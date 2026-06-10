@@ -1,0 +1,53 @@
+EMCC = emcc
+EM_CACHE ?= $(CURDIR)/../../build/emscripten-cache
+
+WASM_CFLAGS = \
+	-O2 \
+	-I. \
+	-DMAELYS_WASM=1
+
+ENGINE_SRCS = \
+	policy/maelys_datalog_audit.c \
+	policy/maelys_datalog_diagnostic.c \
+	policy/maelys_datalog_domain_registry.c \
+	policy/maelys_datalog_edb.c \
+	policy/maelys_datalog_lexer.c \
+	policy/maelys_datalog_manifest_buffer.c \
+	policy/maelys_datalog_parser.c \
+	policy/maelys_datalog_policy.c \
+	policy/maelys_datalog_predicate_registry.c \
+	policy/maelys_datalog_symbol_table.c
+
+COMMON_SRCS = \
+	common/maelys_sha256.c \
+	common/maelys_utf8.c \
+	vendor/yyjson/yyjson.c
+
+WASM_SRCS = $(ENGINE_SRCS) $(COMMON_SRCS)
+
+WASM_EXPORTS = \
+	'_maelys_datalog_manifest_load_from_text', \
+	'_maelys_datalog_policy_set_clear', \
+	'_maelys_datalog_solve_once', \
+	'_maelys_datalog_solve_result_free', \
+	'_maelys_datalog_query_solved_ground_fact', \
+	'_maelys_datalog_diag_code_name', \
+	'_malloc', \
+	'_free'
+
+WASM_LDFLAGS = \
+	-s "EXPORTED_FUNCTIONS=[$(WASM_EXPORTS)]" \
+	-s "EXPORTED_RUNTIME_METHODS=['ccall','cwrap','UTF8ToString','stringToUTF8','lengthBytesUTF8']" \
+	-s ALLOW_MEMORY_GROWTH=1 \
+	-s MODULARIZE=1 \
+	-s EXPORT_NAME="MaelysDatalog"
+
+maelys_datalog.js: $(WASM_SRCS)
+	@mkdir -p $(EM_CACHE)
+	EM_CACHE=$(EM_CACHE) $(EMCC) $(WASM_CFLAGS) $(WASM_SRCS) $(WASM_LDFLAGS) -o $@
+
+maelys_datalog.wasm: maelys_datalog.js
+
+clean:
+	rm -rf $(EM_CACHE)
+	rm -f maelys_datalog.js maelys_datalog.wasm *.o policy/*.o common/*.o vendor/yyjson/*.o
