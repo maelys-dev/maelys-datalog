@@ -28,6 +28,14 @@ EXAMPLES_CHECK = examples/maelys_datalog_examples_check.c
 EXAMPLES_OBJS  = $(EXAMPLES_SRCS:.c=.o)
 EXAMPLES_BIN   = examples/maelys_datalog_examples_check
 
+TEST_HELPER_SRCS = \
+	tests/helpers/test_log.c \
+	tests/helpers/test_framework.c
+
+TEST_SRCS = $(wildcard tests/test_*.c)
+TEST_BINS = $(TEST_SRCS:tests/%.c=build/tests/%)
+TEST_CFLAGS = $(CFLAGS) -DMAELYS_TESTING
+
 libmaelys_datalog.a: $(OBJS)
 	ar rcs $@ $^
 
@@ -35,7 +43,17 @@ examples: libmaelys_datalog.a $(EXAMPLES_OBJS) $(EXAMPLES_CHECK)
 	$(CC) $(CFLAGS) $(EXAMPLES_OBJS) $(EXAMPLES_CHECK) -L. -lmaelys_datalog $(LIBS) -o $(EXAMPLES_BIN)
 	./$(EXAMPLES_BIN)
 
+build/tests/%: tests/%.c $(SRCS) $(EXAMPLES_SRCS) $(TEST_HELPER_SRCS) | build/tests
+	$(CC) $(TEST_CFLAGS) -I. $(SRCS) $(EXAMPLES_SRCS) $(TEST_HELPER_SRCS) $< -o $@
+
+build/tests:
+	mkdir -p $@
+
+test: $(TEST_BINS)
+	@set -e; for b in $(TEST_BINS); do echo "--- $$b ---"; ./$$b; done
+
 clean:
 	rm -f $(OBJS) libmaelys_datalog.a
 	rm -f $(EXAMPLES_OBJS) $(EXAMPLES_BIN)
 	rm -f examples/maelys_datalog_examples_check.o
+	rm -rf build/tests

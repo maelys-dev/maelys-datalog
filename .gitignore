@@ -1,5 +1,6 @@
 *.o
 *.dSYM/
+build/
 libmaelys_datalog.a
 maelys_datalog.js
 maelys_datalog.wasm
