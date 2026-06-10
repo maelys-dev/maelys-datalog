@@ -2,8 +2,8 @@
 #ifndef MAELYS_DATALOG_MANIFEST_H
 #define MAELYS_DATALOG_MANIFEST_H
 
-#include "policy/maelys_datalog_policy.h"
-#include "policy/maelys_datalog_diagnostic.h"
+#include "src/core/maelys_datalog_policy.h"
+#include "src/core/maelys_datalog_diagnostic.h"
 
 #define MAELYS_DATALOG_MANIFEST_ALLOW_TEST_ONLY 1u
 

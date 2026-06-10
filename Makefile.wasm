@@ -7,16 +7,16 @@ WASM_CFLAGS = \
 	-DMAELYS_WASM=1
 
 ENGINE_SRCS = \
-	policy/maelys_datalog_audit.c \
-	policy/maelys_datalog_diagnostic.c \
-	policy/maelys_datalog_domain_registry.c \
-	policy/maelys_datalog_edb.c \
-	policy/maelys_datalog_lexer.c \
-	policy/maelys_datalog_manifest_buffer.c \
-	policy/maelys_datalog_parser.c \
-	policy/maelys_datalog_policy.c \
-	policy/maelys_datalog_predicate_registry.c \
-	policy/maelys_datalog_symbol_table.c
+	src/core/maelys_datalog_audit.c \
+	src/core/maelys_datalog_diagnostic.c \
+	src/core/maelys_datalog_domain_registry.c \
+	src/core/maelys_datalog_edb.c \
+	src/core/maelys_datalog_lexer.c \
+	src/core/maelys_datalog_parser.c \
+	src/core/maelys_datalog_policy.c \
+	src/core/maelys_datalog_predicate_registry.c \
+	src/core/maelys_datalog_symbol_table.c \
+	src/manifest/maelys_datalog_manifest_buffer.c
 
 COMMON_SRCS = \
 	common/maelys_sha256.c \
@@ -50,4 +50,4 @@ maelys_datalog.wasm: maelys_datalog.js
 
 clean:
 	rm -rf $(EM_CACHE)
-	rm -f maelys_datalog.js maelys_datalog.wasm *.o policy/*.o common/*.o vendor/yyjson/*.o
+	rm -f maelys_datalog.js maelys_datalog.wasm *.o src/core/*.o src/manifest/*.o common/*.o vendor/yyjson/*.o

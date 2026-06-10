@@ -2,8 +2,8 @@
 #ifndef MAELYS_DATALOG_PARSER_H
 #define MAELYS_DATALOG_PARSER_H
 
-#include "policy/maelys_datalog_policy.h"
-#include "policy/maelys_datalog_diagnostic.h"
+#include "src/core/maelys_datalog_policy.h"
+#include "src/core/maelys_datalog_diagnostic.h"
 
 maelys_result_t maelys_datalog_ruleset_init(maelys_datalog_ruleset_t *ruleset,
                                             const char *policy_id,

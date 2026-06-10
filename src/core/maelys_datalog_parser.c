@@ -1,8 +1,8 @@
-#include "policy/maelys_datalog_parser.h"
+#include "src/core/maelys_datalog_parser.h"
 
-#include "policy/maelys_datalog_lexer.h"
-#include "policy/maelys_datalog_predicate_registry.h"
-#include "policy/maelys_datalog_symbol_table.h"
+#include "src/core/maelys_datalog_lexer.h"
+#include "src/core/maelys_datalog_predicate_registry.h"
+#include "src/core/maelys_datalog_symbol_table.h"
 
 #include <stdio.h>
 #include <string.h>

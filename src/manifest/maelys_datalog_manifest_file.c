@@ -1,4 +1,4 @@
-#include "policy/maelys_datalog_manifest.h"
+#include "src/manifest/maelys_datalog_manifest.h"
 
 #include "vendor/yyjson/yyjson.h"
 

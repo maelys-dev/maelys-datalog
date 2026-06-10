@@ -1,8 +1,8 @@
 #pragma once
 
-#include "policy/maelys_datalog_audit.h"
-#include "policy/maelys_datalog_domain_registry.h"
-#include "policy/maelys_datalog_edb.h"
-#include "policy/maelys_datalog_manifest.h"
-#include "policy/maelys_datalog_parser.h"
-#include "policy/maelys_datalog_policy.h"
+#include "src/core/maelys_datalog_audit.h"
+#include "src/core/maelys_datalog_domain_registry.h"
+#include "src/core/maelys_datalog_edb.h"
+#include "src/manifest/maelys_datalog_manifest.h"
+#include "src/core/maelys_datalog_parser.h"
+#include "src/core/maelys_datalog_policy.h"

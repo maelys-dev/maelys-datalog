@@ -1,11 +1,11 @@
-#include "policy/maelys_datalog_policy.h"
+#include "src/core/maelys_datalog_policy.h"
 
 #include "common/maelys_sha256.h"
-#include "policy/maelys_datalog_audit.h"
-#include "policy/maelys_datalog_diagnostic.h"
-#include "policy/maelys_datalog_edb.h"
-#include "policy/maelys_datalog_predicate_registry.h"
-#include "policy/maelys_datalog_symbol_table.h"
+#include "src/core/maelys_datalog_audit.h"
+#include "src/core/maelys_datalog_diagnostic.h"
+#include "src/core/maelys_datalog_edb.h"
+#include "src/core/maelys_datalog_predicate_registry.h"
+#include "src/core/maelys_datalog_symbol_table.h"
 
 #include <assert.h>
 #include <stdarg.h>

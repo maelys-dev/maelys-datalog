@@ -1,4 +1,4 @@
-#include "policy/maelys_datalog_predicate_registry.h"
+#include "src/core/maelys_datalog_predicate_registry.h"
 
 #include <string.h>
 

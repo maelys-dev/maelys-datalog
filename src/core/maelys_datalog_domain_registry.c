@@ -1,4 +1,4 @@
-#include "policy/maelys_datalog_domain_registry.h"
+#include "src/core/maelys_datalog_domain_registry.h"
 
 #include <string.h>
 

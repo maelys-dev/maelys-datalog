@@ -2,7 +2,7 @@
 #ifndef MAELYS_DATALOG_AUDIT_H
 #define MAELYS_DATALOG_AUDIT_H
 
-#include "policy/maelys_datalog_policy.h"
+#include "src/core/maelys_datalog_policy.h"
 
 void maelys_datalog_proof_init(maelys_datalog_proof_tree_t *proof,
                                const char *policy_id,

@@ -1,7 +1,7 @@
-#include "policy/maelys_datalog_edb.h"
+#include "src/core/maelys_datalog_edb.h"
 
-#include "policy/maelys_datalog_predicate_registry.h"
-#include "policy/maelys_datalog_symbol_table.h"
+#include "src/core/maelys_datalog_predicate_registry.h"
+#include "src/core/maelys_datalog_symbol_table.h"
 
 #include <stdlib.h>
 #include <string.h>

@@ -2,7 +2,7 @@
 #ifndef MAELYS_DATALOG_PREDICATE_REGISTRY_H
 #define MAELYS_DATALOG_PREDICATE_REGISTRY_H
 
-#include "policy/maelys_datalog_policy.h"
+#include "src/core/maelys_datalog_policy.h"
 
 void maelys_datalog_predicate_registry_init(maelys_datalog_predicate_registry_t *registry);
 void maelys_datalog_predicate_registry_init_core(maelys_datalog_predicate_registry_t *registry);

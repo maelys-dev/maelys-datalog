@@ -4,7 +4,7 @@
 
 #include <stddef.h>
 
-#include "policy/maelys_datalog_predicate_registry.h"
+#include "src/core/maelys_datalog_predicate_registry.h"
 
 #define MAELYS_DATALOG_MAX_REGISTERED_DOMAINS 16u
 

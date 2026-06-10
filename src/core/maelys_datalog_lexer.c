@@ -1,4 +1,4 @@
-#include "policy/maelys_datalog_lexer.h"
+#include "src/core/maelys_datalog_lexer.h"
 
 #include "common/maelys_utf8.h"
 

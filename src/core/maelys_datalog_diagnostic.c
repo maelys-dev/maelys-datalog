@@ -1,4 +1,4 @@
-#include "policy/maelys_datalog_diagnostic.h"
+#include "src/core/maelys_datalog_diagnostic.h"
 
 #include <stdio.h>
 #include <string.h>

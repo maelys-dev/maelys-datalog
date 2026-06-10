@@ -3,17 +3,17 @@ CFLAGS = -Wall -Wextra -g -I.
 LIBS =
 
 ENGINE_SRCS = \
-	policy/maelys_datalog_audit.c \
-	policy/maelys_datalog_diagnostic.c \
-	policy/maelys_datalog_domain_registry.c \
-	policy/maelys_datalog_edb.c \
-	policy/maelys_datalog_lexer.c \
-	policy/maelys_datalog_manifest_buffer.c \
-	policy/maelys_datalog_manifest_file.c \
-	policy/maelys_datalog_parser.c \
-	policy/maelys_datalog_policy.c \
-	policy/maelys_datalog_predicate_registry.c \
-	policy/maelys_datalog_symbol_table.c
+	src/core/maelys_datalog_audit.c \
+	src/core/maelys_datalog_diagnostic.c \
+	src/core/maelys_datalog_domain_registry.c \
+	src/core/maelys_datalog_edb.c \
+	src/core/maelys_datalog_lexer.c \
+	src/core/maelys_datalog_parser.c \
+	src/core/maelys_datalog_policy.c \
+	src/core/maelys_datalog_predicate_registry.c \
+	src/core/maelys_datalog_symbol_table.c \
+	src/manifest/maelys_datalog_manifest_buffer.c \
+	src/manifest/maelys_datalog_manifest_file.c
 
 COMMON_SRCS = \
 	common/maelys_sha256.c \

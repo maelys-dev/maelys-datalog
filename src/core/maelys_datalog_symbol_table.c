@@ -1,4 +1,4 @@
-#include "policy/maelys_datalog_symbol_table.h"
+#include "src/core/maelys_datalog_symbol_table.h"
 
 #include <string.h>
 

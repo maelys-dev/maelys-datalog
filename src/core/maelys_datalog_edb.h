@@ -2,7 +2,7 @@
 #ifndef MAELYS_DATALOG_EDB_H
 #define MAELYS_DATALOG_EDB_H
 
-#include "policy/maelys_datalog_policy.h"
+#include "src/core/maelys_datalog_policy.h"
 
 maelys_result_t maelys_datalog_edb_init(maelys_datalog_edb_t *edb,
                                         maelys_datalog_fact_t *fact_pool,

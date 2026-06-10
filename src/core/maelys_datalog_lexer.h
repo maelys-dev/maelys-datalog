@@ -2,8 +2,8 @@
 #ifndef MAELYS_DATALOG_LEXER_H
 #define MAELYS_DATALOG_LEXER_H
 
-#include "policy/maelys_datalog_policy.h"
-#include "policy/maelys_datalog_diagnostic.h"
+#include "src/core/maelys_datalog_policy.h"
+#include "src/core/maelys_datalog_diagnostic.h"
 
 typedef enum {
     MAELYS_DATALOG_TOKEN_EOF = 0,
