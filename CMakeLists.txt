@@ -25,3 +25,13 @@ add_library(maelys_datalog STATIC ${ENGINE_SRCS} ${COMMON_SRCS})
 target_include_directories(maelys_datalog PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>)
 target_compile_options(maelys_datalog PRIVATE -Wall -Wextra)
+
+option(MAELYS_DATALOG_BUILD_EXAMPLES "Build example domains" OFF)
+
+if(MAELYS_DATALOG_BUILD_EXAMPLES)
+    add_library(maelys_datalog_examples STATIC
+        examples/domains/maelys_datalog_example_domains.c)
+    target_include_directories(maelys_datalog_examples PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>)
+    target_link_libraries(maelys_datalog_examples maelys_datalog)
+endif()

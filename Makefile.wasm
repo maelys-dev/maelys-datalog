@@ -24,6 +24,8 @@ COMMON_SRCS = \
 	vendor/yyjson/yyjson.c
 
 WASM_SRCS = $(ENGINE_SRCS) $(COMMON_SRCS)
+EXAMPLES_SRCS = examples/domains/maelys_datalog_example_domains.c
+WASM_EXAMPLES_SRCS = $(WASM_SRCS) $(EXAMPLES_SRCS)
 
 WASM_EXPORTS = \
 	'_maelys_datalog_manifest_load_from_text', \
@@ -42,12 +44,31 @@ WASM_LDFLAGS = \
 	-s MODULARIZE=1 \
 	-s EXPORT_NAME="MaelysDatalog"
 
+WASM_EXAMPLES_EXPORTS = \
+	$(WASM_EXPORTS), \
+	'_maelys_datalog_example_domains_install'
+
+WASM_EXAMPLES_LDFLAGS = \
+	-s "EXPORTED_FUNCTIONS=[$(WASM_EXAMPLES_EXPORTS)]" \
+	-s "EXPORTED_RUNTIME_METHODS=['ccall','cwrap','UTF8ToString','stringToUTF8','lengthBytesUTF8']" \
+	-s ALLOW_MEMORY_GROWTH=1 \
+	-s MODULARIZE=1 \
+	-s EXPORT_NAME="MaelysDatalogExamples"
+
 maelys_datalog.js: $(WASM_SRCS)
 	@mkdir -p $(EM_CACHE)
 	EM_CACHE=$(EM_CACHE) $(EMCC) $(WASM_CFLAGS) $(WASM_SRCS) $(WASM_LDFLAGS) -o $@
 
 maelys_datalog.wasm: maelys_datalog.js
 
+maelys_datalog_examples.js: $(WASM_EXAMPLES_SRCS)
+	@mkdir -p $(EM_CACHE)
+	EM_CACHE=$(EM_CACHE) $(EMCC) $(WASM_CFLAGS) $(WASM_EXAMPLES_SRCS) $(WASM_EXAMPLES_LDFLAGS) -o $@
+
+maelys_datalog_examples.wasm: maelys_datalog_examples.js
+
 clean:
 	rm -rf $(EM_CACHE)
-	rm -f maelys_datalog.js maelys_datalog.wasm *.o src/core/*.o src/manifest/*.o common/*.o vendor/yyjson/*.o
+	rm -f maelys_datalog.js maelys_datalog.wasm
+	rm -f maelys_datalog_examples.js maelys_datalog_examples.wasm
+	rm -f *.o src/core/*.o src/manifest/*.o common/*.o vendor/yyjson/*.o examples/domains/*.o
