@@ -22,6 +22,10 @@ VENDOR_SRCS = vendor/yyjson/yyjson.c
 
 BUILD_DIR ?= build/asan
 UNAME_S := $(shell uname -s)
+ASAN_IMAGE ?= maelys-datalog-asan-linux:ubuntu24.04
+ASAN_DOCKERFILE ?= docker/asan-linux/Dockerfile
+DOCKER_PLATFORM ?= linux/arm64
+DOCKER_PLATFORM_ARG = $(if $(DOCKER_PLATFORM),--platform $(DOCKER_PLATFORM),)
 
 ASAN_FLAGS = -fsanitize=address,undefined \
 	-fno-omit-frame-pointer -g -O1
@@ -60,7 +64,19 @@ $(BUILD_DIR)/%: tests/%.c | $(BUILD_DIR)
 $(BUILD_DIR):
 	mkdir -p $@
 
-.PHONY: asan clean
+asan-linux-image:
+	docker build $(DOCKER_PLATFORM_ARG) -t $(ASAN_IMAGE) -f $(ASAN_DOCKERFILE) .
+
+test-asan-linux: asan-linux-image
+	@echo "==> Standalone Linux ASAN/UBSAN/LSAN in Docker (detect_leaks=1)"
+	@docker run --rm \
+	  $(DOCKER_PLATFORM_ARG) \
+	  -v "$(CURDIR):/src:ro" \
+	  -w /work \
+	  $(ASAN_IMAGE) \
+	  bash -c 'set -euo pipefail; tar --exclude=.git --exclude=build --exclude=.cache -C /src -cf - . | tar -C /work -xf -; make -B -f Makefile.asan asan'
+
+.PHONY: asan clean asan-linux-image test-asan-linux
 
 asan: $(ASAN_TEST_SRCS:tests/%.c=$(BUILD_DIR)/%)
 

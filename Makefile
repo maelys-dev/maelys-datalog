@@ -1,6 +1,8 @@
 CC = clang
 CFLAGS = -Wall -Wextra -g -I.
 LIBS =
+BUILD_DIR ?= build
+OBJ_DIR = $(BUILD_DIR)/obj
 
 ENGINE_SRCS = \
 	src/core/maelys_datalog_audit.c \
@@ -21,11 +23,11 @@ COMMON_SRCS = \
 	vendor/yyjson/yyjson.c
 
 SRCS = $(ENGINE_SRCS) $(COMMON_SRCS)
-OBJS = $(SRCS:.c=.o)
+OBJS = $(patsubst %.c,$(OBJ_DIR)/%.o,$(SRCS))
 
 EXAMPLES_SRCS  = examples/domains/maelys_datalog_example_domains.c
 EXAMPLES_CHECK = examples/maelys_datalog_examples_check.c
-EXAMPLES_OBJS  = $(EXAMPLES_SRCS:.c=.o)
+EXAMPLES_OBJS  = $(patsubst %.c,$(OBJ_DIR)/%.o,$(EXAMPLES_SRCS))
 EXAMPLES_BIN   = examples/maelys_datalog_examples_check
 
 TEST_HELPER_SRCS = \
@@ -35,6 +37,10 @@ TEST_HELPER_SRCS = \
 TEST_SRCS = $(wildcard tests/test_*.c)
 TEST_BINS = $(TEST_SRCS:tests/%.c=build/tests/%)
 TEST_CFLAGS = $(CFLAGS) -DMAELYS_TESTING
+
+$(OBJ_DIR)/%.o: %.c
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -c $< -o $@
 
 libmaelys_datalog.a: $(OBJS)
 	ar rcs $@ $^
@@ -53,7 +59,6 @@ test: $(TEST_BINS)
 	@set -e; for b in $(TEST_BINS); do echo "--- $$b ---"; ./$$b; done
 
 clean:
-	rm -f $(OBJS) libmaelys_datalog.a
-	rm -f $(EXAMPLES_OBJS) $(EXAMPLES_BIN)
-	rm -f examples/maelys_datalog_examples_check.o
-	rm -rf build/tests
+	rm -rf $(BUILD_DIR)
+	rm -f libmaelys_datalog.a
+	rm -f $(EXAMPLES_BIN)
