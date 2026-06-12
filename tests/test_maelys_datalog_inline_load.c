@@ -568,6 +568,47 @@ static int test_inline_load_with_domain_solve_query(void) {
     TEST_END();
 }
 
+static int test_inline_load_enforces_flag_zero_after_inline(void) {
+    TEST_BEGIN();
+    maelys_datalog_policy_set_t set;
+    TEST_ASSERT_EQUAL(MAELYS_OK, load_inline_source(k_policy_src, strlen(k_policy_src), &set, NULL), "%d");
+    TEST_ASSERT_EQUAL(0, set.enforces_query_whitelist, "%d");
+    TEST_ASSERT_EQUAL((size_t)0u, set.query_whitelist_count, "%zu");
+    TEST_ASSERT_EQUAL(0, set.policies[0].enforces_query_whitelist, "%d");
+    TEST_ASSERT_EQUAL((size_t)0u, set.policies[0].query_whitelist_count, "%zu");
+    TEST_ASSERT_TRUE(!(set.enforces_query_whitelist == 0 && set.query_whitelist_count > 0u));
+    maelys_datalog_policy_set_clear(&set);
+    TEST_END();
+}
+
+static int test_inline_load_query_whitelist_absent_does_not_break_inline(void) {
+    TEST_BEGIN();
+    maelys_datalog_policy_set_t set;
+    TEST_ASSERT_EQUAL(MAELYS_OK, load_inline_source(k_policy_src, strlen(k_policy_src), &set, NULL), "%d");
+    maelys_datalog_fact_t facts[4];
+    maelys_datalog_edb_t edb;
+    TEST_ASSERT_EQUAL(MAELYS_OK,
+                      maelys_datalog_edb_init(&edb,
+                                              facts,
+                                              sizeof(facts) / sizeof(facts[0]),
+                                              &set.policies[0].symbols,
+                                              &set.policies[0].registry),
+                      "%d");
+    maelys_datalog_term_t alice = symbol_term(&set.policies[0], "alice");
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_add_fact(&edb, "safe", &alice, 1), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_finalize(&edb), "%d");
+    maelys_datalog_solve_result_t *result = NULL;
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_solve_once(&set.policies[0], &edb, &result), "%d");
+    bool present = false;
+    TEST_ASSERT_EQUAL(MAELYS_OK,
+                      maelys_datalog_query_solved_ground_fact(result, "allow", &alice, 1, &present),
+                      "%d");
+    TEST_ASSERT_TRUE(present);
+    maelys_datalog_solve_result_free(result);
+    maelys_datalog_policy_set_clear(&set);
+    TEST_END();
+}
+
 int main(int argc, char **argv) {
     test_case_t cases[] = {
         {"inline_load/basic", TEST_MODE_NON_BLOCKING, test_inline_load_basic},
@@ -598,6 +639,8 @@ int main(int argc, char **argv) {
         {"inline_load/with_domain_zero_count", TEST_MODE_NON_BLOCKING, test_inline_load_with_domain_zero_count},
         {"inline_load/with_domain_too_long_domain_name", TEST_MODE_NON_BLOCKING, test_inline_load_with_domain_too_long_domain_name},
         {"inline_load/with_domain_solve_query", TEST_MODE_NON_BLOCKING, test_inline_load_with_domain_solve_query},
+        {"inline_load/enforces_flag_zero_after_inline", TEST_MODE_NON_BLOCKING, test_inline_load_enforces_flag_zero_after_inline},
+        {"inline_load/query_whitelist_absent_does_not_break_inline", TEST_MODE_NON_BLOCKING, test_inline_load_query_whitelist_absent_does_not_break_inline},
     };
     return test_main("maelys_datalog_inline_load", cases, (int)(sizeof(cases) / sizeof(cases[0])), argc, argv);
 }

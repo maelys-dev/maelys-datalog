@@ -84,6 +84,7 @@ typedef struct {
     size_t idb_predicate_count;
     const maelys_datalog_policy_load_predicate_decl_t *queries;
     size_t query_count;
+    int enforces_query_whitelist;
     const char *diagnostic_file_label;
 } maelys_datalog_policy_load_spec_t;
 
@@ -133,29 +134,65 @@ static maelys_result_t collect_decl_array(
     return MAELYS_OK;
 }
 
-static maelys_result_t add_spec_decl_array(
+static maelys_result_t append_policy_set_query_whitelist(
+    maelys_datalog_policy_set_t *set,
+    const maelys_datalog_query_whitelist_entry_t *entry) {
+    if (!set || !entry) return MAELYS_ERR_INVALID_ARGUMENT;
+    for (size_t i = 0u; i < set->query_whitelist_count; i++) {
+        if (set->query_whitelist[i].arity == entry->arity &&
+            strcmp(set->query_whitelist[i].name, entry->name) == 0) {
+            return MAELYS_OK;
+        }
+    }
+    if (set->query_whitelist_count >= MAELYS_DATALOG_MAX_QUERY_WHITELIST) {
+        return MAELYS_ERR_PAYLOAD_TOO_LARGE;
+    }
+    set->query_whitelist[set->query_whitelist_count++] = *entry;
+    return MAELYS_OK;
+}
+
+static maelys_result_t validate_and_copy_query_whitelist(
     maelys_datalog_ruleset_t *ruleset,
     const maelys_datalog_policy_load_predicate_decl_t *decls,
     size_t decl_count,
+    maelys_datalog_policy_set_t *set,
     maelys_datalog_diagnostic_t *diag,
     const char *manifest_path) {
+    if (!ruleset || !set) return MAELYS_ERR_INVALID_ARGUMENT;
     for (size_t i = 0u; i < decl_count; i++) {
         const char *name = decls[i].name;
         size_t arity = decls[i].arity;
-        unsigned kind = decls[i].kind_flags;
-        maelys_result_t rc = maelys_datalog_predicate_registry_add_manifest_predicate(
-            &ruleset->registry, name, arity, kind);
-        if (rc != MAELYS_OK) {
+        maelys_datalog_predicate_id_t pid = 0;
+        if (!maelys_datalog_predicate_registry_find(&ruleset->registry, name, arity, &pid)) {
             manifest_diag(diag,
-                          rc == MAELYS_ERR_INVALID_STATE
-                              ? MAELYS_DATALOG_DIAG_REGISTRY_MUTATION_AFTER_FREEZE
-                              : MAELYS_DATALOG_DIAG_REGISTRY_CONFLICT,
+                          MAELYS_DATALOG_DIAG_REGISTRY_CONFLICT,
                           manifest_path,
-                          "predicate registry declaration rejected",
-                          "check duplicate predicates, arity, and predicate kind");
+                          "query whitelist predicate rejected",
+                          "queries must reference domain QUERY predicates with matching arity");
             maelys_datalog_diagnostic_set_predicate(diag, name, arity);
-            return rc;
+            return MAELYS_ERR_INVALID_FIELD;
         }
+        const maelys_datalog_predicate_def_t *def =
+            maelys_datalog_predicate_registry_get(&ruleset->registry, pid);
+        if (!def || !(def->kind_flags & MAELYS_DATALOG_PRED_KIND_QUERY)) {
+            manifest_diag(diag,
+                          MAELYS_DATALOG_DIAG_REGISTRY_CONFLICT,
+                          manifest_path,
+                          "query whitelist predicate is not query-capable",
+                          "queries may only expose predicates marked QUERY by the domain");
+            maelys_datalog_diagnostic_set_predicate(diag, name, arity);
+            return MAELYS_ERR_INVALID_FIELD;
+        }
+        if (ruleset->query_whitelist_count >= MAELYS_DATALOG_MAX_QUERY_WHITELIST) {
+            return MAELYS_ERR_PAYLOAD_TOO_LARGE;
+        }
+        maelys_datalog_query_whitelist_entry_t entry;
+        memset(&entry, 0, sizeof(entry));
+        snprintf(entry.name, sizeof(entry.name), "%s", def->name);
+        entry.arity = def->arity;
+        ruleset->query_whitelist[ruleset->query_whitelist_count++] = entry;
+        maelys_result_t rc = append_policy_set_query_whitelist(set, &entry);
+        if (rc != MAELYS_OK) return rc;
     }
     return MAELYS_OK;
 }
@@ -215,18 +252,18 @@ static maelys_result_t maelys_datalog_policy_load_from_spec(
                       "check domain predicate declarations");
     }
     if (rc == MAELYS_OK) {
-        rc = add_spec_decl_array(&tmp,
-                                 spec->idb_predicates,
-                                 spec->idb_predicate_count,
-                                 diag,
-                                 label);
-    }
-    if (rc == MAELYS_OK) {
-        rc = add_spec_decl_array(&tmp,
-                                 spec->queries,
-                                 spec->query_count,
-                                 diag,
-                                 label);
+        (void)spec->idb_predicates;
+        (void)spec->idb_predicate_count;
+        tmp.enforces_query_whitelist = spec->enforces_query_whitelist ? 1 : 0;
+        if (tmp.enforces_query_whitelist) {
+            set->enforces_query_whitelist = 1;
+            rc = validate_and_copy_query_whitelist(&tmp,
+                                                   spec->queries,
+                                                   spec->query_count,
+                                                   set,
+                                                   diag,
+                                                   label);
+        }
     }
     if (rc == MAELYS_OK) rc = maelys_datalog_predicate_registry_freeze(&tmp.registry);
     if (rc == MAELYS_OK) {
@@ -374,7 +411,7 @@ static maelys_result_t load_policy_entry_from_bundle(
     rc = collect_decl_array(yyjson_obj_get(entry, "queries"),
                             MAELYS_DATALOG_PRED_KIND_QUERY | MAELYS_DATALOG_PRED_KIND_IDB,
                             queries,
-                            sizeof(queries) / sizeof(queries[0]),
+                            MAELYS_DATALOG_MAX_QUERY_WHITELIST,
                             &query_count,
                             diag,
                             manifest_label,
@@ -392,6 +429,7 @@ static maelys_result_t load_policy_entry_from_bundle(
         .idb_predicate_count = idb_predicate_count,
         .queries = queries,
         .query_count = query_count,
+        .enforces_query_whitelist = 1,
         .diagnostic_file_label = policy_label,
     };
     return maelys_datalog_policy_load_from_spec(&spec, set, diag);
@@ -409,6 +447,7 @@ maelys_result_t maelys_datalog_manifest_load_from_text(
     if (bundle_count > 0u && !bundle) return MAELYS_ERR_INVALID_ARGUMENT;
     if (out_diag) maelys_datalog_diagnostic_clear(out_diag);
     memset(out_set, 0, sizeof(*out_set));
+    out_set->enforces_query_whitelist = 1;
 
     yyjson_doc *doc = yyjson_read(manifest_json ? manifest_json : "", manifest_json_len, 0);
     yyjson_val *root = doc ? yyjson_doc_get_root(doc) : NULL;
@@ -419,6 +458,7 @@ maelys_result_t maelys_datalog_manifest_load_from_text(
                       "<manifest-buffer>",
                       "invalid manifest JSON",
                       "fix manifest JSON syntax");
+        maelys_datalog_policy_set_clear(out_set);
         return MAELYS_ERR_INVALID_FIELD;
     }
 
@@ -518,6 +558,7 @@ maelys_result_t maelys_datalog_load_policy_inline(
         .idb_predicate_count = 0u,
         .queries = NULL,
         .query_count = 0u,
+        .enforces_query_whitelist = 0,
         .diagnostic_file_label = "inline",
     };
     rc = maelys_datalog_policy_load_from_spec(&spec, out_set, out_diag);

@@ -31,6 +31,7 @@ extern "C" {
 #define MAELYS_DATALOG_MAX_EDB_FACTS 1024u
 #define MAELYS_DATALOG_MAX_IDB_FACTS 1024u
 #define MAELYS_DATALOG_MAX_FACTS_PER_PRED 64u
+#define MAELYS_DATALOG_MAX_QUERY_WHITELIST 64u
 #define MAELYS_DATALOG_MAX_DEPTH 10u
 #define MAELYS_DATALOG_MAX_PROOF_NODES 64u
 #define MAELYS_DATALOG_MAX_PROOF_DEPTH 10u
@@ -146,10 +147,18 @@ typedef struct {
 } maelys_datalog_rule_t;
 
 typedef struct {
+    char name[64];
+    size_t arity;
+} maelys_datalog_query_whitelist_entry_t;
+
+typedef struct {
     int loaded;
     char policy_id[128];
     char domain[64];
     char sha256[65];
+    maelys_datalog_query_whitelist_entry_t query_whitelist[MAELYS_DATALOG_MAX_QUERY_WHITELIST];
+    size_t query_whitelist_count;
+    int enforces_query_whitelist;
     int positive_recursion_supported;
     int negation_supported;
     int negation_recursion_supported;
@@ -269,6 +278,9 @@ typedef struct {
 typedef struct {
     maelys_datalog_ruleset_t policies[8];
     size_t policy_count;
+    maelys_datalog_query_whitelist_entry_t query_whitelist[MAELYS_DATALOG_MAX_QUERY_WHITELIST];
+    size_t query_whitelist_count;
+    int enforces_query_whitelist;
 } maelys_datalog_policy_set_t;
 
 const char *maelys_datalog_decision_name(maelys_datalog_decision_t decision);

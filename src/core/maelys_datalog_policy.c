@@ -2163,6 +2163,19 @@ void maelys_datalog_solve_result_free(maelys_datalog_solve_result_t *result) {
     free(result);
 }
 
+static int query_whitelist_contains(const maelys_datalog_ruleset_t *ruleset,
+                                    const char *predicate,
+                                    size_t arity) {
+    if (!ruleset || !predicate) return 0;
+    for (size_t i = 0u; i < ruleset->query_whitelist_count; i++) {
+        if (ruleset->query_whitelist[i].arity == arity &&
+            strcmp(ruleset->query_whitelist[i].name, predicate) == 0) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
 maelys_result_t maelys_datalog_query_solved_ground_fact(
     const maelys_datalog_solve_result_t *result,
     const char *predicate,
@@ -2176,6 +2189,11 @@ maelys_result_t maelys_datalog_query_solved_ground_fact(
         return MAELYS_ERR_INVALID_STATE;
     }
     if (!query_terms_are_ground(terms, arity)) return MAELYS_ERR_INVALID_FIELD;
+
+    if (result->ruleset->enforces_query_whitelist &&
+        !query_whitelist_contains(result->ruleset, predicate, arity)) {
+        return MAELYS_ERR_FORBIDDEN;
+    }
 
     maelys_datalog_predicate_id_t pid = 0;
     if (!maelys_datalog_predicate_registry_find(&result->ruleset->registry, predicate, arity, &pid)) {

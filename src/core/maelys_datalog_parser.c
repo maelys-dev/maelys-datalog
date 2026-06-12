@@ -224,7 +224,7 @@ static maelys_result_t parse_atom(parser_t *p,
                                           : "unknown predicate",
                                       predicate_name_exists(&p->ruleset->registry, pred)
                                           ? "check registry or manifest arity"
-                                          : "declare predicate in domain registry, idb_predicates, or queries");
+                                          : "declare predicate in the domain registry");
         maelys_datalog_diagnostic_set_predicate(p->diag, pred, arity);
         return MAELYS_ERR_INVALID_FIELD;
     }
