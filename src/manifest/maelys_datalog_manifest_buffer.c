@@ -67,12 +67,37 @@ static int required_array(yyjson_val *obj, const char *key) {
     return yyjson_is_arr(yyjson_obj_get(obj, key));
 }
 
-static maelys_result_t add_decl_array(maelys_datalog_ruleset_t *ruleset,
-                                      yyjson_val *arr,
-                                      unsigned kind,
-                                      maelys_datalog_diagnostic_t *diag,
-                                      const char *manifest_path,
-                                      const char *field_name) {
+typedef struct {
+    const char *name;
+    size_t arity;
+    unsigned kind_flags;
+} maelys_datalog_policy_load_predicate_decl_t;
+
+typedef struct {
+    const char *policy_id;
+    const char *domain;
+    const char *src;
+    size_t src_len;
+    const char *sha256;
+    int test_only;
+    const maelys_datalog_policy_load_predicate_decl_t *idb_predicates;
+    size_t idb_predicate_count;
+    const maelys_datalog_policy_load_predicate_decl_t *queries;
+    size_t query_count;
+    const char *diagnostic_file_label;
+} maelys_datalog_policy_load_spec_t;
+
+static maelys_result_t collect_decl_array(
+    yyjson_val *arr,
+    unsigned kind,
+    maelys_datalog_policy_load_predicate_decl_t *decls,
+    size_t decl_cap,
+    size_t *out_count,
+    maelys_datalog_diagnostic_t *diag,
+    const char *manifest_path,
+    const char *field_name) {
+    if (!out_count) return MAELYS_ERR_INVALID_ARGUMENT;
+    *out_count = 0u;
     if (!arr) return MAELYS_OK;
     if (!yyjson_is_arr(arr)) {
         manifest_diag(diag,
@@ -87,6 +112,7 @@ static maelys_result_t add_decl_array(maelys_datalog_ruleset_t *ruleset,
     yyjson_arr_iter iter = yyjson_arr_iter_with(arr);
     yyjson_val *it;
     while ((it = yyjson_arr_iter_next(&iter))) {
+        if (*out_count >= decl_cap) return MAELYS_ERR_PAYLOAD_TOO_LARGE;
         if (!has_only_keys(it, keys) || !required_string(it, "name") ||
             !yyjson_is_int(yyjson_obj_get(it, "arity"))) {
             manifest_diag(diag,
@@ -99,6 +125,24 @@ static maelys_result_t add_decl_array(maelys_datalog_ruleset_t *ruleset,
         }
         const char *name = yyjson_get_str(yyjson_obj_get(it, "name"));
         size_t arity = (size_t)yyjson_get_int(yyjson_obj_get(it, "arity"));
+        decls[*out_count].name = name;
+        decls[*out_count].arity = arity;
+        decls[*out_count].kind_flags = kind;
+        (*out_count)++;
+    }
+    return MAELYS_OK;
+}
+
+static maelys_result_t add_spec_decl_array(
+    maelys_datalog_ruleset_t *ruleset,
+    const maelys_datalog_policy_load_predicate_decl_t *decls,
+    size_t decl_count,
+    maelys_datalog_diagnostic_t *diag,
+    const char *manifest_path) {
+    for (size_t i = 0u; i < decl_count; i++) {
+        const char *name = decls[i].name;
+        size_t arity = decls[i].arity;
+        unsigned kind = decls[i].kind_flags;
         maelys_result_t rc = maelys_datalog_predicate_registry_add_manifest_predicate(
             &ruleset->registry, name, arity, kind);
         if (rc != MAELYS_OK) {
@@ -127,6 +171,77 @@ static const maelys_datalog_policy_bundle_entry_t *find_bundle(
         }
     }
     return NULL;
+}
+
+static maelys_result_t maelys_datalog_policy_load_from_spec(
+    const maelys_datalog_policy_load_spec_t *spec,
+    maelys_datalog_policy_set_t *set,
+    maelys_datalog_diagnostic_t *diag) {
+    if (!spec || !spec->policy_id || !spec->domain || !spec->src || !spec->sha256 || !set) {
+        return MAELYS_ERR_INVALID_ARGUMENT;
+    }
+    const char *label = spec->diagnostic_file_label ? spec->diagnostic_file_label : spec->policy_id;
+    if (!maelys_datalog_domain_registry_find(spec->domain)) {
+        manifest_diag(diag,
+                      MAELYS_DATALOG_DIAG_MANIFEST_UNKNOWN_DOMAIN,
+                      label,
+                      "unknown policy domain",
+                      "install a domain registry or disable the policy");
+        if (diag) snprintf(diag->domain, sizeof(diag->domain), "%s", spec->domain);
+        return MAELYS_ERR_UNSUPPORTED;
+    }
+    if (!maelys_utf8_validate((const unsigned char *)spec->src, spec->src_len)) {
+        manifest_diag(diag,
+                      MAELYS_DATALOG_DIAG_LEXER_INVALID_UTF8,
+                      label,
+                      "invalid UTF-8 in policy text",
+                      "ensure the policy text is valid UTF-8");
+        return MAELYS_ERR_INVALID_FIELD;
+    }
+    if (set->policy_count >= sizeof(set->policies) / sizeof(set->policies[0])) {
+        return MAELYS_ERR_PAYLOAD_TOO_LARGE;
+    }
+
+    maelys_datalog_ruleset_t tmp;
+    memset(&tmp, 0, sizeof(tmp));
+    maelys_result_t rc = maelys_datalog_ruleset_init(
+        &tmp, spec->policy_id, spec->domain, spec->sha256, spec->test_only);
+    if (rc == MAELYS_OK) rc = maelys_datalog_domain_registry_install(spec->domain, &tmp.registry);
+    if (rc != MAELYS_OK) {
+        manifest_diag(diag,
+                      MAELYS_DATALOG_DIAG_REGISTRY_CONFLICT,
+                      label,
+                      "domain predicate registry install failed",
+                      "check domain predicate declarations");
+    }
+    if (rc == MAELYS_OK) {
+        rc = add_spec_decl_array(&tmp,
+                                 spec->idb_predicates,
+                                 spec->idb_predicate_count,
+                                 diag,
+                                 label);
+    }
+    if (rc == MAELYS_OK) {
+        rc = add_spec_decl_array(&tmp,
+                                 spec->queries,
+                                 spec->query_count,
+                                 diag,
+                                 label);
+    }
+    if (rc == MAELYS_OK) rc = maelys_datalog_predicate_registry_freeze(&tmp.registry);
+    if (rc == MAELYS_OK) {
+        rc = maelys_datalog_parse_ruleset_ex(&tmp,
+                                             spec->src,
+                                             spec->src_len,
+                                             label,
+                                             diag);
+    }
+    if (rc != MAELYS_OK) return rc;
+    if (maelys_datalog_ruleset_has_allow_all(&tmp) && !spec->test_only) {
+        return MAELYS_ERR_FORBIDDEN;
+    }
+    set->policies[set->policy_count++] = tmp;
+    return MAELYS_OK;
 }
 
 static maelys_result_t load_policy_entry_from_bundle(
@@ -242,57 +357,44 @@ static maelys_result_t load_policy_entry_from_bundle(
                       "update manifest sha256 after policy edit");
         return MAELYS_ERR_INVALID_FIELD;
     }
-    if (!maelys_utf8_validate((const unsigned char *)src_entry->src, src_entry->src_len)) {
-        manifest_diag(diag,
-                      MAELYS_DATALOG_DIAG_LEXER_INVALID_UTF8,
-                      policy_label,
-                      "invalid UTF-8 in policy text",
-                      "ensure the policy text is valid UTF-8");
-        return MAELYS_ERR_INVALID_FIELD;
-    }
-    if (set->policy_count >= sizeof(set->policies) / sizeof(set->policies[0])) {
-        return MAELYS_ERR_PAYLOAD_TOO_LARGE;
-    }
 
-    maelys_datalog_ruleset_t tmp;
-    memset(&tmp, 0, sizeof(tmp));
-    maelys_result_t rc = maelys_datalog_ruleset_init(&tmp, policy_id, domain, sha, test_only);
-    if (rc == MAELYS_OK) rc = maelys_datalog_domain_registry_install(domain, &tmp.registry);
-    if (rc != MAELYS_OK) {
-        manifest_diag(diag,
-                      MAELYS_DATALOG_DIAG_REGISTRY_CONFLICT,
-                      manifest_label,
-                      "domain predicate registry install failed",
-                      "check domain predicate declarations");
-    }
-    if (rc == MAELYS_OK) {
-        rc = add_decl_array(&tmp,
-                            yyjson_obj_get(entry, "idb_predicates"),
-                            MAELYS_DATALOG_PRED_KIND_IDB,
-                            diag,
-                            manifest_label,
-                            "idb_predicates");
-    }
-    if (rc == MAELYS_OK) {
-        rc = add_decl_array(&tmp,
-                            yyjson_obj_get(entry, "queries"),
+    maelys_datalog_policy_load_predicate_decl_t idb_predicates[MAELYS_DATALOG_MAX_PREDICATES];
+    maelys_datalog_policy_load_predicate_decl_t queries[MAELYS_DATALOG_MAX_PREDICATES];
+    size_t idb_predicate_count = 0u;
+    size_t query_count = 0u;
+    maelys_result_t rc = collect_decl_array(yyjson_obj_get(entry, "idb_predicates"),
+                                            MAELYS_DATALOG_PRED_KIND_IDB,
+                                            idb_predicates,
+                                            sizeof(idb_predicates) / sizeof(idb_predicates[0]),
+                                            &idb_predicate_count,
+                                            diag,
+                                            manifest_label,
+                                            "idb_predicates");
+    if (rc != MAELYS_OK) return rc;
+    rc = collect_decl_array(yyjson_obj_get(entry, "queries"),
                             MAELYS_DATALOG_PRED_KIND_QUERY | MAELYS_DATALOG_PRED_KIND_IDB,
+                            queries,
+                            sizeof(queries) / sizeof(queries[0]),
+                            &query_count,
                             diag,
                             manifest_label,
                             "queries");
-    }
-    if (rc == MAELYS_OK) rc = maelys_datalog_predicate_registry_freeze(&tmp.registry);
-    if (rc == MAELYS_OK) {
-        rc = maelys_datalog_parse_ruleset_ex(&tmp,
-                                             src_entry->src,
-                                             src_entry->src_len,
-                                             policy_label,
-                                             diag);
-    }
     if (rc != MAELYS_OK) return rc;
-    if (maelys_datalog_ruleset_has_allow_all(&tmp) && !test_only) return MAELYS_ERR_FORBIDDEN;
-    set->policies[set->policy_count++] = tmp;
-    return MAELYS_OK;
+
+    maelys_datalog_policy_load_spec_t spec = {
+        .policy_id = policy_id,
+        .domain = domain,
+        .src = src_entry->src,
+        .src_len = src_entry->src_len,
+        .sha256 = sha,
+        .test_only = test_only,
+        .idb_predicates = idb_predicates,
+        .idb_predicate_count = idb_predicate_count,
+        .queries = queries,
+        .query_count = query_count,
+        .diagnostic_file_label = policy_label,
+    };
+    return maelys_datalog_policy_load_from_spec(&spec, set, diag);
 }
 
 maelys_result_t maelys_datalog_manifest_load_from_text(
@@ -362,6 +464,63 @@ maelys_result_t maelys_datalog_manifest_load_from_text(
         }
     }
     yyjson_doc_free(doc);
+    if (rc != MAELYS_OK) maelys_datalog_policy_set_clear(out_set);
+    return rc;
+}
+
+static size_t bounded_cstr_len(const char *value, size_t max_plus_one) {
+    for (size_t i = 0u; i < max_plus_one; i++) {
+        if (value[i] == '\0') return i;
+    }
+    return max_plus_one;
+}
+
+static maelys_result_t validate_inline_identity(const char *value, size_t max_len) {
+    if (!value) return MAELYS_ERR_INVALID_ARGUMENT;
+    size_t len = bounded_cstr_len(value, max_len + 1u);
+    if (len == 0u) return MAELYS_ERR_INVALID_ARGUMENT;
+    if (len > max_len) return MAELYS_ERR_PAYLOAD_TOO_LARGE;
+    return MAELYS_OK;
+}
+
+maelys_result_t maelys_datalog_load_policy_inline(
+    const char *domain,
+    const char *policy_id,
+    const char *src,
+    size_t src_len,
+    unsigned flags,
+    maelys_datalog_policy_set_t *out_set,
+    maelys_datalog_diagnostic_t *out_diag) {
+    if (!out_set) return MAELYS_ERR_INVALID_ARGUMENT;
+    memset(out_set, 0, sizeof(*out_set));
+    if (out_diag) maelys_datalog_diagnostic_clear(out_diag);
+    if (flags != 0u) return MAELYS_ERR_INVALID_ARGUMENT;
+
+    maelys_result_t rc = validate_inline_identity(domain, MAELYS_DATALOG_INLINE_MAX_DOMAIN_LEN);
+    if (rc != MAELYS_OK) return rc;
+    rc = validate_inline_identity(policy_id, MAELYS_DATALOG_INLINE_MAX_POLICY_ID_LEN);
+    if (rc != MAELYS_OK) return rc;
+    if (!src || src_len == 0u) return MAELYS_ERR_INVALID_ARGUMENT;
+
+    char sha[65];
+    if (maelys_sha256_hex((const unsigned char *)src, src_len, sha) != 0) {
+        return MAELYS_ERR_INTERNAL;
+    }
+
+    maelys_datalog_policy_load_spec_t spec = {
+        .policy_id = policy_id,
+        .domain = domain,
+        .src = src,
+        .src_len = src_len,
+        .sha256 = sha,
+        .test_only = 0,
+        .idb_predicates = NULL,
+        .idb_predicate_count = 0u,
+        .queries = NULL,
+        .query_count = 0u,
+        .diagnostic_file_label = "inline",
+    };
+    rc = maelys_datalog_policy_load_from_spec(&spec, out_set, out_diag);
     if (rc != MAELYS_OK) maelys_datalog_policy_set_clear(out_set);
     return rc;
 }
