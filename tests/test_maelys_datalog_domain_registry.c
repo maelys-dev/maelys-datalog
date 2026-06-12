@@ -21,6 +21,24 @@ static maelys_result_t install_domain(const char *domain_name, maelys_datalog_pr
     return maelys_datalog_domain_registry_install(domain_name, registry);
 }
 
+static maelys_result_t install_callback_test_predicates(maelys_datalog_predicate_registry_t *registry) {
+    return maelys_datalog_predicate_registry_add_domain(registry,
+                                                        "callback_pred",
+                                                        1,
+                                                        MAELYS_DATALOG_PRED_KIND_EDB);
+}
+
+static const maelys_datalog_predicate_def_t k_static_table_a[] = {
+    {.name = "static_safe", .arity = 1, .kind_flags = MAELYS_DATALOG_PRED_KIND_EDB},
+    {.name = "static_allow",
+     .arity = 1,
+     .kind_flags = MAELYS_DATALOG_PRED_KIND_IDB | MAELYS_DATALOG_PRED_KIND_QUERY},
+};
+
+static const maelys_datalog_predicate_def_t k_static_table_b[] = {
+    {.name = "static_blocked", .arity = 1, .kind_flags = MAELYS_DATALOG_PRED_KIND_EDB},
+};
+
 static int test_example_domains_install_returns_ok(void) {
     TEST_BEGIN();
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_example_domains_install(), "%d");
@@ -176,6 +194,127 @@ static int test_graph_and_decision_can_share_registry(void) {
     TEST_END();
 }
 
+static int test_domain_registry_static_table_basic(void) {
+    TEST_BEGIN();
+    const maelys_datalog_domain_def_t def = {
+        .domain_name = "static_basic_domain",
+        .predicates = k_static_table_a,
+        .predicate_count = sizeof(k_static_table_a) / sizeof(k_static_table_a[0]),
+        .description = "static table basic",
+        .install_predicates = NULL,
+    };
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_domain_registry_register(&def), "%d");
+    const maelys_datalog_domain_def_t *registered = maelys_datalog_domain_registry_find("static_basic_domain");
+    TEST_ASSERT_NOT_NULL(registered);
+    TEST_ASSERT_NULL(registered->install_predicates);
+    TEST_ASSERT_NOT_NULL(registered->predicates);
+    TEST_ASSERT_EQUAL((size_t)2u, registered->predicate_count, "%zu");
+    TEST_END();
+}
+
+static int test_domain_registry_static_table_idempotent(void) {
+    TEST_BEGIN();
+    const maelys_datalog_domain_def_t def = {
+        .domain_name = "static_idempotent_domain",
+        .predicates = k_static_table_a,
+        .predicate_count = sizeof(k_static_table_a) / sizeof(k_static_table_a[0]),
+        .description = "static table idempotent",
+        .install_predicates = NULL,
+    };
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_domain_registry_register(&def), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_domain_registry_register(&def), "%d");
+    TEST_END();
+}
+
+static int test_domain_registry_static_table_idempotent_conflicting_table(void) {
+    TEST_BEGIN();
+    const maelys_datalog_domain_def_t first = {
+        .domain_name = "static_conflict_domain",
+        .predicates = k_static_table_a,
+        .predicate_count = sizeof(k_static_table_a) / sizeof(k_static_table_a[0]),
+        .description = "static table conflict first",
+        .install_predicates = NULL,
+    };
+    const maelys_datalog_domain_def_t second = {
+        .domain_name = "static_conflict_domain",
+        .predicates = k_static_table_b,
+        .predicate_count = sizeof(k_static_table_b) / sizeof(k_static_table_b[0]),
+        .description = "static table conflict second",
+        .install_predicates = NULL,
+    };
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_domain_registry_register(&first), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_domain_registry_register(&second), "%d");
+    maelys_datalog_predicate_registry_t registry;
+    maelys_datalog_predicate_registry_init_core(&registry);
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_domain_registry_install("static_conflict_domain", &registry), "%d");
+    TEST_ASSERT_NOT_NULL(find_def(&registry, "static_safe", 1));
+    TEST_ASSERT_NOT_NULL(find_def(&registry, "static_allow", 1));
+    TEST_ASSERT_NULL(find_def(&registry, "static_blocked", 1));
+    TEST_END();
+}
+
+static int test_domain_registry_static_table_install(void) {
+    TEST_BEGIN();
+    const maelys_datalog_domain_def_t def = {
+        .domain_name = "static_install_domain",
+        .predicates = k_static_table_a,
+        .predicate_count = sizeof(k_static_table_a) / sizeof(k_static_table_a[0]),
+        .description = "static table install",
+        .install_predicates = NULL,
+    };
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_domain_registry_register(&def), "%d");
+    maelys_datalog_predicate_registry_t registry;
+    maelys_datalog_predicate_registry_init_core(&registry);
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_domain_registry_install("static_install_domain", &registry), "%d");
+    const maelys_datalog_predicate_def_t *safe = find_def(&registry, "static_safe", 1);
+    const maelys_datalog_predicate_def_t *allow = find_def(&registry, "static_allow", 1);
+    TEST_ASSERT_NOT_NULL(safe);
+    TEST_ASSERT_TRUE(safe->kind_flags & MAELYS_DATALOG_PRED_KIND_EDB);
+    TEST_ASSERT_NOT_NULL(allow);
+    TEST_ASSERT_TRUE(allow->kind_flags & MAELYS_DATALOG_PRED_KIND_IDB);
+    TEST_ASSERT_TRUE(allow->kind_flags & MAELYS_DATALOG_PRED_KIND_QUERY);
+    TEST_END();
+}
+
+static int test_domain_registry_static_and_callback_both_non_null(void) {
+    TEST_BEGIN();
+    const maelys_datalog_domain_def_t def = {
+        .domain_name = "static_invalid_both_domain",
+        .predicates = k_static_table_a,
+        .predicate_count = sizeof(k_static_table_a) / sizeof(k_static_table_a[0]),
+        .description = "invalid both",
+        .install_predicates = install_callback_test_predicates,
+    };
+    TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_ARGUMENT, maelys_datalog_domain_registry_register(&def), "%d");
+    TEST_END();
+}
+
+static int test_domain_registry_static_table_zero_count(void) {
+    TEST_BEGIN();
+    const maelys_datalog_domain_def_t def = {
+        .domain_name = "static_invalid_zero_domain",
+        .predicates = k_static_table_a,
+        .predicate_count = 0,
+        .description = "invalid zero count",
+        .install_predicates = NULL,
+    };
+    TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_ARGUMENT, maelys_datalog_domain_registry_register(&def), "%d");
+    TEST_END();
+}
+
+static int test_domain_registry_callback_null_table_null(void) {
+    TEST_BEGIN();
+    const maelys_datalog_domain_def_t def = {
+        .domain_name = "static_invalid_empty_domain",
+        .predicates = NULL,
+        .predicate_count = 0,
+        .description = "invalid empty",
+        .install_predicates = NULL,
+    };
+    TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_ARGUMENT, maelys_datalog_domain_registry_register(&def), "%d");
+    TEST_END();
+}
+
 static int test_domain_registry_rejects_conflicting_predicate(void) {
     TEST_BEGIN();
     maelys_datalog_predicate_registry_t registry;
@@ -243,6 +382,13 @@ int main(int argc, char **argv) {
         {"maelys_datalog_domain_registry/decision_deny_is_query_idb", TEST_MODE_NON_BLOCKING, test_decision_deny_is_query_idb},
         {"maelys_datalog_domain_registry/decision_reduce_is_query_idb", TEST_MODE_NON_BLOCKING, test_decision_reduce_is_query_idb},
         {"maelys_datalog_domain_registry/graph_and_decision_can_share_registry", TEST_MODE_NON_BLOCKING, test_graph_and_decision_can_share_registry},
+        {"maelys_datalog_domain_registry/static_table_basic", TEST_MODE_NON_BLOCKING, test_domain_registry_static_table_basic},
+        {"maelys_datalog_domain_registry/static_table_idempotent", TEST_MODE_NON_BLOCKING, test_domain_registry_static_table_idempotent},
+        {"maelys_datalog_domain_registry/static_table_idempotent_conflicting_table", TEST_MODE_NON_BLOCKING, test_domain_registry_static_table_idempotent_conflicting_table},
+        {"maelys_datalog_domain_registry/static_table_install", TEST_MODE_NON_BLOCKING, test_domain_registry_static_table_install},
+        {"maelys_datalog_domain_registry/static_and_callback_both_non_null", TEST_MODE_NON_BLOCKING, test_domain_registry_static_and_callback_both_non_null},
+        {"maelys_datalog_domain_registry/static_table_zero_count", TEST_MODE_NON_BLOCKING, test_domain_registry_static_table_zero_count},
+        {"maelys_datalog_domain_registry/callback_null_table_null", TEST_MODE_NON_BLOCKING, test_domain_registry_callback_null_table_null},
         {"maelys_datalog_domain_registry/rejects_conflicting_predicate", TEST_MODE_NON_BLOCKING, test_domain_registry_rejects_conflicting_predicate},
         {"maelys_datalog_domain_registry/freezes_and_rejects_mutation", TEST_MODE_NON_BLOCKING, test_registry_freezes_and_rejects_mutation},
         {"maelys_datalog_domain_registry/standalone_has_no_parent_paths", TEST_MODE_NON_BLOCKING, test_standalone_domain_registry_has_no_parent_paths},

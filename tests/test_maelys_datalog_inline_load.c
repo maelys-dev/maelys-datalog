@@ -10,6 +10,18 @@
 static const char k_inline_domain[] = "inline_test";
 static const char k_policy_id[] = "inline-policy";
 static const char k_policy_src[] = "allow(X) :- safe(X).\n";
+static const maelys_datalog_predicate_def_t k_static_domain_table_a[] = {
+    {.name = "safe", .arity = 1, .kind_flags = MAELYS_DATALOG_PRED_KIND_EDB},
+    {.name = "allow",
+     .arity = 1,
+     .kind_flags = MAELYS_DATALOG_PRED_KIND_IDB | MAELYS_DATALOG_PRED_KIND_QUERY},
+};
+static const maelys_datalog_predicate_def_t k_static_domain_table_b[] = {
+    {.name = "blocked", .arity = 1, .kind_flags = MAELYS_DATALOG_PRED_KIND_EDB},
+    {.name = "deny",
+     .arity = 1,
+     .kind_flags = MAELYS_DATALOG_PRED_KIND_IDB | MAELYS_DATALOG_PRED_KIND_QUERY},
+};
 
 static maelys_result_t install_inline_test_predicates(maelys_datalog_predicate_registry_t *reg) {
     maelys_result_t rc = maelys_datalog_predicate_registry_add_domain(
@@ -43,6 +55,21 @@ static maelys_result_t load_inline_source(const char *src,
                                              0,
                                              set,
                                              diag);
+}
+
+static maelys_result_t load_inline_with_static_domain(const char *domain,
+                                                      maelys_datalog_policy_set_t *set,
+                                                      maelys_datalog_diagnostic_t *diag) {
+    return maelys_datalog_load_policy_inline_with_static_domain(k_static_domain_table_a,
+                                                                sizeof(k_static_domain_table_a) /
+                                                                    sizeof(k_static_domain_table_a[0]),
+                                                                domain,
+                                                                k_policy_id,
+                                                                k_policy_src,
+                                                                strlen(k_policy_src),
+                                                                0,
+                                                                set,
+                                                                diag);
 }
 
 static maelys_datalog_term_t symbol_term(maelys_datalog_ruleset_t *ruleset, const char *text) {
@@ -405,6 +432,142 @@ static int test_inline_v1_private_idb_requires_domain_declaration(void) {
     TEST_END();
 }
 
+static int test_inline_load_with_domain_basic(void) {
+    TEST_BEGIN();
+    maelys_datalog_policy_set_t set;
+    TEST_ASSERT_EQUAL(MAELYS_OK, load_inline_with_static_domain("with_domain_basic", &set, NULL), "%d");
+    TEST_ASSERT_EQUAL((size_t)1u, set.policy_count, "%zu");
+    TEST_ASSERT_EQUAL_STRING("with_domain_basic", set.policies[0].domain);
+    maelys_datalog_policy_set_clear(&set);
+    TEST_END();
+}
+
+static int test_inline_load_with_domain_idempotent(void) {
+    TEST_BEGIN();
+    maelys_datalog_policy_set_t set;
+    TEST_ASSERT_EQUAL(MAELYS_OK, load_inline_with_static_domain("with_domain_idempotent", &set, NULL), "%d");
+    maelys_datalog_policy_set_clear(&set);
+    TEST_ASSERT_EQUAL(MAELYS_OK, load_inline_with_static_domain("with_domain_idempotent", &set, NULL), "%d");
+    TEST_ASSERT_EQUAL((size_t)1u, set.policy_count, "%zu");
+    maelys_datalog_policy_set_clear(&set);
+    TEST_END();
+}
+
+static int test_inline_load_with_domain_idempotent_conflicting_table(void) {
+    TEST_BEGIN();
+    const char domain[] = "with_domain_conflicting_table";
+    maelys_datalog_policy_set_t set;
+    TEST_ASSERT_EQUAL(MAELYS_OK, load_inline_with_static_domain(domain, &set, NULL), "%d");
+    maelys_datalog_policy_set_clear(&set);
+    TEST_ASSERT_EQUAL(MAELYS_OK,
+                      maelys_datalog_load_policy_inline_with_static_domain(k_static_domain_table_b,
+                                                                          sizeof(k_static_domain_table_b) /
+                                                                              sizeof(k_static_domain_table_b[0]),
+                                                                          domain,
+                                                                          k_policy_id,
+                                                                          k_policy_src,
+                                                                          strlen(k_policy_src),
+                                                                          0,
+                                                                          &set,
+                                                                          NULL),
+                      "%d");
+    TEST_ASSERT_EQUAL((size_t)1u, set.policy_count, "%zu");
+    TEST_ASSERT_EQUAL_STRING(domain, set.policies[0].domain);
+    maelys_datalog_policy_set_clear(&set);
+    TEST_END();
+}
+
+static int test_inline_load_with_domain_null_predicates(void) {
+    TEST_BEGIN();
+    maelys_datalog_policy_set_t set;
+    set.policy_count = 99u;
+    TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_ARGUMENT,
+                      maelys_datalog_load_policy_inline_with_static_domain(NULL,
+                                                                          sizeof(k_static_domain_table_a) /
+                                                                              sizeof(k_static_domain_table_a[0]),
+                                                                          "with_domain_null_predicates",
+                                                                          k_policy_id,
+                                                                          k_policy_src,
+                                                                          strlen(k_policy_src),
+                                                                          0,
+                                                                          &set,
+                                                                          NULL),
+                      "%d");
+    TEST_ASSERT_EQUAL((size_t)0u, set.policy_count, "%zu");
+    TEST_END();
+}
+
+static int test_inline_load_with_domain_zero_count(void) {
+    TEST_BEGIN();
+    maelys_datalog_policy_set_t set;
+    set.policy_count = 99u;
+    TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_ARGUMENT,
+                      maelys_datalog_load_policy_inline_with_static_domain(k_static_domain_table_a,
+                                                                          0u,
+                                                                          "with_domain_zero_count",
+                                                                          k_policy_id,
+                                                                          k_policy_src,
+                                                                          strlen(k_policy_src),
+                                                                          0,
+                                                                          &set,
+                                                                          NULL),
+                      "%d");
+    TEST_ASSERT_EQUAL((size_t)0u, set.policy_count, "%zu");
+    TEST_END();
+}
+
+static int test_inline_load_with_domain_too_long_domain_name(void) {
+    TEST_BEGIN();
+    char domain[MAELYS_DATALOG_INLINE_MAX_DOMAIN_LEN + 2u];
+    memset(domain, 's', sizeof(domain) - 1u);
+    domain[sizeof(domain) - 1u] = '\0';
+    maelys_datalog_policy_set_t set;
+    set.policy_count = 99u;
+    TEST_ASSERT_EQUAL(MAELYS_ERR_PAYLOAD_TOO_LARGE,
+                      maelys_datalog_load_policy_inline_with_static_domain(k_static_domain_table_a,
+                                                                          sizeof(k_static_domain_table_a) /
+                                                                              sizeof(k_static_domain_table_a[0]),
+                                                                          domain,
+                                                                          k_policy_id,
+                                                                          k_policy_src,
+                                                                          strlen(k_policy_src),
+                                                                          0,
+                                                                          &set,
+                                                                          NULL),
+                      "%d");
+    TEST_ASSERT_EQUAL((size_t)0u, set.policy_count, "%zu");
+    TEST_ASSERT_NULL(maelys_datalog_domain_registry_find(domain));
+    TEST_END();
+}
+
+static int test_inline_load_with_domain_solve_query(void) {
+    TEST_BEGIN();
+    maelys_datalog_policy_set_t set;
+    TEST_ASSERT_EQUAL(MAELYS_OK, load_inline_with_static_domain("with_domain_solve_query", &set, NULL), "%d");
+    maelys_datalog_fact_t facts[4];
+    maelys_datalog_edb_t edb;
+    TEST_ASSERT_EQUAL(MAELYS_OK,
+                      maelys_datalog_edb_init(&edb,
+                                              facts,
+                                              sizeof(facts) / sizeof(facts[0]),
+                                              &set.policies[0].symbols,
+                                              &set.policies[0].registry),
+                      "%d");
+    maelys_datalog_term_t alice = symbol_term(&set.policies[0], "alice");
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_add_fact(&edb, "safe", &alice, 1), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_finalize(&edb), "%d");
+    maelys_datalog_solve_result_t *result = NULL;
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_solve_once(&set.policies[0], &edb, &result), "%d");
+    bool present = false;
+    TEST_ASSERT_EQUAL(MAELYS_OK,
+                      maelys_datalog_query_solved_ground_fact(result, "allow", &alice, 1, &present),
+                      "%d");
+    TEST_ASSERT_TRUE(present);
+    maelys_datalog_solve_result_free(result);
+    maelys_datalog_policy_set_clear(&set);
+    TEST_END();
+}
+
 int main(int argc, char **argv) {
     test_case_t cases[] = {
         {"inline_load/basic", TEST_MODE_NON_BLOCKING, test_inline_load_basic},
@@ -428,6 +591,13 @@ int main(int argc, char **argv) {
         {"inline_load/no_manifest_mode", TEST_MODE_NON_BLOCKING, test_inline_load_no_manifest_mode},
         {"inline_load/synthetic_metadata", TEST_MODE_NON_BLOCKING, test_inline_load_synthetic_metadata},
         {"inline_load/private_idb_requires_domain", TEST_MODE_NON_BLOCKING, test_inline_v1_private_idb_requires_domain_declaration},
+        {"inline_load/with_domain_basic", TEST_MODE_NON_BLOCKING, test_inline_load_with_domain_basic},
+        {"inline_load/with_domain_idempotent", TEST_MODE_NON_BLOCKING, test_inline_load_with_domain_idempotent},
+        {"inline_load/with_domain_idempotent_conflicting_table", TEST_MODE_NON_BLOCKING, test_inline_load_with_domain_idempotent_conflicting_table},
+        {"inline_load/with_domain_null_predicates", TEST_MODE_NON_BLOCKING, test_inline_load_with_domain_null_predicates},
+        {"inline_load/with_domain_zero_count", TEST_MODE_NON_BLOCKING, test_inline_load_with_domain_zero_count},
+        {"inline_load/with_domain_too_long_domain_name", TEST_MODE_NON_BLOCKING, test_inline_load_with_domain_too_long_domain_name},
+        {"inline_load/with_domain_solve_query", TEST_MODE_NON_BLOCKING, test_inline_load_with_domain_solve_query},
     };
     return test_main("maelys_datalog_inline_load", cases, (int)(sizeof(cases) / sizeof(cases[0])), argc, argv);
 }

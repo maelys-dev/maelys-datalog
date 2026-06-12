@@ -525,6 +525,42 @@ maelys_result_t maelys_datalog_load_policy_inline(
     return rc;
 }
 
+maelys_result_t maelys_datalog_load_policy_inline_with_static_domain(
+    const maelys_datalog_predicate_def_t *predicates,
+    size_t predicate_count,
+    const char *domain_name,
+    const char *policy_id,
+    const char *src,
+    size_t src_len,
+    unsigned flags,
+    maelys_datalog_policy_set_t *out_set,
+    maelys_datalog_diagnostic_t *out_diag) {
+    if (!out_set) return MAELYS_ERR_INVALID_ARGUMENT;
+    memset(out_set, 0, sizeof(*out_set));
+    if (out_diag) maelys_datalog_diagnostic_clear(out_diag);
+
+    maelys_result_t rc = validate_inline_identity(domain_name, MAELYS_DATALOG_INLINE_MAX_DOMAIN_LEN);
+    if (rc != MAELYS_OK) return rc;
+
+    maelys_datalog_domain_def_t def = {
+        .domain_name = domain_name,
+        .predicates = predicates,
+        .predicate_count = predicate_count,
+        .description = NULL,
+        .install_predicates = NULL,
+    };
+    rc = maelys_datalog_domain_registry_register(&def);
+    if (rc != MAELYS_OK) return rc;
+
+    return maelys_datalog_load_policy_inline(domain_name,
+                                             policy_id,
+                                             src,
+                                             src_len,
+                                             flags,
+                                             out_set,
+                                             out_diag);
+}
+
 void maelys_datalog_policy_set_clear(maelys_datalog_policy_set_t *set) {
     if (!set) return;
     memset(set, 0, sizeof(*set));
