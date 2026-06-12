@@ -54,6 +54,7 @@ ASAN_TEST_SRCS = \
 	tests/test_maelys_datalog_edb.c \
 	tests/test_maelys_datalog_symbol_table.c \
 	tests/test_maelys_datalog_domain_registry.c \
+	tests/test_maelys_datalog_manifest_buffer.c \
 	tests/test_maelys_datalog_solver.c \
 	tests/test_maelys_datalog_audit.c
 
