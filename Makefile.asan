@@ -41,6 +41,7 @@ ASAN_ENV = ASAN_OPTIONS=$(ASAN_OPTIONS_VALUE) \
 
 ASAN_SRCS = $(ENGINE_SRCS) $(COMMON_SRCS) $(VENDOR_SRCS) \
 	examples/domains/maelys_datalog_example_domains.c \
+	src/wasm/maelys_datalog_wasm.c \
 	tests/helpers/test_log.c \
 	tests/helpers/test_framework.c
 
@@ -57,6 +58,7 @@ ASAN_TEST_SRCS = \
 	tests/test_maelys_datalog_manifest_buffer.c \
 	tests/test_maelys_datalog_inline_load.c \
 	tests/test_maelys_datalog_manifest_file_wrapper.c \
+	tests/test_maelys_datalog_wasm_builder.c \
 	tests/test_maelys_datalog_solver.c \
 	tests/test_maelys_datalog_audit.c
 

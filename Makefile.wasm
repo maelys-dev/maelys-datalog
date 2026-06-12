@@ -26,6 +26,8 @@ COMMON_SRCS = \
 WASM_SRCS = $(ENGINE_SRCS) $(COMMON_SRCS)
 EXAMPLES_SRCS = examples/domains/maelys_datalog_example_domains.c
 WASM_EXAMPLES_SRCS = $(WASM_SRCS) $(EXAMPLES_SRCS)
+WASM_BUILDER_SRC = src/wasm/maelys_datalog_wasm.c
+WASM_DYNAMIC_SRCS = $(WASM_SRCS) $(WASM_BUILDER_SRC)
 
 WASM_EXPORTS = \
 	'_maelys_datalog_manifest_load_from_text', \
@@ -55,6 +57,25 @@ WASM_EXAMPLES_LDFLAGS = \
 	-s MODULARIZE=1 \
 	-s EXPORT_NAME="MaelysDatalogExamples"
 
+WASM_DYNAMIC_EXPORTS = \
+	$(WASM_EXPORTS), \
+	'_maelys_datalog_load_policy_inline', \
+	'_maelys_datalog_wasm_domain_begin', \
+	'_maelys_datalog_wasm_domain_add_predicate', \
+	'_maelys_datalog_wasm_domain_commit', \
+	'_maelys_datalog_wasm_domain_abort', \
+	'_maelys_datalog_wasm_load_policy', \
+	'_maelys_datalog_wasm_ruleset_ptr', \
+	'_maelys_datalog_wasm_last_diag_message', \
+	'_maelys_datalog_wasm_last_diag_code'
+
+WASM_DYNAMIC_LDFLAGS = \
+	-s "EXPORTED_FUNCTIONS=[$(WASM_DYNAMIC_EXPORTS)]" \
+	-s "EXPORTED_RUNTIME_METHODS=['ccall','cwrap','UTF8ToString','stringToUTF8','lengthBytesUTF8']" \
+	-s ALLOW_MEMORY_GROWTH=1 \
+	-s MODULARIZE=1 \
+	-s EXPORT_NAME="MaelysDatalogDynamic"
+
 maelys_datalog.js: $(WASM_SRCS)
 	@mkdir -p $(EM_CACHE)
 	EM_CACHE=$(EM_CACHE) $(EMCC) $(WASM_CFLAGS) $(WASM_SRCS) $(WASM_LDFLAGS) -o $@
@@ -67,8 +88,15 @@ maelys_datalog_examples.js: $(WASM_EXAMPLES_SRCS)
 
 maelys_datalog_examples.wasm: maelys_datalog_examples.js
 
+maelys_datalog_dynamic.js: $(WASM_DYNAMIC_SRCS)
+	@mkdir -p $(EM_CACHE)
+	EM_CACHE=$(EM_CACHE) $(EMCC) $(WASM_CFLAGS) $(WASM_DYNAMIC_SRCS) $(WASM_DYNAMIC_LDFLAGS) -o $@
+
+maelys_datalog_dynamic.wasm: maelys_datalog_dynamic.js
+
 clean:
 	rm -rf $(EM_CACHE)
 	rm -f maelys_datalog.js maelys_datalog.wasm
 	rm -f maelys_datalog_examples.js maelys_datalog_examples.wasm
-	rm -f *.o src/core/*.o src/manifest/*.o common/*.o vendor/yyjson/*.o examples/domains/*.o
+	rm -f maelys_datalog_dynamic.js maelys_datalog_dynamic.wasm
+	rm -f *.o src/core/*.o src/manifest/*.o src/wasm/*.o common/*.o vendor/yyjson/*.o examples/domains/*.o

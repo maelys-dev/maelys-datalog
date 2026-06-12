@@ -34,6 +34,9 @@ TEST_HELPER_SRCS = \
 	tests/helpers/test_log.c \
 	tests/helpers/test_framework.c
 
+WASM_TEST_SRCS = \
+	src/wasm/maelys_datalog_wasm.c
+
 TEST_SRCS = $(wildcard tests/test_*.c)
 TEST_BINS = $(TEST_SRCS:tests/%.c=build/tests/%)
 TEST_CFLAGS = $(CFLAGS) -DMAELYS_TESTING
@@ -49,8 +52,8 @@ examples: libmaelys_datalog.a $(EXAMPLES_OBJS) $(EXAMPLES_CHECK)
 	$(CC) $(CFLAGS) $(EXAMPLES_OBJS) $(EXAMPLES_CHECK) -L. -lmaelys_datalog $(LIBS) -o $(EXAMPLES_BIN)
 	./$(EXAMPLES_BIN)
 
-build/tests/%: tests/%.c $(SRCS) $(EXAMPLES_SRCS) $(TEST_HELPER_SRCS) | build/tests
-	$(CC) $(TEST_CFLAGS) -I. $(SRCS) $(EXAMPLES_SRCS) $(TEST_HELPER_SRCS) $< -o $@
+build/tests/%: tests/%.c $(SRCS) $(EXAMPLES_SRCS) $(TEST_HELPER_SRCS) $(WASM_TEST_SRCS) | build/tests
+	$(CC) $(TEST_CFLAGS) -I. $(SRCS) $(EXAMPLES_SRCS) $(TEST_HELPER_SRCS) $(WASM_TEST_SRCS) $< -o $@
 
 build/tests:
 	mkdir -p $@
