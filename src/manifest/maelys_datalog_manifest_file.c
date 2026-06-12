@@ -221,6 +221,7 @@ maelys_result_t maelys_datalog_manifest_load_ex(const char *manifest_path,
                                                 maelys_datalog_policy_set_t *out_set,
                                                 maelys_datalog_diagnostic_t *out_diag) {
     if (!manifest_path || !out_set) return MAELYS_ERR_INVALID_ARGUMENT;
+    memset(out_set, 0, sizeof(*out_set));
     if (out_diag) maelys_datalog_diagnostic_clear(out_diag);
 
     char *manifest_buf = NULL;
