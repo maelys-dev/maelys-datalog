@@ -686,10 +686,12 @@ static maelys_datalog_compare_result_t solve_once_evaluate_comparison(const mael
     }
     switch (op) {
         case MAELYS_DATALOG_CMP_EQ:
+            if (lhs->kind != rhs->kind) return MAELYS_DATALOG_COMPARE_INVALID_KIND;
             return maelys_datalog_term_equal(lhs, rhs)
                 ? MAELYS_DATALOG_COMPARE_TRUE
                 : MAELYS_DATALOG_COMPARE_FALSE;
         case MAELYS_DATALOG_CMP_NEQ:
+            if (lhs->kind != rhs->kind) return MAELYS_DATALOG_COMPARE_INVALID_KIND;
             return maelys_datalog_term_equal(lhs, rhs)
                 ? MAELYS_DATALOG_COMPARE_FALSE
                 : MAELYS_DATALOG_COMPARE_TRUE;

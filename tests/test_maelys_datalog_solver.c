@@ -30,7 +30,7 @@ maelys_result_t maelys_datalog_test_solve_result_idb_proof_indices(
     const uint16_t **out_indices,
     size_t *out_count);
 
-static int make_ruleset(maelys_datalog_ruleset_t *r, const char *src) {
+static int init_solver_test_ruleset(maelys_datalog_ruleset_t *r) {
     memset(r, 0, sizeof(*r));
     int rc = maelys_datalog_ruleset_init(r, "policy.test", "graph",
                                          "0000000000000000000000000000000000000000000000000000000000000000", 1);
@@ -71,14 +71,29 @@ static int make_ruleset(maelys_datalog_ruleset_t *r, const char *src) {
     }
     static const char *const atoms[] = {
         "proj-1", "alice", "bob", "carol", "dave", "r1", "r2",
-        "cli_pivot", "stdin", "text", "request", "a", "b", "c", NULL};
+        "cli_pivot", "stdin", "text", "request", "a", "b", "c", "notanint", NULL};
     for (size_t i = 0; atoms[i]; i++) {
         rc = maelys_datalog_predicate_registry_add_atom(&r->registry, atoms[i]);
         if (rc != MAELYS_OK) return rc;
     }
     rc = maelys_datalog_predicate_registry_freeze(&r->registry);
     if (rc != MAELYS_OK) return rc;
+    return MAELYS_OK;
+}
+
+static int make_ruleset(maelys_datalog_ruleset_t *r, const char *src) {
+    int rc = init_solver_test_ruleset(r);
+    if (rc != MAELYS_OK) return rc;
     return maelys_datalog_parse_ruleset(r, src, strlen(src));
+}
+
+static int parse_solver_test_ruleset_ex(const char *src, maelys_datalog_diagnostic_t *diag) {
+    maelys_datalog_ruleset_t r;
+    int rc = init_solver_test_ruleset(&r);
+    if (rc != MAELYS_OK) return rc;
+    rc = maelys_datalog_parse_ruleset_ex(&r, src, strlen(src), "comparison_matrix.dl", diag);
+    maelys_datalog_ruleset_clear(&r);
+    return rc;
 }
 
 static maelys_datalog_term_t sym_term(maelys_datalog_ruleset_t *r, const char *s) {
@@ -117,6 +132,41 @@ static void add_int_symbol_binary(maelys_datalog_ruleset_t *r,
     terms[0].kind = MAELYS_DATALOG_TERM_INT;
     terms[0].as.integer = lhs;
     terms[1] = sym_term(r, rhs);
+    (void)maelys_datalog_edb_add_fact(edb, predicate, terms, 2);
+}
+
+static void add_symbol_symbol_binary(maelys_datalog_ruleset_t *r,
+                                     maelys_datalog_edb_t *edb,
+                                     const char *predicate,
+                                     const char *lhs,
+                                     const char *rhs) {
+    maelys_datalog_term_t terms[2];
+    terms[0] = sym_term(r, lhs);
+    terms[1] = sym_term(r, rhs);
+    (void)maelys_datalog_edb_add_fact(edb, predicate, terms, 2);
+}
+
+static void add_symbol_int_binary(maelys_datalog_ruleset_t *r,
+                                  maelys_datalog_edb_t *edb,
+                                  const char *predicate,
+                                  const char *lhs,
+                                  long long rhs) {
+    maelys_datalog_term_t terms[2];
+    terms[0] = sym_term(r, lhs);
+    terms[1].kind = MAELYS_DATALOG_TERM_INT;
+    terms[1].as.integer = rhs;
+    (void)maelys_datalog_edb_add_fact(edb, predicate, terms, 2);
+}
+
+static void add_symbol_bool_binary(maelys_datalog_ruleset_t *r,
+                                   maelys_datalog_edb_t *edb,
+                                   const char *predicate,
+                                   const char *lhs,
+                                   int rhs) {
+    maelys_datalog_term_t terms[2];
+    terms[0] = sym_term(r, lhs);
+    terms[1].kind = MAELYS_DATALOG_TERM_BOOL;
+    terms[1].as.boolean = rhs ? 1 : 0;
     (void)maelys_datalog_edb_add_fact(edb, predicate, terms, 2);
 }
 
@@ -1366,6 +1416,283 @@ static non_int_ordinal_case_result_t run_non_int_ordinal_case(void) {
     outcome.result_was_null = result == NULL;
     if (result) maelys_datalog_solve_result_free(result);
     return outcome;
+}
+
+typedef struct {
+    maelys_datalog_term_kind_t lhs_kind;
+    maelys_datalog_cmp_op_t op;
+    maelys_datalog_term_kind_t rhs_kind;
+    int expect_accept;
+} comparison_matrix_case_t;
+
+static const char *comparison_kind_literal(maelys_datalog_term_kind_t kind, int rhs) {
+    switch (kind) {
+        case MAELYS_DATALOG_TERM_SYMBOL: return rhs ? "\"b\"" : "\"a\"";
+        case MAELYS_DATALOG_TERM_INT: return rhs ? "2" : "1";
+        case MAELYS_DATALOG_TERM_BOOL: return rhs ? "false" : "true";
+        default: return "_";
+    }
+}
+
+static const char *comparison_op_text(maelys_datalog_cmp_op_t op) {
+    switch (op) {
+        case MAELYS_DATALOG_CMP_EQ: return "=";
+        case MAELYS_DATALOG_CMP_NEQ: return "!=";
+        case MAELYS_DATALOG_CMP_LT: return "<";
+        case MAELYS_DATALOG_CMP_LTE: return "<=";
+        case MAELYS_DATALOG_CMP_GT: return ">";
+        case MAELYS_DATALOG_CMP_GTE: return ">=";
+        default: return "?";
+    }
+}
+
+static int comparison_matrix_accepts(maelys_datalog_term_kind_t lhs_kind,
+                                     maelys_datalog_cmp_op_t op,
+                                     maelys_datalog_term_kind_t rhs_kind) {
+    if (lhs_kind != rhs_kind) return 0;
+    if (lhs_kind == MAELYS_DATALOG_TERM_INT) return 1;
+    return op == MAELYS_DATALOG_CMP_EQ || op == MAELYS_DATALOG_CMP_NEQ;
+}
+
+static maelys_result_t solve_ground_comparison_present(const char *comparison,
+                                                       bool *present) {
+    char src[256];
+    snprintf(src, sizeof(src), "p(X) :- q(X, _), %s.", comparison);
+    maelys_datalog_ruleset_t r;
+    maelys_result_t rc = make_ruleset(&r, src);
+    if (rc != MAELYS_OK) return rc;
+    maelys_datalog_fact_t facts[2];
+    maelys_datalog_edb_t edb;
+    rc = maelys_datalog_edb_init(&edb, facts, 2, &r.symbols, &r.registry);
+    if (rc != MAELYS_OK) return rc;
+    add_int_symbol_binary(&r, &edb, "q", 1, "a");
+    rc = maelys_datalog_edb_finalize(&edb);
+    if (rc != MAELYS_OK) return rc;
+    maelys_datalog_solve_result_t *result = NULL;
+    rc = maelys_datalog_solve_once(&r, &edb, &result);
+    if (rc != MAELYS_OK) return rc;
+    rc = query_solved_int_unary(result, "p", 1, present);
+    maelys_datalog_solve_result_free(result);
+    return rc;
+}
+
+static int test_comparison_parser_ground_matrix_54(void) {
+    TEST_BEGIN();
+    const maelys_datalog_term_kind_t kinds[] = {
+        MAELYS_DATALOG_TERM_SYMBOL,
+        MAELYS_DATALOG_TERM_INT,
+        MAELYS_DATALOG_TERM_BOOL,
+    };
+    const maelys_datalog_cmp_op_t ops[] = {
+        MAELYS_DATALOG_CMP_EQ,
+        MAELYS_DATALOG_CMP_NEQ,
+        MAELYS_DATALOG_CMP_LT,
+        MAELYS_DATALOG_CMP_LTE,
+        MAELYS_DATALOG_CMP_GT,
+        MAELYS_DATALOG_CMP_GTE,
+    };
+    size_t observed = 0;
+    size_t accepted = 0;
+    size_t rejected = 0;
+    for (size_t lhs = 0; lhs < sizeof(kinds) / sizeof(kinds[0]); lhs++) {
+        for (size_t op = 0; op < sizeof(ops) / sizeof(ops[0]); op++) {
+            for (size_t rhs = 0; rhs < sizeof(kinds) / sizeof(kinds[0]); rhs++) {
+                comparison_matrix_case_t c = {
+                    kinds[lhs],
+                    ops[op],
+                    kinds[rhs],
+                    comparison_matrix_accepts(kinds[lhs], ops[op], kinds[rhs]),
+                };
+                char src[256];
+                snprintf(src,
+                         sizeof(src),
+                         "allow(X) :- blocked(X), %s %s %s.",
+                         comparison_kind_literal(c.lhs_kind, 0),
+                         comparison_op_text(c.op),
+                         comparison_kind_literal(c.rhs_kind, 1));
+                maelys_datalog_diagnostic_t diag;
+                memset(&diag, 0, sizeof(diag));
+                maelys_result_t parse_rc = parse_solver_test_ruleset_ex(src, &diag);
+                if (c.expect_accept) {
+                    TEST_ASSERT_EQUAL(MAELYS_OK, parse_rc, "%d");
+                    accepted++;
+                } else {
+                    TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_FIELD, parse_rc, "%d");
+                    TEST_ASSERT_EQUAL(MAELYS_DATALOG_DIAG_PARSER_INVALID_COMPARISON, diag.code, "%d");
+                    rejected++;
+                }
+                observed++;
+            }
+        }
+    }
+    TEST_ASSERT_EQUAL((size_t)54u, observed, "%zu");
+    TEST_ASSERT_EQUAL((size_t)10u, accepted, "%zu");
+    TEST_ASSERT_EQUAL((size_t)44u, rejected, "%zu");
+    TEST_END();
+}
+
+static int test_comparison_solver_ground_truth_values(void) {
+    TEST_BEGIN();
+    static const struct {
+        const char *comparison;
+        int expect_present;
+    } cases[] = {
+        {"\"a\" = \"a\"", 1},
+        {"\"a\" = \"b\"", 0},
+        {"\"a\" != \"a\"", 0},
+        {"\"a\" != \"b\"", 1},
+        {"1 = 1", 1},
+        {"1 = 2", 0},
+        {"1 != 1", 0},
+        {"1 != 2", 1},
+        {"1 < 2", 1},
+        {"1 < 1", 0},
+        {"1 <= 1", 1},
+        {"2 > 1", 1},
+        {"2 >= 2", 1},
+        {"1 >= 2", 0},
+        {"true = true", 1},
+        {"true = false", 0},
+        {"true != false", 1},
+        {"false != false", 0},
+    };
+    for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+        bool present = false;
+        TEST_ASSERT_EQUAL(MAELYS_OK, solve_ground_comparison_present(cases[i].comparison, &present), "%d");
+        TEST_ASSERT_EQUAL(cases[i].expect_present, present ? 1 : 0, "%d");
+    }
+    TEST_END();
+}
+
+static int test_comparison_solver_runtime_variables(void) {
+    TEST_BEGIN();
+    maelys_datalog_ruleset_t r;
+    maelys_datalog_fact_t facts[4];
+    maelys_datalog_edb_t edb;
+    maelys_datalog_solve_result_t *result = NULL;
+    bool present = false;
+
+    TEST_ASSERT_EQUAL(MAELYS_OK, make_ruleset(&r, "p(X) :- q(X, V), V >= 10."), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_init(&edb, facts, 4, &r.symbols, &r.registry), "%d");
+    add_symbol_int_binary(&r, &edb, "q", "alice", 15);
+    add_symbol_int_binary(&r, &edb, "q", "bob", 5);
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_finalize(&edb), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_solve_once(&r, &edb, &result), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK, query_solved_symbol_unary(&r, result, "p", "alice", &present), "%d");
+    TEST_ASSERT_TRUE(present);
+    TEST_ASSERT_EQUAL(MAELYS_OK, query_solved_symbol_unary(&r, result, "p", "bob", &present), "%d");
+    TEST_ASSERT_FALSE(present);
+    maelys_datalog_solve_result_free(result);
+
+    TEST_ASSERT_EQUAL(MAELYS_OK, make_ruleset(&r, "p(X) :- q(X, N), N = \"alice\"."), "%d");
+    result = NULL;
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_init(&edb, facts, 4, &r.symbols, &r.registry), "%d");
+    add_symbol_symbol_binary(&r, &edb, "q", "user1", "alice");
+    add_symbol_symbol_binary(&r, &edb, "q", "user2", "bob");
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_finalize(&edb), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_solve_once(&r, &edb, &result), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK, query_solved_symbol_unary(&r, result, "p", "user1", &present), "%d");
+    TEST_ASSERT_TRUE(present);
+    TEST_ASSERT_EQUAL(MAELYS_OK, query_solved_symbol_unary(&r, result, "p", "user2", &present), "%d");
+    TEST_ASSERT_FALSE(present);
+    maelys_datalog_solve_result_free(result);
+
+    TEST_ASSERT_EQUAL(MAELYS_OK, make_ruleset(&r, "p(X) :- q(X, F), F = true."), "%d");
+    result = NULL;
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_init(&edb, facts, 4, &r.symbols, &r.registry), "%d");
+    add_symbol_bool_binary(&r, &edb, "q", "user1", 1);
+    add_symbol_bool_binary(&r, &edb, "q", "user2", 0);
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_finalize(&edb), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_solve_once(&r, &edb, &result), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK, query_solved_symbol_unary(&r, result, "p", "user1", &present), "%d");
+    TEST_ASSERT_TRUE(present);
+    TEST_ASSERT_EQUAL(MAELYS_OK, query_solved_symbol_unary(&r, result, "p", "user2", &present), "%d");
+    TEST_ASSERT_FALSE(present);
+    maelys_datalog_solve_result_free(result);
+    TEST_END();
+}
+
+static int test_comparison_runtime_cross_type_deny(void) {
+    TEST_BEGIN();
+    static const struct {
+        const char *src;
+        maelys_datalog_cmp_op_t op;
+    } cases[] = {
+        {"p(X) :- q(X, V), V = 42.", MAELYS_DATALOG_CMP_EQ},
+        {"p(X) :- q(X, V), V != 42.", MAELYS_DATALOG_CMP_NEQ},
+        {"p(X) :- q(X, V), V < 10.", MAELYS_DATALOG_CMP_LT},
+    };
+    for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+        maelys_datalog_ruleset_t r;
+        TEST_ASSERT_EQUAL(MAELYS_OK, make_ruleset(&r, cases[i].src), "%d");
+        maelys_datalog_fact_t facts[2];
+        maelys_datalog_edb_t edb;
+        TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_init(&edb, facts, 2, &r.symbols, &r.registry), "%d");
+        add_symbol_symbol_binary(&r, &edb, "q", "alice", "notanint");
+        TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_finalize(&edb), "%d");
+        maelys_datalog_solve_result_t *result = NULL;
+        maelys_datalog_solve_diagnostic_t diag;
+        TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_FIELD,
+                          maelys_datalog_solve_once_ex(&r, &edb, &result, &diag),
+                          "%d");
+        TEST_ASSERT_NULL(result);
+        TEST_ASSERT_EQUAL(MAELYS_DATALOG_SOLVE_DIAG_COMPARISON_TYPE_ERROR, diag.category, "%d");
+        TEST_ASSERT_EQUAL(MAELYS_DATALOG_DENY_COMPARISON_TYPE_ERROR, diag.failure_reason, "%d");
+        TEST_ASSERT_EQUAL((uint8_t)MAELYS_DATALOG_TERM_SYMBOL, diag.lhs_kind, "%u");
+        TEST_ASSERT_EQUAL((uint8_t)MAELYS_DATALOG_TERM_INT, diag.rhs_kind, "%u");
+        TEST_ASSERT_EQUAL((uint8_t)cases[i].op, diag.comparison_op, "%u");
+    }
+    TEST_END();
+}
+
+static int test_comparison_symbol_table_immutable_at_runtime(void) {
+    TEST_BEGIN();
+    static const struct {
+        const char *src;
+        int symbol_symbol_edb;
+        int expect_error;
+    } cases[] = {
+        {"p(X) :- q(X, _), \"alice\" = \"alice\".", 0, 0},
+        {"p(X) :- q(X, _), \"alice\" = \"bob\".", 0, 0},
+        {"p(X) :- q(X, _), \"alice\" != \"bob\".", 0, 0},
+        {"p(X) :- q(X, _), 1 = 1.", 0, 0},
+        {"p(X) :- q(X, _), 1 != 2.", 0, 0},
+        {"p(X) :- q(X, _), 1 < 2.", 0, 0},
+        {"p(X) :- q(X, _), 1 <= 1.", 0, 0},
+        {"p(X) :- q(X, _), 2 > 1.", 0, 0},
+        {"p(X) :- q(X, _), 2 >= 2.", 0, 0},
+        {"p(X) :- q(X, _), true = true.", 0, 0},
+        {"p(X) :- q(X, _), true != false.", 0, 0},
+        {"p(X) :- q(X, V), V = 42.", 1, 1},
+    };
+    for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+        maelys_datalog_ruleset_t r;
+        TEST_ASSERT_EQUAL(MAELYS_OK, make_ruleset(&r, cases[i].src), "%d");
+        maelys_datalog_fact_t facts[2];
+        maelys_datalog_edb_t edb;
+        TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_init(&edb, facts, 2, &r.symbols, &r.registry), "%d");
+        if (cases[i].symbol_symbol_edb) {
+            add_symbol_symbol_binary(&r, &edb, "q", "alice", "notanint");
+        } else {
+            add_int_symbol_binary(&r, &edb, "q", 1, "a");
+        }
+        TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_finalize(&edb), "%d");
+        size_t baseline = r.symbols.count;
+        maelys_datalog_solve_result_t *result = NULL;
+        maelys_datalog_solve_diagnostic_t diag;
+        maelys_result_t solve_rc = maelys_datalog_solve_once_ex(&r, &edb, &result, &diag);
+        if (cases[i].expect_error) {
+            TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_FIELD, solve_rc, "%d");
+            TEST_ASSERT_NULL(result);
+            TEST_ASSERT_EQUAL(MAELYS_DATALOG_DENY_COMPARISON_TYPE_ERROR, diag.failure_reason, "%d");
+        } else {
+            TEST_ASSERT_EQUAL(MAELYS_OK, solve_rc, "%d");
+            TEST_ASSERT_NOT_NULL(result);
+            maelys_datalog_solve_result_free(result);
+        }
+        TEST_ASSERT_EQUAL(baseline, r.symbols.count, "%zu");
+    }
+    TEST_END();
 }
 
 static int test_datalog_solve_once_eq_uses_term_equal(void) {
@@ -2946,6 +3273,11 @@ int main(int argc, char **argv) {
         {"maelys_datalog_solver/solve_once_repeated_solve_query_free_no_leak", TEST_MODE_NON_BLOCKING, test_datalog_solve_once_repeated_solve_query_free_no_leak},
         {"maelys_datalog_solver/solve_once_delta_bounds_invariants", TEST_MODE_NON_BLOCKING, test_datalog_solve_once_delta_bounds_invariants},
         {"maelys_datalog_solver/solve_once_max_depth_post_loop_failure_path", TEST_MODE_NON_BLOCKING, test_datalog_solve_once_max_depth_post_loop_failure_path},
+        {"maelys_datalog_solver/comparison_parser_ground_matrix_54", TEST_MODE_NON_BLOCKING, test_comparison_parser_ground_matrix_54},
+        {"maelys_datalog_solver/comparison_solver_ground_truth_values", TEST_MODE_NON_BLOCKING, test_comparison_solver_ground_truth_values},
+        {"maelys_datalog_solver/comparison_solver_runtime_variables", TEST_MODE_NON_BLOCKING, test_comparison_solver_runtime_variables},
+        {"maelys_datalog_solver/comparison_runtime_cross_type_deny", TEST_MODE_NON_BLOCKING, test_comparison_runtime_cross_type_deny},
+        {"maelys_datalog_solver/comparison_symbol_table_immutable_at_runtime", TEST_MODE_NON_BLOCKING, test_comparison_symbol_table_immutable_at_runtime},
         {"maelys_datalog_solver/solve_once_eq_uses_term_equal", TEST_MODE_NON_BLOCKING, test_datalog_solve_once_eq_uses_term_equal},
         {"maelys_datalog_solver/solve_once_symbol_eq_uses_symbol_id", TEST_MODE_NON_BLOCKING, test_datalog_solve_once_symbol_eq_uses_symbol_id},
         {"maelys_datalog_solver/solve_once_int_ordinals", TEST_MODE_NON_BLOCKING, test_datalog_solve_once_int_ordinals},
