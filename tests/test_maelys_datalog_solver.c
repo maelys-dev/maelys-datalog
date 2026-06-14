@@ -1695,6 +1695,53 @@ static int test_comparison_symbol_table_immutable_at_runtime(void) {
     TEST_END();
 }
 
+static int test_symbol_table_immutable_at_query_time(void) {
+    TEST_BEGIN();
+    maelys_datalog_ruleset_t r;
+    TEST_ASSERT_EQUAL(MAELYS_OK, make_ruleset(&r, "p(X) :- q(X, \"a\")."), "%d");
+
+    maelys_datalog_fact_t facts[2];
+    maelys_datalog_edb_t edb;
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_init(&edb, facts, 2, &r.symbols, &r.registry), "%d");
+    add_symbol_symbol_binary(&r, &edb, "q", "alice", "a");
+    maelys_datalog_term_t alice = sym_term(&r, "alice");
+    maelys_datalog_term_t bob = sym_term(&r, "bob");
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_finalize(&edb), "%d");
+
+    maelys_datalog_solve_result_t *result = NULL;
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_solve_once(&r, &edb, &result), "%d");
+    TEST_ASSERT_NOT_NULL(result);
+
+    size_t baseline = r.symbols.count;
+    bool present = false;
+    TEST_ASSERT_EQUAL(MAELYS_OK,
+                      maelys_datalog_query_solved_ground_fact(result, "p", &alice, 1u, &present),
+                      "%d");
+    TEST_ASSERT_TRUE(present);
+    TEST_ASSERT_EQUAL(baseline, r.symbols.count, "%zu");
+
+    present = true;
+    TEST_ASSERT_EQUAL(MAELYS_OK,
+                      maelys_datalog_query_solved_ground_fact(result, "p", &bob, 1u, &present),
+                      "%d");
+    TEST_ASSERT_FALSE(present);
+    TEST_ASSERT_EQUAL(baseline, r.symbols.count, "%zu");
+
+    present = true;
+    TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_FIELD,
+                      maelys_datalog_query_solved_ground_fact(result,
+                                                              "unknown_query_predicate",
+                                                              &alice,
+                                                              1u,
+                                                              &present),
+                      "%d");
+    TEST_ASSERT_FALSE(present);
+    TEST_ASSERT_EQUAL(baseline, r.symbols.count, "%zu");
+
+    maelys_datalog_solve_result_free(result);
+    TEST_END();
+}
+
 static int test_datalog_solve_once_eq_uses_term_equal(void) {
     TEST_BEGIN();
     maelys_datalog_ruleset_t r;
@@ -3278,6 +3325,7 @@ int main(int argc, char **argv) {
         {"maelys_datalog_solver/comparison_solver_runtime_variables", TEST_MODE_NON_BLOCKING, test_comparison_solver_runtime_variables},
         {"maelys_datalog_solver/comparison_runtime_cross_type_deny", TEST_MODE_NON_BLOCKING, test_comparison_runtime_cross_type_deny},
         {"maelys_datalog_solver/comparison_symbol_table_immutable_at_runtime", TEST_MODE_NON_BLOCKING, test_comparison_symbol_table_immutable_at_runtime},
+        {"maelys_datalog_solver/symbol_table_immutable_at_query_time", TEST_MODE_NON_BLOCKING, test_symbol_table_immutable_at_query_time},
         {"maelys_datalog_solver/solve_once_eq_uses_term_equal", TEST_MODE_NON_BLOCKING, test_datalog_solve_once_eq_uses_term_equal},
         {"maelys_datalog_solver/solve_once_symbol_eq_uses_symbol_id", TEST_MODE_NON_BLOCKING, test_datalog_solve_once_symbol_eq_uses_symbol_id},
         {"maelys_datalog_solver/solve_once_int_ordinals", TEST_MODE_NON_BLOCKING, test_datalog_solve_once_int_ordinals},
