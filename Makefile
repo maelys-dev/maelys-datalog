@@ -61,6 +61,10 @@ build/tests:
 test: $(TEST_BINS)
 	@set -e; for b in $(TEST_BINS); do echo "--- $$b ---"; ./$$b; done
 
+.PHONY: test_maelys_datalog_boundary
+test_maelys_datalog_boundary: build/tests/test_maelys_datalog_boundary
+	./build/tests/test_maelys_datalog_boundary
+
 clean:
 	rm -rf $(BUILD_DIR)
 	rm -f libmaelys_datalog.a
