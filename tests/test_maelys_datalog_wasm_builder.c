@@ -5,13 +5,17 @@
 #include "tests/helpers/test_framework.h"
 
 #include <stdbool.h>
+#include <sys/wait.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 static const char k_domain[] = "wasm_builder_test_domain";
 static const char k_policy_id[] = "wasm-builder-policy";
 static const char k_policy_src[] = "allow(X) :- safe(X).\n";
+static const char *g_self_path = NULL;
 
 static char g_long_domain[MAELYS_DATALOG_INLINE_MAX_DOMAIN_LEN + 2u];
 static char g_long_predicate[64u + 1u];
@@ -21,6 +25,27 @@ static void init_long_names(void) {
     g_long_domain[sizeof(g_long_domain) - 1u] = '\0';
     memset(g_long_predicate, 'p', sizeof(g_long_predicate) - 1u);
     g_long_predicate[sizeof(g_long_predicate) - 1u] = '\0';
+}
+
+static int run_edb_begin_without_policy_selftest(void) {
+    return maelys_datalog_wasm_edb_begin() == MAELYS_ERR_INVALID_STATE ? 0 : 1;
+}
+
+static int spawn_edb_begin_without_policy_selftest(const char *path) {
+    if (!path || !*path) return 0;
+
+    pid_t pid = fork();
+    if (pid < 0) return 0;
+    if (pid == 0) {
+        (void)setenv("MAELYS_WASM_EDB_BEGIN_SELFTEST", "1", 1);
+        char *const child_argv[] = {(char *)path, NULL};
+        execvp(path, child_argv);
+        _exit(127);
+    }
+
+    int status = 0;
+    if (waitpid(pid, &status, 0) < 0) return 0;
+    return WIFEXITED(status) && WEXITSTATUS(status) == 0;
 }
 
 static maelys_datalog_term_t symbol_term(maelys_datalog_ruleset_t *ruleset, const char *text) {
@@ -180,6 +205,65 @@ static int test_wasm_builder_basic(void) {
     TEST_END();
 }
 
+static int test_wasm_builder_edb_begin_without_policy(void) {
+    TEST_BEGIN();
+    TEST_ASSERT_TRUE(spawn_edb_begin_without_policy_selftest(g_self_path));
+    TEST_END();
+}
+
+static int test_wasm_builder_edb_and_solve(void) {
+    TEST_BEGIN();
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_wasm_edb_begin(), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK,
+                      maelys_datalog_wasm_edb_add_symbol("safe", "alice"),
+                      "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_wasm_solve(), "%d");
+    TEST_ASSERT_EQUAL(1, maelys_datalog_wasm_query_symbol("allow", "alice"), "%d");
+    TEST_ASSERT_EQUAL(0, maelys_datalog_wasm_query_symbol("allow", "bob"), "%d");
+    maelys_datalog_wasm_solve_result_free();
+    TEST_ASSERT_EQUAL(-1, maelys_datalog_wasm_query_symbol("allow", "alice"), "%d");
+    TEST_END();
+}
+
+static int test_wasm_builder_edb_two_evaluations(void) {
+    TEST_BEGIN();
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_wasm_edb_begin(), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK,
+                      maelys_datalog_wasm_edb_add_symbol("safe", "alice"),
+                      "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_wasm_solve(), "%d");
+    TEST_ASSERT_EQUAL(1, maelys_datalog_wasm_query_symbol("allow", "alice"), "%d");
+
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_wasm_edb_begin(), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK,
+                      maelys_datalog_wasm_edb_add_symbol("safe", "bob"),
+                      "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_wasm_solve(), "%d");
+    TEST_ASSERT_EQUAL(1, maelys_datalog_wasm_query_symbol("allow", "bob"), "%d");
+    TEST_ASSERT_EQUAL(0, maelys_datalog_wasm_query_symbol("allow", "alice"), "%d");
+    maelys_datalog_wasm_solve_result_free();
+    TEST_END();
+}
+
+static int test_wasm_builder_query_without_solve(void) {
+    TEST_BEGIN();
+    TEST_ASSERT_EQUAL(-1, maelys_datalog_wasm_query_symbol("allow", "alice"), "%d");
+    TEST_END();
+}
+
+static int test_wasm_builder_query_unknown_symbol_is_readonly(void) {
+    TEST_BEGIN();
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_wasm_edb_begin(), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_wasm_solve(), "%d");
+    char unknown[32];
+    for (size_t i = 0u; i < MAELYS_DATALOG_MAX_SYMBOLS + 8u; i++) {
+        snprintf(unknown, sizeof(unknown), "ghost_%04zu", i);
+        TEST_ASSERT_EQUAL(0, maelys_datalog_wasm_query_symbol("allow", unknown), "%d");
+    }
+    maelys_datalog_wasm_solve_result_free();
+    TEST_END();
+}
+
 static int test_wasm_builder_no_begin_after_commit(void) {
     TEST_BEGIN();
     TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_STATE,
@@ -260,6 +344,10 @@ static int test_wasm_builder_diag_on_invalid_policy(void) {
 }
 
 int main(int argc, char **argv) {
+    if (getenv("MAELYS_WASM_EDB_BEGIN_SELFTEST")) {
+        return run_edb_begin_without_policy_selftest();
+    }
+    g_self_path = (argc > 0 && argv && argv[0]) ? argv[0] : NULL;
     init_long_names();
     test_case_t cases[] = {
         {"maelys_datalog_wasm_builder/double_begin", TEST_MODE_NON_BLOCKING, test_wasm_builder_double_begin},
@@ -273,6 +361,11 @@ int main(int argc, char **argv) {
         {"maelys_datalog_wasm_builder/kind_flags_unknown_bits", TEST_MODE_NON_BLOCKING, test_wasm_builder_kind_flags_unknown_bits},
         {"maelys_datalog_wasm_builder/max_predicates", TEST_MODE_NON_BLOCKING, test_wasm_builder_max_predicates},
         {"maelys_datalog_wasm_builder/basic", TEST_MODE_NON_BLOCKING, test_wasm_builder_basic},
+        {"maelys_datalog_wasm_builder/edb_begin_without_policy", TEST_MODE_NON_BLOCKING, test_wasm_builder_edb_begin_without_policy},
+        {"maelys_datalog_wasm_builder/edb_and_solve", TEST_MODE_NON_BLOCKING, test_wasm_builder_edb_and_solve},
+        {"maelys_datalog_wasm_builder/edb_two_evaluations", TEST_MODE_NON_BLOCKING, test_wasm_builder_edb_two_evaluations},
+        {"maelys_datalog_wasm_builder/query_without_solve", TEST_MODE_NON_BLOCKING, test_wasm_builder_query_without_solve},
+        {"maelys_datalog_wasm_builder/query_unknown_symbol_is_readonly", TEST_MODE_NON_BLOCKING, test_wasm_builder_query_unknown_symbol_is_readonly},
         {"maelys_datalog_wasm_builder/no_begin_after_commit", TEST_MODE_NON_BLOCKING, test_wasm_builder_no_begin_after_commit},
         {"maelys_datalog_wasm_builder/abort_after_commit_does_not_reset_commit_guard", TEST_MODE_NON_BLOCKING, test_wasm_builder_abort_after_commit_does_not_reset_commit_guard},
         {"maelys_datalog_wasm_builder/ruleset_ptr", TEST_MODE_NON_BLOCKING, test_wasm_builder_ruleset_ptr},

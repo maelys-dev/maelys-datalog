@@ -18,6 +18,19 @@ maelys_result_t maelys_datalog_wasm_domain_add_predicate(const char *name,
 maelys_result_t maelys_datalog_wasm_domain_commit(void);
 maelys_result_t maelys_datalog_wasm_domain_abort(void);
 
+maelys_result_t maelys_datalog_wasm_edb_begin(void);
+maelys_result_t maelys_datalog_wasm_edb_add_symbol(const char *pred,
+                                                   const char *arg0);
+maelys_result_t maelys_datalog_wasm_edb_add_symbol2(const char *pred,
+                                                    const char *arg0,
+                                                    const char *arg1);
+maelys_result_t maelys_datalog_wasm_solve(void);
+int maelys_datalog_wasm_query_symbol(const char *pred, const char *arg0);
+int maelys_datalog_wasm_query_symbol2(const char *pred,
+                                      const char *arg0,
+                                      const char *arg1);
+void maelys_datalog_wasm_solve_result_free(void);
+
 maelys_result_t maelys_datalog_wasm_load_policy(const char *domain_name,
                                                 const char *policy_id,
                                                 const char *src,

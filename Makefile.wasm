@@ -1,5 +1,6 @@
 EMCC = emcc
 EM_CACHE ?= $(CURDIR)/../../build/emscripten-cache
+WASM_BUILD_DIR ?= build/wasm
 
 WASM_CFLAGS = \
 	-O2 \
@@ -64,6 +65,13 @@ WASM_DYNAMIC_EXPORTS = \
 	'_maelys_datalog_wasm_domain_add_predicate', \
 	'_maelys_datalog_wasm_domain_commit', \
 	'_maelys_datalog_wasm_domain_abort', \
+	'_maelys_datalog_wasm_edb_begin', \
+	'_maelys_datalog_wasm_edb_add_symbol', \
+	'_maelys_datalog_wasm_edb_add_symbol2', \
+	'_maelys_datalog_wasm_solve', \
+	'_maelys_datalog_wasm_query_symbol', \
+	'_maelys_datalog_wasm_query_symbol2', \
+	'_maelys_datalog_wasm_solve_result_free', \
 	'_maelys_datalog_wasm_load_policy', \
 	'_maelys_datalog_wasm_ruleset_ptr', \
 	'_maelys_datalog_wasm_last_diag_message', \
@@ -76,27 +84,30 @@ WASM_DYNAMIC_LDFLAGS = \
 	-s MODULARIZE=1 \
 	-s EXPORT_NAME="MaelysDatalogDynamic"
 
-maelys_datalog.js: $(WASM_SRCS)
-	@mkdir -p $(EM_CACHE)
+$(WASM_BUILD_DIR)/maelys_datalog.js: $(WASM_SRCS)
+	@mkdir -p $(EM_CACHE) $(WASM_BUILD_DIR)
 	EM_CACHE=$(EM_CACHE) $(EMCC) $(WASM_CFLAGS) $(WASM_SRCS) $(WASM_LDFLAGS) -o $@
 
-maelys_datalog.wasm: maelys_datalog.js
+$(WASM_BUILD_DIR)/maelys_datalog.wasm: $(WASM_BUILD_DIR)/maelys_datalog.js
 
-maelys_datalog_examples.js: $(WASM_EXAMPLES_SRCS)
-	@mkdir -p $(EM_CACHE)
+$(WASM_BUILD_DIR)/maelys_datalog_examples.js: $(WASM_EXAMPLES_SRCS)
+	@mkdir -p $(EM_CACHE) $(WASM_BUILD_DIR)
 	EM_CACHE=$(EM_CACHE) $(EMCC) $(WASM_CFLAGS) $(WASM_EXAMPLES_SRCS) $(WASM_EXAMPLES_LDFLAGS) -o $@
 
-maelys_datalog_examples.wasm: maelys_datalog_examples.js
+$(WASM_BUILD_DIR)/maelys_datalog_examples.wasm: $(WASM_BUILD_DIR)/maelys_datalog_examples.js
 
-maelys_datalog_dynamic.js: $(WASM_DYNAMIC_SRCS)
-	@mkdir -p $(EM_CACHE)
+$(WASM_BUILD_DIR)/maelys_datalog_dynamic.js: $(WASM_DYNAMIC_SRCS)
+	@mkdir -p $(EM_CACHE) $(WASM_BUILD_DIR)
 	EM_CACHE=$(EM_CACHE) $(EMCC) $(WASM_CFLAGS) $(WASM_DYNAMIC_SRCS) $(WASM_DYNAMIC_LDFLAGS) -o $@
 
-maelys_datalog_dynamic.wasm: maelys_datalog_dynamic.js
+$(WASM_BUILD_DIR)/maelys_datalog_dynamic.wasm: $(WASM_BUILD_DIR)/maelys_datalog_dynamic.js
+
+# Convenience aliases
+maelys_datalog.js:         $(WASM_BUILD_DIR)/maelys_datalog.js
+maelys_datalog_examples.js: $(WASM_BUILD_DIR)/maelys_datalog_examples.js
+maelys_datalog_dynamic.js: $(WASM_BUILD_DIR)/maelys_datalog_dynamic.js
 
 clean:
 	rm -rf $(EM_CACHE)
-	rm -f maelys_datalog.js maelys_datalog.wasm
-	rm -f maelys_datalog_examples.js maelys_datalog_examples.wasm
-	rm -f maelys_datalog_dynamic.js maelys_datalog_dynamic.wasm
+	rm -rf $(WASM_BUILD_DIR)
 	rm -f *.o src/core/*.o src/manifest/*.o src/wasm/*.o common/*.o vendor/yyjson/*.o examples/domains/*.o
