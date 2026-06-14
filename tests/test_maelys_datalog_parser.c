@@ -26,6 +26,14 @@ static int init_parser_ruleset(maelys_datalog_ruleset_t *r) {
     maelys_datalog_predicate_registry_add_domain(&r->registry, "parent", 2, MAELYS_DATALOG_PRED_KIND_EDB);
     maelys_datalog_predicate_registry_add_domain(&r->registry, "q", 2, MAELYS_DATALOG_PRED_KIND_EDB);
     maelys_datalog_predicate_registry_add_domain(&r->registry, "r", 2, MAELYS_DATALOG_PRED_KIND_EDB);
+    maelys_datalog_predicate_registry_add_domain(&r->registry, "user", 1, MAELYS_DATALOG_PRED_KIND_EDB);
+    maelys_datalog_predicate_registry_add_domain(&r->registry, "score", 2, MAELYS_DATALOG_PRED_KIND_EDB);
+    maelys_datalog_predicate_registry_add_domain(&r->registry, "left", 1, MAELYS_DATALOG_PRED_KIND_EDB);
+    maelys_datalog_predicate_registry_add_domain(&r->registry, "right", 1, MAELYS_DATALOG_PRED_KIND_EDB);
+    maelys_datalog_predicate_registry_add_domain(&r->registry, "edge", 2, MAELYS_DATALOG_PRED_KIND_EDB);
+    maelys_datalog_predicate_registry_add_domain(&r->registry, "denied", 2, MAELYS_DATALOG_PRED_KIND_EDB);
+    maelys_datalog_predicate_registry_add_domain(&r->registry, "safe", 1, MAELYS_DATALOG_PRED_KIND_EDB);
+    maelys_datalog_predicate_registry_add_domain(&r->registry, "flag", 2, MAELYS_DATALOG_PRED_KIND_EDB);
     maelys_datalog_predicate_registry_add_domain(&r->registry, "blocked", 1, MAELYS_DATALOG_PRED_KIND_EDB);
     maelys_datalog_predicate_registry_add_domain(&r->registry, "backend", 1, MAELYS_DATALOG_PRED_KIND_EDB);
     maelys_datalog_predicate_registry_add_domain(&r->registry, "backend_class", 2, MAELYS_DATALOG_PRED_KIND_EDB);
@@ -36,6 +44,16 @@ static int init_parser_ruleset(maelys_datalog_ruleset_t *r) {
     maelys_datalog_predicate_registry_add_domain(&r->registry, "named", 2, MAELYS_DATALOG_PRED_KIND_EDB);
     maelys_datalog_predicate_registry_add_domain(&r->registry, "ancestor", 2,
                                                  MAELYS_DATALOG_PRED_KIND_IDB | MAELYS_DATALOG_PRED_KIND_QUERY);
+    maelys_datalog_predicate_registry_add_domain(&r->registry, "edge_ok", 2,
+                                                 MAELYS_DATALOG_PRED_KIND_IDB | MAELYS_DATALOG_PRED_KIND_QUERY);
+    maelys_datalog_predicate_registry_add_domain(&r->registry, "pair", 2,
+                                                 MAELYS_DATALOG_PRED_KIND_IDB | MAELYS_DATALOG_PRED_KIND_QUERY);
+    maelys_datalog_predicate_registry_add_domain(&r->registry, "path", 2,
+                                                 MAELYS_DATALOG_PRED_KIND_IDB | MAELYS_DATALOG_PRED_KIND_QUERY);
+    maelys_datalog_predicate_registry_add_domain(&r->registry, "has_edge", 1,
+                                                 MAELYS_DATALOG_PRED_KIND_IDB | MAELYS_DATALOG_PRED_KIND_QUERY);
+    maelys_datalog_predicate_registry_add_domain(&r->registry, "has_target", 1,
+                                                 MAELYS_DATALOG_PRED_KIND_IDB | MAELYS_DATALOG_PRED_KIND_QUERY);
     maelys_datalog_predicate_registry_add_domain(&r->registry, "has_backend", 1,
                                                  MAELYS_DATALOG_PRED_KIND_IDB | MAELYS_DATALOG_PRED_KIND_QUERY);
     maelys_datalog_predicate_registry_add_domain(&r->registry, "p", 1,
@@ -45,6 +63,12 @@ static int init_parser_ruleset(maelys_datalog_ruleset_t *r) {
     maelys_datalog_predicate_registry_add_domain(&r->registry, "bad", 2,
                                                  MAELYS_DATALOG_PRED_KIND_IDB | MAELYS_DATALOG_PRED_KIND_QUERY);
     maelys_datalog_predicate_registry_add_domain(&r->registry, "allowed_backend_tuple", 3,
+                                                 MAELYS_DATALOG_PRED_KIND_POLICY_FACT);
+    maelys_datalog_predicate_registry_add_domain(&r->registry, "safe_fact", 1,
+                                                 MAELYS_DATALOG_PRED_KIND_POLICY_FACT);
+    maelys_datalog_predicate_registry_add_domain(&r->registry, "score_fact", 2,
+                                                 MAELYS_DATALOG_PRED_KIND_POLICY_FACT);
+    maelys_datalog_predicate_registry_add_domain(&r->registry, "flag_fact", 2,
                                                  MAELYS_DATALOG_PRED_KIND_POLICY_FACT);
     maelys_datalog_predicate_registry_add_manifest_predicate(&r->registry, "allow", 1,
                                                              MAELYS_DATALOG_PRED_KIND_IDB);
@@ -59,6 +83,7 @@ static int init_parser_ruleset(maelys_datalog_ruleset_t *r) {
     maelys_datalog_predicate_registry_add_atom(&r->registry, "a");
     maelys_datalog_predicate_registry_add_atom(&r->registry, "b");
     maelys_datalog_predicate_registry_add_atom(&r->registry, "c");
+    maelys_datalog_predicate_registry_add_atom(&r->registry, "alice");
     maelys_datalog_predicate_registry_freeze(&r->registry);
     return MAELYS_OK;
 }
@@ -456,6 +481,81 @@ static int test_parser_comparison_valid_still_accepted(void) {
     TEST_END();
 }
 
+static int parse_has_unsafe_diag(const char *src) {
+    maelys_datalog_diagnostic_t diag;
+    return parse_text_ex(src, &diag) == MAELYS_ERR_INVALID_FIELD &&
+           diag.code == MAELYS_DATALOG_DIAG_PARSER_UNSAFE_VARIABLE;
+}
+
+static int test_rule_safety_head_variables(void) {
+    TEST_BEGIN();
+    TEST_ASSERT_EQUAL(MAELYS_OK, parse_text("allow(X) :- user(X)."), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK, parse_text("edge_ok(X, Y) :- edge(X, Y)."), "%d");
+
+    TEST_ASSERT_TRUE(parse_has_unsafe_diag("allow(X) :- user(Y)."));
+    TEST_ASSERT_TRUE(parse_has_unsafe_diag("pair(X, Y) :- edge(X, Z)."));
+    TEST_END();
+}
+
+static int test_rule_safety_comparison_variables(void) {
+    TEST_BEGIN();
+    TEST_ASSERT_EQUAL(MAELYS_OK, parse_text("allow(X) :- user(X), X = \"alice\"."), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK, parse_text("allow(X) :- score(X, S), S >= 10."), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK, parse_text("allow(X) :- left(X), right(Y), X != Y."), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK, parse_text("allow(X) :- X = \"alice\", user(X)."), "%d");
+
+    TEST_ASSERT_TRUE(parse_has_unsafe_diag("allow(X) :- X = \"alice\"."));
+    TEST_ASSERT_TRUE(parse_has_unsafe_diag("allow(X) :- user(X), Y = \"alice\"."));
+    TEST_ASSERT_TRUE(parse_has_unsafe_diag("allow(X) :- score(X, S), T >= 10."));
+    TEST_ASSERT_TRUE(parse_has_unsafe_diag("allow(X) :- X = Y."));
+    TEST_END();
+}
+
+static int test_rule_safety_negation_variables(void) {
+    TEST_BEGIN();
+    TEST_ASSERT_EQUAL(MAELYS_OK, parse_text("allow(X) :- user(X), not(blocked(X))."), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK, parse_text("allow(X) :- edge(X, Y), not(denied(X, Y))."), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK, parse_text("allow(X) :- not(blocked(X)), user(X)."), "%d");
+
+    TEST_ASSERT_TRUE(parse_has_unsafe_diag("allow(X) :- not(blocked(X))."));
+    TEST_ASSERT_TRUE(parse_has_unsafe_diag("allow(X) :- user(Y), not(blocked(X))."));
+    TEST_ASSERT_TRUE(parse_has_unsafe_diag("allow(X) :- user(X), not(denied(X, Y))."));
+    TEST_END();
+}
+
+static int test_rule_safety_wildcard_non_binding(void) {
+    TEST_BEGIN();
+    TEST_ASSERT_EQUAL(MAELYS_OK, parse_text("has_edge(X) :- edge(X, _)."), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK, parse_text("has_target(Y) :- edge(_, Y)."), "%d");
+
+    TEST_ASSERT_TRUE(parse_has_unsafe_diag("allow(X) :- edge(_, _)."));
+    TEST_ASSERT_TRUE(parse_has_unsafe_diag("allow(X) :- edge(_, _), X = \"alice\"."));
+    TEST_END();
+}
+
+static int test_rule_safety_direct_facts_ground_only(void) {
+    TEST_BEGIN();
+    TEST_ASSERT_EQUAL(MAELYS_OK, parse_text("safe_fact(\"alice\")."), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK, parse_text("score_fact(\"alice\", 10)."), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK, parse_text("flag_fact(\"alice\", true)."), "%d");
+
+    TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_FIELD, parse_text("safe_fact(X)."), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_FIELD, parse_text("score_fact(\"alice\", X)."), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_FIELD, parse_text("flag_fact(_, true)."), "%d");
+    TEST_END();
+}
+
+static int test_rule_safety_positive_recursion(void) {
+    TEST_BEGIN();
+    TEST_ASSERT_EQUAL(MAELYS_OK, parse_text("path(X, Y) :- edge(X, Y)."), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK, parse_text("path(X, Z) :- path(X, Y), edge(Y, Z)."), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK, parse_text("path(X, Z) :- path(X, Y), edge(W, Z)."), "%d");
+
+    TEST_ASSERT_TRUE(parse_has_unsafe_diag("path(X, Z) :- path(X, Y), edge(Y, W)."));
+    TEST_ASSERT_TRUE(parse_has_unsafe_diag("path(X, Z) :- path(A, B), edge(B, C)."));
+    TEST_END();
+}
+
 static int test_datalog_parser_rejects_symbol_ordinal_static(void) {
     TEST_BEGIN();
     maelys_datalog_diagnostic_t diag;
@@ -827,6 +927,12 @@ int main(int argc, char **argv) {
         {"maelys_datalog_parser/anonymous_variable_excluded_from_head_check", TEST_MODE_NON_BLOCKING, test_parser_anonymous_variable_excluded_from_head_check},
         {"maelys_datalog_parser/valid_rules_unchanged", TEST_MODE_NON_BLOCKING, test_parser_valid_rules_unchanged},
         {"maelys_datalog_parser/comparison_valid_still_accepted", TEST_MODE_NON_BLOCKING, test_parser_comparison_valid_still_accepted},
+        {"maelys_datalog_parser/rule_safety_head_variables", TEST_MODE_NON_BLOCKING, test_rule_safety_head_variables},
+        {"maelys_datalog_parser/rule_safety_comparison_variables", TEST_MODE_NON_BLOCKING, test_rule_safety_comparison_variables},
+        {"maelys_datalog_parser/rule_safety_negation_variables", TEST_MODE_NON_BLOCKING, test_rule_safety_negation_variables},
+        {"maelys_datalog_parser/rule_safety_wildcard_non_binding", TEST_MODE_NON_BLOCKING, test_rule_safety_wildcard_non_binding},
+        {"maelys_datalog_parser/rule_safety_direct_facts_ground_only", TEST_MODE_NON_BLOCKING, test_rule_safety_direct_facts_ground_only},
+        {"maelys_datalog_parser/rule_safety_positive_recursion", TEST_MODE_NON_BLOCKING, test_rule_safety_positive_recursion},
         {"maelys_datalog_parser/rejects_symbol_ordinal_static", TEST_MODE_NON_BLOCKING, test_datalog_parser_rejects_symbol_ordinal_static},
         {"maelys_datalog_parser/rejects_bool_ordinal_static", TEST_MODE_NON_BLOCKING, test_datalog_parser_rejects_bool_ordinal_static},
         {"maelys_datalog_parser/rejects_kind_mismatch_static", TEST_MODE_NON_BLOCKING, test_datalog_parser_rejects_kind_mismatch_static},

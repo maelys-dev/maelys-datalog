@@ -1819,15 +1819,7 @@ static int test_datalog_solve_once_non_int_ordinal_classified(void) {
 static int test_datalog_solve_once_unbound_comparison_variable_classified(void) {
     TEST_BEGIN();
     maelys_datalog_ruleset_t r;
-    TEST_ASSERT_EQUAL(MAELYS_OK, make_ruleset(&r, "p(X) :- q(X, _), Y = 1."), "%d");
-    maelys_datalog_fact_t facts[2];
-    maelys_datalog_edb_t edb;
-    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_init(&edb, facts, 2, &r.symbols, &r.registry), "%d");
-    add_int_symbol_binary(&r, &edb, "q", 1, "a");
-    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_finalize(&edb), "%d");
-    maelys_datalog_solve_result_t *result = NULL;
-    TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_FIELD, maelys_datalog_solve_once(&r, &edb, &result), "%d");
-    TEST_ASSERT_NULL(result);
+    TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_FIELD, make_ruleset(&r, "p(X) :- q(X, _), Y = 1."), "%d");
     TEST_END();
 }
 
@@ -2654,24 +2646,7 @@ static int test_datalog_static_join_order_comparison_after_binding(void) {
 static int test_datalog_static_join_order_orphan_comparison_fails_closed(void) {
     TEST_BEGIN();
     maelys_datalog_ruleset_t r;
-    TEST_ASSERT_EQUAL(MAELYS_OK, make_ruleset(&r, "p(X) :- q(X, _), Y = 1."), "%d");
-    uint8_t order[MAELYS_DATALOG_MAX_BODY_LITERALS];
-    uint8_t count = 0;
-    TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_FIELD,
-                      maelys_datalog_test_build_static_join_order(&r, &r.rules[0], -1, order, &count),
-                      "%d");
-    maelys_datalog_fact_t facts[2];
-    maelys_datalog_edb_t edb;
-    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_init(&edb, facts, 2, &r.symbols, &r.registry), "%d");
-    add_int_symbol_binary(&r, &edb, "q", 1, "a");
-    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_finalize(&edb), "%d");
-    maelys_datalog_solve_result_t *result = NULL;
-    maelys_datalog_solve_diagnostic_t diag;
-    TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_FIELD,
-                      maelys_datalog_solve_once_ex(&r, &edb, &result, &diag),
-                      "%d");
-    TEST_ASSERT_NULL(result);
-    TEST_ASSERT_EQUAL(MAELYS_DATALOG_SOLVE_DIAG_COMPARISON_TYPE_ERROR, diag.category, "%d");
+    TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_FIELD, make_ruleset(&r, "p(X) :- q(X, _), Y = 1."), "%d");
     TEST_END();
 }
 
@@ -2751,19 +2726,7 @@ static int test_datalog_static_join_order_preserves_deny_reduce_allow_precedence
 static int test_datalog_static_join_order_failure_is_fail_closed(void) {
     TEST_BEGIN();
     maelys_datalog_ruleset_t r;
-    TEST_ASSERT_EQUAL(MAELYS_OK, make_ruleset(&r, "p(X) :- Y = 1, q(X, _)."), "%d");
-    maelys_datalog_fact_t facts[2];
-    maelys_datalog_edb_t edb;
-    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_init(&edb, facts, 2, &r.symbols, &r.registry), "%d");
-    add_int_symbol_binary(&r, &edb, "q", 1, "a");
-    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_finalize(&edb), "%d");
-    maelys_datalog_solve_result_t *result = NULL;
-    maelys_datalog_solve_diagnostic_t diag;
-    TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_FIELD,
-                      maelys_datalog_solve_once_ex(&r, &edb, &result, &diag),
-                      "%d");
-    TEST_ASSERT_NULL(result);
-    TEST_ASSERT_EQUAL(MAELYS_DATALOG_DENY_COMPARISON_TYPE_ERROR, diag.failure_reason, "%d");
+    TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_FIELD, make_ruleset(&r, "p(X) :- Y = 1, q(X, _)."), "%d");
     TEST_END();
 }
 

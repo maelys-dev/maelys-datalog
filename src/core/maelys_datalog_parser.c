@@ -369,6 +369,27 @@ static maelys_result_t validate_rule(parser_t *p, const maelys_datalog_rule_t *r
         }
     }
     for (size_t i = 0; i < rule->body_count; i++) {
+        if (rule->body[i].kind == MAELYS_DATALOG_LITERAL_COMPARISON) {
+            uint32_t cmp_vars = 0;
+            if (rule->body[i].lhs.kind == MAELYS_DATALOG_TERM_VAR &&
+                rule->body[i].lhs.as.variable < MAELYS_DATALOG_MAX_RULE_VARIABLES) {
+                cmp_vars |= (1u << rule->body[i].lhs.as.variable);
+            }
+            if (rule->body[i].rhs.kind == MAELYS_DATALOG_TERM_VAR &&
+                rule->body[i].rhs.as.variable < MAELYS_DATALOG_MAX_RULE_VARIABLES) {
+                cmp_vars |= (1u << rule->body[i].rhs.as.variable);
+            }
+            if (cmp_vars & ~body_vars) {
+                parser_diag(p,
+                            MAELYS_DATALOG_DIAG_PARSER_UNSAFE_VARIABLE,
+                            "comparison variable not bound by positive body atom",
+                            "bind all comparison variables in positive body atoms first");
+                maelys_datalog_diagnostic_set_predicate(p->diag, head_def->name, head_def->arity);
+                return MAELYS_ERR_INVALID_FIELD;
+            }
+        }
+    }
+    for (size_t i = 0; i < rule->body_count; i++) {
         if (rule->body[i].kind == MAELYS_DATALOG_LITERAL_NEGATED_ATOM) {
             uint32_t neg_vars = 0;
             vars_in_atom(&rule->body[i].atom, &neg_vars);
