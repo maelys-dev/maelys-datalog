@@ -16,10 +16,8 @@
  *   const pg = await MaelysPlayground.create(MaelysDatalogDynamic, wasmUrl)
  *
  * EDB design note:
- *   edb_add_symbol uses intern_symbol + edb_add_fact (open path).
- *   edb_add_symbol_fact is NOT used: predicate_registry_atom_allowed()
- *   rejects all atoms when atom_count == 0, which is always the case
- *   for WASM dynamic domains with runtime atom values.
+ *   edb_add_symbol uses the open runtime symbol path for WASM dynamic domains.
+ *   Runtime EDB symbols are not required to be pre-declared as policy atoms.
  */
 
 'use strict';

@@ -183,20 +183,8 @@ maelys_result_t maelys_datalog_wasm_edb_add_symbol(const char *pred, const char 
     rc = copy_bounded(arg0_buf, sizeof(arg0_buf), arg0);
     if (rc != MAELYS_OK) return rc;
 
-    /* NOTE: edb_add_symbol_fact() is NOT used here.
-     * It calls predicate_registry_atom_allowed() which rejects ALL atoms when
-     * atom_count == 0 — which is always the case for WASM dynamic domains,
-     * since atoms are runtime values (e.g. "alice") unknown at domain-definition
-     * time. The intern_symbol + edb_add_fact path is the correct open path for
-     * runtime atoms in a dynamic playground. edb_add_symbol_fact is reserved
-     * for manifest-based workflows where atoms are pre-declared.
-     */
-    maelys_datalog_symbol_id_t sid;
-    maelys_result_t rc2 = intern_symbol(arg0_buf, &sid);
-    if (rc2 != MAELYS_OK) return rc2;
-    maelys_datalog_term_t term = {.kind = MAELYS_DATALOG_TERM_SYMBOL};
-    term.as.symbol = sid;
-    return maelys_datalog_edb_add_fact(&s_edb, pred_buf, &term, 1u);
+    /* Open runtime symbol path for WASM dynamic domains. */
+    return maelys_datalog_edb_add_runtime_symbol_fact(&s_edb, pred_buf, arg0_buf);
 }
 
 maelys_result_t maelys_datalog_wasm_edb_add_symbol2(const char *pred,

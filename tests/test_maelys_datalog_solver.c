@@ -260,8 +260,8 @@ static int test_solver_simple_and_query(void) {
     maelys_datalog_fact_t facts[8];
     maelys_datalog_edb_t edb;
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_init(&edb, facts, 8, &r.symbols, &r.registry), "%d");
-    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_add_symbol_fact(&edb, "blocked", "proj-1"), "%d");
-    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_add_symbol_fact(&edb, "blocked", "proj-1"), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_add_atom_fact(&edb, "blocked", "proj-1"), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_add_atom_fact(&edb, "blocked", "proj-1"), "%d");
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_finalize(&edb), "%d");
     maelys_datalog_solve_result_t *result = NULL;
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_solve_once(&r, &edb, &result), "%d");
@@ -2952,7 +2952,7 @@ static int test_datalog_negation_decision_policy_compatible(void) {
     maelys_datalog_fact_t facts[4];
     maelys_datalog_edb_t edb;
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_init(&edb, facts, 4, &r.symbols, &r.registry), "%d");
-    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_add_symbol_fact(&edb, "blocked", "request"), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_add_atom_fact(&edb, "blocked", "request"), "%d");
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_finalize(&edb), "%d");
     maelys_datalog_solve_result_t *result = NULL;
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_solve_once(&r, &edb, &result), "%d");

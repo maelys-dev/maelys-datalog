@@ -60,8 +60,8 @@ static int test_edb_add_query_duplicate(void) {
     maelys_datalog_fact_t pool[4];
     maelys_datalog_edb_t edb;
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_init(&edb, pool, 4, &sym, &reg), "%d");
-    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_add_symbol_fact(&edb, "blocked", "proj-1"), "%d");
-    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_add_symbol_fact(&edb, "blocked", "proj-1"), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_add_atom_fact(&edb, "blocked", "proj-1"), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_add_atom_fact(&edb, "blocked", "proj-1"), "%d");
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_finalize(&edb), "%d");
     TEST_ASSERT_EQUAL((size_t)1, edb.fact_count, "%zu");
     TEST_ASSERT_TRUE(edb.immutable);
@@ -78,9 +78,9 @@ static int test_edb_overflow_and_unknown_atom(void) {
     maelys_datalog_fact_t pool[1];
     maelys_datalog_edb_t edb;
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_init(&edb, pool, 1, &sym, &reg), "%d");
-    TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_FIELD, maelys_datalog_edb_add_symbol_fact(&edb, "blocked", "unsafe_root_shell"), "%d");
-    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_add_symbol_fact(&edb, "blocked", "proj-1"), "%d");
-    TEST_ASSERT_EQUAL(MAELYS_ERR_PAYLOAD_TOO_LARGE, maelys_datalog_edb_add_symbol_fact(&edb, "blocked", "proj-2"), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_ERR_FORBIDDEN, maelys_datalog_edb_add_atom_fact(&edb, "blocked", "unsafe_root_shell"), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_add_atom_fact(&edb, "blocked", "proj-1"), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_ERR_PAYLOAD_TOO_LARGE, maelys_datalog_edb_add_atom_fact(&edb, "blocked", "proj-2"), "%d");
     TEST_END();
 }
 

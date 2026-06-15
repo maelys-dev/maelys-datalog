@@ -65,6 +65,10 @@ test: $(TEST_BINS)
 test_maelys_datalog_boundary: build/tests/test_maelys_datalog_boundary
 	./build/tests/test_maelys_datalog_boundary
 
+.PHONY: test_maelys_datalog_atom_vocabulary
+test_maelys_datalog_atom_vocabulary: build/tests/test_maelys_datalog_atom_vocabulary
+	./build/tests/test_maelys_datalog_atom_vocabulary
+
 .PHONY: test_maelys_datalog_determinism
 test_maelys_datalog_determinism: build/tests/test_maelys_datalog_determinism
 	./build/tests/test_maelys_datalog_determinism

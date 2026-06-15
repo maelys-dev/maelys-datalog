@@ -14,9 +14,27 @@ maelys_result_t maelys_datalog_edb_add_fact(maelys_datalog_edb_t *edb,
                                             const char *predicate,
                                             const maelys_datalog_term_t *terms,
                                             size_t arity);
-maelys_result_t maelys_datalog_edb_add_symbol_fact(maelys_datalog_edb_t *edb,
-                                                   const char *predicate,
-                                                   const char *arg0);
+/**
+ * Add a 1-arity EDB fact with an open runtime symbol value.
+ *
+ * Interns `value` into the policy symbol table and inserts it as a
+ * SYMBOL-typed fact. Does not require `value` to be pre-registered in the
+ * atom vocabulary. This is the canonical path for runtime observations such
+ * as user names, branch names, file paths, and request IDs.
+ */
+maelys_result_t maelys_datalog_edb_add_runtime_symbol_fact(maelys_datalog_edb_t *edb,
+                                                           const char *predicate,
+                                                           const char *value);
+/**
+ * Add a 1-arity EDB fact with a closed atom value.
+ *
+ * Checks that `atom` is pre-declared in the atom vocabulary before inserting
+ * the fact. Returns MAELYS_ERR_FORBIDDEN when the atom is absent, including
+ * the atom_count == 0 case used by inline/WASM dynamic domains.
+ */
+maelys_result_t maelys_datalog_edb_add_atom_fact(maelys_datalog_edb_t *edb,
+                                                 const char *predicate,
+                                                 const char *atom);
 maelys_result_t maelys_datalog_edb_finalize(maelys_datalog_edb_t *edb);
 int maelys_datalog_term_equal(const maelys_datalog_term_t *a,
                               const maelys_datalog_term_t *b);
