@@ -1,0 +1,2 @@
+/* EXPECT: FAIL */
+safe("unterminated

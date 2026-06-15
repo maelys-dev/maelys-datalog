@@ -1,0 +1,3 @@
+/* EXPECT: POLICY_NOT_STRATIFIABLE */
+allow(X) :- user(X), not(deny_any(X)).
+deny_any(X) :- user(X), not(allow(X)).

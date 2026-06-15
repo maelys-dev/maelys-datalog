@@ -1,0 +1,2 @@
+/* EXPECT: PARSER_ANONYMOUS_VARIABLE_IN_COMPARISON */
+allow(X) :- user(X), X = _.

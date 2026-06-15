@@ -1,0 +1,2 @@
+/* EXPECT: OK */
+allow(X) :- user(X), not(blocked(X)).

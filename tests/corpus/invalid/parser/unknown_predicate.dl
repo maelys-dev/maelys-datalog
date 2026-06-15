@@ -1,0 +1,2 @@
+/* EXPECT: PARSER_UNKNOWN_PREDICATE */
+unknown_pred(X) :- user(X).

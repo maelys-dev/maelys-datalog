@@ -1,0 +1,3 @@
+/* EXPECT: OK */
+/* comments only */
+% line comment only

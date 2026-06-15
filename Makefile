@@ -69,6 +69,10 @@ test_maelys_datalog_boundary: build/tests/test_maelys_datalog_boundary
 test_maelys_datalog_determinism: build/tests/test_maelys_datalog_determinism
 	./build/tests/test_maelys_datalog_determinism
 
+.PHONY: test_maelys_datalog_corpus
+test_maelys_datalog_corpus: build/tests/test_maelys_datalog_corpus
+	./build/tests/test_maelys_datalog_corpus
+
 clean:
 	rm -rf $(BUILD_DIR)
 	rm -f libmaelys_datalog.a

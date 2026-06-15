@@ -1,0 +1,2 @@
+/* EXPECT: FAIL */
+allow(X) :-

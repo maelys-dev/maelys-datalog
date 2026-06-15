@@ -1,0 +1,2 @@
+/* EXPECT: PARSER_EXPECTED_NECK */
+allow(X) user(X).

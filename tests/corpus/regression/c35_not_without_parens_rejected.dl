@@ -1,0 +1,2 @@
+/* EXPECT: LEXER_INVALID_TOKEN */
+allow(X) :- user(X), not blocked(X).
