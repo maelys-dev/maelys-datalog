@@ -1,0 +1,143 @@
+# Makefile.afl - AFL++ persistent-mode build for P3-C35-QUATER
+#
+# Usage (from extern/maelys-datalog/):
+#   make -f Makefile.afl afl-build
+#   make -f Makefile.afl afl-smoke          # 30s bounded run (local)
+#   make -f Makefile.afl afl-smoke-linux    # 30s bounded run in Docker Linux
+#   make -f Makefile.afl afl-clean
+#
+# Prerequisites:
+#   afl-clang-fast in PATH  (local build)
+#   Docker                  (Linux smoke)
+
+AFL_CC    ?= afl-clang-fast
+BUILD     ?= build/afl
+CORPUS    ?= tests/corpus
+SEED      ?= $(BUILD)/seed
+FINDINGS  ?= $(BUILD)/findings
+DICT      ?= tests/fuzz/datalog.dict
+
+AFLPP_IMAGE    ?= maelys-datalog-aflpp-linux:ubuntu24.04
+AFLPP_DOCKERFILE ?= docker/aflpp-linux/Dockerfile
+DOCKER_PLATFORM ?= linux/arm64
+DOCKER_PLATFORM_ARG = $(if $(DOCKER_PLATFORM),--platform $(DOCKER_PLATFORM),)
+
+ENGINE_SRCS = \
+	src/core/maelys_datalog_audit.c \
+	src/core/maelys_datalog_diagnostic.c \
+	src/core/maelys_datalog_domain_registry.c \
+	src/core/maelys_datalog_edb.c \
+	src/core/maelys_datalog_lexer.c \
+	src/core/maelys_datalog_parser.c \
+	src/core/maelys_datalog_policy.c \
+	src/core/maelys_datalog_predicate_registry.c \
+	src/core/maelys_datalog_symbol_table.c \
+	src/manifest/maelys_datalog_manifest_buffer.c \
+	src/manifest/maelys_datalog_manifest_file.c
+
+COMMON_SRCS = \
+	common/maelys_sha256.c \
+	common/maelys_utf8.c
+
+VENDOR_SRCS = vendor/yyjson/yyjson.c
+
+AFL_SRCS  = tests/fuzz/fuzz_parse_ruleset_afl.c
+AFL_BIN   = $(BUILD)/fuzz_parse_ruleset_afl
+
+AFL_CFLAGS = \
+	-Wall -Wextra -g -O1 -I. \
+	-fsanitize=address,undefined \
+	-fno-omit-frame-pointer
+
+AFL_ASAN_OPTIONS = \
+	ASAN_OPTIONS=detect_leaks=1:halt_on_error=1:abort_on_error=1:symbolize=0 \
+	UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1
+
+# AFL++ smoke: 30 seconds, single local instance.
+# -m none : disable memory limit (ASAN handles that)
+# -t 1000 : 1s timeout per execution
+# -V 30   : exit after 30 seconds
+AFL_SMOKE_FLAGS = \
+	-m none \
+	-t 1000 \
+	-V 30
+
+.PHONY: afl-build afl-seed afl-smoke afl-smoke-run afl-smoke-linux afl-image afl-clean
+
+afl-build: $(BUILD) afl-seed
+	$(AFL_CC) $(AFL_CFLAGS) \
+		$(ENGINE_SRCS) $(COMMON_SRCS) $(VENDOR_SRCS) $(AFL_SRCS) \
+		-o $(AFL_BIN)
+	@echo "AFL++ binary: $(AFL_BIN)"
+
+afl-seed: $(SEED)
+	@echo "Copying corpus seed files (flattening with unique names)..."
+	@rm -rf "$(SEED)"
+	@mkdir -p "$(SEED)"
+	@find $(CORPUS) -name "*.dl" | while read f; do \
+		dst=$$(echo "$$f" | sed 's#[/ ]#_#g'); \
+		cp "$$f" "$(SEED)/$$dst"; \
+	done
+	@echo "Seed files: $$(ls $(SEED) | wc -l)"
+
+# afl-smoke: build then run smoke (local).
+# afl-smoke-run is a separate .PHONY so afl-smoke-linux can call the smoke
+# without triggering a second afl-build (which would escape the warning grep).
+afl-smoke: afl-build afl-smoke-run
+
+afl-smoke-run:
+	@echo "==> AFL++ smoke run: 30 seconds"
+	@rm -rf "$(FINDINGS)"
+	@mkdir -p "$(FINDINGS)"
+	$(AFL_ASAN_OPTIONS) \
+	AFL_SKIP_CPUFREQ=1 \
+	AFL_NO_UI=1 \
+	afl-fuzz \
+		$(AFL_SMOKE_FLAGS) \
+		$(if $(wildcard $(DICT)),-x $(DICT),) \
+		-i "$(SEED)" \
+		-o "$(FINDINGS)" \
+		-- "$(AFL_BIN)"
+	@echo "==> Smoke run complete"
+	@crashes=$$(find "$(FINDINGS)/default/crashes/" -type f ! -name 'README*' 2>/dev/null | wc -l | tr -d " "); \
+	hangs=$$(find "$(FINDINGS)/default/hangs/" -type f ! -name 'README*' 2>/dev/null | wc -l | tr -d " "); \
+	echo "Crashes found: $$crashes"; \
+	echo "Hangs found:   $$hangs"; \
+	if [ "$$crashes" != "0" ] || [ "$$hangs" != "0" ]; then \
+		echo "AFL++ smoke found crashes or hangs -- NO-GO"; \
+		exit 1; \
+	fi
+
+afl-image:
+	docker build $(DOCKER_PLATFORM_ARG) -t $(AFLPP_IMAGE) -f $(AFLPP_DOCKERFILE) .
+
+# afl-smoke-linux: build inside Docker Linux, then run afl-smoke-run.
+# Calls afl-smoke-run (not afl-smoke) so the build inside Docker is the only
+# build, and its output is fully covered by the warning grep gate.
+afl-smoke-linux: afl-image
+	@echo "==> AFL++ smoke run in Docker Linux (30 seconds)"
+	docker run --rm \
+		$(DOCKER_PLATFORM_ARG) \
+		-v "$$(pwd):/src:ro" \
+		-w /work \
+		$(AFLPP_IMAGE) \
+		bash -lc '\
+			set -euo pipefail; \
+			tar --exclude=.git --exclude=build -C /src -cf - . | tar -C /work -xf -; \
+			make -f Makefile.afl afl-clean; \
+			make -f Makefile.afl afl-build 2>&1 | tee /tmp/afl-build.log; \
+			if grep -Ei "warning|error" /tmp/afl-build.log | grep -v "^INFO:"; then \
+				echo "unexpected warning/error in AFL++ Linux build"; \
+				exit 1; \
+			fi; \
+			make -f Makefile.afl afl-smoke-run; \
+		'
+
+afl-clean:
+	rm -rf $(BUILD)
+
+$(BUILD):
+	mkdir -p $@
+
+$(SEED): $(BUILD)
+	mkdir -p $@
