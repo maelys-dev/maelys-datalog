@@ -1,0 +1,102 @@
+# Makefile.fuzz - libFuzzer build for P3-C35-TER
+#
+# Usage:
+#   make -f Makefile.fuzz fuzz-build
+#   make -f Makefile.fuzz fuzz-smoke
+#   make -f Makefile.fuzz fuzz-clean
+
+ifeq ($(origin CC),default)
+ifneq ($(wildcard /opt/homebrew/opt/llvm/bin/clang),)
+CC := /opt/homebrew/opt/llvm/bin/clang
+else
+CC := clang
+endif
+endif
+
+BUILD ?= build/fuzz
+CORPUS ?= tests/corpus
+SEED ?= $(BUILD)/seed
+DICT ?= tests/fuzz/datalog.dict
+UNAME_S := $(shell uname -s)
+
+ENGINE_SRCS = \
+	src/core/maelys_datalog_audit.c \
+	src/core/maelys_datalog_diagnostic.c \
+	src/core/maelys_datalog_domain_registry.c \
+	src/core/maelys_datalog_edb.c \
+	src/core/maelys_datalog_lexer.c \
+	src/core/maelys_datalog_parser.c \
+	src/core/maelys_datalog_policy.c \
+	src/core/maelys_datalog_predicate_registry.c \
+	src/core/maelys_datalog_symbol_table.c \
+	src/manifest/maelys_datalog_manifest_buffer.c \
+	src/manifest/maelys_datalog_manifest_file.c
+
+COMMON_SRCS = \
+	common/maelys_sha256.c \
+	common/maelys_utf8.c
+
+VENDOR_SRCS = vendor/yyjson/yyjson.c
+
+FUZZ_SRCS = tests/fuzz/fuzz_parse_ruleset.c
+FUZZ_BIN = $(BUILD)/fuzz_parse_ruleset
+
+FUZZ_CFLAGS = \
+	-Wall -Wextra -g -O1 -I. \
+	-fsanitize=fuzzer,address,undefined \
+	-fno-omit-frame-pointer
+
+FUZZ_LDFLAGS =
+
+ifeq ($(UNAME_S),Darwin)
+# Homebrew clang 22 sanitizer objects currently trip the default Apple ld on
+# this host with "invalid r_symbolnum"; ld_classic links the fuzz target.
+FUZZ_LDFLAGS += -Wl,-ld_classic
+endif
+
+FUZZ_ASAN_OPTIONS = \
+	ASAN_OPTIONS=detect_leaks=1:halt_on_error=1:abort_on_error=1 \
+	UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1
+
+FUZZ_SMOKE_FLAGS = \
+	-max_total_time=30 \
+	-runs=10000 \
+	-max_len=4096 \
+	-rss_limit_mb=0 \
+	-print_final_stats=1
+
+.PHONY: fuzz-build fuzz-seed fuzz-smoke fuzz-clean
+
+fuzz-build: $(BUILD) fuzz-seed
+	$(CC) $(FUZZ_CFLAGS) \
+		$(ENGINE_SRCS) $(COMMON_SRCS) $(VENDOR_SRCS) $(FUZZ_SRCS) \
+		$(FUZZ_LDFLAGS) \
+		-o $(FUZZ_BIN)
+	@echo "Fuzz binary: $(FUZZ_BIN)"
+
+fuzz-seed: $(SEED)
+	@echo "Copying corpus seed files (flattening with unique names)..."
+	@rm -rf "$(SEED)"
+	@mkdir -p "$(SEED)"
+	@find $(CORPUS) -name "*.dl" | while read f; do \
+		dst=$$(echo "$$f" | sed 's#[/ ]#_#g'); \
+		cp "$$f" "$(SEED)/$$dst"; \
+	done
+	@echo "Seed files: $$(ls $(SEED) | wc -l)"
+
+fuzz-smoke: fuzz-build
+	@echo "==> Smoke run: max 30s / 10000 iterations"
+	$(FUZZ_ASAN_OPTIONS) $(FUZZ_BIN) \
+		$(FUZZ_SMOKE_FLAGS) \
+		$(if $(wildcard $(DICT)),-dict=$(DICT),) \
+		$(SEED)
+	@echo "==> Smoke run PASS"
+
+fuzz-clean:
+	rm -rf $(BUILD)
+
+$(BUILD):
+	mkdir -p $@
+
+$(SEED): $(BUILD)
+	mkdir -p $@

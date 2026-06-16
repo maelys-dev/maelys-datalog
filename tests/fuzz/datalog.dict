@@ -1,0 +1,49 @@
+# Maelys DL token dictionary for libFuzzer
+# P3-C35-TER
+
+# Rule syntax
+":-"
+"."
+","
+"("
+")"
+
+# Negation
+"not("
+
+# Comparison operators
+"="
+"!="
+"<"
+">"
+"<="
+">="
+
+# Variables
+"X"
+"Y"
+"Z"
+"U"
+"V"
+
+# Wildcard
+"_"
+
+# Common predicate names from fuzz domain
+"allow"
+"deny"
+"safe"
+"user"
+"owns"
+"path"
+"edge"
+"blocked"
+"trusted"
+
+# Common atom values from corpus
+"alice"
+"bob"
+"a"
+"b"
+"true"
+"false"
