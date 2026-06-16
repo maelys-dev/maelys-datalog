@@ -1,0 +1,2 @@
+/* EXPECT: OK */
+allow(X) :- score(X, Flag), Flag = true.

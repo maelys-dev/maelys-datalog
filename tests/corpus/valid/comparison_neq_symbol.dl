@@ -1,0 +1,2 @@
+/* EXPECT: OK */
+allow(X) :- owns(X, Name), Name != "bob".

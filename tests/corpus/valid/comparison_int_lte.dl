@@ -1,0 +1,2 @@
+/* EXPECT: OK */
+allow(X) :- score(X, Level), Level <= 10.
