@@ -56,6 +56,8 @@ _Static_assert(MAELYS_DATALOG_MAX_STRATA <= MAELYS_DATALOG_MAX_PREDICATES,
 typedef uint32_t maelys_datalog_symbol_id_t;
 typedef uint16_t maelys_datalog_predicate_id_t;
 
+#define MAELYS_DATALOG_SYMBOL_ID_INVALID ((maelys_datalog_symbol_id_t)0u)
+
 typedef enum {
     MAELYS_DATALOG_TERM_SYMBOL = 1,
     MAELYS_DATALOG_TERM_INT = 2,

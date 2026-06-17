@@ -26,6 +26,29 @@ maelys_result_t maelys_datalog_edb_add_runtime_symbol_fact(maelys_datalog_edb_t 
                                                            const char *predicate,
                                                            const char *value);
 /**
+ * Intern an open runtime symbol into the EDB's symbol table.
+ *
+ * The returned id is scoped to this EDB/ruleset symbol table. It is a
+ * 1-based handle; MAELYS_DATALOG_SYMBOL_ID_INVALID (0) is never returned
+ * for a successful intern.
+ */
+maelys_result_t maelys_datalog_edb_intern_runtime_symbol(maelys_datalog_edb_t *edb,
+                                                         const char *text,
+                                                         maelys_datalog_symbol_id_t *out_id);
+/**
+ * Add a 1-arity EDB fact using a pre-interned runtime symbol id.
+ */
+maelys_result_t maelys_datalog_edb_add_symbol_id_fact(maelys_datalog_edb_t *edb,
+                                                      const char *predicate,
+                                                      maelys_datalog_symbol_id_t value);
+/**
+ * Add a 2-arity EDB fact using two pre-interned runtime symbol ids.
+ */
+maelys_result_t maelys_datalog_edb_add_symbol_ids_fact(maelys_datalog_edb_t *edb,
+                                                       const char *predicate,
+                                                       maelys_datalog_symbol_id_t left,
+                                                       maelys_datalog_symbol_id_t right);
+/**
  * Add a 1-arity EDB fact with a closed atom value.
  *
  * Checks that `atom` is pre-declared in the atom vocabulary before inserting

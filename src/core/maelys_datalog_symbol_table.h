@@ -9,6 +9,8 @@ maelys_result_t maelys_datalog_symbol_intern(maelys_datalog_symbol_table_t *tabl
                                              const char *text,
                                              size_t len,
                                              maelys_datalog_symbol_id_t *out_id);
+int maelys_datalog_symbol_id_is_valid(const maelys_datalog_symbol_table_t *table,
+                                      maelys_datalog_symbol_id_t id);
 const char *maelys_datalog_symbol_text(const maelys_datalog_symbol_table_t *table,
                                        maelys_datalog_symbol_id_t id);
 

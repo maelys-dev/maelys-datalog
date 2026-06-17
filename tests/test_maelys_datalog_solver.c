@@ -297,6 +297,135 @@ static int test_solver_simple_and_query(void) {
     TEST_END();
 }
 
+static int test_solver_preinterned_unary_symbol_id_equivalent_to_string_path(void) {
+    TEST_BEGIN();
+    const char *src = "allow(U) :- user(U).";
+    maelys_datalog_ruleset_t string_ruleset;
+    maelys_datalog_ruleset_t id_ruleset;
+    TEST_ASSERT_EQUAL(MAELYS_OK, make_ruleset(&string_ruleset, src), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK, make_ruleset(&id_ruleset, src), "%d");
+
+    maelys_datalog_fact_t string_facts[4];
+    maelys_datalog_fact_t id_facts[4];
+    maelys_datalog_edb_t string_edb;
+    maelys_datalog_edb_t id_edb;
+    TEST_ASSERT_EQUAL(MAELYS_OK,
+                      maelys_datalog_edb_init(&string_edb, string_facts, 4,
+                                              &string_ruleset.symbols, &string_ruleset.registry),
+                      "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK,
+                      maelys_datalog_edb_init(&id_edb, id_facts, 4,
+                                              &id_ruleset.symbols, &id_ruleset.registry),
+                      "%d");
+
+    TEST_ASSERT_EQUAL(MAELYS_OK,
+                      maelys_datalog_edb_add_runtime_symbol_fact(&string_edb, "user", "alice"),
+                      "%d");
+    maelys_datalog_symbol_id_t alice = MAELYS_DATALOG_SYMBOL_ID_INVALID;
+    TEST_ASSERT_EQUAL(MAELYS_OK,
+                      maelys_datalog_edb_intern_runtime_symbol(&id_edb, "alice", &alice),
+                      "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK,
+                      maelys_datalog_edb_add_symbol_id_fact(&id_edb, "user", alice),
+                      "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_finalize(&string_edb), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_finalize(&id_edb), "%d");
+
+    maelys_datalog_solve_result_t *string_result = NULL;
+    maelys_datalog_solve_result_t *id_result = NULL;
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_solve_once(&string_ruleset, &string_edb, &string_result), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_solve_once(&id_ruleset, &id_edb, &id_result), "%d");
+
+    bool string_present = false;
+    bool id_present = false;
+    TEST_ASSERT_EQUAL(MAELYS_OK,
+                      query_solved_symbol_unary(&string_ruleset, string_result, "allow", "alice", &string_present),
+                      "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK,
+                      query_solved_symbol_unary(&id_ruleset, id_result, "allow", "alice", &id_present),
+                      "%d");
+    TEST_ASSERT_TRUE(string_present);
+    TEST_ASSERT_TRUE(id_present);
+    TEST_ASSERT_EQUAL((int)string_present, (int)id_present, "%d");
+
+    maelys_datalog_solve_result_free(string_result);
+    maelys_datalog_solve_result_free(id_result);
+    TEST_END();
+}
+
+static int test_solver_preinterned_binary_symbol_ids_equivalent_to_low_level_path(void) {
+    TEST_BEGIN();
+    const char *src = "allow(U) :- owns(U, \"doc.pdf\").";
+    maelys_datalog_ruleset_t low_ruleset;
+    maelys_datalog_ruleset_t id_ruleset;
+    TEST_ASSERT_EQUAL(MAELYS_OK, make_ruleset(&low_ruleset, src), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK, make_ruleset(&id_ruleset, src), "%d");
+
+    maelys_datalog_fact_t low_facts[4];
+    maelys_datalog_fact_t id_facts[4];
+    maelys_datalog_edb_t low_edb;
+    maelys_datalog_edb_t id_edb;
+    TEST_ASSERT_EQUAL(MAELYS_OK,
+                      maelys_datalog_edb_init(&low_edb, low_facts, 4,
+                                              &low_ruleset.symbols, &low_ruleset.registry),
+                      "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK,
+                      maelys_datalog_edb_init(&id_edb, id_facts, 4,
+                                              &id_ruleset.symbols, &id_ruleset.registry),
+                      "%d");
+
+    maelys_datalog_symbol_id_t low_alice = 0;
+    maelys_datalog_symbol_id_t low_doc = 0;
+    TEST_ASSERT_EQUAL(MAELYS_OK,
+                      maelys_datalog_symbol_intern(&low_ruleset.symbols, "alice", strlen("alice"), &low_alice),
+                      "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK,
+                      maelys_datalog_symbol_intern(&low_ruleset.symbols, "doc.pdf", strlen("doc.pdf"), &low_doc),
+                      "%d");
+    maelys_datalog_term_t low_terms[2] = {
+        {.kind = MAELYS_DATALOG_TERM_SYMBOL},
+        {.kind = MAELYS_DATALOG_TERM_SYMBOL},
+    };
+    low_terms[0].as.symbol = low_alice;
+    low_terms[1].as.symbol = low_doc;
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_add_fact(&low_edb, "owns", low_terms, 2), "%d");
+
+    maelys_datalog_symbol_id_t id_alice = 0;
+    maelys_datalog_symbol_id_t id_doc = 0;
+    TEST_ASSERT_EQUAL(MAELYS_OK,
+                      maelys_datalog_edb_intern_runtime_symbol(&id_edb, "alice", &id_alice),
+                      "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK,
+                      maelys_datalog_edb_intern_runtime_symbol(&id_edb, "doc.pdf", &id_doc),
+                      "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK,
+                      maelys_datalog_edb_add_symbol_ids_fact(&id_edb, "owns", id_alice, id_doc),
+                      "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_finalize(&low_edb), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_finalize(&id_edb), "%d");
+
+    maelys_datalog_solve_result_t *low_result = NULL;
+    maelys_datalog_solve_result_t *id_result = NULL;
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_solve_once(&low_ruleset, &low_edb, &low_result), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_solve_once(&id_ruleset, &id_edb, &id_result), "%d");
+
+    bool low_present = false;
+    bool id_present = false;
+    TEST_ASSERT_EQUAL(MAELYS_OK,
+                      query_solved_symbol_unary(&low_ruleset, low_result, "allow", "alice", &low_present),
+                      "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK,
+                      query_solved_symbol_unary(&id_ruleset, id_result, "allow", "alice", &id_present),
+                      "%d");
+    TEST_ASSERT_TRUE(low_present);
+    TEST_ASSERT_TRUE(id_present);
+    TEST_ASSERT_EQUAL((int)low_present, (int)id_present, "%d");
+
+    maelys_datalog_solve_result_free(low_result);
+    maelys_datalog_solve_result_free(id_result);
+    TEST_END();
+}
+
 static int test_solver_positive_recursion_transitive_closure(void) {
     TEST_BEGIN();
     const char *src =
@@ -3451,6 +3580,8 @@ static int test_arithmetic_expr_overflow_fails_closed(void) {
 int main(int argc, char **argv) {
     test_case_t cases[] = {
         {"maelys_datalog_solver/simple_and_query", TEST_MODE_NON_BLOCKING, test_solver_simple_and_query},
+        {"maelys_datalog_solver/preinterned_unary_symbol_id_equivalent_to_string_path", TEST_MODE_NON_BLOCKING, test_solver_preinterned_unary_symbol_id_equivalent_to_string_path},
+        {"maelys_datalog_solver/preinterned_binary_symbol_ids_equivalent_to_low_level_path", TEST_MODE_NON_BLOCKING, test_solver_preinterned_binary_symbol_ids_equivalent_to_low_level_path},
         {"maelys_datalog_solver/positive_recursion_transitive_closure", TEST_MODE_NON_BLOCKING, test_solver_positive_recursion_transitive_closure},
         {"maelys_datalog_solver/duplicate_and_overflow_bounds", TEST_MODE_NON_BLOCKING, test_solver_duplicate_and_overflow_bounds},
         {"maelys_datalog_solver/query_and_conflict_helper", TEST_MODE_NON_BLOCKING, test_solver_query_and_conflict_helper},

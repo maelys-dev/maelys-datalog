@@ -47,6 +47,11 @@ maelys_result_t maelys_datalog_symbol_intern(maelys_datalog_symbol_table_t *tabl
 
 const char *maelys_datalog_symbol_text(const maelys_datalog_symbol_table_t *table,
                                        maelys_datalog_symbol_id_t id) {
-    if (!table || id == 0 || id > table->count) return NULL;
+    if (!maelys_datalog_symbol_id_is_valid(table, id)) return NULL;
     return table->storage + table->entries[id - 1u].offset;
+}
+
+int maelys_datalog_symbol_id_is_valid(const maelys_datalog_symbol_table_t *table,
+                                      maelys_datalog_symbol_id_t id) {
+    return table && id != MAELYS_DATALOG_SYMBOL_ID_INVALID && id <= table->count;
 }
