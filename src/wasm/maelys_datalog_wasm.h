@@ -19,6 +19,13 @@ maelys_result_t maelys_datalog_wasm_domain_commit(void);
 maelys_result_t maelys_datalog_wasm_domain_abort(void);
 
 maelys_result_t maelys_datalog_wasm_edb_begin(void);
+maelys_result_t maelys_datalog_wasm_edb_intern_runtime_symbol(const char *text,
+                                                              int32_t *out_id);
+maelys_result_t maelys_datalog_wasm_edb_add_symbol_id_fact(const char *predicate,
+                                                           int32_t symbol_id_from_js);
+maelys_result_t maelys_datalog_wasm_edb_add_symbol_ids_fact(const char *predicate,
+                                                            int32_t left_from_js,
+                                                            int32_t right_from_js);
 maelys_result_t maelys_datalog_wasm_edb_add_symbol(const char *pred,
                                                    const char *arg0);
 maelys_result_t maelys_datalog_wasm_edb_add_symbol2(const char *pred,

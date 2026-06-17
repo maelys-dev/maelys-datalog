@@ -79,12 +79,19 @@ static int lookup_symbol_readonly(const char *text, maelys_datalog_symbol_id_t *
     return 0;
 }
 
-static maelys_result_t intern_symbol(const char *text, maelys_datalog_symbol_id_t *out_id) {
-    if (!text || !text[0] || !out_id) return MAELYS_ERR_INVALID_ARGUMENT;
-    size_t len = strnlen(text, MAELYS_DATALOG_MAX_STRING_BYTES + 1u);
-    if (len == 0u) return MAELYS_ERR_INVALID_ARGUMENT;
-    if (len > MAELYS_DATALOG_MAX_STRING_BYTES) return MAELYS_ERR_PAYLOAD_TOO_LARGE;
-    return maelys_datalog_symbol_intern(&s_policy_set.policies[0].symbols, text, len, out_id);
+static maelys_result_t wasm_validate_symbol_id(int32_t symbol_id_from_js,
+                                               maelys_datalog_symbol_id_t *out) {
+    if (!out) return MAELYS_ERR_INVALID_ARGUMENT;
+    if (symbol_id_from_js <= 0) return MAELYS_ERR_INVALID_ARGUMENT;
+
+    maelys_datalog_symbol_id_t candidate =
+        (maelys_datalog_symbol_id_t)symbol_id_from_js;
+    if (!maelys_datalog_symbol_id_is_valid(&s_policy_set.policies[0].symbols, candidate)) {
+        return MAELYS_ERR_INVALID_ARGUMENT;
+    }
+
+    *out = candidate;
+    return MAELYS_OK;
 }
 
 maelys_result_t maelys_datalog_wasm_domain_begin(const char *name) {
@@ -174,6 +181,44 @@ maelys_result_t maelys_datalog_wasm_edb_begin(void) {
     return MAELYS_OK;
 }
 
+maelys_result_t maelys_datalog_wasm_edb_intern_runtime_symbol(const char *text,
+                                                              int32_t *out_id) {
+    if (s_edb_state != WASM_EDB_STATE_OPEN) return MAELYS_ERR_INVALID_STATE;
+    if (!text || !out_id) return MAELYS_ERR_INVALID_ARGUMENT;
+
+    maelys_datalog_symbol_id_t core_id;
+    maelys_result_t rc = maelys_datalog_edb_intern_runtime_symbol(&s_edb, text, &core_id);
+    if (rc != MAELYS_OK) return rc;
+    *out_id = (int32_t)core_id;
+    return MAELYS_OK;
+}
+
+maelys_result_t maelys_datalog_wasm_edb_add_symbol_id_fact(const char *predicate,
+                                                           int32_t symbol_id_from_js) {
+    if (s_edb_state != WASM_EDB_STATE_OPEN) return MAELYS_ERR_INVALID_STATE;
+    if (!predicate) return MAELYS_ERR_INVALID_ARGUMENT;
+
+    maelys_datalog_symbol_id_t symbol_id;
+    maelys_result_t rc = wasm_validate_symbol_id(symbol_id_from_js, &symbol_id);
+    if (rc != MAELYS_OK) return rc;
+    return maelys_datalog_edb_add_symbol_id_fact(&s_edb, predicate, symbol_id);
+}
+
+maelys_result_t maelys_datalog_wasm_edb_add_symbol_ids_fact(const char *predicate,
+                                                            int32_t left_from_js,
+                                                            int32_t right_from_js) {
+    if (s_edb_state != WASM_EDB_STATE_OPEN) return MAELYS_ERR_INVALID_STATE;
+    if (!predicate) return MAELYS_ERR_INVALID_ARGUMENT;
+
+    maelys_datalog_symbol_id_t left;
+    maelys_datalog_symbol_id_t right;
+    maelys_result_t rc = wasm_validate_symbol_id(left_from_js, &left);
+    if (rc != MAELYS_OK) return rc;
+    rc = wasm_validate_symbol_id(right_from_js, &right);
+    if (rc != MAELYS_OK) return rc;
+    return maelys_datalog_edb_add_symbol_ids_fact(&s_edb, predicate, left, right);
+}
+
 maelys_result_t maelys_datalog_wasm_edb_add_symbol(const char *pred, const char *arg0) {
     if (s_edb_state != WASM_EDB_STATE_OPEN) return MAELYS_ERR_INVALID_STATE;
     char pred_buf[MAELYS_DATALOG_MAX_STRING_BYTES + 1u];
@@ -183,8 +228,10 @@ maelys_result_t maelys_datalog_wasm_edb_add_symbol(const char *pred, const char 
     rc = copy_bounded(arg0_buf, sizeof(arg0_buf), arg0);
     if (rc != MAELYS_OK) return rc;
 
-    /* Open runtime symbol path for WASM dynamic domains. */
-    return maelys_datalog_edb_add_runtime_symbol_fact(&s_edb, pred_buf, arg0_buf);
+    int32_t id0;
+    rc = maelys_datalog_wasm_edb_intern_runtime_symbol(arg0_buf, &id0);
+    if (rc != MAELYS_OK) return rc;
+    return maelys_datalog_wasm_edb_add_symbol_id_fact(pred_buf, id0);
 }
 
 maelys_result_t maelys_datalog_wasm_edb_add_symbol2(const char *pred,
@@ -201,19 +248,14 @@ maelys_result_t maelys_datalog_wasm_edb_add_symbol2(const char *pred,
     rc = copy_bounded(arg1_buf, sizeof(arg1_buf), arg1);
     if (rc != MAELYS_OK) return rc;
 
-    maelys_datalog_symbol_id_t id0;
-    maelys_datalog_symbol_id_t id1;
-    rc = intern_symbol(arg0_buf, &id0);
+    int32_t id0;
+    int32_t id1;
+    rc = maelys_datalog_wasm_edb_intern_runtime_symbol(arg0_buf, &id0);
     if (rc != MAELYS_OK) return rc;
-    rc = intern_symbol(arg1_buf, &id1);
+    rc = maelys_datalog_wasm_edb_intern_runtime_symbol(arg1_buf, &id1);
     if (rc != MAELYS_OK) return rc;
 
-    maelys_datalog_term_t terms[2];
-    terms[0].kind = MAELYS_DATALOG_TERM_SYMBOL;
-    terms[0].as.symbol = id0;
-    terms[1].kind = MAELYS_DATALOG_TERM_SYMBOL;
-    terms[1].as.symbol = id1;
-    return maelys_datalog_edb_add_fact(&s_edb, pred_buf, terms, 2u);
+    return maelys_datalog_wasm_edb_add_symbol_ids_fact(pred_buf, id0, id1);
 }
 
 maelys_result_t maelys_datalog_wasm_solve(void) {

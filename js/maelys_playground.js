@@ -16,8 +16,9 @@
  *   const pg = await MaelysPlayground.create(MaelysDatalogDynamic, wasmUrl)
  *
  * EDB design note:
- *   edb_add_symbol uses the open runtime symbol path for WASM dynamic domains.
- *   Runtime EDB symbols are not required to be pre-declared as policy atoms.
+ *   string helpers are ergonomic sugar over the WASM symbol-id path.
+ *   Runtime EDB symbols are interned dynamically and are not required to be
+ *   pre-declared as policy atoms.
  */
 
 'use strict';
@@ -30,6 +31,9 @@ const PredKind = Object.freeze({
 });
 
 const MAELYS_OK = 0;
+const MAELYS_ERR_INVALID_ARGUMENT = -1;
+const MAELYS_ERR_INVALID_FIELD = -2;
+const MAELYS_ERR_INVALID_STATE = -13;
 
 function makeError(name, rc, msg) {
   return new Error(`${name} failed (rc=${rc})${msg ? ': ' + msg : ''}`);
@@ -115,6 +119,45 @@ class MaelysPlayground {
     return this;
   }
 
+  internRuntimeSymbol(text) {
+    const ptr = this._mod._malloc(4);
+    if (!ptr) throw new Error('internRuntimeSymbol failed: malloc returned 0');
+    try {
+      this._check(
+        this._call('maelys_datalog_wasm_edb_intern_runtime_symbol',
+                   'number',
+                   ['string', 'number'],
+                   [text, ptr]),
+        'internRuntimeSymbol',
+      );
+      return this._mod.getValue(ptr, 'i32');
+    } finally {
+      this._mod._free(ptr);
+    }
+  }
+
+  addSymbolIdFact(pred, symbolId) {
+    this._check(
+      this._call('maelys_datalog_wasm_edb_add_symbol_id_fact',
+                 'number',
+                 ['string', 'number'],
+                 [pred, symbolId]),
+      'addSymbolIdFact',
+    );
+    return this;
+  }
+
+  addSymbolIdsFact(pred, left, right) {
+    this._check(
+      this._call('maelys_datalog_wasm_edb_add_symbol_ids_fact',
+                 'number',
+                 ['string', 'number', 'number'],
+                 [pred, left, right]),
+      'addSymbolIdsFact',
+    );
+    return this;
+  }
+
   addFact2(pred, arg0, arg1) {
     this._check(
       this._call('maelys_datalog_wasm_edb_add_symbol2',
@@ -160,7 +203,14 @@ class MaelysPlayground {
   }
 }
 
-const api = { PredKind, MAELYS_OK, MaelysPlayground };
+const api = {
+  PredKind,
+  MAELYS_OK,
+  MAELYS_ERR_INVALID_ARGUMENT,
+  MAELYS_ERR_INVALID_FIELD,
+  MAELYS_ERR_INVALID_STATE,
+  MaelysPlayground,
+};
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = api;
@@ -169,5 +219,8 @@ if (typeof module !== 'undefined' && module.exports) {
 if (typeof globalThis !== 'undefined') {
   globalThis.PredKind = PredKind;
   globalThis.MAELYS_OK = MAELYS_OK;
+  globalThis.MAELYS_ERR_INVALID_ARGUMENT = MAELYS_ERR_INVALID_ARGUMENT;
+  globalThis.MAELYS_ERR_INVALID_FIELD = MAELYS_ERR_INVALID_FIELD;
+  globalThis.MAELYS_ERR_INVALID_STATE = MAELYS_ERR_INVALID_STATE;
   globalThis.MaelysPlayground = MaelysPlayground;
 }

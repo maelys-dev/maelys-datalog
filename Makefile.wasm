@@ -42,7 +42,7 @@ WASM_EXPORTS = \
 
 WASM_LDFLAGS = \
 	-s "EXPORTED_FUNCTIONS=[$(WASM_EXPORTS)]" \
-	-s "EXPORTED_RUNTIME_METHODS=['ccall','cwrap','UTF8ToString','stringToUTF8','lengthBytesUTF8']" \
+	-s "EXPORTED_RUNTIME_METHODS=['ccall','cwrap','UTF8ToString','stringToUTF8','lengthBytesUTF8','getValue']" \
 	-s ALLOW_MEMORY_GROWTH=1 \
 	-s MODULARIZE=1 \
 	-s EXPORT_NAME="MaelysDatalog"
@@ -53,7 +53,7 @@ WASM_EXAMPLES_EXPORTS = \
 
 WASM_EXAMPLES_LDFLAGS = \
 	-s "EXPORTED_FUNCTIONS=[$(WASM_EXAMPLES_EXPORTS)]" \
-	-s "EXPORTED_RUNTIME_METHODS=['ccall','cwrap','UTF8ToString','stringToUTF8','lengthBytesUTF8']" \
+	-s "EXPORTED_RUNTIME_METHODS=['ccall','cwrap','UTF8ToString','stringToUTF8','lengthBytesUTF8','getValue']" \
 	-s ALLOW_MEMORY_GROWTH=1 \
 	-s MODULARIZE=1 \
 	-s EXPORT_NAME="MaelysDatalogExamples"
@@ -66,6 +66,9 @@ WASM_DYNAMIC_EXPORTS = \
 	'_maelys_datalog_wasm_domain_commit', \
 	'_maelys_datalog_wasm_domain_abort', \
 	'_maelys_datalog_wasm_edb_begin', \
+	'_maelys_datalog_wasm_edb_intern_runtime_symbol', \
+	'_maelys_datalog_wasm_edb_add_symbol_id_fact', \
+	'_maelys_datalog_wasm_edb_add_symbol_ids_fact', \
 	'_maelys_datalog_wasm_edb_add_symbol', \
 	'_maelys_datalog_wasm_edb_add_symbol2', \
 	'_maelys_datalog_wasm_solve', \
@@ -79,7 +82,7 @@ WASM_DYNAMIC_EXPORTS = \
 
 WASM_DYNAMIC_LDFLAGS = \
 	-s "EXPORTED_FUNCTIONS=[$(WASM_DYNAMIC_EXPORTS)]" \
-	-s "EXPORTED_RUNTIME_METHODS=['ccall','cwrap','UTF8ToString','stringToUTF8','lengthBytesUTF8']" \
+	-s "EXPORTED_RUNTIME_METHODS=['ccall','cwrap','UTF8ToString','stringToUTF8','lengthBytesUTF8','getValue']" \
 	-s ALLOW_MEMORY_GROWTH=1 \
 	-s MODULARIZE=1 \
 	-s EXPORT_NAME="MaelysDatalogDynamic"
