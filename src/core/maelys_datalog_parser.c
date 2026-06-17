@@ -247,8 +247,215 @@ static maelys_datalog_cmp_op_t cmp_kind(maelys_datalog_token_kind_t k) {
     }
 }
 
-static maelys_result_t parse_literal(parser_t *p, maelys_datalog_literal_t *lit) {
+typedef struct {
+    uint8_t root;
+    maelys_datalog_term_t term;
+    int has_simple_term;
+    int is_composite;
+} arith_operand_t;
+
+static int token_starts_comparison_operand(maelys_datalog_token_kind_t kind) {
+    return kind == MAELYS_DATALOG_TOKEN_VARIABLE ||
+           kind == MAELYS_DATALOG_TOKEN_STRING ||
+           kind == MAELYS_DATALOG_TOKEN_INTEGER ||
+           kind == MAELYS_DATALOG_TOKEN_BOOLEAN ||
+           kind == MAELYS_DATALOG_TOKEN_UNDERSCORE ||
+           kind == MAELYS_DATALOG_TOKEN_LPAREN;
+}
+
+static maelys_result_t arith_expr_add_node(parser_t *p,
+                                           maelys_datalog_rule_t *rule,
+                                           maelys_datalog_arith_expr_kind_t kind,
+                                           const maelys_datalog_term_t *term,
+                                           uint8_t left,
+                                           uint8_t right,
+                                           uint8_t *out_index) {
+    if (!p || !rule || !out_index) return MAELYS_ERR_INVALID_ARGUMENT;
+    if (rule->expr_node_count >= MAELYS_DATALOG_MAX_ARITH_EXPR_NODES) {
+        parser_diag(p,
+                    MAELYS_DATALOG_DIAG_PARSER_INVALID_COMPARISON,
+                    "arithmetic expression node limit exceeded",
+                    "simplify the arithmetic expression");
+        maelys_datalog_diagnostic_set_limit(p->diag,
+                                            (size_t)rule->expr_node_count + 1u,
+                                            MAELYS_DATALOG_MAX_ARITH_EXPR_NODES);
+        return MAELYS_ERR_PAYLOAD_TOO_LARGE;
+    }
+    uint8_t idx = rule->expr_node_count++;
+    maelys_datalog_arith_expr_node_t *node = &rule->expr_nodes[idx];
+    memset(node, 0, sizeof(*node));
+    node->kind = kind;
+    node->left = left;
+    node->right = right;
+    if (term) node->term = *term;
+    *out_index = idx;
+    return MAELYS_OK;
+}
+
+static maelys_result_t parse_arith_sum(parser_t *p,
+                                       maelys_datalog_rule_t *rule,
+                                       unsigned depth,
+                                       uint8_t *out_root,
+                                       int *out_composite);
+
+static maelys_result_t parse_arith_atom(parser_t *p,
+                                        maelys_datalog_rule_t *rule,
+                                        unsigned depth,
+                                        uint8_t *out_root,
+                                        int *out_composite) {
+    if (depth > MAELYS_DATALOG_MAX_ARITH_EXPR_DEPTH) {
+        parser_diag(p,
+                    MAELYS_DATALOG_DIAG_PARSER_INVALID_COMPARISON,
+                    "arithmetic expression depth limit exceeded",
+                    "reduce parentheses or split the expression");
+        maelys_datalog_diagnostic_set_limit(p->diag,
+                                            (size_t)depth,
+                                            MAELYS_DATALOG_MAX_ARITH_EXPR_DEPTH);
+        return MAELYS_ERR_PAYLOAD_TOO_LARGE;
+    }
+    if (p->tok.kind == MAELYS_DATALOG_TOKEN_INTEGER ||
+        p->tok.kind == MAELYS_DATALOG_TOKEN_VARIABLE) {
+        maelys_datalog_term_t term;
+        int has_anonymous = 0;
+        maelys_result_t rc = parse_term(p, &term, MAELYS_DATALOG_TERM_CTX_COMPARISON, &has_anonymous);
+        if (rc != MAELYS_OK) return rc;
+        maelys_datalog_arith_expr_kind_t kind =
+            term.kind == MAELYS_DATALOG_TERM_INT
+                ? MAELYS_DATALOG_ARITH_EXPR_INT_LITERAL
+                : MAELYS_DATALOG_ARITH_EXPR_VAR;
+        *out_composite = 0;
+        return arith_expr_add_node(p,
+                                   rule,
+                                   kind,
+                                   &term,
+                                   MAELYS_DATALOG_ARITH_EXPR_NO_NODE,
+                                   MAELYS_DATALOG_ARITH_EXPR_NO_NODE,
+                                   out_root);
+    }
+    if (p->tok.kind == MAELYS_DATALOG_TOKEN_UNDERSCORE) {
+        parser_diag(p,
+                    MAELYS_DATALOG_DIAG_PARSER_ANONYMOUS_VARIABLE_IN_COMPARISON,
+                    "anonymous variable is not allowed in arithmetic expressions",
+                    "use a named variable bound by a positive body atom");
+        return MAELYS_ERR_INVALID_FIELD;
+    }
+    if (p->tok.kind == MAELYS_DATALOG_TOKEN_LPAREN) {
+        maelys_result_t rc = next(p);
+        if (rc != MAELYS_OK) return rc;
+        int inner_composite = 0;
+        rc = parse_arith_sum(p, rule, depth + 1u, out_root, &inner_composite);
+        if (rc != MAELYS_OK) return rc;
+        if (p->tok.kind != MAELYS_DATALOG_TOKEN_RPAREN) {
+            parser_diag(p,
+                        MAELYS_DATALOG_DIAG_LEXER_INVALID_TOKEN,
+                        "expected ')' in arithmetic expression",
+                        "close the parenthesized arithmetic expression");
+            return MAELYS_ERR_INVALID_FIELD;
+        }
+        rc = next(p);
+        if (rc != MAELYS_OK) return rc;
+        *out_composite = 1;
+        return MAELYS_OK;
+    }
+    parser_diag(p,
+                MAELYS_DATALOG_DIAG_PARSER_INVALID_COMPARISON,
+                "expected integer arithmetic expression",
+                "use integer literals, variables, +, -, *, and parentheses");
+    return MAELYS_ERR_INVALID_FIELD;
+}
+
+static maelys_result_t parse_arith_product(parser_t *p,
+                                           maelys_datalog_rule_t *rule,
+                                           unsigned depth,
+                                           uint8_t *out_root,
+                                           int *out_composite) {
+    maelys_result_t rc = parse_arith_atom(p, rule, depth, out_root, out_composite);
+    if (rc != MAELYS_OK) return rc;
+    while (p->tok.kind == MAELYS_DATALOG_TOKEN_STAR) {
+        rc = next(p);
+        if (rc != MAELYS_OK) return rc;
+        uint8_t rhs = MAELYS_DATALOG_ARITH_EXPR_NO_NODE;
+        int rhs_composite = 0;
+        rc = parse_arith_atom(p, rule, depth, &rhs, &rhs_composite);
+        if (rc != MAELYS_OK) return rc;
+        uint8_t root = MAELYS_DATALOG_ARITH_EXPR_NO_NODE;
+        rc = arith_expr_add_node(p,
+                                 rule,
+                                 MAELYS_DATALOG_ARITH_EXPR_MUL,
+                                 NULL,
+                                 *out_root,
+                                 rhs,
+                                 &root);
+        if (rc != MAELYS_OK) return rc;
+        *out_root = root;
+        *out_composite = 1;
+        (void)rhs_composite;
+    }
+    return MAELYS_OK;
+}
+
+static maelys_result_t parse_arith_sum(parser_t *p,
+                                       maelys_datalog_rule_t *rule,
+                                       unsigned depth,
+                                       uint8_t *out_root,
+                                       int *out_composite) {
+    maelys_result_t rc = parse_arith_product(p, rule, depth, out_root, out_composite);
+    if (rc != MAELYS_OK) return rc;
+    while (p->tok.kind == MAELYS_DATALOG_TOKEN_PLUS ||
+           p->tok.kind == MAELYS_DATALOG_TOKEN_MINUS) {
+        maelys_datalog_arith_expr_kind_t kind =
+            p->tok.kind == MAELYS_DATALOG_TOKEN_PLUS
+                ? MAELYS_DATALOG_ARITH_EXPR_ADD
+                : MAELYS_DATALOG_ARITH_EXPR_SUB;
+        rc = next(p);
+        if (rc != MAELYS_OK) return rc;
+        uint8_t rhs = MAELYS_DATALOG_ARITH_EXPR_NO_NODE;
+        int rhs_composite = 0;
+        rc = parse_arith_product(p, rule, depth, &rhs, &rhs_composite);
+        if (rc != MAELYS_OK) return rc;
+        uint8_t root = MAELYS_DATALOG_ARITH_EXPR_NO_NODE;
+        rc = arith_expr_add_node(p, rule, kind, NULL, *out_root, rhs, &root);
+        if (rc != MAELYS_OK) return rc;
+        *out_root = root;
+        *out_composite = 1;
+        (void)rhs_composite;
+    }
+    return MAELYS_OK;
+}
+
+static maelys_result_t parse_comparison_operand(parser_t *p,
+                                                maelys_datalog_rule_t *rule,
+                                                arith_operand_t *out) {
+    if (!p || !rule || !out) return MAELYS_ERR_INVALID_ARGUMENT;
+    memset(out, 0, sizeof(*out));
+    out->root = MAELYS_DATALOG_ARITH_EXPR_NO_NODE;
+    if (p->tok.kind == MAELYS_DATALOG_TOKEN_VARIABLE ||
+        p->tok.kind == MAELYS_DATALOG_TOKEN_INTEGER ||
+        p->tok.kind == MAELYS_DATALOG_TOKEN_LPAREN) {
+        maelys_result_t rc = parse_arith_sum(p, rule, 1u, &out->root, &out->is_composite);
+        if (rc != MAELYS_OK) return rc;
+        const maelys_datalog_arith_expr_node_t *root = &rule->expr_nodes[out->root];
+        if (!out->is_composite &&
+            (root->kind == MAELYS_DATALOG_ARITH_EXPR_INT_LITERAL ||
+             root->kind == MAELYS_DATALOG_ARITH_EXPR_VAR)) {
+            out->term = root->term;
+            out->has_simple_term = 1;
+        }
+        return MAELYS_OK;
+    }
+    int has_anonymous = 0;
+    maelys_result_t rc = parse_term(p, &out->term, MAELYS_DATALOG_TERM_CTX_COMPARISON, &has_anonymous);
+    if (rc != MAELYS_OK) return rc;
+    out->has_simple_term = 1;
+    return MAELYS_OK;
+}
+
+static maelys_result_t parse_literal(parser_t *p,
+                                     maelys_datalog_rule_t *rule,
+                                     maelys_datalog_literal_t *lit) {
     memset(lit, 0, sizeof(*lit));
+    lit->lhs_expr_root = MAELYS_DATALOG_ARITH_EXPR_NO_NODE;
+    lit->rhs_expr_root = MAELYS_DATALOG_ARITH_EXPR_NO_NODE;
     if (p->tok.kind == MAELYS_DATALOG_TOKEN_NOT) {
         maelys_result_t rc = next(p);
         if (rc != MAELYS_OK) return rc;
@@ -289,13 +496,10 @@ static maelys_result_t parse_literal(parser_t *p, maelys_datalog_literal_t *lit)
         int has_anonymous = 0;
         return parse_atom(p, &lit->atom, MAELYS_DATALOG_TERM_CTX_BODY_ATOM, &has_anonymous);
     }
-    if (p->tok.kind == MAELYS_DATALOG_TOKEN_VARIABLE ||
-        p->tok.kind == MAELYS_DATALOG_TOKEN_STRING ||
-        p->tok.kind == MAELYS_DATALOG_TOKEN_INTEGER ||
-        p->tok.kind == MAELYS_DATALOG_TOKEN_BOOLEAN ||
-        p->tok.kind == MAELYS_DATALOG_TOKEN_UNDERSCORE) {
-        int has_anonymous = 0;
-        maelys_result_t rc = parse_term(p, &lit->lhs, MAELYS_DATALOG_TERM_CTX_COMPARISON, &has_anonymous);
+    if (token_starts_comparison_operand(p->tok.kind)) {
+        arith_operand_t lhs;
+        arith_operand_t rhs;
+        maelys_result_t rc = parse_comparison_operand(p, rule, &lhs);
         if (rc != MAELYS_OK) return rc;
         if (!token_is_cmp(p->tok.kind)) {
             parser_diag(p,
@@ -307,9 +511,36 @@ static maelys_result_t parse_literal(parser_t *p, maelys_datalog_literal_t *lit)
         lit->op = cmp_kind(p->tok.kind);
         rc = next(p);
         if (rc != MAELYS_OK) return rc;
-        rc = parse_term(p, &lit->rhs, MAELYS_DATALOG_TERM_CTX_COMPARISON, &has_anonymous);
+        rc = parse_comparison_operand(p, rule, &rhs);
         if (rc != MAELYS_OK) return rc;
-        if (lit->lhs.kind != MAELYS_DATALOG_TERM_VAR && lit->rhs.kind != MAELYS_DATALOG_TERM_VAR) {
+        const int uses_arith_expr = lhs.is_composite || rhs.is_composite;
+        if (uses_arith_expr && (lhs.root == MAELYS_DATALOG_ARITH_EXPR_NO_NODE ||
+                                rhs.root == MAELYS_DATALOG_ARITH_EXPR_NO_NODE)) {
+            parser_diag(p,
+                        MAELYS_DATALOG_DIAG_PARSER_INVALID_COMPARISON,
+                        "arithmetic comparison requires integer expressions",
+                        "do not mix arithmetic expressions with symbols or booleans");
+            return MAELYS_ERR_INVALID_FIELD;
+        }
+        if (!uses_arith_expr) {
+            if (!lhs.has_simple_term || !rhs.has_simple_term) {
+                parser_diag(p,
+                            MAELYS_DATALOG_DIAG_PARSER_INVALID_COMPARISON,
+                            "expected comparison terms",
+                            "use simple typed terms or integer arithmetic expressions");
+                return MAELYS_ERR_INVALID_FIELD;
+            }
+            lit->lhs = lhs.term;
+            lit->rhs = rhs.term;
+        } else {
+            lit->lhs = lhs.has_simple_term ? lhs.term : (maelys_datalog_term_t){0};
+            lit->rhs = rhs.has_simple_term ? rhs.term : (maelys_datalog_term_t){0};
+            lit->lhs_expr_root = lhs.root;
+            lit->rhs_expr_root = rhs.root;
+            lit->has_arith_expr = 1;
+        }
+        if (!lit->has_arith_expr &&
+            lit->lhs.kind != MAELYS_DATALOG_TERM_VAR && lit->rhs.kind != MAELYS_DATALOG_TERM_VAR) {
             if (lit->lhs.kind != lit->rhs.kind) {
                 parser_diag(p,
                             MAELYS_DATALOG_DIAG_PARSER_INVALID_COMPARISON,
@@ -345,6 +576,32 @@ static void vars_in_atom(const maelys_datalog_fact_t *a, uint32_t *mask) {
     }
 }
 
+static void vars_in_arith_expr(const maelys_datalog_rule_t *rule,
+                               uint8_t root,
+                               uint32_t *mask) {
+    if (!rule || !mask || root >= rule->expr_node_count ||
+        root == MAELYS_DATALOG_ARITH_EXPR_NO_NODE) {
+        return;
+    }
+    const maelys_datalog_arith_expr_node_t *node = &rule->expr_nodes[root];
+    switch (node->kind) {
+        case MAELYS_DATALOG_ARITH_EXPR_VAR:
+            if (node->term.as.variable < MAELYS_DATALOG_MAX_RULE_VARIABLES) {
+                *mask |= (1u << node->term.as.variable);
+            }
+            return;
+        case MAELYS_DATALOG_ARITH_EXPR_ADD:
+        case MAELYS_DATALOG_ARITH_EXPR_SUB:
+        case MAELYS_DATALOG_ARITH_EXPR_MUL:
+            vars_in_arith_expr(rule, node->left, mask);
+            vars_in_arith_expr(rule, node->right, mask);
+            return;
+        case MAELYS_DATALOG_ARITH_EXPR_INT_LITERAL:
+        default:
+            return;
+    }
+}
+
 static maelys_result_t validate_rule(parser_t *p, const maelys_datalog_rule_t *rule) {
     maelys_datalog_ruleset_t *r = p->ruleset;
     const maelys_datalog_predicate_def_t *head_def =
@@ -371,13 +628,18 @@ static maelys_result_t validate_rule(parser_t *p, const maelys_datalog_rule_t *r
     for (size_t i = 0; i < rule->body_count; i++) {
         if (rule->body[i].kind == MAELYS_DATALOG_LITERAL_COMPARISON) {
             uint32_t cmp_vars = 0;
-            if (rule->body[i].lhs.kind == MAELYS_DATALOG_TERM_VAR &&
-                rule->body[i].lhs.as.variable < MAELYS_DATALOG_MAX_RULE_VARIABLES) {
-                cmp_vars |= (1u << rule->body[i].lhs.as.variable);
-            }
-            if (rule->body[i].rhs.kind == MAELYS_DATALOG_TERM_VAR &&
-                rule->body[i].rhs.as.variable < MAELYS_DATALOG_MAX_RULE_VARIABLES) {
-                cmp_vars |= (1u << rule->body[i].rhs.as.variable);
+            if (rule->body[i].has_arith_expr) {
+                vars_in_arith_expr(rule, rule->body[i].lhs_expr_root, &cmp_vars);
+                vars_in_arith_expr(rule, rule->body[i].rhs_expr_root, &cmp_vars);
+            } else {
+                if (rule->body[i].lhs.kind == MAELYS_DATALOG_TERM_VAR &&
+                    rule->body[i].lhs.as.variable < MAELYS_DATALOG_MAX_RULE_VARIABLES) {
+                    cmp_vars |= (1u << rule->body[i].lhs.as.variable);
+                }
+                if (rule->body[i].rhs.kind == MAELYS_DATALOG_TERM_VAR &&
+                    rule->body[i].rhs.as.variable < MAELYS_DATALOG_MAX_RULE_VARIABLES) {
+                    cmp_vars |= (1u << rule->body[i].rhs.as.variable);
+                }
             }
             if (cmp_vars & ~body_vars) {
                 parser_diag(p,
@@ -573,7 +835,7 @@ static maelys_result_t parse_clause(parser_t *p) {
                                                 MAELYS_DATALOG_MAX_BODY_LITERALS);
             return MAELYS_ERR_PAYLOAD_TOO_LARGE;
         }
-        rc = parse_literal(p, &rule.body[rule.body_count++]);
+        rc = parse_literal(p, &rule, &rule.body[rule.body_count++]);
         if (rc != MAELYS_OK) return rc;
         if (p->tok.kind == MAELYS_DATALOG_TOKEN_COMMA) {
             rc = next(p);

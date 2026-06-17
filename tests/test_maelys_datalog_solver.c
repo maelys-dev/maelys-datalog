@@ -7,6 +7,7 @@
 #include "src/core/maelys_datalog_symbol_table.h"
 #include "tests/helpers/test_framework.h"
 
+#include <limits.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -42,6 +43,17 @@ static int init_solver_test_ruleset(maelys_datalog_ruleset_t *r) {
         {"q", 2, MAELYS_DATALOG_PRED_KIND_EDB},
         {"r", 2, MAELYS_DATALOG_PRED_KIND_EDB},
         {"edge", 2, MAELYS_DATALOG_PRED_KIND_EDB},
+        {"score", 2, MAELYS_DATALOG_PRED_KIND_EDB},
+        {"bonus", 2, MAELYS_DATALOG_PRED_KIND_EDB},
+        {"rollback_frames", 2, MAELYS_DATALOG_PRED_KIND_EDB},
+        {"tick_ms", 1, MAELYS_DATALOG_PRED_KIND_EDB},
+        {"value", 1, MAELYS_DATALOG_PRED_KIND_EDB},
+        {"candidate", 1, MAELYS_DATALOG_PRED_KIND_EDB},
+        {"big", 2, MAELYS_DATALOG_PRED_KIND_EDB},
+        {"owns", 2, MAELYS_DATALOG_PRED_KIND_EDB},
+        {"a", 2, MAELYS_DATALOG_PRED_KIND_EDB},
+        {"b", 2, MAELYS_DATALOG_PRED_KIND_EDB},
+        {"c", 2, MAELYS_DATALOG_PRED_KIND_EDB},
         {"blocked", 1, MAELYS_DATALOG_PRED_KIND_EDB},
         {"backend", 1, MAELYS_DATALOG_PRED_KIND_EDB},
         {"backend_class", 2, MAELYS_DATALOG_PRED_KIND_EDB},
@@ -63,6 +75,7 @@ static int init_solver_test_ruleset(maelys_datalog_ruleset_t *r) {
         {"right", 1, MAELYS_DATALOG_PRED_KIND_IDB | MAELYS_DATALOG_PRED_KIND_QUERY},
         {"both", 1, MAELYS_DATALOG_PRED_KIND_IDB | MAELYS_DATALOG_PRED_KIND_QUERY},
         {"base_only", 1, MAELYS_DATALOG_PRED_KIND_IDB | MAELYS_DATALOG_PRED_KIND_QUERY},
+        {"next", 2, MAELYS_DATALOG_PRED_KIND_IDB | MAELYS_DATALOG_PRED_KIND_QUERY},
     };
     for (size_t i = 0; i < sizeof(test_defs) / sizeof(test_defs[0]); i++) {
         rc = maelys_datalog_predicate_registry_add_domain(
@@ -71,7 +84,7 @@ static int init_solver_test_ruleset(maelys_datalog_ruleset_t *r) {
     }
     static const char *const atoms[] = {
         "proj-1", "alice", "bob", "carol", "dave", "r1", "r2",
-        "cli_pivot", "stdin", "text", "request", "a", "b", "c", "notanint", NULL};
+        "cli_pivot", "stdin", "text", "request", "a", "b", "c", "doc.pdf", "notanint", NULL};
     for (size_t i = 0; atoms[i]; i++) {
         rc = maelys_datalog_predicate_registry_add_atom(&r->registry, atoms[i]);
         if (rc != MAELYS_OK) return rc;
@@ -194,6 +207,15 @@ static int query_solved_int_unary(const maelys_datalog_solve_result_t *result,
                                   bool *present) {
     maelys_datalog_term_t term = int_term(value);
     return maelys_datalog_query_solved_ground_fact(result, predicate, &term, 1, present);
+}
+
+static int query_solved_int_binary(const maelys_datalog_solve_result_t *result,
+                                   const char *predicate,
+                                   long long lhs,
+                                   long long rhs,
+                                   bool *present) {
+    maelys_datalog_term_t terms[2] = {int_term(lhs), int_term(rhs)};
+    return maelys_datalog_query_solved_ground_fact(result, predicate, terms, 2, present);
 }
 
 static int query_solved_symbol_unary(maelys_datalog_ruleset_t *r,
@@ -3224,6 +3246,208 @@ static int test_datalog_proof_tree_single_node_still_bounded(void) {
     TEST_END();
 }
 
+static int test_arithmetic_expr_basic_true_false(void) {
+    TEST_BEGIN();
+    maelys_datalog_ruleset_t r;
+    TEST_ASSERT_EQUAL(MAELYS_OK, make_ruleset(&r, "allow(U) :- score(U, S), S + 1 >= 10."), "%d");
+    maelys_datalog_fact_t facts[8];
+    maelys_datalog_edb_t edb;
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_init(&edb, facts, 8, &r.symbols, &r.registry), "%d");
+    add_symbol_int_binary(&r, &edb, "score", "alice", 9);
+    add_symbol_int_binary(&r, &edb, "score", "bob", 8);
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_finalize(&edb), "%d");
+    maelys_datalog_solve_result_t *result = NULL;
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_solve_once(&r, &edb, &result), "%d");
+    bool present = false;
+    TEST_ASSERT_EQUAL(MAELYS_OK, query_solved_symbol_unary(&r, result, "allow", "alice", &present), "%d");
+    TEST_ASSERT_TRUE(present);
+    TEST_ASSERT_EQUAL(MAELYS_OK, query_solved_symbol_unary(&r, result, "allow", "bob", &present), "%d");
+    TEST_ASSERT_FALSE(present);
+    maelys_datalog_solve_result_free(result);
+    maelys_datalog_ruleset_clear(&r);
+    TEST_END();
+}
+
+static int test_arithmetic_expr_two_variable_expression(void) {
+    TEST_BEGIN();
+    maelys_datalog_ruleset_t r;
+    TEST_ASSERT_EQUAL(MAELYS_OK, make_ruleset(&r, "allow(U) :- score(U, S), bonus(U, B), S + B >= 10."), "%d");
+    maelys_datalog_fact_t facts[8];
+    maelys_datalog_edb_t edb;
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_init(&edb, facts, 8, &r.symbols, &r.registry), "%d");
+    add_symbol_int_binary(&r, &edb, "score", "alice", 7);
+    add_symbol_int_binary(&r, &edb, "bonus", "alice", 3);
+    add_symbol_int_binary(&r, &edb, "score", "bob", 7);
+    add_symbol_int_binary(&r, &edb, "bonus", "bob", 2);
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_finalize(&edb), "%d");
+    maelys_datalog_solve_result_t *result = NULL;
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_solve_once(&r, &edb, &result), "%d");
+    bool present = false;
+    TEST_ASSERT_EQUAL(MAELYS_OK, query_solved_symbol_unary(&r, result, "allow", "alice", &present), "%d");
+    TEST_ASSERT_TRUE(present);
+    TEST_ASSERT_EQUAL(MAELYS_OK, query_solved_symbol_unary(&r, result, "allow", "bob", &present), "%d");
+    TEST_ASSERT_FALSE(present);
+    maelys_datalog_solve_result_free(result);
+    maelys_datalog_ruleset_clear(&r);
+    TEST_END();
+}
+
+static int test_arithmetic_expr_multiplication(void) {
+    TEST_BEGIN();
+    maelys_datalog_ruleset_t r;
+    TEST_ASSERT_EQUAL(MAELYS_OK, make_ruleset(&r, "allow(P) :- rollback_frames(P, F), tick_ms(T), F * T > 150."), "%d");
+    maelys_datalog_fact_t facts[8];
+    maelys_datalog_edb_t edb;
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_init(&edb, facts, 8, &r.symbols, &r.registry), "%d");
+    add_symbol_int_binary(&r, &edb, "rollback_frames", "alice", 8);
+    add_symbol_int_binary(&r, &edb, "rollback_frames", "bob", 4);
+    add_int_unary(&edb, "tick_ms", 20);
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_finalize(&edb), "%d");
+    maelys_datalog_solve_result_t *result = NULL;
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_solve_once(&r, &edb, &result), "%d");
+    bool present = false;
+    TEST_ASSERT_EQUAL(MAELYS_OK, query_solved_symbol_unary(&r, result, "allow", "alice", &present), "%d");
+    TEST_ASSERT_TRUE(present);
+    TEST_ASSERT_EQUAL(MAELYS_OK, query_solved_symbol_unary(&r, result, "allow", "bob", &present), "%d");
+    TEST_ASSERT_FALSE(present);
+    maelys_datalog_solve_result_free(result);
+    maelys_datalog_ruleset_clear(&r);
+    TEST_END();
+}
+
+static int test_arithmetic_expr_precedence_and_parentheses(void) {
+    TEST_BEGIN();
+    maelys_datalog_ruleset_t r;
+    TEST_ASSERT_EQUAL(MAELYS_OK,
+                      make_ruleset(&r, "allow(X) :- a(X, A), b(X, B), c(X, C), A + B * C = 14."),
+                      "%d");
+    maelys_datalog_fact_t facts[8];
+    maelys_datalog_edb_t edb;
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_init(&edb, facts, 8, &r.symbols, &r.registry), "%d");
+    add_symbol_int_binary(&r, &edb, "a", "alice", 2);
+    add_symbol_int_binary(&r, &edb, "b", "alice", 3);
+    add_symbol_int_binary(&r, &edb, "c", "alice", 4);
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_finalize(&edb), "%d");
+    maelys_datalog_solve_result_t *result = NULL;
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_solve_once(&r, &edb, &result), "%d");
+    bool present = false;
+    TEST_ASSERT_EQUAL(MAELYS_OK, query_solved_symbol_unary(&r, result, "allow", "alice", &present), "%d");
+    TEST_ASSERT_TRUE(present);
+    maelys_datalog_solve_result_free(result);
+    maelys_datalog_ruleset_clear(&r);
+
+    TEST_ASSERT_EQUAL(MAELYS_OK,
+                      make_ruleset(&r, "allow(X) :- a(X, A), b(X, B), c(X, C), (A + B) * C = 20."),
+                      "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_init(&edb, facts, 8, &r.symbols, &r.registry), "%d");
+    add_symbol_int_binary(&r, &edb, "a", "alice", 2);
+    add_symbol_int_binary(&r, &edb, "b", "alice", 3);
+    add_symbol_int_binary(&r, &edb, "c", "alice", 4);
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_finalize(&edb), "%d");
+    result = NULL;
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_solve_once(&r, &edb, &result), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK, query_solved_symbol_unary(&r, result, "allow", "alice", &present), "%d");
+    TEST_ASSERT_TRUE(present);
+    maelys_datalog_solve_result_free(result);
+    maelys_datalog_ruleset_clear(&r);
+    TEST_END();
+}
+
+static int test_arithmetic_expr_left_associative_subtraction(void) {
+    TEST_BEGIN();
+    maelys_datalog_ruleset_t r;
+    TEST_ASSERT_EQUAL(MAELYS_OK, make_ruleset(&r, "allow(X) :- a(X, A), A - 5 - 2 = 3."), "%d");
+    maelys_datalog_fact_t facts[4];
+    maelys_datalog_edb_t edb;
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_init(&edb, facts, 4, &r.symbols, &r.registry), "%d");
+    add_symbol_int_binary(&r, &edb, "a", "alice", 10);
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_finalize(&edb), "%d");
+    maelys_datalog_solve_result_t *result = NULL;
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_solve_once(&r, &edb, &result), "%d");
+    bool present = false;
+    TEST_ASSERT_EQUAL(MAELYS_OK, query_solved_symbol_unary(&r, result, "allow", "alice", &present), "%d");
+    TEST_ASSERT_TRUE(present);
+    maelys_datalog_solve_result_free(result);
+    maelys_datalog_ruleset_clear(&r);
+    TEST_END();
+}
+
+static int test_arithmetic_expr_non_generative_rejected(void) {
+    TEST_BEGIN();
+    maelys_datalog_diagnostic_t diag;
+    TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_FIELD,
+                      parse_solver_test_ruleset_ex("next(X, Y) :- value(X), Y = X + 1.", &diag),
+                      "%d");
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_DIAG_PARSER_UNSAFE_VARIABLE, diag.code, "%d");
+    TEST_END();
+}
+
+static int test_arithmetic_expr_candidate_filter_equality(void) {
+    TEST_BEGIN();
+    maelys_datalog_ruleset_t r;
+    TEST_ASSERT_EQUAL(MAELYS_OK, make_ruleset(&r, "next(X, Y) :- value(X), candidate(Y), Y = X + 1."), "%d");
+    maelys_datalog_fact_t facts[8];
+    maelys_datalog_edb_t edb;
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_init(&edb, facts, 8, &r.symbols, &r.registry), "%d");
+    add_int_unary(&edb, "value", 1);
+    add_int_unary(&edb, "candidate", 1);
+    add_int_unary(&edb, "candidate", 2);
+    add_int_unary(&edb, "candidate", 3);
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_finalize(&edb), "%d");
+    maelys_datalog_solve_result_t *result = NULL;
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_solve_once(&r, &edb, &result), "%d");
+    bool present = false;
+    TEST_ASSERT_EQUAL(MAELYS_OK, query_solved_int_binary(result, "next", 1, 2, &present), "%d");
+    TEST_ASSERT_TRUE(present);
+    TEST_ASSERT_EQUAL(MAELYS_OK, query_solved_int_binary(result, "next", 1, 1, &present), "%d");
+    TEST_ASSERT_FALSE(present);
+    TEST_ASSERT_EQUAL(MAELYS_OK, query_solved_int_binary(result, "next", 1, 3, &present), "%d");
+    TEST_ASSERT_FALSE(present);
+    maelys_datalog_solve_result_free(result);
+    maelys_datalog_ruleset_clear(&r);
+    TEST_END();
+}
+
+static int test_arithmetic_expr_runtime_type_mismatch_fails_closed(void) {
+    TEST_BEGIN();
+    maelys_datalog_ruleset_t r;
+    TEST_ASSERT_EQUAL(MAELYS_OK, make_ruleset(&r, "allow(U) :- owns(U, Name), Name + 1 <= 10."), "%d");
+    maelys_datalog_fact_t facts[4];
+    maelys_datalog_edb_t edb;
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_init(&edb, facts, 4, &r.symbols, &r.registry), "%d");
+    add_symbol_symbol_binary(&r, &edb, "owns", "alice", "doc.pdf");
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_finalize(&edb), "%d");
+    maelys_datalog_solve_result_t *result = NULL;
+    maelys_datalog_solve_diagnostic_t diag;
+    TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_FIELD,
+                      maelys_datalog_solve_once_ex(&r, &edb, &result, &diag),
+                      "%d");
+    TEST_ASSERT_NULL(result);
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_SOLVE_DIAG_COMPARISON_TYPE_ERROR, diag.category, "%d");
+    maelys_datalog_ruleset_clear(&r);
+    TEST_END();
+}
+
+static int test_arithmetic_expr_overflow_fails_closed(void) {
+    TEST_BEGIN();
+    maelys_datalog_ruleset_t r;
+    TEST_ASSERT_EQUAL(MAELYS_OK, make_ruleset(&r, "allow(U) :- big(U, X), X * X > 0."), "%d");
+    maelys_datalog_fact_t facts[4];
+    maelys_datalog_edb_t edb;
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_init(&edb, facts, 4, &r.symbols, &r.registry), "%d");
+    add_symbol_int_binary(&r, &edb, "big", "alice", (LLONG_MAX / 2LL) + 1LL);
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_finalize(&edb), "%d");
+    maelys_datalog_solve_result_t *result = NULL;
+    maelys_datalog_solve_diagnostic_t diag;
+    TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_FIELD,
+                      maelys_datalog_solve_once_ex(&r, &edb, &result, &diag),
+                      "%d");
+    TEST_ASSERT_NULL(result);
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_SOLVE_DIAG_COMPARISON_TYPE_ERROR, diag.category, "%d");
+    maelys_datalog_ruleset_clear(&r);
+    TEST_END();
+}
+
 int main(int argc, char **argv) {
     test_case_t cases[] = {
         {"maelys_datalog_solver/simple_and_query", TEST_MODE_NON_BLOCKING, test_solver_simple_and_query},
@@ -3364,6 +3588,15 @@ int main(int argc, char **argv) {
         {"maelys_datalog_solver/proof_idb_proof_index_survives_stratum_sort", TEST_MODE_NON_BLOCKING, test_datalog_proof_idb_proof_index_survives_stratum_sort},
         {"maelys_datalog_solver/proof_extract_remaps_parent_indices", TEST_MODE_NON_BLOCKING, test_datalog_proof_extract_remaps_parent_indices},
         {"maelys_datalog_solver/proof_tree_single_node_still_bounded", TEST_MODE_NON_BLOCKING, test_datalog_proof_tree_single_node_still_bounded},
+        {"maelys_datalog_solver/arithmetic_expr_basic_true_false", TEST_MODE_NON_BLOCKING, test_arithmetic_expr_basic_true_false},
+        {"maelys_datalog_solver/arithmetic_expr_two_variable_expression", TEST_MODE_NON_BLOCKING, test_arithmetic_expr_two_variable_expression},
+        {"maelys_datalog_solver/arithmetic_expr_multiplication", TEST_MODE_NON_BLOCKING, test_arithmetic_expr_multiplication},
+        {"maelys_datalog_solver/arithmetic_expr_precedence_and_parentheses", TEST_MODE_NON_BLOCKING, test_arithmetic_expr_precedence_and_parentheses},
+        {"maelys_datalog_solver/arithmetic_expr_left_associative_subtraction", TEST_MODE_NON_BLOCKING, test_arithmetic_expr_left_associative_subtraction},
+        {"maelys_datalog_solver/arithmetic_expr_non_generative_rejected", TEST_MODE_NON_BLOCKING, test_arithmetic_expr_non_generative_rejected},
+        {"maelys_datalog_solver/arithmetic_expr_candidate_filter_equality", TEST_MODE_NON_BLOCKING, test_arithmetic_expr_candidate_filter_equality},
+        {"maelys_datalog_solver/arithmetic_expr_runtime_type_mismatch_fails_closed", TEST_MODE_NON_BLOCKING, test_arithmetic_expr_runtime_type_mismatch_fails_closed},
+        {"maelys_datalog_solver/arithmetic_expr_overflow_fails_closed", TEST_MODE_NON_BLOCKING, test_arithmetic_expr_overflow_fails_closed},
     };
     return test_main("maelys_datalog_solver", cases, (int)(sizeof(cases) / sizeof(cases[0])), argc, argv);
 }

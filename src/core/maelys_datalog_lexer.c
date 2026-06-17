@@ -272,6 +272,9 @@ maelys_result_t maelys_datalog_lexer_next(maelys_datalog_lexer_t *l,
         case '(' : out->kind = MAELYS_DATALOG_TOKEN_LPAREN; return MAELYS_OK;
         case ')' : out->kind = MAELYS_DATALOG_TOKEN_RPAREN; return MAELYS_OK;
         case ',' : out->kind = MAELYS_DATALOG_TOKEN_COMMA; return MAELYS_OK;
+        case '+' : out->kind = MAELYS_DATALOG_TOKEN_PLUS; return MAELYS_OK;
+        case '-' : out->kind = MAELYS_DATALOG_TOKEN_MINUS; return MAELYS_OK;
+        case '*' : out->kind = MAELYS_DATALOG_TOKEN_STAR; return MAELYS_OK;
         case '.' :
             if (is_pred_start((unsigned char)peek(l, 0))) {
                 return lexer_invalid(l,

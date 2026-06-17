@@ -32,7 +32,8 @@ typedef enum {
     MAELYS_DATALOG_COMPARE_INVALID_ORDINAL_TYPE,
     MAELYS_DATALOG_COMPARE_UNBOUND_VARIABLE,
     MAELYS_DATALOG_COMPARE_UNKNOWN_OPERATOR,
-    MAELYS_DATALOG_COMPARE_UNKNOWN_TERM_KIND
+    MAELYS_DATALOG_COMPARE_UNKNOWN_TERM_KIND,
+    MAELYS_DATALOG_COMPARE_ARITH_OVERFLOW
 } maelys_datalog_compare_result_t;
 
 struct maelys_datalog_solve_result {
@@ -175,8 +176,9 @@ static maelys_result_t canonical_stream_atom(maelys_sha256_ctx_t *ctx,
 
 static maelys_result_t canonical_stream_literal(maelys_sha256_ctx_t *ctx,
                                                 const maelys_datalog_ruleset_t *ruleset,
+                                                const maelys_datalog_rule_t *rule,
                                                 const maelys_datalog_literal_t *literal) {
-    if (!ctx || !ruleset || !literal) return MAELYS_ERR_INVALID_ARGUMENT;
+    if (!ctx || !ruleset || !rule || !literal) return MAELYS_ERR_INVALID_ARGUMENT;
     switch (literal->kind) {
         case MAELYS_DATALOG_LITERAL_ATOM:
             return canonical_stream_atom(ctx, ruleset, "body.atom=", &literal->atom);
@@ -185,12 +187,38 @@ static maelys_result_t canonical_stream_literal(maelys_sha256_ctx_t *ctx,
         case MAELYS_DATALOG_LITERAL_COMPARISON: {
             maelys_result_t rc = canonical_printf(ctx, "body.cmp=%u:", (unsigned)literal->op);
             if (rc != MAELYS_OK) return rc;
-            rc = canonical_stream_term(ctx, ruleset, &literal->lhs);
-            if (rc != MAELYS_OK) return rc;
-            rc = canonical_update(ctx, ",");
-            if (rc != MAELYS_OK) return rc;
-            rc = canonical_stream_term(ctx, ruleset, &literal->rhs);
-            if (rc != MAELYS_OK) return rc;
+            if (literal->has_arith_expr) {
+                rc = canonical_printf(ctx,
+                                      "expr:%u:%u:nodes=%u:",
+                                      (unsigned)literal->lhs_expr_root,
+                                      (unsigned)literal->rhs_expr_root,
+                                      (unsigned)rule->expr_node_count);
+                if (rc != MAELYS_OK) return rc;
+                for (uint8_t i = 0; i < rule->expr_node_count; i++) {
+                    const maelys_datalog_arith_expr_node_t *node = &rule->expr_nodes[i];
+                    rc = canonical_printf(ctx,
+                                          "[%u:%u:%u:%u:",
+                                          (unsigned)i,
+                                          (unsigned)node->kind,
+                                          (unsigned)node->left,
+                                          (unsigned)node->right);
+                    if (rc != MAELYS_OK) return rc;
+                    if (node->kind == MAELYS_DATALOG_ARITH_EXPR_INT_LITERAL ||
+                        node->kind == MAELYS_DATALOG_ARITH_EXPR_VAR) {
+                        rc = canonical_stream_term(ctx, ruleset, &node->term);
+                        if (rc != MAELYS_OK) return rc;
+                    }
+                    rc = canonical_update(ctx, "]");
+                    if (rc != MAELYS_OK) return rc;
+                }
+            } else {
+                rc = canonical_stream_term(ctx, ruleset, &literal->lhs);
+                if (rc != MAELYS_OK) return rc;
+                rc = canonical_update(ctx, ",");
+                if (rc != MAELYS_OK) return rc;
+                rc = canonical_stream_term(ctx, ruleset, &literal->rhs);
+                if (rc != MAELYS_OK) return rc;
+            }
             return canonical_update(ctx, "\n");
         }
         default:
@@ -224,7 +252,7 @@ static maelys_result_t ruleset_stream_canonical(maelys_sha256_ctx_t *ctx,
         rc = canonical_stream_atom(ctx, ruleset, "head=", &rule->head);
         if (rc != MAELYS_OK) return rc;
         for (size_t j = 0; j < rule->body_count; j++) {
-            rc = canonical_stream_literal(ctx, ruleset, &rule->body[j]);
+            rc = canonical_stream_literal(ctx, ruleset, rule, &rule->body[j]);
             if (rc != MAELYS_OK) return rc;
         }
     }
@@ -726,6 +754,148 @@ static maelys_datalog_compare_result_t solve_once_evaluate_comparison(const mael
     }
 }
 
+static maelys_datalog_compare_result_t solve_once_eval_arith_expr(
+    const maelys_datalog_rule_t *rule,
+    uint8_t root,
+    const solve_once_bindings_t *bindings,
+    long long *out_value,
+    maelys_datalog_term_kind_t *out_observed_kind) {
+    if (!rule || !bindings || !out_value || root == MAELYS_DATALOG_ARITH_EXPR_NO_NODE ||
+        root >= rule->expr_node_count) {
+        return MAELYS_DATALOG_COMPARE_UNKNOWN_TERM_KIND;
+    }
+    const maelys_datalog_arith_expr_node_t *node = &rule->expr_nodes[root];
+    switch (node->kind) {
+        case MAELYS_DATALOG_ARITH_EXPR_INT_LITERAL:
+            *out_value = node->term.as.integer;
+            if (out_observed_kind) *out_observed_kind = MAELYS_DATALOG_TERM_INT;
+            return MAELYS_DATALOG_COMPARE_TRUE;
+        case MAELYS_DATALOG_ARITH_EXPR_VAR: {
+            unsigned variable = node->term.as.variable;
+            if (variable >= MAELYS_DATALOG_MAX_RULE_VARIABLES ||
+                !bindings->bound[variable]) {
+                if (out_observed_kind) *out_observed_kind = MAELYS_DATALOG_TERM_VAR;
+                return MAELYS_DATALOG_COMPARE_UNBOUND_VARIABLE;
+            }
+            const maelys_datalog_term_t *bound = &bindings->value[variable];
+            if (!datalog_term_kind_known(bound->kind)) {
+                if (out_observed_kind) *out_observed_kind = bound->kind;
+                return MAELYS_DATALOG_COMPARE_UNKNOWN_TERM_KIND;
+            }
+            if (bound->kind != MAELYS_DATALOG_TERM_INT) {
+                if (out_observed_kind) *out_observed_kind = bound->kind;
+                return MAELYS_DATALOG_COMPARE_INVALID_ORDINAL_TYPE;
+            }
+            *out_value = bound->as.integer;
+            if (out_observed_kind) *out_observed_kind = MAELYS_DATALOG_TERM_INT;
+            return MAELYS_DATALOG_COMPARE_TRUE;
+        }
+        case MAELYS_DATALOG_ARITH_EXPR_ADD:
+        case MAELYS_DATALOG_ARITH_EXPR_SUB:
+        case MAELYS_DATALOG_ARITH_EXPR_MUL: {
+            long long lhs = 0;
+            long long rhs = 0;
+            maelys_datalog_term_kind_t lhs_kind = 0;
+            maelys_datalog_term_kind_t rhs_kind = 0;
+            maelys_datalog_compare_result_t lhs_rc =
+                solve_once_eval_arith_expr(rule, node->left, bindings, &lhs, &lhs_kind);
+            if (lhs_rc != MAELYS_DATALOG_COMPARE_TRUE) {
+                if (out_observed_kind) *out_observed_kind = lhs_kind;
+                return lhs_rc;
+            }
+            maelys_datalog_compare_result_t rhs_rc =
+                solve_once_eval_arith_expr(rule, node->right, bindings, &rhs, &rhs_kind);
+            if (rhs_rc != MAELYS_DATALOG_COMPARE_TRUE) {
+                if (out_observed_kind) *out_observed_kind = rhs_kind;
+                return rhs_rc;
+            }
+            long long result = 0;
+            int overflow = 0;
+            if (node->kind == MAELYS_DATALOG_ARITH_EXPR_ADD) {
+                overflow = __builtin_add_overflow(lhs, rhs, &result);
+            } else if (node->kind == MAELYS_DATALOG_ARITH_EXPR_SUB) {
+                overflow = __builtin_sub_overflow(lhs, rhs, &result);
+            } else {
+                overflow = __builtin_mul_overflow(lhs, rhs, &result);
+            }
+            if (overflow) {
+                if (out_observed_kind) *out_observed_kind = MAELYS_DATALOG_TERM_INT;
+                return MAELYS_DATALOG_COMPARE_ARITH_OVERFLOW;
+            }
+            *out_value = result;
+            if (out_observed_kind) *out_observed_kind = MAELYS_DATALOG_TERM_INT;
+            return MAELYS_DATALOG_COMPARE_TRUE;
+        }
+        default:
+            return MAELYS_DATALOG_COMPARE_UNKNOWN_TERM_KIND;
+    }
+}
+
+static int solve_once_evaluate_comparison_literal(maelys_datalog_solve_result_t *result,
+                                                  const maelys_datalog_rule_t *rule,
+                                                  const maelys_datalog_literal_t *literal,
+                                                  const solve_once_bindings_t *bindings) {
+    if (!rule || !literal || literal->kind != MAELYS_DATALOG_LITERAL_COMPARISON) return 0;
+    maelys_datalog_term_t lhs;
+    maelys_datalog_term_t rhs;
+    memset(&lhs, 0, sizeof(lhs));
+    memset(&rhs, 0, sizeof(rhs));
+    if (literal->has_arith_expr) {
+        long long lhs_value = 0;
+        long long rhs_value = 0;
+        maelys_datalog_term_kind_t lhs_kind = 0;
+        maelys_datalog_term_kind_t rhs_kind = 0;
+        maelys_datalog_compare_result_t lhs_rc =
+            solve_once_eval_arith_expr(rule,
+                                       literal->lhs_expr_root,
+                                       bindings,
+                                       &lhs_value,
+                                       &lhs_kind);
+        if (lhs_rc != MAELYS_DATALOG_COMPARE_TRUE) {
+            lhs.kind = lhs_kind;
+            rhs.kind = MAELYS_DATALOG_TERM_INT;
+            solve_once_set_comparison_failure(result, lhs_rc, &lhs, literal->op, &rhs);
+            return 0;
+        }
+        maelys_datalog_compare_result_t rhs_rc =
+            solve_once_eval_arith_expr(rule,
+                                       literal->rhs_expr_root,
+                                       bindings,
+                                       &rhs_value,
+                                       &rhs_kind);
+        if (rhs_rc != MAELYS_DATALOG_COMPARE_TRUE) {
+            lhs.kind = MAELYS_DATALOG_TERM_INT;
+            rhs.kind = rhs_kind;
+            solve_once_set_comparison_failure(result, rhs_rc, &lhs, literal->op, &rhs);
+            return 0;
+        }
+        lhs.kind = MAELYS_DATALOG_TERM_INT;
+        lhs.as.integer = lhs_value;
+        rhs.kind = MAELYS_DATALOG_TERM_INT;
+        rhs.as.integer = rhs_value;
+    } else {
+        maelys_datalog_compare_result_t lhs_rc =
+            solve_once_instantiate_comparison_term(bindings, &literal->lhs, &lhs);
+        if (lhs_rc != MAELYS_DATALOG_COMPARE_TRUE) {
+            solve_once_set_comparison_failure(result, lhs_rc, &literal->lhs, literal->op, &literal->rhs);
+            return 0;
+        }
+        maelys_datalog_compare_result_t rhs_rc =
+            solve_once_instantiate_comparison_term(bindings, &literal->rhs, &rhs);
+        if (rhs_rc != MAELYS_DATALOG_COMPARE_TRUE) {
+            solve_once_set_comparison_failure(result, rhs_rc, &lhs, literal->op, &literal->rhs);
+            return 0;
+        }
+    }
+    maelys_datalog_compare_result_t cmp_rc = solve_once_evaluate_comparison(&lhs, literal->op, &rhs);
+    if (cmp_rc == MAELYS_DATALOG_COMPARE_FALSE) return 1;
+    if (cmp_rc != MAELYS_DATALOG_COMPARE_TRUE) {
+        solve_once_set_comparison_failure(result, cmp_rc, &lhs, literal->op, &rhs);
+        return 0;
+    }
+    return 2;
+}
+
 static int solve_once_fact_in_base(const maelys_datalog_solve_result_t *result,
                                    const maelys_datalog_fact_t *fact) {
     if (!result || !fact) return 0;
@@ -819,6 +989,30 @@ static int comparison_term_safe_with_bound_vars(const maelys_datalog_term_t *ter
     return (bound_var_mask & ((uint64_t)1u << term->as.variable)) != 0;
 }
 
+static int arith_expr_safe_with_bound_vars(const maelys_datalog_rule_t *rule,
+                                           uint8_t root,
+                                           uint64_t bound_var_mask) {
+    if (!rule || root == MAELYS_DATALOG_ARITH_EXPR_NO_NODE ||
+        root >= rule->expr_node_count) {
+        return 0;
+    }
+    const maelys_datalog_arith_expr_node_t *node = &rule->expr_nodes[root];
+    switch (node->kind) {
+        case MAELYS_DATALOG_ARITH_EXPR_INT_LITERAL:
+            return 1;
+        case MAELYS_DATALOG_ARITH_EXPR_VAR:
+            if (node->term.as.variable >= 64u) return 0;
+            return (bound_var_mask & ((uint64_t)1u << node->term.as.variable)) != 0;
+        case MAELYS_DATALOG_ARITH_EXPR_ADD:
+        case MAELYS_DATALOG_ARITH_EXPR_SUB:
+        case MAELYS_DATALOG_ARITH_EXPR_MUL:
+            return arith_expr_safe_with_bound_vars(rule, node->left, bound_var_mask) &&
+                   arith_expr_safe_with_bound_vars(rule, node->right, bound_var_mask);
+        default:
+            return 0;
+    }
+}
+
 static int literal_safe_with_bound_vars(const maelys_datalog_rule_t *rule,
                                         uint8_t index,
                                         uint64_t bound_var_mask) {
@@ -837,6 +1031,10 @@ static int literal_safe_with_bound_vars(const maelys_datalog_rule_t *rule,
         return 1;
     }
     if (literal->kind != MAELYS_DATALOG_LITERAL_COMPARISON) return 0;
+    if (literal->has_arith_expr) {
+        return arith_expr_safe_with_bound_vars(rule, literal->lhs_expr_root, bound_var_mask) &&
+               arith_expr_safe_with_bound_vars(rule, literal->rhs_expr_root, bound_var_mask);
+    }
     return comparison_term_safe_with_bound_vars(&literal->lhs, bound_var_mask) &&
            comparison_term_safe_with_bound_vars(&literal->rhs, bound_var_mask);
 }
@@ -1119,28 +1317,9 @@ static int solve_once_derive_recursive(const maelys_datalog_ruleset_t *ruleset,
 
     const maelys_datalog_literal_t *literal = &rule->body[literal_index];
     if (literal->kind == MAELYS_DATALOG_LITERAL_COMPARISON) {
-        maelys_datalog_term_t lhs;
-        maelys_datalog_term_t rhs;
-        maelys_datalog_compare_result_t lhs_rc =
-            solve_once_instantiate_comparison_term(bindings, &literal->lhs, &lhs);
-        if (lhs_rc != MAELYS_DATALOG_COMPARE_TRUE) {
-            solve_once_set_comparison_failure(result, lhs_rc, &literal->lhs, literal->op, &literal->rhs);
-            return 0;
-        }
-        maelys_datalog_compare_result_t rhs_rc =
-            solve_once_instantiate_comparison_term(bindings, &literal->rhs, &rhs);
-        if (rhs_rc != MAELYS_DATALOG_COMPARE_TRUE) {
-            solve_once_set_comparison_failure(result, rhs_rc, &lhs, literal->op, &literal->rhs);
-            return 0;
-        }
-        maelys_datalog_compare_result_t cmp_rc = solve_once_evaluate_comparison(&lhs, literal->op, &rhs);
-        if (cmp_rc == MAELYS_DATALOG_COMPARE_FALSE) {
-            return 1;
-        }
-        if (cmp_rc != MAELYS_DATALOG_COMPARE_TRUE) {
-            solve_once_set_comparison_failure(result, cmp_rc, &lhs, literal->op, &rhs);
-            return 0;
-        }
+        int comparison = solve_once_evaluate_comparison_literal(result, rule, literal, bindings);
+        if (comparison == 0) return 0;
+        if (comparison == 1) return 1;
         return solve_once_derive_recursive(ruleset,
                                            result,
                                            rule,
@@ -1339,28 +1518,9 @@ static int solve_once_derive_ordered(const maelys_datalog_ruleset_t *ruleset,
     if (literal_index >= rule->body_count) return 0;
     const maelys_datalog_literal_t *literal = &rule->body[literal_index];
     if (literal->kind == MAELYS_DATALOG_LITERAL_COMPARISON) {
-        maelys_datalog_term_t lhs;
-        maelys_datalog_term_t rhs;
-        maelys_datalog_compare_result_t lhs_rc =
-            solve_once_instantiate_comparison_term(bindings, &literal->lhs, &lhs);
-        if (lhs_rc != MAELYS_DATALOG_COMPARE_TRUE) {
-            solve_once_set_comparison_failure(result, lhs_rc, &literal->lhs, literal->op, &literal->rhs);
-            return 0;
-        }
-        maelys_datalog_compare_result_t rhs_rc =
-            solve_once_instantiate_comparison_term(bindings, &literal->rhs, &rhs);
-        if (rhs_rc != MAELYS_DATALOG_COMPARE_TRUE) {
-            solve_once_set_comparison_failure(result, rhs_rc, &lhs, literal->op, &literal->rhs);
-            return 0;
-        }
-        maelys_datalog_compare_result_t cmp_rc = solve_once_evaluate_comparison(&lhs, literal->op, &rhs);
-        if (cmp_rc == MAELYS_DATALOG_COMPARE_FALSE) {
-            return 1;
-        }
-        if (cmp_rc != MAELYS_DATALOG_COMPARE_TRUE) {
-            solve_once_set_comparison_failure(result, cmp_rc, &lhs, literal->op, &rhs);
-            return 0;
-        }
+        int comparison = solve_once_evaluate_comparison_literal(result, rule, literal, bindings);
+        if (comparison == 0) return 0;
+        if (comparison == 1) return 1;
         return solve_once_derive_ordered(ruleset,
                                          result,
                                          rule,

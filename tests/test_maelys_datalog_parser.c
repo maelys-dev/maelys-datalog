@@ -28,6 +28,8 @@ static int init_parser_ruleset(maelys_datalog_ruleset_t *r) {
     maelys_datalog_predicate_registry_add_domain(&r->registry, "r", 2, MAELYS_DATALOG_PRED_KIND_EDB);
     maelys_datalog_predicate_registry_add_domain(&r->registry, "user", 1, MAELYS_DATALOG_PRED_KIND_EDB);
     maelys_datalog_predicate_registry_add_domain(&r->registry, "score", 2, MAELYS_DATALOG_PRED_KIND_EDB);
+    maelys_datalog_predicate_registry_add_domain(&r->registry, "metric", 2, MAELYS_DATALOG_PRED_KIND_EDB);
+    maelys_datalog_predicate_registry_add_domain(&r->registry, "value", 1, MAELYS_DATALOG_PRED_KIND_EDB);
     maelys_datalog_predicate_registry_add_domain(&r->registry, "left", 1, MAELYS_DATALOG_PRED_KIND_EDB);
     maelys_datalog_predicate_registry_add_domain(&r->registry, "right", 1, MAELYS_DATALOG_PRED_KIND_EDB);
     maelys_datalog_predicate_registry_add_domain(&r->registry, "edge", 2, MAELYS_DATALOG_PRED_KIND_EDB);
@@ -61,6 +63,8 @@ static int init_parser_ruleset(maelys_datalog_ruleset_t *r) {
     maelys_datalog_predicate_registry_add_domain(&r->registry, "bad", 1,
                                                  MAELYS_DATALOG_PRED_KIND_IDB | MAELYS_DATALOG_PRED_KIND_QUERY);
     maelys_datalog_predicate_registry_add_domain(&r->registry, "bad", 2,
+                                                 MAELYS_DATALOG_PRED_KIND_IDB | MAELYS_DATALOG_PRED_KIND_QUERY);
+    maelys_datalog_predicate_registry_add_domain(&r->registry, "next", 2,
                                                  MAELYS_DATALOG_PRED_KIND_IDB | MAELYS_DATALOG_PRED_KIND_QUERY);
     maelys_datalog_predicate_registry_add_domain(&r->registry, "allowed_backend_tuple", 3,
                                                  MAELYS_DATALOG_PRED_KIND_POLICY_FACT);
@@ -892,6 +896,69 @@ static int test_datalog_wildcard_generated_names_not_in_symbol_table(void) {
     TEST_END();
 }
 
+static int test_parser_arithmetic_expression_filters_valid(void) {
+    TEST_BEGIN();
+    TEST_ASSERT_EQUAL(MAELYS_OK, parse_text("allow(U) :- score(U, S), S + 1 <= 10."), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK, parse_text("allow(U) :- score(U, S), edge(U, L), S + 1 <= L."), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK, parse_text("allow(U) :- score(U, A), edge(U, B), A + B < 10."), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK, parse_text("allow(U) :- score(U, S), S - 1 >= 0."), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK, parse_text("allow(U) :- score(U, A), edge(U, B), A * B > 150."), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK,
+                      parse_text("allow(U) :- score(U, A), edge(U, B), metric(U, C), (A + B) * C < 100."),
+                      "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK,
+                      parse_text("allow(U) :- score(U, A), edge(U, B), metric(U, C), A + B * C < 100."),
+                      "%d");
+    TEST_END();
+}
+
+static int test_parser_arithmetic_expression_filters_invalid(void) {
+    TEST_BEGIN();
+    maelys_datalog_diagnostic_t diag;
+    memset(&diag, 0, sizeof(diag));
+    TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_FIELD,
+                      parse_text_ex("allow(U) :- score(U, S), S / 2 <= 10.", &diag),
+                      "%d");
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_DIAG_LEXER_INVALID_TOKEN, diag.code, "%d");
+    memset(&diag, 0, sizeof(diag));
+    TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_FIELD,
+                      parse_text_ex("allow(U) :- score(U, S), S % 2 = 0.", &diag),
+                      "%d");
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_DIAG_PARSER_INVALID_COMPARISON, diag.code, "%d");
+    memset(&diag, 0, sizeof(diag));
+    TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_FIELD,
+                      parse_text_ex("allow(U) :- score(U, S), S + T <= 10.", &diag),
+                      "%d");
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_DIAG_PARSER_UNSAFE_VARIABLE, diag.code, "%d");
+    memset(&diag, 0, sizeof(diag));
+    TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_FIELD,
+                      parse_text_ex("allow(U) :- score(U, S), S + _ <= 10.", &diag),
+                      "%d");
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_DIAG_PARSER_ANONYMOUS_VARIABLE_IN_COMPARISON, diag.code, "%d");
+    TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_FIELD, parse_text("next(X, Y) :- value(X), Y = X + 1."), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_FIELD, parse_text("p(X + 1) :- value(X)."), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_FIELD, parse_text("p(X) :- value(X + 1)."), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_FIELD,
+                      parse_text("allow(U) :- score(U, S), not(edge(U, L)), S <= L."),
+                      "%d");
+    TEST_END();
+}
+
+static int test_parser_arithmetic_expression_depth_limit(void) {
+    TEST_BEGIN();
+    TEST_ASSERT_EQUAL(MAELYS_OK,
+                      parse_text("allow(U) :- score(U, S), (((((((S))))))) + 1 <= 10."),
+                      "%d");
+    maelys_datalog_diagnostic_t diag;
+    memset(&diag, 0, sizeof(diag));
+    TEST_ASSERT_EQUAL(MAELYS_ERR_PAYLOAD_TOO_LARGE,
+                      parse_text_ex("allow(U) :- score(U, S), ((((((((S)))))))) + 1 <= 10.", &diag),
+                      "%d");
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_DIAG_PARSER_INVALID_COMPARISON, diag.code, "%d");
+    TEST_ASSERT_EQUAL((size_t)MAELYS_DATALOG_MAX_ARITH_EXPR_DEPTH, diag.limit, "%zu");
+    TEST_END();
+}
+
 int main(int argc, char **argv) {
     test_case_t cases[] = {
         {"maelys_datalog_parser/valid_fact_rule_recursion", TEST_MODE_NON_BLOCKING, test_parser_accepts_valid_fact_rule_and_recursion},
@@ -965,6 +1032,9 @@ int main(int argc, char **argv) {
         {"maelys_datalog_parser/wildcard_capacity_overflow_fails_closed", TEST_MODE_NON_BLOCKING, test_datalog_wildcard_capacity_overflow_fails_closed},
         {"maelys_datalog_parser/wildcard_no_global_symbol_growth_on_repeated_loads", TEST_MODE_NON_BLOCKING, test_datalog_wildcard_no_global_symbol_growth_on_repeated_loads},
         {"maelys_datalog_parser/wildcard_generated_names_not_in_symbol_table", TEST_MODE_NON_BLOCKING, test_datalog_wildcard_generated_names_not_in_symbol_table},
+        {"maelys_datalog_parser/arithmetic_expression_filters_valid", TEST_MODE_NON_BLOCKING, test_parser_arithmetic_expression_filters_valid},
+        {"maelys_datalog_parser/arithmetic_expression_filters_invalid", TEST_MODE_NON_BLOCKING, test_parser_arithmetic_expression_filters_invalid},
+        {"maelys_datalog_parser/arithmetic_expression_depth_limit", TEST_MODE_NON_BLOCKING, test_parser_arithmetic_expression_depth_limit},
     };
     return test_main("maelys_datalog_parser", cases, (int)(sizeof(cases) / sizeof(cases[0])), argc, argv);
 }

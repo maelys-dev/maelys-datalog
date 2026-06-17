@@ -35,6 +35,8 @@ extern "C" {
 #define MAELYS_DATALOG_MAX_DEPTH 10u
 #define MAELYS_DATALOG_MAX_PROOF_NODES 64u
 #define MAELYS_DATALOG_MAX_PROOF_DEPTH 10u
+#define MAELYS_DATALOG_MAX_ARITH_EXPR_NODES 32u
+#define MAELYS_DATALOG_MAX_ARITH_EXPR_DEPTH 8u
 #define MAELYS_DATALOG_MAX_INT 2147483647LL
 #define MAELYS_DATALOG_PROOF_NO_PARENT UINT16_MAX
 
@@ -131,17 +133,40 @@ typedef enum {
     MAELYS_DATALOG_CMP_GTE = 6
 } maelys_datalog_cmp_op_t;
 
+#define MAELYS_DATALOG_ARITH_EXPR_NO_NODE UINT8_MAX
+
+typedef enum {
+    MAELYS_DATALOG_ARITH_EXPR_INT_LITERAL = 1,
+    MAELYS_DATALOG_ARITH_EXPR_VAR = 2,
+    MAELYS_DATALOG_ARITH_EXPR_ADD = 3,
+    MAELYS_DATALOG_ARITH_EXPR_SUB = 4,
+    MAELYS_DATALOG_ARITH_EXPR_MUL = 5
+} maelys_datalog_arith_expr_kind_t;
+
+typedef struct {
+    maelys_datalog_arith_expr_kind_t kind;
+    uint8_t left;
+    uint8_t right;
+    uint8_t _pad[2];
+    maelys_datalog_term_t term;
+} maelys_datalog_arith_expr_node_t;
+
 typedef struct {
     maelys_datalog_literal_kind_t kind;
     maelys_datalog_fact_t atom;
     maelys_datalog_term_t lhs;
     maelys_datalog_term_t rhs;
     maelys_datalog_cmp_op_t op;
+    uint8_t lhs_expr_root;
+    uint8_t rhs_expr_root;
+    uint8_t has_arith_expr;
 } maelys_datalog_literal_t;
 
 typedef struct {
     maelys_datalog_fact_t head;
     maelys_datalog_literal_t body[MAELYS_DATALOG_MAX_BODY_LITERALS];
+    maelys_datalog_arith_expr_node_t expr_nodes[MAELYS_DATALOG_MAX_ARITH_EXPR_NODES];
+    uint8_t expr_node_count;
     size_t body_count;
     size_t rule_id;
 } maelys_datalog_rule_t;
