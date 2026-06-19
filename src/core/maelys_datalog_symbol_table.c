@@ -24,22 +24,32 @@ maelys_result_t maelys_datalog_symbol_intern(maelys_datalog_symbol_table_t *tabl
         return MAELYS_ERR_INVALID_ARGUMENT;
     }
     uint32_t h = fnv1a(text, len);
-    for (size_t i = 0; i < table->count; i++) {
+    size_t bucket = (size_t)h & (MAELYS_DATALOG_SYMBOL_INDEX_BUCKETS - 1u);
+    size_t probes = 0;
+    while (table->index[bucket] != 0u) {
+        size_t i = (size_t)table->index[bucket] - 1u;
+        if (i >= table->count) return MAELYS_ERR_INVALID_STATE;
         if (table->entries[i].hash == h && table->entries[i].len == len &&
             memcmp(table->storage + table->entries[i].offset, text, len) == 0) {
             *out_id = (maelys_datalog_symbol_id_t)(i + 1u);
             return MAELYS_OK;
         }
+        bucket = (bucket + 1u) & (MAELYS_DATALOG_SYMBOL_INDEX_BUCKETS - 1u);
+        if (++probes >= MAELYS_DATALOG_SYMBOL_INDEX_BUCKETS) {
+            return MAELYS_ERR_INVALID_STATE;
+        }
     }
     if (table->count >= MAELYS_DATALOG_MAX_SYMBOLS) return MAELYS_ERR_PAYLOAD_TOO_LARGE;
     if (len + 1u > sizeof(table->storage) - table->used) return MAELYS_ERR_PAYLOAD_TOO_LARGE;
     size_t offset = table->used;
+    size_t entry_index = table->count;
     memcpy(table->storage + offset, text, len);
     table->storage[offset + len] = '\0';
-    table->entries[table->count].hash = h;
-    table->entries[table->count].offset = (uint32_t)offset;
-    table->entries[table->count].len = (uint16_t)len;
+    table->entries[entry_index].hash = h;
+    table->entries[entry_index].offset = (uint32_t)offset;
+    table->entries[entry_index].len = (uint16_t)len;
     table->used += len + 1u;
+    table->index[bucket] = (uint16_t)(entry_index + 1u);
     table->count++;
     *out_id = (maelys_datalog_symbol_id_t)table->count;
     return MAELYS_OK;

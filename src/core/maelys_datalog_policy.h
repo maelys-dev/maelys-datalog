@@ -17,6 +17,7 @@ extern "C" {
 #define MAELYS_DATALOG_MAX_STRING_BYTES 1024u
 #define MAELYS_DATALOG_MAX_TOKEN_BYTES 1024u
 #define MAELYS_DATALOG_MAX_SYMBOLS 512u
+#define MAELYS_DATALOG_SYMBOL_INDEX_BUCKETS 1024u
 #define MAELYS_DATALOG_STRING_POOL_BYTES 32768u
 #define MAELYS_DATALOG_MAX_PREDICATES 128u
 #define MAELYS_DATALOG_MAX_ATOMS 256u
@@ -52,6 +53,14 @@ _Static_assert(MAELYS_DATALOG_MAX_PREDICATES <= 128u,
                "strata array indexed by predicate_id");
 _Static_assert(MAELYS_DATALOG_MAX_STRATA <= MAELYS_DATALOG_MAX_PREDICATES,
                "strata count cannot exceed predicate id capacity");
+_Static_assert((MAELYS_DATALOG_SYMBOL_INDEX_BUCKETS &
+                (MAELYS_DATALOG_SYMBOL_INDEX_BUCKETS - 1u)) == 0u,
+               "symbol index buckets must be a power of two");
+_Static_assert(MAELYS_DATALOG_SYMBOL_INDEX_BUCKETS >=
+                   2u * MAELYS_DATALOG_MAX_SYMBOLS,
+               "symbol index load factor must stay <= 0.5");
+_Static_assert(MAELYS_DATALOG_MAX_SYMBOLS < UINT16_MAX,
+               "symbol index bucket values store entry_index + 1");
 
 typedef uint32_t maelys_datalog_symbol_id_t;
 typedef uint16_t maelys_datalog_predicate_id_t;
@@ -118,6 +127,7 @@ typedef struct {
         uint16_t len;
     } entries[MAELYS_DATALOG_MAX_SYMBOLS];
     size_t count;
+    uint16_t index[MAELYS_DATALOG_SYMBOL_INDEX_BUCKETS];
 } maelys_datalog_symbol_table_t;
 
 typedef enum {
