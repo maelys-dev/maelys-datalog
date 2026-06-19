@@ -7,6 +7,9 @@
 #include <stdlib.h>
 #include <string.h>
 
+_Static_assert(sizeof(maelys_datalog_symbol_id_t) * 2u * MAELYS_DATALOG_MAX_EDB_FACTS <= 8192u,
+               "Binary scratch buffer is too large for the Wasm stack");
+
 static int term_cmp(const maelys_datalog_term_t *a, const maelys_datalog_term_t *b) {
     if (a->kind != b->kind) return (int)a->kind - (int)b->kind;
     switch (a->kind) {
@@ -442,6 +445,50 @@ maelys_result_t maelys_datalog_edb_add_symbol_ids_facts(
         if (rc != MAELYS_OK) return rc;
     }
     return MAELYS_OK;
+}
+
+maelys_result_t maelys_datalog_edb_add_runtime_symbol_facts(
+    maelys_datalog_edb_t *edb,
+    const char *predicate,
+    const char *const *values,
+    size_t value_count) {
+    if (!edb || !predicate) return MAELYS_ERR_INVALID_ARGUMENT;
+    if (value_count > 0 && !values) return MAELYS_ERR_INVALID_ARGUMENT;
+    if (value_count == 0) return MAELYS_OK;
+    if (value_count > MAELYS_DATALOG_MAX_EDB_FACTS) return MAELYS_ERR_PAYLOAD_TOO_LARGE;
+
+    maelys_result_t rc = validate_edb_symbol_batch_target(edb, predicate, 1, value_count);
+    if (rc != MAELYS_OK) return rc;
+
+    maelys_datalog_symbol_id_t ids[MAELYS_DATALOG_MAX_EDB_FACTS];
+    for (size_t i = 0; i < value_count; i++) {
+        rc = maelys_datalog_edb_intern_runtime_symbol(edb, values[i], &ids[i]);
+        if (rc != MAELYS_OK) return rc;
+    }
+    return maelys_datalog_edb_add_symbol_id_facts(edb, predicate, ids, value_count);
+}
+
+maelys_result_t maelys_datalog_edb_add_runtime_symbol_pair_facts(
+    maelys_datalog_edb_t *edb,
+    const char *predicate,
+    const char *const *flat_pairs,
+    size_t pair_count) {
+    if (!edb || !predicate) return MAELYS_ERR_INVALID_ARGUMENT;
+    if (pair_count > 0 && !flat_pairs) return MAELYS_ERR_INVALID_ARGUMENT;
+    if (pair_count == 0) return MAELYS_OK;
+    if (pair_count > SIZE_MAX / 2u) return MAELYS_ERR_PAYLOAD_TOO_LARGE;
+    if (pair_count > MAELYS_DATALOG_MAX_EDB_FACTS) return MAELYS_ERR_PAYLOAD_TOO_LARGE;
+
+    maelys_result_t rc = validate_edb_symbol_batch_target(edb, predicate, 2, pair_count);
+    if (rc != MAELYS_OK) return rc;
+
+    const size_t symbol_count = pair_count * 2u;
+    maelys_datalog_symbol_id_t ids[2u * MAELYS_DATALOG_MAX_EDB_FACTS];
+    for (size_t i = 0; i < symbol_count; i++) {
+        rc = maelys_datalog_edb_intern_runtime_symbol(edb, flat_pairs[i], &ids[i]);
+        if (rc != MAELYS_OK) return rc;
+    }
+    return maelys_datalog_edb_add_symbol_ids_facts(edb, predicate, ids, pair_count);
 }
 
 maelys_result_t maelys_datalog_edb_add_runtime_symbol_fact(maelys_datalog_edb_t *edb,

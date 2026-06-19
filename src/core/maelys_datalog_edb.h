@@ -71,6 +71,30 @@ maelys_result_t maelys_datalog_edb_add_symbol_ids_facts(
     const maelys_datalog_symbol_id_t *pairs,
     size_t pair_count);
 /**
+ * Add multiple 1-arity EDB facts from open runtime symbol strings.
+ *
+ * Strings are interned monotonically into the EDB's symbol table, then the
+ * resulting ids are committed with the atomic symbol-id batch path. Empty
+ * batches are accepted as no-ops after validating edb and predicate.
+ */
+maelys_result_t maelys_datalog_edb_add_runtime_symbol_facts(
+    maelys_datalog_edb_t *edb,
+    const char *predicate,
+    const char *const *values,
+    size_t value_count);
+/**
+ * Add multiple 2-arity EDB facts from open runtime symbol string pairs.
+ *
+ * `flat_pairs` is a flat array: left0, right0, left1, right1, ...
+ * `pair_count` is the number of binary facts, not the array length. Symbol
+ * interning is monotonic and is not rolled back if a later string fails.
+ */
+maelys_result_t maelys_datalog_edb_add_runtime_symbol_pair_facts(
+    maelys_datalog_edb_t *edb,
+    const char *predicate,
+    const char *const *flat_pairs,
+    size_t pair_count);
+/**
  * Add a 1-arity EDB fact with a closed atom value.
  *
  * Checks that `atom` is pre-declared in the atom vocabulary before inserting

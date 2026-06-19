@@ -640,6 +640,195 @@ static int test_edb_batch_duplicates_and_tight_capacity_semantics(void) {
     TEST_END();
 }
 
+static int test_edb_runtime_symbol_batch_empty_and_arg_guards(void) {
+    TEST_BEGIN();
+    maelys_datalog_predicate_registry_t reg;
+    init_runtime_symbol_registry(&reg);
+    maelys_datalog_symbol_table_t sym;
+    maelys_datalog_symbol_table_init(&sym);
+    maelys_datalog_fact_t pool[4];
+    maelys_datalog_edb_t edb;
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_init(&edb, pool, 4, &sym, &reg), "%d");
+
+    const char *one_value[1] = {"alice"};
+    const char *one_pair[2] = {"alice", "doc.pdf"};
+    TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_ARGUMENT,
+                      maelys_datalog_edb_add_runtime_symbol_facts(NULL, "user", NULL, 0),
+                      "%d");
+    TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_ARGUMENT,
+                      maelys_datalog_edb_add_runtime_symbol_facts(&edb, NULL, NULL, 0),
+                      "%d");
+    TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_ARGUMENT,
+                      maelys_datalog_edb_add_runtime_symbol_facts(&edb, "user", NULL, 1),
+                      "%d");
+    TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_ARGUMENT,
+                      maelys_datalog_edb_add_runtime_symbol_pair_facts(&edb, "owns", NULL, 1),
+                      "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK,
+                      maelys_datalog_edb_add_runtime_symbol_facts(&edb, "user", NULL, 0),
+                      "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK,
+                      maelys_datalog_edb_add_runtime_symbol_pair_facts(&edb, "owns", NULL, 0),
+                      "%d");
+    TEST_ASSERT_EQUAL((size_t)0u, edb.fact_count, "%zu");
+    TEST_ASSERT_EQUAL((size_t)0u, sym.count, "%zu");
+
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_finalize(&edb), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK,
+                      maelys_datalog_edb_add_runtime_symbol_facts(&edb, "user", NULL, 0),
+                      "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK,
+                      maelys_datalog_edb_add_runtime_symbol_pair_facts(&edb, "owns", NULL, 0),
+                      "%d");
+
+    maelys_datalog_edb_clear(&edb);
+    TEST_ASSERT_EQUAL(MAELYS_ERR_PAYLOAD_TOO_LARGE,
+                      maelys_datalog_edb_add_runtime_symbol_facts(
+                          &edb, "user", one_value, (size_t)MAELYS_DATALOG_MAX_EDB_FACTS + 1u),
+                      "%d");
+    TEST_ASSERT_EQUAL(MAELYS_ERR_PAYLOAD_TOO_LARGE,
+                      maelys_datalog_edb_add_runtime_symbol_pair_facts(
+                          &edb, "owns", one_pair, (size_t)MAELYS_DATALOG_MAX_EDB_FACTS + 1u),
+                      "%d");
+    TEST_ASSERT_EQUAL(MAELYS_ERR_PAYLOAD_TOO_LARGE,
+                      maelys_datalog_edb_add_runtime_symbol_pair_facts(
+                          &edb, "owns", one_pair, SIZE_MAX / 2u + 1u),
+                      "%d");
+    TEST_ASSERT_EQUAL((size_t)0u, edb.fact_count, "%zu");
+    TEST_ASSERT_EQUAL((size_t)0u, sym.count, "%zu");
+    TEST_END();
+}
+
+static int test_edb_runtime_symbol_batch_success_and_reuse(void) {
+    TEST_BEGIN();
+    maelys_datalog_predicate_registry_t reg;
+    init_runtime_symbol_registry(&reg);
+    maelys_datalog_symbol_table_t sym;
+    maelys_datalog_symbol_table_init(&sym);
+    maelys_datalog_fact_t pool[8];
+    maelys_datalog_edb_t edb;
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_init(&edb, pool, 8, &sym, &reg), "%d");
+
+    const char *users[3] = {"alice", "bob", "alice"};
+    TEST_ASSERT_EQUAL(MAELYS_OK,
+                      maelys_datalog_edb_add_runtime_symbol_facts(&edb, "user", users, 3),
+                      "%d");
+    TEST_ASSERT_EQUAL((size_t)2u, edb.fact_count, "%zu");
+    TEST_ASSERT_EQUAL((size_t)2u, sym.count, "%zu");
+    TEST_ASSERT_EQUAL_STRING("alice", maelys_datalog_symbol_text(&sym, edb.facts[0].terms[0].as.symbol));
+    TEST_ASSERT_EQUAL_STRING("bob", maelys_datalog_symbol_text(&sym, edb.facts[1].terms[0].as.symbol));
+
+    maelys_datalog_symbol_id_t alice = 0;
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_intern_runtime_symbol(&edb, "alice", &alice), "%d");
+    TEST_ASSERT_EQUAL(edb.facts[0].terms[0].as.symbol, alice, "%u");
+    TEST_ASSERT_EQUAL((size_t)2u, sym.count, "%zu");
+
+    const char *pairs[4] = {"alice", "doc.pdf", "bob", "other.pdf"};
+    TEST_ASSERT_EQUAL(MAELYS_OK,
+                      maelys_datalog_edb_add_runtime_symbol_pair_facts(&edb, "owns", pairs, 2),
+                      "%d");
+    TEST_ASSERT_EQUAL((size_t)4u, edb.fact_count, "%zu");
+    TEST_ASSERT_EQUAL_STRING("alice", maelys_datalog_symbol_text(&sym, edb.facts[2].terms[0].as.symbol));
+    TEST_ASSERT_EQUAL_STRING("doc.pdf", maelys_datalog_symbol_text(&sym, edb.facts[2].terms[1].as.symbol));
+    TEST_ASSERT_EQUAL_STRING("bob", maelys_datalog_symbol_text(&sym, edb.facts[3].terms[0].as.symbol));
+    TEST_ASSERT_EQUAL_STRING("other.pdf", maelys_datalog_symbol_text(&sym, edb.facts[3].terms[1].as.symbol));
+    TEST_END();
+}
+
+static int test_edb_runtime_symbol_batch_binary_uses_full_pair_capacity(void) {
+    TEST_BEGIN();
+    maelys_datalog_predicate_registry_t reg;
+    init_runtime_symbol_registry(&reg);
+    maelys_datalog_symbol_table_t sym;
+    maelys_datalog_symbol_table_init(&sym);
+    maelys_datalog_fact_t pool[MAELYS_DATALOG_MAX_FACTS_PER_PRED];
+    maelys_datalog_edb_t edb;
+    TEST_ASSERT_EQUAL(MAELYS_OK,
+                      maelys_datalog_edb_init(&edb, pool, MAELYS_DATALOG_MAX_FACTS_PER_PRED, &sym, &reg),
+                      "%d");
+
+    char labels[2u * MAELYS_DATALOG_MAX_FACTS_PER_PRED][32];
+    const char *pairs[2u * MAELYS_DATALOG_MAX_FACTS_PER_PRED];
+    for (size_t i = 0; i < MAELYS_DATALOG_MAX_FACTS_PER_PRED; i++) {
+        snprintf(labels[2u * i], sizeof(labels[2u * i]), "owner_%02zu", i);
+        snprintf(labels[2u * i + 1u], sizeof(labels[2u * i + 1u]), "doc_%02zu", i);
+        pairs[2u * i] = labels[2u * i];
+        pairs[2u * i + 1u] = labels[2u * i + 1u];
+    }
+    TEST_ASSERT_EQUAL(MAELYS_OK,
+                      maelys_datalog_edb_add_runtime_symbol_pair_facts(
+                          &edb, "owns", pairs, MAELYS_DATALOG_MAX_FACTS_PER_PRED),
+                      "%d");
+    TEST_ASSERT_EQUAL((size_t)MAELYS_DATALOG_MAX_FACTS_PER_PRED, edb.fact_count, "%zu");
+    TEST_ASSERT_EQUAL((size_t)(2u * MAELYS_DATALOG_MAX_FACTS_PER_PRED), sym.count, "%zu");
+    TEST_ASSERT_EQUAL_STRING("owner_00", maelys_datalog_symbol_text(&sym, edb.facts[0].terms[0].as.symbol));
+    TEST_ASSERT_EQUAL_STRING("doc_00", maelys_datalog_symbol_text(&sym, edb.facts[0].terms[1].as.symbol));
+    TEST_END();
+}
+
+static int test_edb_runtime_symbol_batch_null_elements_keep_monotonic_interns(void) {
+    TEST_BEGIN();
+    maelys_datalog_predicate_registry_t reg;
+    init_runtime_symbol_registry(&reg);
+    maelys_datalog_symbol_table_t sym;
+    maelys_datalog_symbol_table_init(&sym);
+    maelys_datalog_fact_t pool[8];
+    maelys_datalog_edb_t edb;
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_init(&edb, pool, 8, &sym, &reg), "%d");
+
+    const char *values[3] = {"alice", NULL, "bob"};
+    TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_ARGUMENT,
+                      maelys_datalog_edb_add_runtime_symbol_facts(&edb, "user", values, 3),
+                      "%d");
+    TEST_ASSERT_EQUAL((size_t)0u, edb.fact_count, "%zu");
+    TEST_ASSERT_EQUAL((size_t)1u, sym.count, "%zu");
+    maelys_datalog_symbol_id_t alice = 0;
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_intern_runtime_symbol(&edb, "alice", &alice), "%d");
+    TEST_ASSERT_EQUAL((maelys_datalog_symbol_id_t)1u, alice, "%u");
+
+    maelys_datalog_edb_clear(&edb);
+    maelys_datalog_symbol_table_init(&sym);
+    const char *pairs[4] = {"alice", "doc.pdf", "bob", NULL};
+    TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_ARGUMENT,
+                      maelys_datalog_edb_add_runtime_symbol_pair_facts(&edb, "owns", pairs, 2),
+                      "%d");
+    TEST_ASSERT_EQUAL((size_t)0u, edb.fact_count, "%zu");
+    TEST_ASSERT_EQUAL((size_t)3u, sym.count, "%zu");
+    maelys_datalog_symbol_id_t bob = 0;
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_intern_runtime_symbol(&edb, "bob", &bob), "%d");
+    TEST_ASSERT_EQUAL((maelys_datalog_symbol_id_t)3u, bob, "%u");
+    TEST_END();
+}
+
+static int test_edb_runtime_symbol_batch_prechecks_before_interning(void) {
+    TEST_BEGIN();
+    maelys_datalog_predicate_registry_t reg;
+    init_runtime_symbol_registry(&reg);
+    maelys_datalog_symbol_table_t sym;
+    maelys_datalog_symbol_table_init(&sym);
+    maelys_datalog_fact_t pool[1];
+    maelys_datalog_edb_t edb;
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_init(&edb, pool, 1, &sym, &reg), "%d");
+
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_add_runtime_symbol_fact(&edb, "user", "existing"), "%d");
+    size_t before_facts = edb.fact_count;
+    size_t before_symbols = sym.count;
+    const char *values[1] = {"not_interned_due_to_capacity"};
+    TEST_ASSERT_EQUAL(MAELYS_ERR_PAYLOAD_TOO_LARGE,
+                      maelys_datalog_edb_add_runtime_symbol_facts(&edb, "user", values, 1),
+                      "%d");
+    TEST_ASSERT_EQUAL(before_facts, edb.fact_count, "%zu");
+    TEST_ASSERT_EQUAL(before_symbols, sym.count, "%zu");
+
+    const char *pairs[2] = {"also_not_interned", "doc.pdf"};
+    TEST_ASSERT_EQUAL(MAELYS_ERR_PAYLOAD_TOO_LARGE,
+                      maelys_datalog_edb_add_runtime_symbol_pair_facts(&edb, "owns", pairs, 1),
+                      "%d");
+    TEST_ASSERT_EQUAL(before_facts, edb.fact_count, "%zu");
+    TEST_ASSERT_EQUAL(before_symbols, sym.count, "%zu");
+    TEST_END();
+}
+
 static int test_edb_add_query_duplicate(void) {
     TEST_BEGIN();
     maelys_datalog_predicate_registry_t reg;
@@ -977,6 +1166,11 @@ int main(int argc, char **argv) {
         {"maelys_datalog_edb/batch_per_predicate_capacity_atomicity", TEST_MODE_NON_BLOCKING, test_edb_batch_per_predicate_capacity_atomicity},
         {"maelys_datalog_edb/batch_immutable_and_overflow_guards", TEST_MODE_NON_BLOCKING, test_edb_batch_immutable_and_overflow_guards},
         {"maelys_datalog_edb/batch_duplicates_and_tight_capacity_semantics", TEST_MODE_NON_BLOCKING, test_edb_batch_duplicates_and_tight_capacity_semantics},
+        {"maelys_datalog_edb/runtime_symbol_batch_empty_and_arg_guards", TEST_MODE_NON_BLOCKING, test_edb_runtime_symbol_batch_empty_and_arg_guards},
+        {"maelys_datalog_edb/runtime_symbol_batch_success_and_reuse", TEST_MODE_NON_BLOCKING, test_edb_runtime_symbol_batch_success_and_reuse},
+        {"maelys_datalog_edb/runtime_symbol_batch_binary_uses_full_pair_capacity", TEST_MODE_NON_BLOCKING, test_edb_runtime_symbol_batch_binary_uses_full_pair_capacity},
+        {"maelys_datalog_edb/runtime_symbol_batch_null_elements_keep_monotonic_interns", TEST_MODE_NON_BLOCKING, test_edb_runtime_symbol_batch_null_elements_keep_monotonic_interns},
+        {"maelys_datalog_edb/runtime_symbol_batch_prechecks_before_interning", TEST_MODE_NON_BLOCKING, test_edb_runtime_symbol_batch_prechecks_before_interning},
         {"maelys_datalog_edb/policy_fact_emission_forbidden", TEST_MODE_NON_BLOCKING, test_datalog_edb_builder_rejects_policy_fact_emission},
         {"maelys_datalog_edb/edb_kind_emission_accepted", TEST_MODE_NON_BLOCKING, test_datalog_edb_builder_accepts_edb_kind_emission},
         {"maelys_datalog_edb/idb_helper_emission_rejected", TEST_MODE_NON_BLOCKING, test_datalog_edb_builder_rejects_idb_helper_emission},
