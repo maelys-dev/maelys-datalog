@@ -69,6 +69,8 @@ WASM_DYNAMIC_EXPORTS = \
 	'_maelys_datalog_wasm_edb_intern_runtime_symbol', \
 	'_maelys_datalog_wasm_edb_add_symbol_id_fact', \
 	'_maelys_datalog_wasm_edb_add_symbol_ids_fact', \
+	'_maelys_datalog_wasm_edb_add_symbol_id_facts', \
+	'_maelys_datalog_wasm_edb_add_symbol_ids_facts', \
 	'_maelys_datalog_wasm_edb_add_symbol', \
 	'_maelys_datalog_wasm_edb_add_symbol2', \
 	'_maelys_datalog_wasm_solve', \
@@ -82,7 +84,7 @@ WASM_DYNAMIC_EXPORTS = \
 
 WASM_DYNAMIC_LDFLAGS = \
 	-s "EXPORTED_FUNCTIONS=[$(WASM_DYNAMIC_EXPORTS)]" \
-	-s "EXPORTED_RUNTIME_METHODS=['ccall','cwrap','UTF8ToString','stringToUTF8','lengthBytesUTF8','getValue']" \
+	-s "EXPORTED_RUNTIME_METHODS=['ccall','cwrap','UTF8ToString','stringToUTF8','lengthBytesUTF8','getValue','HEAP32']" \
 	-s ALLOW_MEMORY_GROWTH=1 \
 	-s MODULARIZE=1 \
 	-s EXPORT_NAME="MaelysDatalogDynamic"

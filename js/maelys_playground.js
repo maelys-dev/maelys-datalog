@@ -158,6 +158,56 @@ class MaelysPlayground {
     return this;
   }
 
+  _callInt32Array(name, pred, values, factCount) {
+    if (!Array.isArray(values)) {
+      throw new TypeError(`${name} expects an array of symbol IDs`);
+    }
+    if (values.length === 0) {
+      this._check(
+        this._call(name, 'number', ['string', 'number', 'number'], [pred, 0, 0]),
+        name,
+      );
+      return this;
+    }
+
+    const bytes = values.length * 4;
+    const ptr = this._mod._malloc(bytes);
+    if (!ptr) throw new Error(`${name} failed: malloc returned 0`);
+    try {
+      this._mod.HEAP32.set(Int32Array.from(values), ptr >> 2);
+      this._check(
+        this._call(name, 'number', ['string', 'number', 'number'], [pred, ptr, factCount]),
+        name,
+      );
+      return this;
+    } finally {
+      this._mod._free(ptr);
+    }
+  }
+
+  addSymbolIdFacts(pred, ids) {
+    if (!Array.isArray(ids)) {
+      throw new TypeError('addSymbolIdFacts expects an array of symbol IDs');
+    }
+    return this._callInt32Array('maelys_datalog_wasm_edb_add_symbol_id_facts',
+                                pred,
+                                ids,
+                                ids.length);
+  }
+
+  addSymbolIdsFacts(pred, pairs) {
+    if (!Array.isArray(pairs)) {
+      throw new TypeError('addSymbolIdsFacts expects an array of symbol IDs');
+    }
+    if (pairs.length % 2 !== 0) {
+      throw new TypeError('addSymbolIdsFacts expects a flat array with even length');
+    }
+    return this._callInt32Array('maelys_datalog_wasm_edb_add_symbol_ids_facts',
+                                pred,
+                                pairs,
+                                pairs.length / 2);
+  }
+
   addFact2(pred, arg0, arg1) {
     this._check(
       this._call('maelys_datalog_wasm_edb_add_symbol2',

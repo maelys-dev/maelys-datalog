@@ -28,6 +28,7 @@ static maelys_datalog_policy_set_t s_policy_set;
 static maelys_datalog_diagnostic_t s_last_diag;
 static maelys_datalog_edb_t s_edb;
 static maelys_datalog_fact_t s_fact_pool[MAELYS_DATALOG_MAX_EDB_FACTS];
+static maelys_datalog_symbol_id_t s_id_scratch[MAELYS_DATALOG_MAX_EDB_FACTS * 2u];
 static maelys_datalog_solve_result_t *s_solve_result = NULL;
 static wasm_edb_state_t s_edb_state = WASM_EDB_STATE_EMPTY;
 
@@ -91,6 +92,17 @@ static maelys_result_t wasm_validate_symbol_id(int32_t symbol_id_from_js,
     }
 
     *out = candidate;
+    return MAELYS_OK;
+}
+
+static maelys_result_t wasm_validate_symbol_id_array(const int32_t *ids,
+                                                     size_t id_count,
+                                                     maelys_datalog_symbol_id_t *out) {
+    if (!ids || !out) return MAELYS_ERR_INVALID_ARGUMENT;
+    for (size_t i = 0; i < id_count; i++) {
+        maelys_result_t rc = wasm_validate_symbol_id(ids[i], &out[i]);
+        if (rc != MAELYS_OK) return rc;
+    }
     return MAELYS_OK;
 }
 
@@ -217,6 +229,49 @@ maelys_result_t maelys_datalog_wasm_edb_add_symbol_ids_fact(const char *predicat
     rc = wasm_validate_symbol_id(right_from_js, &right);
     if (rc != MAELYS_OK) return rc;
     return maelys_datalog_edb_add_symbol_ids_fact(&s_edb, predicate, left, right);
+}
+
+maelys_result_t maelys_datalog_wasm_edb_add_symbol_id_facts(const char *predicate,
+                                                            const int32_t *ids,
+                                                            int32_t count) {
+    if (s_edb_state != WASM_EDB_STATE_OPEN) return MAELYS_ERR_INVALID_STATE;
+    if (!predicate) return MAELYS_ERR_INVALID_ARGUMENT;
+    if (count < 0) return MAELYS_ERR_INVALID_ARGUMENT;
+    if (count == 0) return MAELYS_OK;
+    if (!ids) return MAELYS_ERR_INVALID_ARGUMENT;
+    if ((uint32_t)count > MAELYS_DATALOG_MAX_EDB_FACTS) {
+        return MAELYS_ERR_PAYLOAD_TOO_LARGE;
+    }
+
+    const size_t value_count = (size_t)count;
+    maelys_result_t rc = wasm_validate_symbol_id_array(ids, value_count, s_id_scratch);
+    if (rc != MAELYS_OK) return rc;
+    return maelys_datalog_edb_add_symbol_id_facts(&s_edb,
+                                                  predicate,
+                                                  s_id_scratch,
+                                                  value_count);
+}
+
+maelys_result_t maelys_datalog_wasm_edb_add_symbol_ids_facts(const char *predicate,
+                                                             const int32_t *pairs,
+                                                             int32_t pair_count) {
+    if (s_edb_state != WASM_EDB_STATE_OPEN) return MAELYS_ERR_INVALID_STATE;
+    if (!predicate) return MAELYS_ERR_INVALID_ARGUMENT;
+    if (pair_count < 0) return MAELYS_ERR_INVALID_ARGUMENT;
+    if (pair_count == 0) return MAELYS_OK;
+    if (!pairs) return MAELYS_ERR_INVALID_ARGUMENT;
+    if ((uint32_t)pair_count > MAELYS_DATALOG_MAX_EDB_FACTS) {
+        return MAELYS_ERR_PAYLOAD_TOO_LARGE;
+    }
+
+    const size_t fact_count = (size_t)pair_count;
+    const size_t flat_len = fact_count * 2u;
+    maelys_result_t rc = wasm_validate_symbol_id_array(pairs, flat_len, s_id_scratch);
+    if (rc != MAELYS_OK) return rc;
+    return maelys_datalog_edb_add_symbol_ids_facts(&s_edb,
+                                                   predicate,
+                                                   s_id_scratch,
+                                                   fact_count);
 }
 
 maelys_result_t maelys_datalog_wasm_edb_add_symbol(const char *pred, const char *arg0) {
