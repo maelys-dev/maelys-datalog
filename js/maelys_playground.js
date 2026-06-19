@@ -33,7 +33,10 @@ const PredKind = Object.freeze({
 const MAELYS_OK = 0;
 const MAELYS_ERR_INVALID_ARGUMENT = -1;
 const MAELYS_ERR_INVALID_FIELD = -2;
+const MAELYS_ERR_PAYLOAD_TOO_LARGE = -12;
 const MAELYS_ERR_INVALID_STATE = -13;
+const MAELYS_DATALOG_WASM_PACKED_STRING_BYTES_MAX = 32768;
+const INT32_MAX = 0x7fffffff;
 
 function makeError(name, rc, msg) {
   return new Error(`${name} failed (rc=${rc})${msg ? ': ' + msg : ''}`);
@@ -185,6 +188,56 @@ class MaelysPlayground {
     }
   }
 
+  _callPackedStrings(name, pred, values, factCount) {
+    if (!Array.isArray(values)) {
+      throw new TypeError(`${name} expects an array of strings`);
+    }
+    for (const value of values) {
+      if (typeof value !== 'string') {
+        throw new TypeError(`${name} expects every element to be a string`);
+      }
+    }
+    if (values.length === 0) {
+      this._check(
+        this._call(name, 'number', ['string', 'number', 'number', 'number'], [pred, 0, 0, 0]),
+        name,
+      );
+      return this;
+    }
+
+    let byteLen = 0;
+    for (const value of values) {
+      byteLen += this._mod.lengthBytesUTF8(value) + 1;
+      if (byteLen > INT32_MAX) {
+        throw new RangeError(`${name} packed string buffer exceeds int32 byte length`);
+      }
+      if (byteLen > MAELYS_DATALOG_WASM_PACKED_STRING_BYTES_MAX) {
+        throw new RangeError(`${name} packed string buffer exceeds WASM boundary limit`);
+      }
+    }
+
+    const ptr = this._mod._malloc(byteLen);
+    if (!ptr) throw new Error(`${name} failed: malloc returned 0`);
+    try {
+      let offset = 0;
+      for (const value of values) {
+        const segmentBytes = this._mod.lengthBytesUTF8(value) + 1;
+        this._mod.stringToUTF8(value, ptr + offset, segmentBytes);
+        offset += segmentBytes;
+      }
+      this._check(
+        this._call(name,
+                   'number',
+                   ['string', 'number', 'number', 'number'],
+                   [pred, ptr, byteLen, factCount]),
+        name,
+      );
+      return this;
+    } finally {
+      this._mod._free(ptr);
+    }
+  }
+
   addSymbolIdFacts(pred, ids) {
     if (!Array.isArray(ids)) {
       throw new TypeError('addSymbolIdFacts expects an array of symbol IDs');
@@ -206,6 +259,29 @@ class MaelysPlayground {
                                 pred,
                                 pairs,
                                 pairs.length / 2);
+  }
+
+  addRuntimeSymbolFacts(pred, values) {
+    if (!Array.isArray(values)) {
+      throw new TypeError('addRuntimeSymbolFacts expects an array of strings');
+    }
+    return this._callPackedStrings('maelys_datalog_wasm_edb_add_runtime_symbol_facts',
+                                   pred,
+                                   values,
+                                   values.length);
+  }
+
+  addRuntimeSymbolPairFacts(pred, flatPairs) {
+    if (!Array.isArray(flatPairs)) {
+      throw new TypeError('addRuntimeSymbolPairFacts expects an array of strings');
+    }
+    if (flatPairs.length % 2 !== 0) {
+      throw new TypeError('addRuntimeSymbolPairFacts expects a flat array with even length');
+    }
+    return this._callPackedStrings('maelys_datalog_wasm_edb_add_runtime_symbol_pair_facts',
+                                   pred,
+                                   flatPairs,
+                                   flatPairs.length / 2);
   }
 
   addFact2(pred, arg0, arg1) {
@@ -258,7 +334,9 @@ const api = {
   MAELYS_OK,
   MAELYS_ERR_INVALID_ARGUMENT,
   MAELYS_ERR_INVALID_FIELD,
+  MAELYS_ERR_PAYLOAD_TOO_LARGE,
   MAELYS_ERR_INVALID_STATE,
+  MAELYS_DATALOG_WASM_PACKED_STRING_BYTES_MAX,
   MaelysPlayground,
 };
 
@@ -271,6 +349,8 @@ if (typeof globalThis !== 'undefined') {
   globalThis.MAELYS_OK = MAELYS_OK;
   globalThis.MAELYS_ERR_INVALID_ARGUMENT = MAELYS_ERR_INVALID_ARGUMENT;
   globalThis.MAELYS_ERR_INVALID_FIELD = MAELYS_ERR_INVALID_FIELD;
+  globalThis.MAELYS_ERR_PAYLOAD_TOO_LARGE = MAELYS_ERR_PAYLOAD_TOO_LARGE;
   globalThis.MAELYS_ERR_INVALID_STATE = MAELYS_ERR_INVALID_STATE;
+  globalThis.MAELYS_DATALOG_WASM_PACKED_STRING_BYTES_MAX = MAELYS_DATALOG_WASM_PACKED_STRING_BYTES_MAX;
   globalThis.MaelysPlayground = MaelysPlayground;
 }

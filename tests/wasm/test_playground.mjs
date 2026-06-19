@@ -6,7 +6,9 @@ const {
   PredKind,
   MAELYS_ERR_INVALID_ARGUMENT,
   MAELYS_ERR_INVALID_FIELD,
+  MAELYS_ERR_PAYLOAD_TOO_LARGE,
   MAELYS_ERR_INVALID_STATE,
+  MAELYS_DATALOG_WASM_PACKED_STRING_BYTES_MAX,
 } = playgroundPkg;
 
 let passed = 0;
@@ -44,6 +46,31 @@ function expectRc(actual, expected, label) {
   if (actual !== expected) {
     throw new Error(`${label}: expected rc=${expected}, got ${actual}`);
   }
+}
+
+function expectThrowType(fn, type, label) {
+  try {
+    fn();
+  } catch (err) {
+    if (!(err instanceof type)) {
+      throw new Error(`${label}: expected ${type.name}, got ${err.constructor.name}: ${err.message}`);
+    }
+    return;
+  }
+  throw new Error(`${label}: expected ${type.name}`);
+}
+
+function packStrings(pg, values) {
+  const byteLen = values.reduce((sum, value) => sum + pg._mod.lengthBytesUTF8(value) + 1, 0);
+  const ptr = pg._mod._malloc(byteLen);
+  if (!ptr) throw new Error('packStrings malloc returned 0');
+  let offset = 0;
+  for (const value of values) {
+    const segmentBytes = pg._mod.lengthBytesUTF8(value) + 1;
+    pg._mod.stringToUTF8(value, ptr + offset, segmentBytes);
+    offset += segmentBytes;
+  }
+  return { ptr, byteLen };
 }
 
 async function setupUnaryAccess(domainName) {
@@ -561,6 +588,280 @@ await test('playground_batch_id_binary_not_half_capped_by_flat_scratch', async (
   expectThrowRc(() => pg.addSymbolIdsFacts('missing', pairs),
                 MAELYS_ERR_INVALID_FIELD,
                 'batch pair_count above half MAX should reach core predicate lookup');
+  pg.freeResult();
+});
+
+await test('playground_string_batch_unary_round_trip', async () => {
+  const pg = await setupUnaryAccess('string_batch_unary');
+  pg.addRuntimeSymbolFacts('safe', ['alice', 'bob']);
+  pg.solve();
+  if (!pg.querySymbol('allow', 'alice')) throw new Error('expected alice=true');
+  if (!pg.querySymbol('allow', 'bob')) throw new Error('expected bob=true');
+  if (pg.querySymbol('allow', 'mallory')) throw new Error('expected mallory=false');
+  pg.freeResult();
+});
+
+await test('playground_string_batch_binary_round_trip', async () => {
+  const pg = await setupBinaryAccess('string_batch_binary');
+  pg.addFact('target', 'doc.pdf');
+  pg.addRuntimeSymbolPairFacts('owns', ['alice', 'doc.pdf', 'bob', 'other.pdf']);
+  pg.solve();
+  if (!pg.querySymbol('allow', 'alice')) throw new Error('expected allow(alice)=true');
+  if (pg.querySymbol('allow', 'bob')) throw new Error('expected allow(bob)=false');
+  if (!pg.querySymbol2('allowed_pair', 'alice', 'doc.pdf')) {
+    throw new Error('expected allowed_pair(alice, doc.pdf)=true');
+  }
+  if (!pg.querySymbol2('allowed_pair', 'bob', 'other.pdf')) {
+    throw new Error('expected allowed_pair(bob, other.pdf)=true');
+  }
+  pg.freeResult();
+});
+
+await test('playground_string_batch_empty_batch_ok', async () => {
+  const pg = await setupUnaryAccess('string_batch_empty_unary');
+  pg.addRuntimeSymbolFacts('safe', []);
+  pg.solve();
+  if (pg.querySymbol('allow', 'alice')) throw new Error('empty unary string batch inserted a fact');
+  pg.freeResult();
+
+  const pg2 = await setupBinaryAccess('string_batch_empty_binary');
+  pg2.addRuntimeSymbolPairFacts('owns', []);
+  pg2.solve();
+  if (pg2.querySymbol('allow', 'alice')) throw new Error('empty binary string batch inserted a fact');
+  pg2.freeResult();
+});
+
+await test('playground_string_batch_js_boundary_rejects_bad_arrays', async () => {
+  const pg = await setupBinaryAccess('string_batch_js_bad_arrays');
+  expectThrowType(() => pg.addRuntimeSymbolFacts('safe', 'alice'), TypeError, 'unary non-array');
+  expectThrowType(() => pg.addRuntimeSymbolFacts('safe', ['alice', 42]), TypeError, 'unary non-string');
+  expectThrowType(() => pg.addRuntimeSymbolPairFacts('owns', ['alice']), TypeError, 'odd flat pairs');
+  expectThrowType(
+    () => pg.addRuntimeSymbolPairFacts('owns', ['alice', {}]),
+    TypeError,
+    'binary non-string',
+  );
+  pg.freeResult();
+});
+
+await test('playground_string_batch_js_rejects_oversize_before_malloc', async () => {
+  const pg = await setupUnaryAccess('string_batch_js_range');
+  const originalLen = pg._mod.lengthBytesUTF8;
+  const originalMalloc = pg._mod._malloc;
+  let mallocCalled = false;
+  pg._mod._malloc = (bytes) => {
+    mallocCalled = true;
+    return originalMalloc(bytes);
+  };
+  try {
+    pg._mod.lengthBytesUTF8 = () => 0x7fffffff;
+    expectThrowType(() => pg.addRuntimeSymbolFacts('safe', ['x']), RangeError, 'int32 byteLen');
+    pg._mod.lengthBytesUTF8 = () => MAELYS_DATALOG_WASM_PACKED_STRING_BYTES_MAX;
+    expectThrowType(() => pg.addRuntimeSymbolFacts('safe', ['x']), RangeError, 'wasm byteLen');
+  } finally {
+    pg._mod.lengthBytesUTF8 = originalLen;
+    pg._mod._malloc = originalMalloc;
+  }
+  if (mallocCalled) throw new Error('oversize JS guard called malloc');
+  pg.freeResult();
+});
+
+await test('playground_string_batch_raw_boundary_rejects_invalid_packed_args', async () => {
+  const pg = await setupUnaryAccess('string_batch_raw_invalid');
+  expectRc(
+    pg._call('maelys_datalog_wasm_edb_add_runtime_symbol_facts',
+             'number',
+             ['string', 'number', 'number', 'number'],
+             ['safe', 0, 1, 1]),
+    MAELYS_ERR_INVALID_ARGUMENT,
+    'unary null packed',
+  );
+  expectRc(
+    pg._call('maelys_datalog_wasm_edb_add_runtime_symbol_facts',
+             'number',
+             ['string', 'number', 'number', 'number'],
+             ['safe', 0, 0, -1]),
+    MAELYS_ERR_INVALID_ARGUMENT,
+    'unary negative count',
+  );
+  const tiny = pg._mod._malloc(1);
+  if (!tiny) throw new Error('malloc returned 0');
+  try {
+    expectRc(
+      pg._call('maelys_datalog_wasm_edb_add_runtime_symbol_facts',
+               'number',
+               ['string', 'number', 'number', 'number'],
+               ['safe', tiny, -1, 1]),
+      MAELYS_ERR_INVALID_ARGUMENT,
+      'unary negative byte_len',
+    );
+    expectRc(
+      pg._call('maelys_datalog_wasm_edb_add_runtime_symbol_facts',
+               'number',
+               ['string', 'number', 'number', 'number'],
+               ['safe', tiny, MAELYS_DATALOG_WASM_PACKED_STRING_BYTES_MAX + 1, 1]),
+      MAELYS_ERR_PAYLOAD_TOO_LARGE,
+      'unary packed byte_len boundary',
+    );
+    expectRc(
+      pg._call('maelys_datalog_wasm_edb_add_runtime_symbol_pair_facts',
+               'number',
+               ['string', 'number', 'number', 'number'],
+               ['owns', tiny, MAELYS_DATALOG_WASM_PACKED_STRING_BYTES_MAX + 1, 1]),
+      MAELYS_ERR_PAYLOAD_TOO_LARGE,
+      'binary packed byte_len boundary',
+    );
+  } finally {
+    pg._mod._free(tiny);
+  }
+  pg.freeResult();
+});
+
+await test('playground_string_batch_raw_boundary_rejects_bad_framing', async () => {
+  const pg = await setupUnaryAccess('string_batch_raw_framing');
+  const packed = packStrings(pg, ['alice', 'bob']);
+  try {
+    expectRc(
+      pg._call('maelys_datalog_wasm_edb_add_runtime_symbol_facts',
+               'number',
+               ['string', 'number', 'number', 'number'],
+               ['safe', packed.ptr, packed.byteLen - 1, 2]),
+      MAELYS_ERR_INVALID_ARGUMENT,
+      'missing final NUL',
+    );
+  } finally {
+    pg._mod._free(packed.ptr);
+  }
+
+  const trailing = packStrings(pg, ['alice', 'bob', 'junk']);
+  try {
+    expectRc(
+      pg._call('maelys_datalog_wasm_edb_add_runtime_symbol_facts',
+               'number',
+               ['string', 'number', 'number', 'number'],
+               ['safe', trailing.ptr, trailing.byteLen, 2]),
+      MAELYS_ERR_INVALID_ARGUMENT,
+      'trailing bytes after expected segments',
+    );
+  } finally {
+    pg._mod._free(trailing.ptr);
+  }
+  pg.solve();
+  if (pg.querySymbol('allow', 'alice')) throw new Error('malformed buffers inserted a fact');
+  pg.freeResult();
+});
+
+await test('playground_string_batch_empty_string_follows_core_semantics', async () => {
+  const pg = await setupUnaryAccess('string_batch_empty_string');
+  pg.addRuntimeSymbolFacts('safe', ['']);
+  pg.solve();
+  if (pg.querySymbol('allow', 'alice')) throw new Error('unexpected alice fact');
+  pg.freeResult();
+});
+
+await test('playground_string_batch_predicate_errors_propagated', async () => {
+  const pg = await createPlayground();
+  pg.domainBegin('string_batch_predicate_errors');
+  pg.domainAddPredicate('safe', 1, PredKind.EDB);
+  pg.domainAddPredicate('owns', 2, PredKind.EDB);
+  pg.domainAddPredicate('allow', 1, PredKind.IDB | PredKind.QUERY);
+  pg.domainCommit();
+  pg.loadPolicy('string_batch_predicate_errors', 'string_batch_predicate_errors.main', 'allow(X) :- safe(X).\n');
+  pg.edbBegin();
+  expectThrowRc(() => pg.addRuntimeSymbolFacts('missing', ['alice']),
+                MAELYS_ERR_INVALID_FIELD,
+                'unknown predicate');
+  expectThrowRc(() => pg.addRuntimeSymbolFacts('owns', ['alice']),
+                MAELYS_ERR_INVALID_FIELD,
+                'unary into binary predicate');
+  expectThrowRc(() => pg.addRuntimeSymbolPairFacts('safe', ['alice', 'bob']),
+                MAELYS_ERR_INVALID_FIELD,
+                'binary into unary predicate');
+  pg.solve();
+  if (pg.querySymbol('allow', 'alice')) throw new Error('predicate errors inserted a fact');
+  pg.freeResult();
+});
+
+await test('playground_string_batch_capacity_failure_is_atomic', async () => {
+  const pg = await setupUnaryAccess('string_batch_capacity');
+  const values = Array.from({ length: 65 }, (_, i) => `user_${i}`);
+  expectThrowRc(() => pg.addRuntimeSymbolFacts('safe', values),
+                MAELYS_ERR_PAYLOAD_TOO_LARGE,
+                'per-predicate capacity');
+  pg.solve();
+  if (pg.querySymbol('allow', 'user_0')) throw new Error('capacity failure inserted user_0');
+  if (pg.querySymbol('allow', 'user_64')) throw new Error('capacity failure inserted user_64');
+  pg.freeResult();
+});
+
+await test('playground_string_batch_overlong_segment_rejected_no_fact', async () => {
+  const pg = await setupUnaryAccess('string_batch_overlong');
+  const overlong = 'x'.repeat(1025);
+  expectThrowRc(() => pg.addRuntimeSymbolFacts('safe', [overlong]),
+                MAELYS_ERR_PAYLOAD_TOO_LARGE,
+                'overlong segment');
+  pg.solve();
+  if (pg.querySymbol('allow', 'x')) throw new Error('overlong segment inserted a fact');
+  pg.freeResult();
+});
+
+await test('playground_string_batch_equals_repeated_string_calls', async () => {
+  const pgA = await setupUnaryAccess('string_batch_equals_a');
+  pgA.addRuntimeSymbolFacts('safe', ['alice', 'bob']);
+  pgA.solve();
+  const batchAlice = pgA.querySymbol('allow', 'alice');
+  const batchBob = pgA.querySymbol('allow', 'bob');
+  pgA.freeResult();
+
+  const pgB = await setupUnaryAccess('string_batch_equals_b');
+  pgB.addFact('safe', 'alice');
+  pgB.addFact('safe', 'bob');
+  pgB.solve();
+  if (batchAlice !== pgB.querySymbol('allow', 'alice')) throw new Error('alice mismatch');
+  if (batchBob !== pgB.querySymbol('allow', 'bob')) throw new Error('bob mismatch');
+  pgB.freeResult();
+
+  const pgC = await setupBinaryAccess('string_batch_equals_c');
+  pgC.addFact('target', 'doc.pdf');
+  pgC.addRuntimeSymbolPairFacts('owns', ['alice', 'doc.pdf', 'bob', 'other.pdf']);
+  pgC.solve();
+  const batchAllowAlice = pgC.querySymbol('allow', 'alice');
+  const batchAllowBob = pgC.querySymbol('allow', 'bob');
+  pgC.freeResult();
+
+  const pgD = await setupBinaryAccess('string_batch_equals_d');
+  pgD.addFact('target', 'doc.pdf');
+  pgD.addFact2('owns', 'alice', 'doc.pdf');
+  pgD.addFact2('owns', 'bob', 'other.pdf');
+  pgD.solve();
+  if (batchAllowAlice !== pgD.querySymbol('allow', 'alice')) throw new Error('binary alice mismatch');
+  if (batchAllowBob !== pgD.querySymbol('allow', 'bob')) throw new Error('binary bob mismatch');
+  pgD.freeResult();
+});
+
+await test('playground_string_batch_state_guards', async () => {
+  const pg = await createPlayground();
+  expectThrowRc(() => pg.addRuntimeSymbolFacts('safe', []),
+                MAELYS_ERR_INVALID_STATE,
+                'empty-state unary string batch');
+  expectThrowRc(() => pg.addRuntimeSymbolPairFacts('owns', []),
+                MAELYS_ERR_INVALID_STATE,
+                'empty-state binary string batch');
+
+  pg.domainBegin('string_batch_state');
+  pg.domainAddPredicate('safe', 1, PredKind.EDB);
+  pg.domainAddPredicate('owns', 2, PredKind.EDB);
+  pg.domainAddPredicate('allow', 1, PredKind.IDB | PredKind.QUERY);
+  pg.domainCommit();
+  pg.loadPolicy('string_batch_state', 'string_batch_state.main', 'allow(X) :- safe(X).\n');
+  pg.edbBegin();
+  pg.solve();
+  expectThrowRc(() => pg.addRuntimeSymbolFacts('safe', []),
+                MAELYS_ERR_INVALID_STATE,
+                'solved-state unary string batch');
+  expectThrowRc(() => pg.addRuntimeSymbolPairFacts('owns', []),
+                MAELYS_ERR_INVALID_STATE,
+                'solved-state binary string batch');
   pg.freeResult();
 });
 

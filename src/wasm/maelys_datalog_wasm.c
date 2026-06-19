@@ -13,6 +13,9 @@
     (MAELYS_DATALOG_PRED_KIND_EDB | MAELYS_DATALOG_PRED_KIND_IDB | \
      MAELYS_DATALOG_PRED_KIND_QUERY | MAELYS_DATALOG_PRED_KIND_POLICY_FACT)
 
+/* WASM boundary only: caps packed-buffer scans; not a core string-pool rule. */
+#define MAELYS_DATALOG_WASM_PACKED_STRING_BYTES_MAX MAELYS_DATALOG_STRING_POOL_BYTES
+
 typedef enum {
     WASM_EDB_STATE_EMPTY = 0,
     WASM_EDB_STATE_OPEN = 1,
@@ -103,6 +106,39 @@ static maelys_result_t wasm_validate_symbol_id_array(const int32_t *ids,
         maelys_result_t rc = wasm_validate_symbol_id(ids[i], &out[i]);
         if (rc != MAELYS_OK) return rc;
     }
+    return MAELYS_OK;
+}
+
+static maelys_result_t wasm_unpack_packed_strings(const char *packed,
+                                                  int32_t byte_len,
+                                                  size_t expected_count,
+                                                  const char **out) {
+    if (!packed || !out) return MAELYS_ERR_INVALID_ARGUMENT;
+    if (byte_len <= 0) return MAELYS_ERR_INVALID_ARGUMENT;
+    if ((uint32_t)byte_len > MAELYS_DATALOG_WASM_PACKED_STRING_BYTES_MAX) {
+        return MAELYS_ERR_PAYLOAD_TOO_LARGE;
+    }
+
+    const char *cursor = packed;
+    const char *end = packed + (size_t)byte_len;
+    for (size_t i = 0; i < expected_count; i++) {
+        if (cursor >= end) return MAELYS_ERR_INVALID_ARGUMENT;
+        size_t remaining = (size_t)(end - cursor);
+        size_t cap = remaining;
+        if (cap > (size_t)MAELYS_DATALOG_MAX_STRING_BYTES + 1u) {
+            cap = (size_t)MAELYS_DATALOG_MAX_STRING_BYTES + 1u;
+        }
+        size_t len = strnlen(cursor, cap);
+        if (len == cap) {
+            if (cap <= remaining && cap > MAELYS_DATALOG_MAX_STRING_BYTES) {
+                return MAELYS_ERR_PAYLOAD_TOO_LARGE;
+            }
+            return MAELYS_ERR_INVALID_ARGUMENT;
+        }
+        out[i] = cursor;
+        cursor += len + 1u;
+    }
+    if (cursor != end) return MAELYS_ERR_INVALID_ARGUMENT;
     return MAELYS_OK;
 }
 
@@ -272,6 +308,47 @@ maelys_result_t maelys_datalog_wasm_edb_add_symbol_ids_facts(const char *predica
                                                    predicate,
                                                    s_id_scratch,
                                                    fact_count);
+}
+
+maelys_result_t maelys_datalog_wasm_edb_add_runtime_symbol_facts(const char *predicate,
+                                                                 const char *packed,
+                                                                 int32_t byte_len,
+                                                                 int32_t value_count) {
+    if (s_edb_state != WASM_EDB_STATE_OPEN) return MAELYS_ERR_INVALID_STATE;
+    if (!predicate) return MAELYS_ERR_INVALID_ARGUMENT;
+    if (value_count < 0) return MAELYS_ERR_INVALID_ARGUMENT;
+    if (value_count == 0) return MAELYS_OK;
+    if (!packed) return MAELYS_ERR_INVALID_ARGUMENT;
+    if ((uint32_t)value_count > MAELYS_DATALOG_MAX_EDB_FACTS) {
+        return MAELYS_ERR_PAYLOAD_TOO_LARGE;
+    }
+
+    const size_t count = (size_t)value_count;
+    const char *values[MAELYS_DATALOG_MAX_EDB_FACTS];
+    maelys_result_t rc = wasm_unpack_packed_strings(packed, byte_len, count, values);
+    if (rc != MAELYS_OK) return rc;
+    return maelys_datalog_edb_add_runtime_symbol_facts(&s_edb, predicate, values, count);
+}
+
+maelys_result_t maelys_datalog_wasm_edb_add_runtime_symbol_pair_facts(const char *predicate,
+                                                                      const char *packed,
+                                                                      int32_t byte_len,
+                                                                      int32_t pair_count) {
+    if (s_edb_state != WASM_EDB_STATE_OPEN) return MAELYS_ERR_INVALID_STATE;
+    if (!predicate) return MAELYS_ERR_INVALID_ARGUMENT;
+    if (pair_count < 0) return MAELYS_ERR_INVALID_ARGUMENT;
+    if (pair_count == 0) return MAELYS_OK;
+    if (!packed) return MAELYS_ERR_INVALID_ARGUMENT;
+    if ((uint32_t)pair_count > MAELYS_DATALOG_MAX_EDB_FACTS) {
+        return MAELYS_ERR_PAYLOAD_TOO_LARGE;
+    }
+
+    const size_t count = (size_t)pair_count;
+    const size_t symbol_count = count * 2u;
+    const char *values[2u * MAELYS_DATALOG_MAX_EDB_FACTS];
+    maelys_result_t rc = wasm_unpack_packed_strings(packed, byte_len, symbol_count, values);
+    if (rc != MAELYS_OK) return rc;
+    return maelys_datalog_edb_add_runtime_symbol_pair_facts(&s_edb, predicate, values, count);
 }
 
 maelys_result_t maelys_datalog_wasm_edb_add_symbol(const char *pred, const char *arg0) {

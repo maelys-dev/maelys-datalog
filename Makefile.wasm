@@ -71,6 +71,8 @@ WASM_DYNAMIC_EXPORTS = \
 	'_maelys_datalog_wasm_edb_add_symbol_ids_fact', \
 	'_maelys_datalog_wasm_edb_add_symbol_id_facts', \
 	'_maelys_datalog_wasm_edb_add_symbol_ids_facts', \
+	'_maelys_datalog_wasm_edb_add_runtime_symbol_facts', \
+	'_maelys_datalog_wasm_edb_add_runtime_symbol_pair_facts', \
 	'_maelys_datalog_wasm_edb_add_symbol', \
 	'_maelys_datalog_wasm_edb_add_symbol2', \
 	'_maelys_datalog_wasm_solve', \

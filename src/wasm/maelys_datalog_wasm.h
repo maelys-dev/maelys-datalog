@@ -32,6 +32,14 @@ maelys_result_t maelys_datalog_wasm_edb_add_symbol_id_facts(const char *predicat
 maelys_result_t maelys_datalog_wasm_edb_add_symbol_ids_facts(const char *predicate,
                                                              const int32_t *pairs,
                                                              int32_t pair_count);
+maelys_result_t maelys_datalog_wasm_edb_add_runtime_symbol_facts(const char *predicate,
+                                                                 const char *packed,
+                                                                 int32_t byte_len,
+                                                                 int32_t value_count);
+maelys_result_t maelys_datalog_wasm_edb_add_runtime_symbol_pair_facts(const char *predicate,
+                                                                      const char *packed,
+                                                                      int32_t byte_len,
+                                                                      int32_t pair_count);
 maelys_result_t maelys_datalog_wasm_edb_add_symbol(const char *pred,
                                                    const char *arg0);
 maelys_result_t maelys_datalog_wasm_edb_add_symbol2(const char *pred,
