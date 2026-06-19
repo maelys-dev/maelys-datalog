@@ -3,6 +3,7 @@
 #include "src/core/maelys_datalog_predicate_registry.h"
 #include "src/core/maelys_datalog_symbol_table.h"
 
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -288,6 +289,37 @@ static maelys_result_t validate_edb_symbol_target(maelys_datalog_edb_t *edb,
     return MAELYS_OK;
 }
 
+static maelys_result_t validate_edb_symbol_batch_target(maelys_datalog_edb_t *edb,
+                                                        const char *predicate,
+                                                        size_t arity,
+                                                        size_t count) {
+    if (!edb || !predicate) return MAELYS_ERR_INVALID_ARGUMENT;
+    if (arity == 0 || arity > MAELYS_DATALOG_MAX_ARITY) return MAELYS_ERR_INVALID_ARGUMENT;
+    if (edb->immutable) return MAELYS_ERR_INVALID_STATE;
+    maelys_datalog_predicate_id_t pid;
+    if (!maelys_datalog_predicate_registry_find(edb->registry, predicate, arity, &pid)) {
+        return MAELYS_ERR_INVALID_FIELD;
+    }
+    const maelys_datalog_predicate_def_t *def =
+        maelys_datalog_predicate_registry_get(edb->registry, pid);
+    if (!def) return MAELYS_ERR_INVALID_FIELD;
+    if (def->kind_flags & MAELYS_DATALOG_PRED_KIND_POLICY_FACT) return MAELYS_ERR_FORBIDDEN;
+    if (!(def->kind_flags & MAELYS_DATALOG_PRED_KIND_EDB)) return MAELYS_ERR_INVALID_FIELD;
+    if (edb->fact_count > edb->fact_capacity ||
+        edb->fact_count > (size_t)MAELYS_DATALOG_MAX_EDB_FACTS ||
+        edb->facts_per_pred[pid] > (size_t)MAELYS_DATALOG_MAX_FACTS_PER_PRED) {
+        return MAELYS_ERR_PAYLOAD_TOO_LARGE;
+    }
+    if (count > edb->fact_capacity - edb->fact_count) return MAELYS_ERR_PAYLOAD_TOO_LARGE;
+    if (count > (size_t)MAELYS_DATALOG_MAX_EDB_FACTS - edb->fact_count) {
+        return MAELYS_ERR_PAYLOAD_TOO_LARGE;
+    }
+    if (count > (size_t)MAELYS_DATALOG_MAX_FACTS_PER_PRED - edb->facts_per_pred[pid]) {
+        return MAELYS_ERR_PAYLOAD_TOO_LARGE;
+    }
+    return MAELYS_OK;
+}
+
 static maelys_result_t validate_edb_symbol_capacity(maelys_datalog_edb_t *edb,
                                                     const char *predicate,
                                                     size_t arity) {
@@ -356,6 +388,60 @@ maelys_result_t maelys_datalog_edb_add_symbol_ids_fact(maelys_datalog_edb_t *edb
     terms[0].as.symbol = left;
     terms[1].as.symbol = right;
     return maelys_datalog_edb_add_fact(edb, predicate, terms, 2);
+}
+
+maelys_result_t maelys_datalog_edb_add_symbol_id_facts(
+    maelys_datalog_edb_t *edb,
+    const char *predicate,
+    const maelys_datalog_symbol_id_t *values,
+    size_t value_count) {
+    if (!edb || !predicate) return MAELYS_ERR_INVALID_ARGUMENT;
+    if (value_count > 0 && !values) return MAELYS_ERR_INVALID_ARGUMENT;
+    if (value_count == 0) return MAELYS_OK;
+
+    maelys_result_t rc = validate_edb_symbol_batch_target(edb, predicate, 1, value_count);
+    if (rc != MAELYS_OK) return rc;
+    for (size_t i = 0; i < value_count; i++) {
+        rc = validate_symbol_id(edb, values[i]);
+        if (rc != MAELYS_OK) return rc;
+    }
+    for (size_t i = 0; i < value_count; i++) {
+        maelys_datalog_term_t term = {.kind = MAELYS_DATALOG_TERM_SYMBOL};
+        term.as.symbol = values[i];
+        rc = maelys_datalog_edb_add_fact(edb, predicate, &term, 1);
+        if (rc != MAELYS_OK) return rc;
+    }
+    return MAELYS_OK;
+}
+
+maelys_result_t maelys_datalog_edb_add_symbol_ids_facts(
+    maelys_datalog_edb_t *edb,
+    const char *predicate,
+    const maelys_datalog_symbol_id_t *pairs,
+    size_t pair_count) {
+    if (!edb || !predicate) return MAELYS_ERR_INVALID_ARGUMENT;
+    if (pair_count > 0 && !pairs) return MAELYS_ERR_INVALID_ARGUMENT;
+    if (pair_count == 0) return MAELYS_OK;
+    if (pair_count > SIZE_MAX / 2u) return MAELYS_ERR_PAYLOAD_TOO_LARGE;
+
+    maelys_result_t rc = validate_edb_symbol_batch_target(edb, predicate, 2, pair_count);
+    if (rc != MAELYS_OK) return rc;
+    const size_t symbol_count = pair_count * 2u;
+    for (size_t i = 0; i < symbol_count; i++) {
+        rc = validate_symbol_id(edb, pairs[i]);
+        if (rc != MAELYS_OK) return rc;
+    }
+    for (size_t i = 0; i < pair_count; i++) {
+        maelys_datalog_term_t terms[2] = {
+            {.kind = MAELYS_DATALOG_TERM_SYMBOL},
+            {.kind = MAELYS_DATALOG_TERM_SYMBOL},
+        };
+        terms[0].as.symbol = pairs[2u * i];
+        terms[1].as.symbol = pairs[2u * i + 1u];
+        rc = maelys_datalog_edb_add_fact(edb, predicate, terms, 2);
+        if (rc != MAELYS_OK) return rc;
+    }
+    return MAELYS_OK;
 }
 
 maelys_result_t maelys_datalog_edb_add_runtime_symbol_fact(maelys_datalog_edb_t *edb,

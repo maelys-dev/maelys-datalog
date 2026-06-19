@@ -49,6 +49,28 @@ maelys_result_t maelys_datalog_edb_add_symbol_ids_fact(maelys_datalog_edb_t *edb
                                                        maelys_datalog_symbol_id_t left,
                                                        maelys_datalog_symbol_id_t right);
 /**
+ * Add multiple 1-arity EDB facts using pre-interned runtime symbol ids.
+ *
+ * Empty batches are accepted as no-ops after validating edb and predicate.
+ * Non-empty batches validate the whole batch before inserting any fact.
+ */
+maelys_result_t maelys_datalog_edb_add_symbol_id_facts(
+    maelys_datalog_edb_t *edb,
+    const char *predicate,
+    const maelys_datalog_symbol_id_t *values,
+    size_t value_count);
+/**
+ * Add multiple 2-arity EDB facts using pre-interned runtime symbol ids.
+ *
+ * `pairs` is a flat array: left0, right0, left1, right1, ...
+ * `pair_count` is the number of binary facts, not the array length.
+ */
+maelys_result_t maelys_datalog_edb_add_symbol_ids_facts(
+    maelys_datalog_edb_t *edb,
+    const char *predicate,
+    const maelys_datalog_symbol_id_t *pairs,
+    size_t pair_count);
+/**
  * Add a 1-arity EDB fact with a closed atom value.
  *
  * Checks that `atom` is pre-declared in the atom vocabulary before inserting
