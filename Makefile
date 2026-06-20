@@ -11,9 +11,12 @@ ENGINE_SRCS = \
 	src/core/maelys_datalog_edb.c \
 	src/core/maelys_datalog_lexer.c \
 	src/core/maelys_datalog_parser.c \
-	src/core/maelys_datalog_policy.c \
 	src/core/maelys_datalog_predicate_registry.c \
+	src/core/maelys_datalog_ruleset.c \
+	src/core/maelys_datalog_ruleset_canonical.c \
+	src/core/maelys_datalog_solver.c \
 	src/core/maelys_datalog_symbol_table.c \
+	src/core/maelys_datalog_decision.c \
 	src/manifest/maelys_datalog_manifest_buffer.c \
 	src/manifest/maelys_datalog_manifest_file.c
 

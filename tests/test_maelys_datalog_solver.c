@@ -1,9 +1,11 @@
 #include "src/core/maelys_datalog_edb.h"
 #include "src/core/maelys_datalog_audit.h"
+#include "src/core/maelys_datalog_decision.h"
 #include "src/core/maelys_datalog_domain_registry.h"
 #include "examples/domains/maelys_datalog_example_domains.h"
 #include "src/core/maelys_datalog_parser.h"
-#include "src/core/maelys_datalog_policy.h"
+#include "src/core/maelys_datalog_ruleset.h"
+#include "src/core/maelys_datalog_solver.h"
 #include "src/core/maelys_datalog_symbol_table.h"
 #include "tests/helpers/test_framework.h"
 
@@ -940,8 +942,8 @@ static int test_maelys_datalog_query_no_domain_leak(void) {
         parent_context_registry,
         NULL
     };
-    TEST_ASSERT_FALSE(file_contains_any("src/core/maelys_datalog_policy.h", forbidden));
-    TEST_ASSERT_FALSE(file_contains_any("src/core/maelys_datalog_policy.c", forbidden));
+    TEST_ASSERT_FALSE(file_contains_any("src/core/maelys_datalog_solver.h", forbidden));
+    TEST_ASSERT_FALSE(file_contains_any("src/core/maelys_datalog_solver.c", forbidden));
     TEST_END();
 }
 
@@ -1946,7 +1948,7 @@ static int test_datalog_query_does_not_sort_or_mutate(void) {
 static int test_datalog_solve_once_no_per_insert_memmove_required(void) {
     TEST_BEGIN();
     static const char *const forbidden[] = {"memmove", NULL};
-    TEST_ASSERT_FALSE(file_contains_any("src/core/maelys_datalog_policy.c", forbidden));
+    TEST_ASSERT_FALSE(file_contains_any("src/core/maelys_datalog_solver.c", forbidden));
     TEST_END();
 }
 
@@ -3186,7 +3188,7 @@ static int test_datalog_semi_naive_delta_variants_bounded_by_body_literals(void)
 static int test_datalog_semi_naive_positive_only_no_negation(void) {
     TEST_BEGIN();
     static const char *const forbidden[] = {"Tarjan", "SCC", "negative dependency", NULL};
-    TEST_ASSERT_FALSE(file_contains_any("src/core/maelys_datalog_policy.c", forbidden));
+    TEST_ASSERT_FALSE(file_contains_any("src/core/maelys_datalog_solver.c", forbidden));
     TEST_END();
 }
 
@@ -3415,7 +3417,7 @@ static int test_datalog_static_join_order_greedy_no_recursion_no_heap(void) {
         "vasprintf(",
         NULL
     };
-    TEST_ASSERT_FALSE(file_block_contains_any("src/core/maelys_datalog_policy.c",
+    TEST_ASSERT_FALSE(file_block_contains_any("src/core/maelys_datalog_solver.c",
                                               "static maelys_result_t build_static_join_order",
                                               "/* Recursion depth is bounded",
                                               forbidden));
@@ -3430,7 +3432,7 @@ static int test_datalog_static_join_order_future_negated_literal_classification_
     TEST_ASSERT_EQUAL(MAELYS_DATALOG_LITERAL_COMPARISON, MAELYS_DATALOG_LITERAL_COMPARISON, "%d");
     TEST_ASSERT_EQUAL(3, MAELYS_DATALOG_LITERAL_NEGATED_ATOM, "%d");
     static const char *const forbidden[] = {"KIND_NEGATED", "negative_edge", NULL};
-    TEST_ASSERT_FALSE(file_contains_any("src/core/maelys_datalog_policy.h", forbidden));
+    TEST_ASSERT_FALSE(file_contains_any("src/core/maelys_datalog_types.h", forbidden));
     TEST_END();
 }
 

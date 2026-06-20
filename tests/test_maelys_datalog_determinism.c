@@ -1,6 +1,7 @@
 #include "src/core/maelys_datalog_edb.h"
 #include "src/core/maelys_datalog_parser.h"
 #include "src/core/maelys_datalog_predicate_registry.h"
+#include "src/core/maelys_datalog_solver.h"
 #include "src/core/maelys_datalog_symbol_table.h"
 #include "tests/helpers/test_framework.h"
 
@@ -441,6 +442,47 @@ static int test_determinism_proof_visible_metadata_stable(void) {
     TEST_END();
 }
 
+static int test_determinism_c44_canonical_sha_fixture(void) {
+    TEST_BEGIN();
+    maelys_datalog_ruleset_t ruleset;
+    memset(&ruleset, 0, sizeof(ruleset));
+    TEST_ASSERT_EQUAL(MAELYS_OK,
+                      maelys_datalog_ruleset_init(&ruleset,
+                                                  "c44.canonical.fixture",
+                                                  "c44",
+                                                  MAELYS_DATALOG_SHA256_UNSET,
+                                                  1),
+                      "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK,
+                      add_predicate(&ruleset, "owns", 2u, MAELYS_DATALOG_PRED_KIND_EDB),
+                      "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK,
+                      add_predicate(&ruleset, "blocked", 1u, MAELYS_DATALOG_PRED_KIND_POLICY_FACT),
+                      "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK,
+                      add_predicate(&ruleset,
+                                    "allow",
+                                    2u,
+                                    MAELYS_DATALOG_PRED_KIND_IDB | MAELYS_DATALOG_PRED_KIND_QUERY),
+                      "%d");
+    static const char *const atoms[] = {"alice", "mallory", "doc.pdf", NULL};
+    for (size_t i = 0; atoms[i] != NULL; i++) {
+        TEST_ASSERT_EQUAL(MAELYS_OK,
+                          maelys_datalog_predicate_registry_add_atom(&ruleset.registry, atoms[i]),
+                          "%d");
+    }
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_predicate_registry_freeze(&ruleset.registry), "%d");
+    const char *src =
+        "blocked(\"mallory\").\n"
+        "allow(U, D) :- owns(U, D), not(blocked(U)).\n";
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_parse_ruleset(&ruleset, src, strlen(src)), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_ruleset_finalize_sha256(&ruleset), "%d");
+    TEST_ASSERT_EQUAL_STRING("e745887b8f197efa9b91c29b15dcdccd436aa44f481e9ab17f9926c521be5834",
+                             ruleset.sha256);
+    maelys_datalog_ruleset_clear(&ruleset);
+    TEST_END();
+}
+
 int main(int argc, char **argv) {
     test_case_t cases[] = {
         {"maelys_datalog_determinism/repeated_solve_same_result",
@@ -473,6 +515,9 @@ int main(int argc, char **argv) {
         {"maelys_datalog_determinism/proof_visible_metadata_stable",
          TEST_MODE_NON_BLOCKING,
          test_determinism_proof_visible_metadata_stable},
+        {"maelys_datalog_determinism/c44_canonical_sha_fixture",
+         TEST_MODE_NON_BLOCKING,
+         test_determinism_c44_canonical_sha_fixture},
     };
     return test_main("maelys_datalog_determinism",
                      cases,

@@ -2,8 +2,10 @@
 #ifndef MAELYS_DATALOG_MANIFEST_H
 #define MAELYS_DATALOG_MANIFEST_H
 
-#include "src/core/maelys_datalog_policy.h"
 #include "src/core/maelys_datalog_diagnostic.h"
+#include "src/core/maelys_datalog_predicate_registry.h"
+#include "src/core/maelys_datalog_ruleset.h"
+#include "src/core/maelys_datalog_types.h"
 
 #define MAELYS_DATALOG_MANIFEST_ALLOW_TEST_ONLY 1u
 #define MAELYS_DATALOG_INLINE_MAX_DOMAIN_LEN 63u
@@ -18,6 +20,18 @@ typedef struct {
     const char *src;         /* .dl source text (need not be NUL-terminated) */
     size_t src_len;          /* byte length of src */
 } maelys_datalog_policy_bundle_entry_t;
+
+typedef struct {
+    int allow_test_only;
+} maelys_datalog_manifest_load_options_t;
+
+typedef struct {
+    maelys_datalog_ruleset_t policies[8];
+    size_t policy_count;
+    maelys_datalog_query_whitelist_entry_t query_whitelist[MAELYS_DATALOG_MAX_QUERY_WHITELIST];
+    size_t query_whitelist_count;
+    int enforces_query_whitelist;
+} maelys_datalog_policy_set_t;
 
 /*
  * Load a policy set from in-memory buffers.

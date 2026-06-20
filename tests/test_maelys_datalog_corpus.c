@@ -4,8 +4,9 @@
 #include "src/core/maelys_datalog_diagnostic.h"
 #include "src/core/maelys_datalog_domain_registry.h"
 #include "src/core/maelys_datalog_parser.h"
-#include "src/core/maelys_datalog_policy.h"
 #include "src/core/maelys_datalog_predicate_registry.h"
+#include "src/core/maelys_datalog_ruleset.h"
+#include "src/core/maelys_datalog_solver.h"
 #include "src/manifest/maelys_datalog_manifest.h"
 
 #include <dirent.h>

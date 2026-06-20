@@ -2,7 +2,24 @@
 #ifndef MAELYS_DATALOG_PREDICATE_REGISTRY_H
 #define MAELYS_DATALOG_PREDICATE_REGISTRY_H
 
-#include "src/core/maelys_datalog_policy.h"
+#include <stddef.h>
+
+#include "common/maelys_errors.h"
+#include "src/core/maelys_datalog_types.h"
+
+typedef struct {
+    char name[64];
+    size_t arity;
+    unsigned kind_flags;
+} maelys_datalog_predicate_def_t;
+
+typedef struct {
+    maelys_datalog_predicate_def_t defs[MAELYS_DATALOG_MAX_PREDICATES];
+    size_t count;
+    char atoms[MAELYS_DATALOG_MAX_ATOMS][64];
+    size_t atom_count;
+    int frozen;
+} maelys_datalog_predicate_registry_t;
 
 void maelys_datalog_predicate_registry_init(maelys_datalog_predicate_registry_t *registry);
 void maelys_datalog_predicate_registry_init_core(maelys_datalog_predicate_registry_t *registry);

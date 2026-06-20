@@ -2,6 +2,7 @@
 #include "src/core/maelys_datalog_lexer.h"
 #include "src/core/maelys_datalog_parser.h"
 #include "src/core/maelys_datalog_predicate_registry.h"
+#include "src/core/maelys_datalog_solver.h"
 #include "src/core/maelys_datalog_symbol_table.h"
 #include "tests/helpers/test_framework.h"
 

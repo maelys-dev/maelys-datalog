@@ -8,9 +8,12 @@ ENGINE_SRCS = \
 	src/core/maelys_datalog_edb.c \
 	src/core/maelys_datalog_lexer.c \
 	src/core/maelys_datalog_parser.c \
-	src/core/maelys_datalog_policy.c \
 	src/core/maelys_datalog_predicate_registry.c \
+	src/core/maelys_datalog_ruleset.c \
+	src/core/maelys_datalog_ruleset_canonical.c \
+	src/core/maelys_datalog_solver.c \
 	src/core/maelys_datalog_symbol_table.c \
+	src/core/maelys_datalog_decision.c \
 	src/manifest/maelys_datalog_manifest_buffer.c \
 	src/manifest/maelys_datalog_manifest_file.c
 
@@ -59,6 +62,7 @@ ASAN_TEST_SRCS = \
 	tests/test_maelys_datalog_inline_load.c \
 	tests/test_maelys_datalog_manifest_file_wrapper.c \
 	tests/test_maelys_datalog_wasm_builder.c \
+	tests/test_maelys_datalog_headers.c \
 	tests/test_maelys_datalog_solver.c \
 	tests/test_maelys_datalog_atom_vocabulary.c \
 	tests/test_maelys_datalog_boundary.c \

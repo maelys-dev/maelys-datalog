@@ -2,7 +2,21 @@
 #ifndef MAELYS_DATALOG_EDB_H
 #define MAELYS_DATALOG_EDB_H
 
-#include "src/core/maelys_datalog_policy.h"
+#include "common/maelys_errors.h"
+#include "src/core/maelys_datalog_predicate_registry.h"
+#include "src/core/maelys_datalog_symbol_table.h"
+#include "src/core/maelys_datalog_types.h"
+
+typedef struct {
+    maelys_datalog_fact_t *facts;
+    size_t fact_capacity;
+    size_t fact_count;
+    maelys_datalog_fact_set_t fact_set;
+    size_t facts_per_pred[MAELYS_DATALOG_MAX_PREDICATES];
+    int immutable;
+    maelys_datalog_symbol_table_t *symbols;
+    const maelys_datalog_predicate_registry_t *registry;
+} maelys_datalog_edb_t;
 
 maelys_result_t maelys_datalog_edb_init(maelys_datalog_edb_t *edb,
                                         maelys_datalog_fact_t *fact_pool,
