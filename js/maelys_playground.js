@@ -27,7 +27,7 @@ const PredKind = Object.freeze({
   EDB: 1,
   IDB: 2,
   QUERY: 4,
-  POLICY_FACT: 8,
+  RULESET_FACT: 8,
 });
 
 const MAELYS_OK = 0;
@@ -97,14 +97,14 @@ class MaelysPlayground {
     return this;
   }
 
-  loadPolicy(domainName, policyId, src) {
+  loadRuleset(domainName, rulesetId, src) {
     const srcLen = this._mod.lengthBytesUTF8(src);
     this._check(
-      this._call('maelys_datalog_wasm_load_policy',
+      this._call('maelys_datalog_wasm_load_ruleset',
                  'number',
                  ['string', 'string', 'string', 'number'],
-                 [domainName, policyId, src, srcLen]),
-      'loadPolicy',
+                 [domainName, rulesetId, src, srcLen]),
+      'loadRuleset',
     );
     return this;
   }

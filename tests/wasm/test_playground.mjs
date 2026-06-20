@@ -79,7 +79,7 @@ async function setupUnaryAccess(domainName) {
   pg.domainAddPredicate('safe', 1, PredKind.EDB);
   pg.domainAddPredicate('allow', 1, PredKind.IDB | PredKind.QUERY);
   pg.domainCommit();
-  pg.loadPolicy(domainName, `${domainName}.main`, 'allow(X) :- safe(X).\n');
+  pg.loadRuleset(domainName, `${domainName}.main`, 'allow(X) :- safe(X).\n');
   pg.edbBegin();
   return pg;
 }
@@ -92,7 +92,7 @@ async function setupBinaryAccess(domainName) {
   pg.domainAddPredicate('allow', 1, PredKind.IDB | PredKind.QUERY);
   pg.domainAddPredicate('allowed_pair', 2, PredKind.IDB | PredKind.QUERY);
   pg.domainCommit();
-  pg.loadPolicy(
+  pg.loadRuleset(
     domainName,
     `${domainName}.main`,
     'allow(U) :- owns(U, D), target(D).\nallowed_pair(U, D) :- owns(U, D).\n',
@@ -107,7 +107,7 @@ await test('playground_basic', async () => {
   pg.domainAddPredicate('safe', 1, PredKind.EDB);
   pg.domainAddPredicate('allow', 1, PredKind.IDB | PredKind.QUERY);
   pg.domainCommit();
-  pg.loadPolicy('access', 'access.main', 'allow(X) :- safe(X).\n');
+  pg.loadRuleset('access', 'access.main', 'allow(X) :- safe(X).\n');
   pg.edbBegin();
   pg.addFact('safe', 'alice');
   pg.solve();
@@ -122,7 +122,7 @@ await test('playground_two_evaluations', async () => {
   pg.domainAddPredicate('safe', 1, PredKind.EDB);
   pg.domainAddPredicate('allow', 1, PredKind.IDB | PredKind.QUERY);
   pg.domainCommit();
-  pg.loadPolicy('access2', 'access2.main', 'allow(X) :- safe(X).\n');
+  pg.loadRuleset('access2', 'access2.main', 'allow(X) :- safe(X).\n');
   pg.edbBegin();
   pg.addFact('safe', 'alice');
   pg.solve();
@@ -142,11 +142,11 @@ await test('playground_error_throw', async () => {
   pg.domainCommit();
   let threw = false;
   try {
-    pg.loadPolicy('err_domain', 'err.main', 'invalid !!! datalog\n');
+    pg.loadRuleset('err_domain', 'err.main', 'invalid !!! datalog\n');
   } catch (err) {
     threw = true;
-    if (!err.message.includes('loadPolicy')) {
-      throw new Error(`expected "loadPolicy" in: ${err.message}`);
+    if (!err.message.includes('loadRuleset')) {
+      throw new Error(`expected "loadRuleset" in: ${err.message}`);
     }
   }
   if (!threw) throw new Error('must throw on invalid source');
@@ -158,7 +158,7 @@ await test('playground_query_unknown_readonly', async () => {
   pg.domainAddPredicate('safe', 1, PredKind.EDB);
   pg.domainAddPredicate('allow', 1, PredKind.IDB | PredKind.QUERY);
   pg.domainCommit();
-  pg.loadPolicy('ro_test', 'ro.main', 'allow(X) :- safe(X).\n');
+  pg.loadRuleset('ro_test', 'ro.main', 'allow(X) :- safe(X).\n');
   pg.edbBegin();
   pg.solve();
   const unknowns = Array.from(
@@ -192,7 +192,7 @@ await test('playground_id_binary_round_trip', async () => {
   pg.domainAddPredicate('allowed_pair', 2, PredKind.IDB | PredKind.QUERY);
   pg.domainAddPredicate('allow', 1, PredKind.IDB | PredKind.QUERY);
   pg.domainCommit();
-  pg.loadPolicy(
+  pg.loadRuleset(
     'id_binary',
     'id_binary.main',
     'allow(U) :- owns(U, D).\nallowed_pair(U, D) :- owns(U, D).\n',
@@ -280,7 +280,7 @@ await test('playground_symbol_id_state_guards', async () => {
   pg.domainAddPredicate('owns', 2, PredKind.EDB);
   pg.domainAddPredicate('allow', 1, PredKind.IDB | PredKind.QUERY);
   pg.domainCommit();
-  pg.loadPolicy('id_state', 'id_state.main', 'allow(X) :- safe(X).\n');
+  pg.loadRuleset('id_state', 'id_state.main', 'allow(X) :- safe(X).\n');
   pg.edbBegin();
   pg.solve();
 
@@ -299,7 +299,7 @@ await test('playground_symbol_id_propagates_predicate_errors', async () => {
   pg.domainAddPredicate('owns', 2, PredKind.EDB);
   pg.domainAddPredicate('allow', 1, PredKind.IDB | PredKind.QUERY);
   pg.domainCommit();
-  pg.loadPolicy('id_predicate_errors', 'id_predicate_errors.main', 'allow(X) :- safe(X).\n');
+  pg.loadRuleset('id_predicate_errors', 'id_predicate_errors.main', 'allow(X) :- safe(X).\n');
   pg.edbBegin();
   const alice = pg.internRuntimeSymbol('alice');
   const doc = pg.internRuntimeSymbol('doc.pdf');
@@ -463,7 +463,7 @@ await test('playground_batch_id_predicate_errors_propagated', async () => {
   pg.domainAddPredicate('owns', 2, PredKind.EDB);
   pg.domainAddPredicate('allow', 1, PredKind.IDB | PredKind.QUERY);
   pg.domainCommit();
-  pg.loadPolicy('batch_predicate_errors', 'batch_predicate_errors.main', 'allow(X) :- safe(X).\n');
+  pg.loadRuleset('batch_predicate_errors', 'batch_predicate_errors.main', 'allow(X) :- safe(X).\n');
   pg.edbBegin();
   const alice = pg.internRuntimeSymbol('alice');
   const bob = pg.internRuntimeSymbol('bob');
@@ -495,7 +495,7 @@ await test('playground_batch_id_state_guards', async () => {
   pg.domainAddPredicate('owns', 2, PredKind.EDB);
   pg.domainAddPredicate('allow', 1, PredKind.IDB | PredKind.QUERY);
   pg.domainCommit();
-  pg.loadPolicy('batch_state', 'batch_state.main', 'allow(X) :- safe(X).\n');
+  pg.loadRuleset('batch_state', 'batch_state.main', 'allow(X) :- safe(X).\n');
   pg.edbBegin();
   pg.solve();
   expectThrowRc(() => pg.addSymbolIdFacts('safe', []),
@@ -515,7 +515,7 @@ await test('playground_batch_id_string_path_still_works', async () => {
   pg.domainAddPredicate('allow', 1, PredKind.IDB | PredKind.QUERY);
   pg.domainAddPredicate('allowed_pair', 2, PredKind.IDB | PredKind.QUERY);
   pg.domainCommit();
-  pg.loadPolicy(
+  pg.loadRuleset(
     'batch_string_paths',
     'batch_string_paths.main',
     'allow(X) :- safe(X).\nallowed_pair(U, D) :- owns(U, D).\n',
@@ -766,7 +766,7 @@ await test('playground_string_batch_predicate_errors_propagated', async () => {
   pg.domainAddPredicate('owns', 2, PredKind.EDB);
   pg.domainAddPredicate('allow', 1, PredKind.IDB | PredKind.QUERY);
   pg.domainCommit();
-  pg.loadPolicy('string_batch_predicate_errors', 'string_batch_predicate_errors.main', 'allow(X) :- safe(X).\n');
+  pg.loadRuleset('string_batch_predicate_errors', 'string_batch_predicate_errors.main', 'allow(X) :- safe(X).\n');
   pg.edbBegin();
   expectThrowRc(() => pg.addRuntimeSymbolFacts('missing', ['alice']),
                 MAELYS_ERR_INVALID_FIELD,
@@ -853,7 +853,7 @@ await test('playground_string_batch_state_guards', async () => {
   pg.domainAddPredicate('owns', 2, PredKind.EDB);
   pg.domainAddPredicate('allow', 1, PredKind.IDB | PredKind.QUERY);
   pg.domainCommit();
-  pg.loadPolicy('string_batch_state', 'string_batch_state.main', 'allow(X) :- safe(X).\n');
+  pg.loadRuleset('string_batch_state', 'string_batch_state.main', 'allow(X) :- safe(X).\n');
   pg.edbBegin();
   pg.solve();
   expectThrowRc(() => pg.addRuntimeSymbolFacts('safe', []),

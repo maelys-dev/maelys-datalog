@@ -197,7 +197,7 @@ static int test_wasm_builder_basic(void) {
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_wasm_domain_commit(), "%d");
     TEST_ASSERT_EQUAL((uintptr_t)0u, maelys_datalog_wasm_ruleset_ptr(), "%lu");
     TEST_ASSERT_EQUAL(MAELYS_OK,
-                      maelys_datalog_wasm_load_policy(k_domain,
+                      maelys_datalog_wasm_load_ruleset(k_domain,
                                                       k_policy_id,
                                                       k_policy_src,
                                                       strlen(k_policy_src)),
@@ -321,7 +321,7 @@ static int test_wasm_builder_load_failure_clears_ruleset_ptr(void) {
     TEST_BEGIN();
     const char invalid_src[] = "allow(X) :- safe(X)\n";
     TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_FIELD,
-                      maelys_datalog_wasm_load_policy(k_domain,
+                      maelys_datalog_wasm_load_ruleset(k_domain,
                                                       k_policy_id,
                                                       invalid_src,
                                                       strlen(invalid_src)),
@@ -334,7 +334,7 @@ static int test_wasm_builder_diag_on_invalid_policy(void) {
     TEST_BEGIN();
     const char invalid_src[] = "allow(X) :- safe(X)\n";
     TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_FIELD,
-                      maelys_datalog_wasm_load_policy(k_domain,
+                      maelys_datalog_wasm_load_ruleset(k_domain,
                                                       k_policy_id,
                                                       invalid_src,
                                                       strlen(invalid_src)),

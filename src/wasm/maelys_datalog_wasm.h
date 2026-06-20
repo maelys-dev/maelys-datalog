@@ -52,7 +52,7 @@ int maelys_datalog_wasm_query_symbol2(const char *pred,
                                       const char *arg1);
 void maelys_datalog_wasm_solve_result_free(void);
 
-maelys_result_t maelys_datalog_wasm_load_policy(const char *domain_name,
+maelys_result_t maelys_datalog_wasm_load_ruleset(const char *domain_name,
                                                 const char *policy_id,
                                                 const char *src,
                                                 size_t src_len);
