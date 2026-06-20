@@ -20,6 +20,8 @@ _Static_assert(MAELYS_DATALOG_MAX_BODY_LITERALS <= 64u,
                "planned_mask width insufficient for MAX_BODY_LITERALS");
 _Static_assert(MAELYS_DATALOG_MAX_RULE_VARIABLES <= 64u,
                "bound_var_mask width insufficient for MAX_RULE_VARIABLES");
+_Static_assert(MAELYS_DATALOG_MAX_RULE_VARIABLES <= 32u,
+               "solve_once_bindings_t bound_mask width insufficient for MAX_RULE_VARIABLES");
 _Static_assert(MAELYS_DATALOG_MAX_EDB_FACTS <= UINT16_MAX,
                "EDB predicate ranges require uint16_t fact indexes");
 
@@ -29,9 +31,23 @@ typedef struct {
 } maelys_datalog_pred_range_t;
 
 typedef struct {
-    int bound[MAELYS_DATALOG_MAX_RULE_VARIABLES];
+    uint32_t bound_mask;
     maelys_datalog_term_t value[MAELYS_DATALOG_MAX_RULE_VARIABLES];
 } solve_once_bindings_t;
+
+static int solve_once_bindings_is_bound(const solve_once_bindings_t *bindings,
+                                        uint32_t variable) {
+    if (!bindings) return 0;
+    assert(variable < MAELYS_DATALOG_MAX_RULE_VARIABLES);
+    return (bindings->bound_mask & ((uint32_t)1u << variable)) != 0;
+}
+
+static void solve_once_bindings_set_bound(solve_once_bindings_t *bindings,
+                                          uint32_t variable) {
+    assert(bindings);
+    assert(variable < MAELYS_DATALOG_MAX_RULE_VARIABLES);
+    bindings->bound_mask |= (uint32_t)1u << variable;
+}
 
 typedef enum {
     MAELYS_DATALOG_COMPARE_TRUE = 0,
@@ -621,8 +637,8 @@ static int solve_once_bind_or_match(solve_once_bindings_t *bindings,
     if (pattern->kind != MAELYS_DATALOG_TERM_VAR) return maelys_datalog_term_equal(pattern, value);
     unsigned variable = pattern->as.variable;
     if (variable >= MAELYS_DATALOG_MAX_RULE_VARIABLES) return 0;
-    if (!bindings->bound[variable]) {
-        bindings->bound[variable] = 1;
+    if (!solve_once_bindings_is_bound(bindings, variable)) {
+        solve_once_bindings_set_bound(bindings, variable);
         bindings->value[variable] = *value;
         return 1;
     }
@@ -637,7 +653,8 @@ static int solve_once_instantiate_term(const solve_once_bindings_t *bindings,
         return 1;
     }
     unsigned variable = src->as.variable;
-    if (variable >= MAELYS_DATALOG_MAX_RULE_VARIABLES || !bindings->bound[variable]) return 0;
+    if (variable >= MAELYS_DATALOG_MAX_RULE_VARIABLES ||
+        !solve_once_bindings_is_bound(bindings, variable)) return 0;
     *dst = bindings->value[variable];
     return 1;
 }
@@ -762,7 +779,8 @@ static maelys_datalog_compare_result_t solve_once_instantiate_comparison_term(
         return MAELYS_DATALOG_COMPARE_TRUE;
     }
     unsigned variable = src->as.variable;
-    if (!bindings || variable >= MAELYS_DATALOG_MAX_RULE_VARIABLES || !bindings->bound[variable]) {
+    if (!bindings || variable >= MAELYS_DATALOG_MAX_RULE_VARIABLES ||
+        !solve_once_bindings_is_bound(bindings, variable)) {
         return MAELYS_DATALOG_COMPARE_UNBOUND_VARIABLE;
     }
     *dst = bindings->value[variable];
@@ -842,7 +860,7 @@ static maelys_datalog_compare_result_t solve_once_eval_arith_expr(
         case MAELYS_DATALOG_ARITH_EXPR_VAR: {
             unsigned variable = node->term.as.variable;
             if (variable >= MAELYS_DATALOG_MAX_RULE_VARIABLES ||
-                !bindings->bound[variable]) {
+                !solve_once_bindings_is_bound(bindings, variable)) {
                 if (out_observed_kind) *out_observed_kind = MAELYS_DATALOG_TERM_VAR;
                 return MAELYS_DATALOG_COMPARE_UNBOUND_VARIABLE;
             }
@@ -2430,6 +2448,45 @@ maelys_result_t maelys_datalog_test_edb_slice_null_base(
     result.edb_snapshot.count = 0;
     result.edb_snapshot.sorted = 1;
     solve_once_edb_slice(&result, predicate_id, out_facts, out_count);
+    return MAELYS_OK;
+}
+
+maelys_result_t maelys_datalog_test_bindings_bitmask_probe(
+    size_t *out_size,
+    uint32_t *out_initial_mask,
+    int *out_var0_bound,
+    int *out_var31_bound,
+    int *out_var30_bound,
+    int *out_equal_rebind,
+    int *out_different_rebind) {
+    if (!out_size || !out_initial_mask || !out_var0_bound || !out_var31_bound ||
+        !out_var30_bound || !out_equal_rebind || !out_different_rebind) {
+        return MAELYS_ERR_INVALID_ARGUMENT;
+    }
+    solve_once_bindings_t bindings;
+    memset(&bindings, 0, sizeof(bindings));
+    *out_size = sizeof(bindings);
+    *out_initial_mask = bindings.bound_mask;
+
+    maelys_datalog_term_t var0 = {.kind = MAELYS_DATALOG_TERM_VAR};
+    var0.as.variable = 0;
+    maelys_datalog_term_t var31 = {.kind = MAELYS_DATALOG_TERM_VAR};
+    var31.as.variable = 31;
+    maelys_datalog_term_t value0 = {.kind = MAELYS_DATALOG_TERM_INT};
+    value0.as.integer = 7;
+    maelys_datalog_term_t value0_same = value0;
+    maelys_datalog_term_t value0_different = {.kind = MAELYS_DATALOG_TERM_INT};
+    value0_different.as.integer = 8;
+    maelys_datalog_term_t value31 = {.kind = MAELYS_DATALOG_TERM_SYMBOL};
+    value31.as.symbol = 31;
+
+    if (!solve_once_bind_or_match(&bindings, &var0, &value0)) return MAELYS_ERR_INVALID_STATE;
+    if (!solve_once_bind_or_match(&bindings, &var31, &value31)) return MAELYS_ERR_INVALID_STATE;
+    *out_var0_bound = solve_once_bindings_is_bound(&bindings, 0);
+    *out_var31_bound = solve_once_bindings_is_bound(&bindings, 31);
+    *out_var30_bound = solve_once_bindings_is_bound(&bindings, 30);
+    *out_equal_rebind = solve_once_bind_or_match(&bindings, &var0, &value0_same);
+    *out_different_rebind = solve_once_bind_or_match(&bindings, &var0, &value0_different);
     return MAELYS_OK;
 }
 #endif

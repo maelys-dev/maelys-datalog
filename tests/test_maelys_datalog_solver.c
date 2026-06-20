@@ -8,6 +8,7 @@
 #include "tests/helpers/test_framework.h"
 
 #include <limits.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -54,6 +55,14 @@ maelys_result_t maelys_datalog_test_edb_slice_null_base(
     maelys_datalog_predicate_id_t predicate_id,
     const maelys_datalog_fact_t **out_facts,
     size_t *out_count);
+maelys_result_t maelys_datalog_test_bindings_bitmask_probe(
+    size_t *out_size,
+    uint32_t *out_initial_mask,
+    int *out_var0_bound,
+    int *out_var31_bound,
+    int *out_var30_bound,
+    int *out_equal_rebind,
+    int *out_different_rebind);
 
 static int init_solver_test_ruleset(maelys_datalog_ruleset_t *r) {
     memset(r, 0, sizeof(*r));
@@ -1190,6 +1199,84 @@ static int test_datalog_edb_dense_ranges_fact_dense_stress(void) {
 
     maelys_datalog_solve_result_free(optimized);
     maelys_datalog_solve_result_free(full_scan);
+    TEST_END();
+}
+
+static int test_datalog_bindings_bitmask_boundaries(void) {
+    TEST_BEGIN();
+    size_t bindings_size = 0;
+    uint32_t initial_mask = 1u;
+    int var0_bound = 0;
+    int var31_bound = 0;
+    int var30_bound = 1;
+    int equal_rebind = 0;
+    int different_rebind = 1;
+    TEST_ASSERT_EQUAL(MAELYS_OK,
+                      maelys_datalog_test_bindings_bitmask_probe(&bindings_size,
+                                                                 &initial_mask,
+                                                                 &var0_bound,
+                                                                 &var31_bound,
+                                                                 &var30_bound,
+                                                                 &equal_rebind,
+                                                                 &different_rebind),
+                      "%d");
+    TEST_ASSERT_TRUE(bindings_size < 640u);
+    TEST_ASSERT_EQUAL((uint32_t)0u, initial_mask, "%u");
+    TEST_ASSERT_EQUAL(1, var0_bound, "%d");
+    TEST_ASSERT_EQUAL(1, var31_bound, "%d");
+    TEST_ASSERT_EQUAL(0, var30_bound, "%d");
+    TEST_ASSERT_EQUAL(1, equal_rebind, "%d");
+    TEST_ASSERT_EQUAL(0, different_rebind, "%d");
+    TEST_END();
+}
+
+static int test_datalog_bindings_bitmask_arithmetic_reference(void) {
+    TEST_BEGIN();
+    maelys_datalog_ruleset_t r;
+    const char *src =
+        "allow(U) :- score(U, X), bonus(U, Y), X + Y >= 10, X != Y.";
+    TEST_ASSERT_EQUAL(MAELYS_OK, make_ruleset(&r, src), "%d");
+    maelys_datalog_fact_t facts[8];
+    maelys_datalog_edb_t edb;
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_init(&edb, facts, 8, &r.symbols, &r.registry), "%d");
+    add_symbol_int_binary(&r, &edb, "score", "alice", 7);
+    add_symbol_int_binary(&r, &edb, "bonus", "alice", 4);
+    add_symbol_int_binary(&r, &edb, "score", "bob", 5);
+    add_symbol_int_binary(&r, &edb, "bonus", "bob", 5);
+    add_symbol_int_binary(&r, &edb, "score", "carol", 3);
+    add_symbol_int_binary(&r, &edb, "bonus", "carol", 2);
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_finalize(&edb), "%d");
+
+    maelys_datalog_solve_result_t *optimized = NULL;
+    maelys_datalog_solve_result_t *full_scan = NULL;
+    maelys_datalog_solve_result_t *legacy = NULL;
+    maelys_datalog_solve_result_t *legacy_full_scan = NULL;
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_solve_once(&r, &edb, &optimized), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK,
+                      maelys_datalog_test_solve_once_full_scan(&r, &edb, &full_scan, NULL),
+                      "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK,
+                      maelys_datalog_test_solve_once_legacy_order(&r, &edb, &legacy, NULL),
+                      "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK,
+                      maelys_datalog_test_solve_once_legacy_full_scan(&r, &edb, &legacy_full_scan, NULL),
+                      "%d");
+    TEST_ASSERT_TRUE(solve_results_byte_identical(optimized, full_scan));
+    TEST_ASSERT_TRUE(solve_results_byte_identical(legacy, legacy_full_scan));
+    TEST_ASSERT_TRUE(solve_results_byte_identical(optimized, legacy));
+
+    bool present = false;
+    TEST_ASSERT_EQUAL(MAELYS_OK, query_solved_symbol_unary(&r, optimized, "allow", "alice", &present), "%d");
+    TEST_ASSERT_TRUE(present);
+    TEST_ASSERT_EQUAL(MAELYS_OK, query_solved_symbol_unary(&r, optimized, "allow", "bob", &present), "%d");
+    TEST_ASSERT_FALSE(present);
+    TEST_ASSERT_EQUAL(MAELYS_OK, query_solved_symbol_unary(&r, optimized, "allow", "carol", &present), "%d");
+    TEST_ASSERT_FALSE(present);
+
+    maelys_datalog_solve_result_free(optimized);
+    maelys_datalog_solve_result_free(full_scan);
+    maelys_datalog_solve_result_free(legacy);
+    maelys_datalog_solve_result_free(legacy_full_scan);
     TEST_END();
 }
 
@@ -4040,6 +4127,8 @@ int main(int argc, char **argv) {
         {"maelys_datalog_solver/edb_dense_ranges_match_full_scan_reference", TEST_MODE_NON_BLOCKING, test_datalog_edb_dense_ranges_match_full_scan_reference},
         {"maelys_datalog_solver/edb_dense_ranges_stratified_full_scan_reference", TEST_MODE_NON_BLOCKING, test_datalog_edb_dense_ranges_stratified_full_scan_reference},
         {"maelys_datalog_solver/edb_dense_ranges_fact_dense_stress", TEST_MODE_NON_BLOCKING, test_datalog_edb_dense_ranges_fact_dense_stress},
+        {"maelys_datalog_solver/bindings_bitmask_boundaries", TEST_MODE_NON_BLOCKING, test_datalog_bindings_bitmask_boundaries},
+        {"maelys_datalog_solver/bindings_bitmask_arithmetic_reference", TEST_MODE_NON_BLOCKING, test_datalog_bindings_bitmask_arithmetic_reference},
         {"maelys_datalog_solver/cartesian_product_within_bounds", TEST_MODE_NON_BLOCKING, test_maelys_datalog_cartesian_product_within_bounds},
         {"maelys_datalog_solver/cartesian_product_overflow_fails_closed", TEST_MODE_NON_BLOCKING, test_maelys_datalog_cartesian_product_overflow_fails_closed},
         {"maelys_datalog_solver/reads_policy_fact_from_ruleset", TEST_MODE_NON_BLOCKING, test_datalog_solver_reads_policy_fact_from_ruleset},
