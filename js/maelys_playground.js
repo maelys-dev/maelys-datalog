@@ -23,6 +23,7 @@
 
 'use strict';
 
+/** @type {{ readonly EDB: 1; readonly IDB: 2; readonly QUERY: 4; readonly RULESET_FACT: 8 }} */
 const PredKind = Object.freeze({
   EDB: 1,
   IDB: 2,
@@ -43,10 +44,19 @@ function makeError(name, rc, msg) {
 }
 
 class MaelysPlayground {
+  /**
+   * @param {{ ccall: (fn: string, returnType: string|null, argTypes: string[], args: unknown[]) => unknown, _malloc: (bytes: number) => number, _free: (ptr: number) => void, getValue: (ptr: number, type: string) => number, lengthBytesUTF8: (str: string) => number, stringToUTF8: (str: string, ptr: number, maxBytes: number) => void, HEAP32: Int32Array }} mod
+   */
   constructor(mod) {
+    /** @private */
     this._mod = mod;
   }
 
+  /**
+   * @param {(opts: object) => Promise<{ ccall: (fn: string, returnType: string|null, argTypes: string[], args: unknown[]) => unknown, _malloc: (bytes: number) => number, _free: (ptr: number) => void, getValue: (ptr: number, type: string) => number, lengthBytesUTF8: (str: string) => number, stringToUTF8: (str: string, ptr: number, maxBytes: number) => void, HEAP32: Int32Array }>} factory
+   * @param {string=} wasmUrl
+   * @returns {Promise<MaelysPlayground>}
+   */
   static async create(factory, wasmUrl) {
     const opts = wasmUrl
       ? {
@@ -56,18 +66,43 @@ class MaelysPlayground {
     return new MaelysPlayground(await factory(opts));
   }
 
+  /**
+   * @internal
+   * @private
+   * @param {string} name
+   * @param {string|null} retType
+   * @param {string[]} argTypes
+   * @param {any[]} args
+   * @returns {any}
+   */
   _call(name, retType, argTypes, args) {
     return this._mod.ccall(name, retType, argTypes, args);
   }
 
+  /**
+   * @internal
+   * @private
+   * @returns {string}
+   */
   _diag() {
     return this._call('maelys_datalog_wasm_last_diag_message', 'string', [], []);
   }
 
+  /**
+   * @internal
+   * @private
+   * @param {number} rc
+   * @param {string} name
+   * @returns {void}
+   */
   _check(rc, name) {
     if (rc !== MAELYS_OK) throw makeError(name, rc, this._diag());
   }
 
+  /**
+   * @param {string} name
+   * @returns {MaelysPlayground}
+   */
   domainBegin(name) {
     this._check(
       this._call('maelys_datalog_wasm_domain_begin', 'number', ['string'], [name]),
@@ -76,6 +111,12 @@ class MaelysPlayground {
     return this;
   }
 
+  /**
+   * @param {string} name
+   * @param {number} arity
+   * @param {number} kindFlags
+   * @returns {MaelysPlayground}
+   */
   domainAddPredicate(name, arity, kindFlags) {
     this._check(
       this._call('maelys_datalog_wasm_domain_add_predicate',
@@ -87,16 +128,28 @@ class MaelysPlayground {
     return this;
   }
 
+  /**
+   * @returns {MaelysPlayground}
+   */
   domainCommit() {
     this._check(this._call('maelys_datalog_wasm_domain_commit', 'number', [], []), 'domainCommit');
     return this;
   }
 
+  /**
+   * @returns {MaelysPlayground}
+   */
   domainAbort() {
     this._call('maelys_datalog_wasm_domain_abort', null, [], []);
     return this;
   }
 
+  /**
+   * @param {string} domainName
+   * @param {string} rulesetId
+   * @param {string} src
+   * @returns {MaelysPlayground}
+   */
   loadRuleset(domainName, rulesetId, src) {
     const srcLen = this._mod.lengthBytesUTF8(src);
     this._check(
@@ -109,11 +162,19 @@ class MaelysPlayground {
     return this;
   }
 
+  /**
+   * @returns {MaelysPlayground}
+   */
   edbBegin() {
     this._check(this._call('maelys_datalog_wasm_edb_begin', 'number', [], []), 'edbBegin');
     return this;
   }
 
+  /**
+   * @param {string} pred
+   * @param {string} arg0
+   * @returns {MaelysPlayground}
+   */
   addFact(pred, arg0) {
     this._check(
       this._call('maelys_datalog_wasm_edb_add_symbol', 'number', ['string', 'string'], [pred, arg0]),
@@ -122,6 +183,10 @@ class MaelysPlayground {
     return this;
   }
 
+  /**
+   * @param {string} text
+   * @returns {number}
+   */
   internRuntimeSymbol(text) {
     const ptr = this._mod._malloc(4);
     if (!ptr) throw new Error('internRuntimeSymbol failed: malloc returned 0');
@@ -139,6 +204,11 @@ class MaelysPlayground {
     }
   }
 
+  /**
+   * @param {string} pred
+   * @param {number} symbolId
+   * @returns {MaelysPlayground}
+   */
   addSymbolIdFact(pred, symbolId) {
     this._check(
       this._call('maelys_datalog_wasm_edb_add_symbol_id_fact',
@@ -150,6 +220,12 @@ class MaelysPlayground {
     return this;
   }
 
+  /**
+   * @param {string} pred
+   * @param {number} left
+   * @param {number} right
+   * @returns {MaelysPlayground}
+   */
   addSymbolIdsFact(pred, left, right) {
     this._check(
       this._call('maelys_datalog_wasm_edb_add_symbol_ids_fact',
@@ -161,6 +237,15 @@ class MaelysPlayground {
     return this;
   }
 
+  /**
+   * @internal
+   * @private
+   * @param {string} name
+   * @param {string} pred
+   * @param {number[]} values
+   * @param {number} factCount
+   * @returns {MaelysPlayground}
+   */
   _callInt32Array(name, pred, values, factCount) {
     if (!Array.isArray(values)) {
       throw new TypeError(`${name} expects an array of symbol IDs`);
@@ -188,6 +273,15 @@ class MaelysPlayground {
     }
   }
 
+  /**
+   * @internal
+   * @private
+   * @param {string} name
+   * @param {string} pred
+   * @param {string[]} values
+   * @param {number} factCount
+   * @returns {MaelysPlayground}
+   */
   _callPackedStrings(name, pred, values, factCount) {
     if (!Array.isArray(values)) {
       throw new TypeError(`${name} expects an array of strings`);
@@ -238,6 +332,11 @@ class MaelysPlayground {
     }
   }
 
+  /**
+   * @param {string} pred
+   * @param {number[]} ids
+   * @returns {MaelysPlayground}
+   */
   addSymbolIdFacts(pred, ids) {
     if (!Array.isArray(ids)) {
       throw new TypeError('addSymbolIdFacts expects an array of symbol IDs');
@@ -248,6 +347,11 @@ class MaelysPlayground {
                                 ids.length);
   }
 
+  /**
+   * @param {string} pred
+   * @param {number[]} pairs
+   * @returns {MaelysPlayground}
+   */
   addSymbolIdsFacts(pred, pairs) {
     if (!Array.isArray(pairs)) {
       throw new TypeError('addSymbolIdsFacts expects an array of symbol IDs');
@@ -261,6 +365,11 @@ class MaelysPlayground {
                                 pairs.length / 2);
   }
 
+  /**
+   * @param {string} pred
+   * @param {string[]} values
+   * @returns {MaelysPlayground}
+   */
   addRuntimeSymbolFacts(pred, values) {
     if (!Array.isArray(values)) {
       throw new TypeError('addRuntimeSymbolFacts expects an array of strings');
@@ -271,6 +380,11 @@ class MaelysPlayground {
                                    values.length);
   }
 
+  /**
+   * @param {string} pred
+   * @param {string[]} flatPairs
+   * @returns {MaelysPlayground}
+   */
   addRuntimeSymbolPairFacts(pred, flatPairs) {
     if (!Array.isArray(flatPairs)) {
       throw new TypeError('addRuntimeSymbolPairFacts expects an array of strings');
@@ -284,6 +398,12 @@ class MaelysPlayground {
                                    flatPairs.length / 2);
   }
 
+  /**
+   * @param {string} pred
+   * @param {string} arg0
+   * @param {string} arg1
+   * @returns {MaelysPlayground}
+   */
   addFact2(pred, arg0, arg1) {
     this._check(
       this._call('maelys_datalog_wasm_edb_add_symbol2',
@@ -295,17 +415,31 @@ class MaelysPlayground {
     return this;
   }
 
+  /**
+   * @returns {MaelysPlayground}
+   */
   solve() {
     this._check(this._call('maelys_datalog_wasm_solve', 'number', [], []), 'solve');
     return this;
   }
 
+  /**
+   * @param {string} pred
+   * @param {string} arg0
+   * @returns {boolean}
+   */
   querySymbol(pred, arg0) {
     const rc = this._call('maelys_datalog_wasm_query_symbol', 'number', ['string', 'string'], [pred, arg0]);
     if (rc === -1) throw makeError('querySymbol', -1, this._diag());
     return rc === 1;
   }
 
+  /**
+   * @param {string} pred
+   * @param {string} arg0
+   * @param {string} arg1
+   * @returns {boolean}
+   */
   querySymbol2(pred, arg0, arg1) {
     const rc = this._call('maelys_datalog_wasm_query_symbol2',
                           'number',
@@ -315,15 +449,24 @@ class MaelysPlayground {
     return rc === 1;
   }
 
+  /**
+   * @returns {MaelysPlayground}
+   */
   freeResult() {
     this._call('maelys_datalog_wasm_solve_result_free', null, [], []);
     return this;
   }
 
+  /**
+   * @returns {string}
+   */
   get diagMessage() {
     return this._diag();
   }
 
+  /**
+   * @returns {number}
+   */
   get diagCode() {
     return this._call('maelys_datalog_wasm_last_diag_code', 'number', [], []);
   }
