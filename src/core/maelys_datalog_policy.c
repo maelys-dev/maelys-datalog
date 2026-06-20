@@ -8,6 +8,7 @@
 #include "src/core/maelys_datalog_symbol_table.h"
 
 #include <assert.h>
+#include <stdint.h>
 #include <stdarg.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -19,6 +20,13 @@ _Static_assert(MAELYS_DATALOG_MAX_BODY_LITERALS <= 64u,
                "planned_mask width insufficient for MAX_BODY_LITERALS");
 _Static_assert(MAELYS_DATALOG_MAX_RULE_VARIABLES <= 64u,
                "bound_var_mask width insufficient for MAX_RULE_VARIABLES");
+_Static_assert(MAELYS_DATALOG_MAX_EDB_FACTS <= UINT16_MAX,
+               "EDB predicate ranges require uint16_t fact indexes");
+
+typedef struct {
+    uint16_t begin;
+    uint16_t count;
+} maelys_datalog_pred_range_t;
 
 typedef struct {
     int bound[MAELYS_DATALOG_MAX_RULE_VARIABLES];
@@ -42,6 +50,7 @@ struct maelys_datalog_solve_result {
     maelys_datalog_fact_t idb_facts[MAELYS_DATALOG_MAX_IDB_FACTS];
     uint16_t idb_proof_index[MAELYS_DATALOG_MAX_IDB_FACTS];
     maelys_datalog_fact_set_t edb_snapshot;
+    maelys_datalog_pred_range_t edb_ranges[MAELYS_DATALOG_MAX_PREDICATES];
     maelys_datalog_fact_set_t idb_final;
     size_t facts_per_pred[MAELYS_DATALOG_MAX_PREDICATES];
     size_t stratum_idb_end[MAELYS_DATALOG_MAX_STRATA + 1u];
@@ -57,6 +66,9 @@ struct maelys_datalog_solve_result {
     maelys_datalog_diagnostic_t runtime_diag;
     int finalized;
     int failed;
+#ifdef MAELYS_TESTING
+    int edb_full_scan_reference;
+#endif
 };
 
 static void solve_once_init_proof_indices(maelys_datalog_solve_result_t *result) {
@@ -77,6 +89,63 @@ static void solve_once_assert_windows(const maelys_datalog_solve_result_t *resul
         assert(result->stratum_idb_end[i] <= result->stratum_idb_end[i + 1u]);
         assert(result->stratum_idb_end[i + 1u] <= MAELYS_DATALOG_MAX_IDB_FACTS);
     }
+}
+
+static maelys_result_t solve_once_build_edb_ranges(maelys_datalog_solve_result_t *result) {
+    if (!result || !result->edb_snapshot.sorted ||
+        (!result->edb_snapshot.facts && result->edb_snapshot.count > 0)) {
+        return MAELYS_ERR_INVALID_STATE;
+    }
+
+    memset(result->edb_ranges, 0, sizeof(result->edb_ranges));
+    size_t i = 0;
+    maelys_datalog_predicate_id_t previous_pid = 0;
+    int have_previous = 0;
+    while (i < result->edb_snapshot.count) {
+        const maelys_datalog_predicate_id_t pid = result->edb_snapshot.facts[i].predicate_id;
+        if (pid >= MAELYS_DATALOG_MAX_PREDICATES) return MAELYS_ERR_INVALID_STATE;
+        if (have_previous && pid < previous_pid) return MAELYS_ERR_INVALID_STATE;
+
+        const size_t begin = i;
+        while (i < result->edb_snapshot.count &&
+               result->edb_snapshot.facts[i].predicate_id == pid) {
+            i++;
+        }
+        const size_t count = i - begin;
+        if (begin > UINT16_MAX || count > UINT16_MAX) return MAELYS_ERR_INVALID_STATE;
+        result->edb_ranges[pid].begin = (uint16_t)begin;
+        result->edb_ranges[pid].count = (uint16_t)count;
+        previous_pid = pid;
+        have_previous = 1;
+    }
+    return MAELYS_OK;
+}
+
+static void solve_once_edb_slice(const maelys_datalog_solve_result_t *result,
+                                 maelys_datalog_predicate_id_t pid,
+                                 const maelys_datalog_fact_t **out_facts,
+                                 size_t *out_count) {
+    if (!out_facts || !out_count) return;
+    *out_facts = result ? result->edb_snapshot.facts : NULL;
+    *out_count = 0;
+    if (!result || pid >= MAELYS_DATALOG_MAX_PREDICATES) return;
+
+#ifdef MAELYS_TESTING
+    if (result->edb_full_scan_reference) {
+        *out_facts = result->edb_snapshot.facts;
+        *out_count = result->edb_snapshot.count;
+        return;
+    }
+#endif
+
+    const maelys_datalog_pred_range_t range = result->edb_ranges[pid];
+    if (range.count == 0) {
+        *out_facts = result->edb_snapshot.facts;
+        *out_count = 0;
+        return;
+    }
+    *out_facts = result->edb_snapshot.facts + range.begin;
+    *out_count = range.count;
 }
 
 const char *maelys_datalog_decision_name(maelys_datalog_decision_t decision) {
@@ -1373,19 +1442,23 @@ static int solve_once_derive_recursive(const maelys_datalog_ruleset_t *ruleset,
                                     parent_proof_index)) {
         return 0;
     }
-    if ((def->kind_flags & MAELYS_DATALOG_PRED_KIND_EDB) &&
-        !solve_once_scan_candidates(ruleset,
-                                    result,
-                                    rule,
-                                    literal_index,
-                                    bindings,
-                                    result->edb_snapshot.facts,
-                                    result->edb_snapshot.count,
-                                    delta_literal_index,
-                                    depth,
-                                    NULL,
-                                    parent_proof_index)) {
-        return 0;
+    if (def->kind_flags & MAELYS_DATALOG_PRED_KIND_EDB) {
+        const maelys_datalog_fact_t *edb_facts = NULL;
+        size_t edb_count = 0;
+        solve_once_edb_slice(result, literal->atom.predicate_id, &edb_facts, &edb_count);
+        if (!solve_once_scan_candidates(ruleset,
+                                        result,
+                                        rule,
+                                        literal_index,
+                                        bindings,
+                                        edb_facts,
+                                        edb_count,
+                                        delta_literal_index,
+                                        depth,
+                                        NULL,
+                                        parent_proof_index)) {
+            return 0;
+        }
     }
     if (def->kind_flags & MAELYS_DATALOG_PRED_KIND_IDB) {
         size_t begin = 0;
@@ -1582,21 +1655,25 @@ static int solve_once_derive_ordered(const maelys_datalog_ruleset_t *ruleset,
                                             parent_proof_index)) {
         return 0;
     }
-    if ((def->kind_flags & MAELYS_DATALOG_PRED_KIND_EDB) &&
-        !solve_once_scan_candidates_ordered(ruleset,
-                                            result,
-                                            rule,
-                                            order_pos,
-                                            join_order,
-                                            join_order_count,
-                                            bindings,
-                                            result->edb_snapshot.facts,
-                                            result->edb_snapshot.count,
-                                            delta_literal_index,
-                                            depth,
-                                            NULL,
-                                            parent_proof_index)) {
-        return 0;
+    if (def->kind_flags & MAELYS_DATALOG_PRED_KIND_EDB) {
+        const maelys_datalog_fact_t *edb_facts = NULL;
+        size_t edb_count = 0;
+        solve_once_edb_slice(result, literal->atom.predicate_id, &edb_facts, &edb_count);
+        if (!solve_once_scan_candidates_ordered(ruleset,
+                                                result,
+                                                rule,
+                                                order_pos,
+                                                join_order,
+                                                join_order_count,
+                                                bindings,
+                                                edb_facts,
+                                                edb_count,
+                                                delta_literal_index,
+                                                depth,
+                                                NULL,
+                                                parent_proof_index)) {
+            return 0;
+        }
     }
     if (def->kind_flags & MAELYS_DATALOG_PRED_KIND_IDB) {
         size_t begin = 0;
@@ -1701,7 +1778,8 @@ static maelys_result_t solve_stratified_path(
     const maelys_datalog_ruleset_t *ruleset,
     const maelys_datalog_edb_t *edb,
     maelys_datalog_solve_result_t **out_result,
-    maelys_datalog_solve_diagnostic_t *out_diag) {
+    maelys_datalog_solve_diagnostic_t *out_diag,
+    int full_scan_reference) {
     solve_once_diag_clear(out_diag);
     if (!ruleset || !ruleset->loaded || !edb || !out_result) {
         solve_once_diag_base(out_diag,
@@ -1754,6 +1832,11 @@ static maelys_result_t solve_stratified_path(
     result->ruleset = ruleset;
     result->stratified = 1;
     result->failure_reason = MAELYS_DATALOG_DENY_NONE;
+#ifdef MAELYS_TESTING
+    result->edb_full_scan_reference = full_scan_reference;
+#else
+    (void)full_scan_reference;
+#endif
     solve_once_init_proof_indices(result);
     maelys_datalog_fact_set_init(&result->edb_snapshot, result->edb_facts, MAELYS_DATALOG_MAX_EDB_FACTS);
     maelys_datalog_fact_set_init(&result->idb_final, result->idb_facts, MAELYS_DATALOG_MAX_IDB_FACTS);
@@ -1769,6 +1852,16 @@ static maelys_result_t solve_stratified_path(
         solve_once_diag_malformed_edb(out_diag, &ruleset->registry, &result->edb_snapshot);
         maelys_datalog_solve_result_free(result);
         return MAELYS_ERR_INVALID_STATE;
+    }
+    maelys_result_t range_rc = solve_once_build_edb_ranges(result);
+    if (range_rc != MAELYS_OK) {
+        result->failed = 1;
+        solve_once_diag_base(out_diag,
+                             MAELYS_DATALOG_SOLVE_DIAG_INVALID_STATE,
+                             range_rc,
+                             MAELYS_DATALOG_DENY_NONE);
+        maelys_datalog_solve_result_free(result);
+        return range_rc;
     }
     if (!datalog_fact_slice_structurally_valid(&ruleset->registry, ruleset->facts, ruleset->fact_count)) {
         result->failed = 1;
@@ -1949,7 +2042,8 @@ static maelys_result_t maelys_datalog_solve_once_run(
     const maelys_datalog_edb_t *edb,
     maelys_datalog_solve_result_t **out_result,
     maelys_datalog_solve_diagnostic_t *out_diag,
-    int use_static_join_order) {
+    int use_static_join_order,
+    int full_scan_reference) {
     solve_once_diag_clear(out_diag);
     if (!ruleset || !ruleset->loaded || !edb || !out_result) {
         solve_once_diag_base(out_diag,
@@ -1993,6 +2087,11 @@ static maelys_result_t maelys_datalog_solve_once_run(
     }
     result->ruleset = ruleset;
     result->failure_reason = MAELYS_DATALOG_DENY_NONE;
+#ifdef MAELYS_TESTING
+    result->edb_full_scan_reference = full_scan_reference;
+#else
+    (void)full_scan_reference;
+#endif
     solve_once_init_proof_indices(result);
     maelys_datalog_fact_set_init(&result->edb_snapshot, result->edb_facts, MAELYS_DATALOG_MAX_EDB_FACTS);
     maelys_datalog_fact_set_init(&result->idb_final, result->idb_facts, MAELYS_DATALOG_MAX_IDB_FACTS);
@@ -2008,6 +2107,16 @@ static maelys_result_t maelys_datalog_solve_once_run(
         solve_once_diag_malformed_edb(out_diag, &ruleset->registry, &result->edb_snapshot);
         maelys_datalog_solve_result_free(result);
         return MAELYS_ERR_INVALID_STATE;
+    }
+    maelys_result_t range_rc = solve_once_build_edb_ranges(result);
+    if (range_rc != MAELYS_OK) {
+        result->failed = 1;
+        solve_once_diag_base(out_diag,
+                             MAELYS_DATALOG_SOLVE_DIAG_INVALID_STATE,
+                             range_rc,
+                             MAELYS_DATALOG_DENY_NONE);
+        maelys_datalog_solve_result_free(result);
+        return range_rc;
     }
     if (!datalog_fact_slice_structurally_valid(&ruleset->registry, ruleset->facts, ruleset->fact_count)) {
         result->failed = 1;
@@ -2196,9 +2305,9 @@ maelys_result_t maelys_datalog_solve_once_ex(
     maelys_datalog_solve_result_t **out_result,
     maelys_datalog_solve_diagnostic_t *out_diag) {
     if (ruleset && ruleset->negation_supported) {
-        return solve_stratified_path(ruleset, edb, out_result, out_diag);
+        return solve_stratified_path(ruleset, edb, out_result, out_diag, 0);
     }
-    return maelys_datalog_solve_once_run(ruleset, edb, out_result, out_diag, 1);
+    return maelys_datalog_solve_once_run(ruleset, edb, out_result, out_diag, 1, 0);
 }
 
 maelys_result_t maelys_datalog_solve_once(const maelys_datalog_ruleset_t *ruleset,
@@ -2222,7 +2331,26 @@ maelys_result_t maelys_datalog_test_solve_once_legacy_order(
     const maelys_datalog_edb_t *edb,
     maelys_datalog_solve_result_t **out_result,
     maelys_datalog_solve_diagnostic_t *out_diag) {
-    return maelys_datalog_solve_once_run(ruleset, edb, out_result, out_diag, 0);
+    return maelys_datalog_solve_once_run(ruleset, edb, out_result, out_diag, 0, 0);
+}
+
+maelys_result_t maelys_datalog_test_solve_once_full_scan(
+    const maelys_datalog_ruleset_t *ruleset,
+    const maelys_datalog_edb_t *edb,
+    maelys_datalog_solve_result_t **out_result,
+    maelys_datalog_solve_diagnostic_t *out_diag) {
+    if (ruleset && ruleset->negation_supported) {
+        return solve_stratified_path(ruleset, edb, out_result, out_diag, 1);
+    }
+    return maelys_datalog_solve_once_run(ruleset, edb, out_result, out_diag, 1, 1);
+}
+
+maelys_result_t maelys_datalog_test_solve_once_legacy_full_scan(
+    const maelys_datalog_ruleset_t *ruleset,
+    const maelys_datalog_edb_t *edb,
+    maelys_datalog_solve_result_t **out_result,
+    maelys_datalog_solve_diagnostic_t *out_diag) {
+    return maelys_datalog_solve_once_run(ruleset, edb, out_result, out_diag, 0, 1);
 }
 
 maelys_result_t maelys_datalog_test_solve_result_idb_facts(
@@ -2242,6 +2370,66 @@ maelys_result_t maelys_datalog_test_solve_result_idb_proof_indices(
     if (!result || !out_indices || !out_count) return MAELYS_ERR_INVALID_ARGUMENT;
     *out_indices = result->idb_proof_index;
     *out_count = result->idb_final.count;
+    return MAELYS_OK;
+}
+
+maelys_result_t maelys_datalog_test_solve_result_edb_slice(
+    const maelys_datalog_solve_result_t *result,
+    maelys_datalog_predicate_id_t predicate_id,
+    const maelys_datalog_fact_t **out_facts,
+    size_t *out_count) {
+    if (!result || !out_facts || !out_count) return MAELYS_ERR_INVALID_ARGUMENT;
+    solve_once_edb_slice(result, predicate_id, out_facts, out_count);
+    return MAELYS_OK;
+}
+
+maelys_result_t maelys_datalog_test_solve_result_edb_range_stats(
+    const maelys_datalog_solve_result_t *result,
+    size_t *out_sum,
+    int *out_ascending,
+    int *out_non_overlapping) {
+    if (!result || !out_sum || !out_ascending || !out_non_overlapping) {
+        return MAELYS_ERR_INVALID_ARGUMENT;
+    }
+    size_t sum = 0;
+    size_t previous_end = 0;
+    int have_previous = 0;
+    int ascending = 1;
+    int non_overlapping = 1;
+    for (size_t i = 0; i < MAELYS_DATALOG_MAX_PREDICATES; i++) {
+        const maelys_datalog_pred_range_t range = result->edb_ranges[i];
+        if (range.count == 0) continue;
+        const size_t begin = range.begin;
+        const size_t end = begin + range.count;
+        if (end > result->edb_snapshot.count) {
+            ascending = 0;
+            non_overlapping = 0;
+        }
+        if (have_previous && begin < previous_end) {
+            ascending = 0;
+            non_overlapping = 0;
+        }
+        sum += range.count;
+        previous_end = end;
+        have_previous = 1;
+    }
+    *out_sum = sum;
+    *out_ascending = ascending;
+    *out_non_overlapping = non_overlapping;
+    return MAELYS_OK;
+}
+
+maelys_result_t maelys_datalog_test_edb_slice_null_base(
+    maelys_datalog_predicate_id_t predicate_id,
+    const maelys_datalog_fact_t **out_facts,
+    size_t *out_count) {
+    if (!out_facts || !out_count) return MAELYS_ERR_INVALID_ARGUMENT;
+    maelys_datalog_solve_result_t result;
+    memset(&result, 0, sizeof(result));
+    result.edb_snapshot.facts = NULL;
+    result.edb_snapshot.count = 0;
+    result.edb_snapshot.sorted = 1;
+    solve_once_edb_slice(&result, predicate_id, out_facts, out_count);
     return MAELYS_OK;
 }
 #endif
