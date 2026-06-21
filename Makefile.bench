@@ -3,6 +3,8 @@ CFLAGS_COMMON = -Wall -Wextra -g -I.
 BUILD_DIR ?= bench/build
 RESULT_DIR ?= bench/results
 REPORT_DIR ?= bench/reports
+BASELINE_DIR ?= bench/baseline
+BASELINE_JSON ?= $(BASELINE_DIR)/linux-arm64-clang18-O2.json
 ASAN_IMAGE ?= maelys-datalog-asan-linux:ubuntu24.04
 DOCKER_PLATFORM ?= linux/arm64
 DOCKER_PLATFORM_ARG = $(if $(DOCKER_PLATFORM),--platform $(DOCKER_PLATFORM),)
@@ -43,10 +45,13 @@ BENCH_DEFS = \
 BENCH_O0 = $(BUILD_DIR)/bench_datalog_O0
 BENCH_O2 = $(BUILD_DIR)/bench_datalog_O2
 
-.PHONY: bench bench-linux clean clean-results
+.PHONY: bench bench-linux bench-baseline-update check clean clean-results
 
 bench: $(BENCH_O0) $(BENCH_O2)
 	bash bench/run_benchmarks.sh "$(BENCH_O0)" "$(BENCH_O2)"
+
+check:
+	bash bench/check_regression.sh
 
 $(BENCH_O0): $(BENCH_SRCS) | $(BUILD_DIR)
 	$(CC) $(CFLAGS_COMMON) -O0 $(BENCH_DEFS) -DBENCH_OPT_LEVEL=\"-O0\" -DBENCH_CFLAGS=\"-Wall_-Wextra_-g_-I._-O0\" $(BENCH_SRCS) -o $@
@@ -70,9 +75,17 @@ clean:
 
 bench-linux:
 	@echo "==> Standalone Linux benchmark run in Docker"
+	@mkdir -p "$(RESULT_DIR)"
+	@$(MAKE) --no-print-directory -f Makefile.asan asan-linux-image
 	@docker run --rm \
 	  $(DOCKER_PLATFORM_ARG) \
 	  -v "$(CURDIR):/src:ro" \
+	  -v "$(CURDIR)/$(RESULT_DIR):/work/bench/results:rw" \
 	  -w /work \
 	  $(ASAN_IMAGE) \
-	  bash -c 'set -euo pipefail; tar --exclude=.git --exclude=build --exclude=.cache -C /src -cf - . | tar -C /work -xf -; make -f Makefile.bench bench'
+	  bash -c 'set -euo pipefail; tar --exclude=.git --exclude=build --exclude=.cache --exclude=bench/results -C /src -cf - . | tar -C /work -xf -; make --no-print-directory -f Makefile.bench "$(BENCH_O0)" "$(BENCH_O2)" COMMIT="$(COMMIT)" DIRTY="$(DIRTY)"; rm -f "$(RESULT_DIR)"/P3-C49-datalog-bench-*.csv "$(RESULT_DIR)"/P3-C49-datalog-bench-*.json; "$(BENCH_O0)" "$(RESULT_DIR)/P3-C49-datalog-bench-O0.csv" "$(RESULT_DIR)/P3-C49-datalog-bench-O0.json"; "$(BENCH_O2)" "$(RESULT_DIR)/P3-C49-datalog-bench-O2.csv" "$(RESULT_DIR)/P3-C49-datalog-bench-O2.json"; chmod -R a+rw /work/bench/results || true'
+
+bench-baseline-update:
+	@mkdir -p "$(BASELINE_DIR)"
+	@$(MAKE) --no-print-directory -f Makefile.bench bench-linux
+	cp "$(RESULT_DIR)/P3-C49-datalog-bench-O2.json" "$(BASELINE_JSON)"

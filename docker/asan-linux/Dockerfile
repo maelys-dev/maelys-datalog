@@ -10,6 +10,7 @@ RUN apt-get update && \
       binutils \
       libc6-dev \
       tar \
+      jq \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /work
