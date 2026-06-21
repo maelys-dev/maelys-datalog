@@ -11,6 +11,9 @@
 #include <sys/utsname.h>
 #include <time.h>
 #include <unistd.h>
+#if defined(__APPLE__)
+#include <mach/mach_time.h>
+#endif
 
 #include "common/maelys_errors.h"
 #include "src/core/maelys_datalog_edb.h"
@@ -39,7 +42,7 @@
 
 #define WARMUP_MIN_NS 300000000ULL
 #define WARMUP_MIN_ITERS 500u
-#define INNER_REPEAT_TARGET_NS 100000ULL
+#define INNER_REPEAT_TARGET_NS 1000ULL
 #define INNER_REPEAT_MAX 1048576u
 #define DEFAULT_SAMPLES 1000u
 #define MAX_RESULTS 128u
@@ -97,16 +100,30 @@ typedef struct {
   char date_utc[32];
 } bench_output_t;
 
+typedef struct {
+  uint64_t payload_ns;
+  uint64_t acc;
+} repeated_payload_t;
+
 typedef void (*prepare_fn_t)(bench_ctx_t *ctx, const bench_case_t *bench);
 typedef uint64_t (*run_fn_t)(bench_ctx_t *ctx, const bench_case_t *bench);
 
 static uint64_t now_ns(void) {
+#if defined(__APPLE__)
+  static mach_timebase_info_data_t timebase;
+  if (timebase.denom == 0u) {
+    mach_timebase_info(&timebase);
+  }
+  const uint64_t ticks = mach_absolute_time();
+  return (ticks * (uint64_t)timebase.numer) / (uint64_t)timebase.denom;
+#else
   struct timespec ts;
   if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) {
     perror("clock_gettime");
     exit(2);
   }
   return ((uint64_t)ts.tv_sec * 1000000000ULL) + (uint64_t)ts.tv_nsec;
+#endif
 }
 
 static void consume_u64(uint64_t value) {
@@ -225,7 +242,6 @@ static void intern_values(bench_ctx_t *ctx, size_t count) {
 static void prepare_intern_distinct(bench_ctx_t *ctx, const bench_case_t *bench) {
   (void)bench;
   maelys_datalog_symbol_table_init(&ctx->symbols);
-  init_registry(ctx);
   edb_reset(ctx);
   fill_values(ctx, "sym", bench->size);
 }
@@ -245,7 +261,6 @@ static uint64_t run_intern_distinct(bench_ctx_t *ctx, const bench_case_t *bench)
 
 static void prepare_intern_reexisting(bench_ctx_t *ctx, const bench_case_t *bench) {
   maelys_datalog_symbol_table_init(&ctx->symbols);
-  init_registry(ctx);
   edb_reset(ctx);
   fill_values(ctx, "sym", bench->size);
   intern_values(ctx, bench->size);
@@ -258,7 +273,6 @@ static uint64_t run_intern_reexisting(bench_ctx_t *ctx, const bench_case_t *benc
 static void prepare_intern_mixed(bench_ctx_t *ctx, const bench_case_t *bench) {
   const size_t half = bench->size / 2u;
   maelys_datalog_symbol_table_init(&ctx->symbols);
-  init_registry(ctx);
   edb_reset(ctx);
   fill_values(ctx, "mix", bench->size);
   intern_values(ctx, half);
@@ -270,7 +284,6 @@ static uint64_t run_intern_mixed(bench_ctx_t *ctx, const bench_case_t *bench) {
 
 static void prepare_symbol_insert(bench_ctx_t *ctx, const bench_case_t *bench) {
   maelys_datalog_symbol_table_init(&ctx->symbols);
-  init_registry(ctx);
   edb_reset(ctx);
   fill_values(ctx, "fact", bench->size * 2u);
   intern_values(ctx, bench->size * 2u);
@@ -321,7 +334,6 @@ static uint64_t run_symbol_batch_binary(bench_ctx_t *ctx, const bench_case_t *be
 
 static void prepare_string_insert(bench_ctx_t *ctx, const bench_case_t *bench) {
   maelys_datalog_symbol_table_init(&ctx->symbols);
-  init_registry(ctx);
   edb_reset(ctx);
   fill_values(ctx, "runtime", bench->size * 2u);
 }
@@ -594,22 +606,25 @@ static void cleanup_case(bench_ctx_t *ctx, const bench_case_t *bench) {
   maelys_datalog_ruleset_clear(&ctx->ruleset);
 }
 
-static uint64_t run_repeated_workloads(bench_ctx_t *ctx,
-                                       const bench_case_t *bench,
-                                       prepare_fn_t prepare,
-                                       run_fn_t run,
-                                       bool cleanup_ruleset,
-                                       size_t repeats) {
+static repeated_payload_t run_payload_repeats(bench_ctx_t *ctx,
+                                              const bench_case_t *bench,
+                                              prepare_fn_t prepare,
+                                              run_fn_t run,
+                                              bool cleanup_ruleset,
+                                              size_t repeats) {
   uint64_t acc = 0;
+  uint64_t payload_ns = 0;
   for (size_t i = 0; i < repeats; ++i) {
     prepare(ctx, bench);
+    const uint64_t start = now_ns();
     acc += run(ctx, bench);
+    payload_ns += now_ns() - start;
     if (cleanup_ruleset) {
       cleanup_case(ctx, bench);
     }
   }
   consume_u64(acc);
-  return acc;
+  return (repeated_payload_t){.payload_ns = payload_ns, .acc = acc};
 }
 
 static size_t calibrate_inner_repeats(bench_ctx_t *ctx,
@@ -617,18 +632,27 @@ static size_t calibrate_inner_repeats(bench_ctx_t *ctx,
                                       prepare_fn_t prepare,
                                       run_fn_t run,
                                       bool cleanup_ruleset) {
-  size_t repeats = 1u;
-  while (repeats < INNER_REPEAT_MAX) {
-    const uint64_t start = now_ns();
-    const uint64_t acc = run_repeated_workloads(ctx, bench, prepare, run, cleanup_ruleset, repeats);
-    const uint64_t elapsed = now_ns() - start;
-    consume_u64(acc);
-    if (elapsed >= INNER_REPEAT_TARGET_NS) {
-      return repeats;
+  uint64_t payload_ns = 0;
+  size_t repeats = 0u;
+  size_t batch = 1u;
+  while (payload_ns < INNER_REPEAT_TARGET_NS && repeats < INNER_REPEAT_MAX) {
+    size_t remaining = INNER_REPEAT_MAX - repeats;
+    size_t batch_repeats = batch < remaining ? batch : remaining;
+    repeated_payload_t measured =
+        run_payload_repeats(ctx, bench, prepare, run, cleanup_ruleset, batch_repeats);
+    payload_ns += measured.payload_ns;
+    repeats += batch_repeats;
+    consume_u64(measured.acc);
+    if (batch < (INNER_REPEAT_MAX / 2u)) {
+      batch *= 2u;
+    } else {
+      batch = INNER_REPEAT_MAX - repeats;
+      if (batch == 0u) {
+        break;
+      }
     }
-    repeats *= 2u;
   }
-  return repeats;
+  return repeats == 0u ? 1u : repeats;
 }
 
 static void measure_case(bench_output_t *out,
@@ -638,6 +662,7 @@ static void measure_case(bench_output_t *out,
                          bool cleanup_ruleset) {
   bench_ctx_t ctx;
   memset(&ctx, 0, sizeof(ctx));
+  init_registry(&ctx);
   const size_t inner_repeats =
       calibrate_inner_repeats(&ctx, bench, prepare, run, cleanup_ruleset);
 
@@ -645,9 +670,9 @@ static void measure_case(bench_output_t *out,
   uint64_t warmup_elapsed = 0;
   size_t warmup_iters = 0;
   while (warmup_elapsed < WARMUP_MIN_NS || warmup_iters < WARMUP_MIN_ITERS) {
-    const uint64_t acc =
-        run_repeated_workloads(&ctx, bench, prepare, run, cleanup_ruleset, inner_repeats);
-    consume_u64(acc);
+    repeated_payload_t measured =
+        run_payload_repeats(&ctx, bench, prepare, run, cleanup_ruleset, 1u);
+    consume_u64(measured.acc);
     ++warmup_iters;
     warmup_elapsed = now_ns() - warmup_start;
   }
@@ -661,15 +686,27 @@ static void measure_case(bench_output_t *out,
   double total_ns = 0.0;
   double min_ns = HUGE_VAL;
   double max_ns = 0.0;
+  size_t max_inner_repeats_used = inner_repeats;
   for (size_t i = 0; i < out->samples; ++i) {
-    const uint64_t start = now_ns();
-    const uint64_t acc =
-        run_repeated_workloads(&ctx, bench, prepare, run, cleanup_ruleset, inner_repeats);
-    const uint64_t elapsed = now_ns() - start;
-    consume_u64(acc);
-    require_true(elapsed > 0u, "positive raw timing");
-    measured_total_ns += elapsed;
-    const double per_workload_ns = (double)elapsed / (double)inner_repeats;
+    size_t sample_repeats = inner_repeats;
+    repeated_payload_t measured = {0};
+    while (sample_repeats <= INNER_REPEAT_MAX) {
+      measured = run_payload_repeats(&ctx, bench, prepare, run, cleanup_ruleset, sample_repeats);
+      if (measured.payload_ns > 0u) {
+        break;
+      }
+      if (sample_repeats > (INNER_REPEAT_MAX / 2u)) {
+        break;
+      }
+      sample_repeats *= 2u;
+    }
+    consume_u64(measured.acc);
+    require_true(measured.payload_ns > 0u, "positive raw timing");
+    if (sample_repeats > max_inner_repeats_used) {
+      max_inner_repeats_used = sample_repeats;
+    }
+    measured_total_ns += measured.payload_ns;
+    const double per_workload_ns = (double)measured.payload_ns / (double)sample_repeats;
     durations[i] = per_workload_ns;
     total_ns += per_workload_ns;
     if (per_workload_ns < min_ns) {
@@ -713,7 +750,7 @@ static void measure_case(bench_output_t *out,
   row->size = bench->size;
   row->selectivity = bench->selectivity;
   row->samples = out->samples;
-  row->inner_repeats = inner_repeats;
+  row->inner_repeats = max_inner_repeats_used;
   row->warmup = warmup_iters;
   row->warmup_us = (double)warmup_elapsed / 1000.0;
   row->median_us = median_ns / 1000.0;

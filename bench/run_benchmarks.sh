@@ -104,15 +104,26 @@ The harness is native-only and compiles the Datalog engine twice: once with
 \`-O0\` and once with \`-O2\`. The main Makefile is not modified; invocation is
 through \`make -f Makefile.bench bench\`.
 
-Each row measures a complete workload of logical size \`size\`. The harness uses
-\`clock_gettime(CLOCK_MONOTONIC)\` around the whole workload, never around each
-individual operation. Warmup continues until both thresholds are reached:
-at least 300 ms and at least 500 warmup iterations. The default statistical
-sample count is 1000 and can be overridden with \`MAELYS_BENCH_SAMPLES\`.
+Each row measures the payload of a logical workload of size \`size\`. The
+harness keeps per-repeat \`prepare\` and \`cleanup\` outside the timed window,
+then uses \`clock_gettime(CLOCK_MONOTONIC)\` around the \`run\` payload only.
+This avoids an Amdahl-style additive setup cost flattening batch/unit ratios.
+On macOS hosts the native timer uses \`mach_absolute_time()\` converted to
+nanoseconds, because the observed \`clock_gettime\` granularity is too coarse
+for payload-only start/stop windows; Linux builds keep
+\`clock_gettime(CLOCK_MONOTONIC)\`.
+Warmup continues until both thresholds are reached: at least 300 ms and at
+least 500 warmup iterations. The default statistical sample count is 1000 and
+can be overridden with \`MAELYS_BENCH_SAMPLES\`.
 Each sample uses an adaptive inner-repeat count calibrated per benchmark case
-so that the raw timed window exceeds clock resolution. CSV/JSON include both
-\`inner_repeats\` and \`measured_total_us\`; reported \`*_us\` values are per
-logical workload after division by \`inner_repeats\`.
+so that pure payload time targets roughly 1 us and exceeds clock resolution on
+the native timer.
+CSV/JSON include both \`inner_repeats\` and \`measured_total_us\`;
+\`measured_total_us\` is raw payload time before division, and reported
+\`*_us\` values are per logical workload after division by the repeat count
+used for each sample. If a payload window returns zero on the native timer, the
+sample is retried with more repeats; the reported \`inner_repeats\` is the
+maximum repeat count used for that row.
 
 Anti-DCE barriers are used on every measured loop by accumulating return codes,
 ids, query booleans, and fact counts into a volatile sink. State is reset at the
@@ -135,7 +146,8 @@ table.
 
 ## Selected -O2 Speedups
 
-These speedups compare median workload time at size 64 on this machine.
+These speedups compare payload-only median workload time at size 64 on this
+machine.
 
 | Benchmark | Comparison | Speedup |
 |---|---:|---:|
