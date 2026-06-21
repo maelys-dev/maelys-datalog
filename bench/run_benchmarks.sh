@@ -12,20 +12,20 @@ bench_o2=$2
 result_dir=bench/results
 report_dir=bench/reports
 mkdir -p "$result_dir" "$report_dir"
-rm -f "$result_dir"/P3-C49-datalog-bench-*.csv
-rm -f "$result_dir"/P3-C49-datalog-bench-*.json
+rm -f "$result_dir"/datalog-bench-*.csv
+rm -f "$result_dir"/datalog-bench-*.json
 rm -rf "$result_dir"/graphs
 
 "$bench_o0" \
-  "$result_dir/P3-C49-datalog-bench-O0.csv" \
-  "$result_dir/P3-C49-datalog-bench-O0.json"
+  "$result_dir/datalog-bench-O0.csv" \
+  "$result_dir/datalog-bench-O0.json"
 "$bench_o2" \
-  "$result_dir/P3-C49-datalog-bench-O2.csv" \
-  "$result_dir/P3-C49-datalog-bench-O2.json"
+  "$result_dir/datalog-bench-O2.csv" \
+  "$result_dir/datalog-bench-O2.json"
 
-report="$report_dir/P3-C49-performance-report.md"
+report="$report_dir/datalog-performance-report.md"
 commit=$(git rev-parse HEAD 2>/dev/null || echo unknown)
-source_dirty_before_run=$(python3 - <<'PY' "$result_dir/P3-C49-datalog-bench-O2.json" 2>/dev/null || echo unknown
+source_dirty_before_run=$(python3 - <<'PY' "$result_dir/datalog-bench-O2.json" 2>/dev/null || echo unknown
 import json
 import sys
 with open(sys.argv[1], "r", encoding="utf-8") as fp:
@@ -65,10 +65,10 @@ speedup() {
   ' "$csv"
 }
 
-c39_unary=$(speedup "$result_dir/P3-C49-datalog-bench-O2.csv" "edb_symbol_id_insert" "unit_unary" "batch_unary" 64)
-c39_binary=$(speedup "$result_dir/P3-C49-datalog-bench-O2.csv" "edb_symbol_id_insert" "unit_binary" "batch_binary" 64)
-c41_unary=$(speedup "$result_dir/P3-C49-datalog-bench-O2.csv" "edb_runtime_string_insert" "unit_unary" "batch_unary" 64)
-c41_binary=$(speedup "$result_dir/P3-C49-datalog-bench-O2.csv" "edb_runtime_string_pair_insert" "composed_unit_binary" "batch_binary" 64)
+c39_unary=$(speedup "$result_dir/datalog-bench-O2.csv" "edb_symbol_id_insert" "unit_unary" "batch_unary" 64)
+c39_binary=$(speedup "$result_dir/datalog-bench-O2.csv" "edb_symbol_id_insert" "unit_binary" "batch_binary" 64)
+c41_unary=$(speedup "$result_dir/datalog-bench-O2.csv" "edb_runtime_string_insert" "unit_unary" "batch_unary" 64)
+c41_binary=$(speedup "$result_dir/datalog-bench-O2.csv" "edb_runtime_string_pair_insert" "composed_unit_binary" "batch_binary" 64)
 
 cat > "$report" <<REPORT
 # Datalog Performance Report
@@ -192,7 +192,7 @@ graph/report consumers.
 |---|---|---|---|---:|---:|---:|---:|---|
 REPORT
 
-for csv in "$result_dir"/P3-C49-datalog-bench-O0.csv "$result_dir"/P3-C49-datalog-bench-O2.csv; do
+for csv in "$result_dir"/datalog-bench-O0.csv "$result_dir"/datalog-bench-O2.csv; do
   awk -F, '
     function feature_name(bench) {
       if (bench == "intern_distinct_symbols") return "Interning de symboles distincts"
@@ -263,7 +263,7 @@ if command -v python3 >/dev/null 2>&1; then
 import matplotlib
 PY
   then
-    python3 bench/plot_results.py "$result_dir"/P3-C49-datalog-bench-*.csv || true
+    python3 bench/plot_results.py "$result_dir"/datalog-bench-*.csv || true
   fi
 fi
 

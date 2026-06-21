@@ -2,10 +2,10 @@
 set -euo pipefail
 
 RESULTS_DIR=${MAELYS_BENCH_RESULTS_DIR:-bench/results}
-CSV_O0=${MAELYS_BENCH_CSV_O0:-$RESULTS_DIR/P3-C49-datalog-bench-O0.csv}
-CSV_O2=${MAELYS_BENCH_CSV_O2:-$RESULTS_DIR/P3-C49-datalog-bench-O2.csv}
-JSON_O0=${MAELYS_BENCH_JSON_O0:-$RESULTS_DIR/P3-C49-datalog-bench-O0.json}
-JSON_O2=${MAELYS_BENCH_JSON_O2:-$RESULTS_DIR/P3-C49-datalog-bench-O2.json}
+CSV_O0=${MAELYS_BENCH_CSV_O0:-$RESULTS_DIR/datalog-bench-O0.csv}
+CSV_O2=${MAELYS_BENCH_CSV_O2:-$RESULTS_DIR/datalog-bench-O2.csv}
+JSON_O0=${MAELYS_BENCH_JSON_O0:-$RESULTS_DIR/datalog-bench-O0.json}
+JSON_O2=${MAELYS_BENCH_JSON_O2:-$RESULTS_DIR/datalog-bench-O2.json}
 BASELINE_JSON=${MAELYS_BENCH_BASELINE_JSON:-bench/baseline/linux-arm64-clang18-O2.json}
 
 failures=()

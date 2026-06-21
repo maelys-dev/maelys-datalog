@@ -65,13 +65,13 @@ $(BUILD_DIR):
 clean-results:
 	rm -f $(RESULT_DIR)/*.csv $(RESULT_DIR)/*.json
 	rm -rf $(RESULT_DIR)/graphs
-	rm -f $(REPORT_DIR)/P3-C49-performance-report.md
+	rm -f $(REPORT_DIR)/datalog-performance-report.md
 
 clean:
 	rm -rf $(BUILD_DIR)
 	rm -f $(RESULT_DIR)/*.csv $(RESULT_DIR)/*.json
 	rm -rf $(RESULT_DIR)/graphs
-	rm -f $(REPORT_DIR)/P3-C49-performance-report.md
+	rm -f $(REPORT_DIR)/datalog-performance-report.md
 
 bench-linux:
 	@echo "==> Standalone Linux benchmark run in Docker"
@@ -83,9 +83,9 @@ bench-linux:
 	  -v "$(CURDIR)/$(RESULT_DIR):/work/bench/results:rw" \
 	  -w /work \
 	  $(ASAN_IMAGE) \
-	  bash -c 'set -euo pipefail; tar --exclude=.git --exclude=build --exclude=.cache --exclude=bench/results -C /src -cf - . | tar -C /work -xf -; make --no-print-directory -f Makefile.bench "$(BENCH_O0)" "$(BENCH_O2)" COMMIT="$(COMMIT)" DIRTY="$(DIRTY)"; rm -f "$(RESULT_DIR)"/P3-C49-datalog-bench-*.csv "$(RESULT_DIR)"/P3-C49-datalog-bench-*.json; "$(BENCH_O0)" "$(RESULT_DIR)/P3-C49-datalog-bench-O0.csv" "$(RESULT_DIR)/P3-C49-datalog-bench-O0.json"; "$(BENCH_O2)" "$(RESULT_DIR)/P3-C49-datalog-bench-O2.csv" "$(RESULT_DIR)/P3-C49-datalog-bench-O2.json"; chmod -R a+rw /work/bench/results || true'
+	  bash -c 'set -euo pipefail; tar --exclude=.git --exclude=build --exclude=.cache --exclude=bench/results -C /src -cf - . | tar -C /work -xf -; make --no-print-directory -f Makefile.bench "$(BENCH_O0)" "$(BENCH_O2)" COMMIT="$(COMMIT)" DIRTY="$(DIRTY)"; rm -f "$(RESULT_DIR)"/datalog-bench-*.csv "$(RESULT_DIR)"/datalog-bench-*.json; "$(BENCH_O0)" "$(RESULT_DIR)/datalog-bench-O0.csv" "$(RESULT_DIR)/datalog-bench-O0.json"; "$(BENCH_O2)" "$(RESULT_DIR)/datalog-bench-O2.csv" "$(RESULT_DIR)/datalog-bench-O2.json"; chmod -R a+rw /work/bench/results || true'
 
 bench-baseline-update:
 	@mkdir -p "$(BASELINE_DIR)"
 	@$(MAKE) --no-print-directory -f Makefile.bench bench-linux
-	cp "$(RESULT_DIR)/P3-C49-datalog-bench-O2.json" "$(BASELINE_JSON)"
+	cp "$(RESULT_DIR)/datalog-bench-O2.json" "$(BASELINE_JSON)"

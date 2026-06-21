@@ -11,11 +11,11 @@ make -f Makefile.bench bench
 The harness builds two production-style native binaries, one with `-O0` and one
 with `-O2`, then writes:
 
-- `bench/results/P3-C49-datalog-bench-O0.csv`
-- `bench/results/P3-C49-datalog-bench-O2.csv`
-- `bench/results/P3-C49-datalog-bench-O0.json`
-- `bench/results/P3-C49-datalog-bench-O2.json`
-- `bench/reports/P3-C49-performance-report.md`
+- `bench/results/datalog-bench-O0.csv`
+- `bench/results/datalog-bench-O2.csv`
+- `bench/results/datalog-bench-O0.json`
+- `bench/results/datalog-bench-O2.json`
+- `bench/reports/datalog-performance-report.md`
 
 The default sample count is 1000. Override it only for local iteration:
 
