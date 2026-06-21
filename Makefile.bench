@@ -1,0 +1,78 @@
+CC ?= clang
+CFLAGS_COMMON = -Wall -Wextra -g -I.
+BUILD_DIR ?= bench/build
+RESULT_DIR ?= bench/results
+REPORT_DIR ?= bench/reports
+ASAN_IMAGE ?= maelys-datalog-asan-linux:ubuntu24.04
+DOCKER_PLATFORM ?= linux/arm64
+DOCKER_PLATFORM_ARG = $(if $(DOCKER_PLATFORM),--platform $(DOCKER_PLATFORM),)
+
+ENGINE_SRCS = \
+	src/core/maelys_datalog_audit.c \
+	src/core/maelys_datalog_diagnostic.c \
+	src/core/maelys_datalog_domain_registry.c \
+	src/core/maelys_datalog_edb.c \
+	src/core/maelys_datalog_lexer.c \
+	src/core/maelys_datalog_parser.c \
+	src/core/maelys_datalog_predicate_registry.c \
+	src/core/maelys_datalog_ruleset.c \
+	src/core/maelys_datalog_ruleset_canonical.c \
+	src/core/maelys_datalog_solver.c \
+	src/core/maelys_datalog_symbol_table.c \
+	src/core/maelys_datalog_decision.c \
+	src/manifest/maelys_datalog_manifest_buffer.c \
+	src/manifest/maelys_datalog_manifest_file.c
+
+COMMON_SRCS = \
+	common/maelys_sha256.c \
+	common/maelys_utf8.c
+
+VENDOR_SRCS = vendor/yyjson/yyjson.c
+BENCH_SRC = bench/bench_datalog.c
+BENCH_SRCS = $(ENGINE_SRCS) $(COMMON_SRCS) $(VENDOR_SRCS) $(BENCH_SRC)
+
+COMMIT := $(shell git rev-parse HEAD 2>/dev/null || echo unknown)
+DIRTY := $(shell test -z "$$(git status --short 2>/dev/null)" && echo false || echo true)
+COMPILER := $(shell $(CC) --version 2>/dev/null | head -n 1 | sed 's/[^A-Za-z0-9._-]/_/g')
+
+BENCH_DEFS = \
+	-DBENCH_COMMIT=\"$(COMMIT)\" \
+	-DBENCH_DIRTY=\"$(DIRTY)\" \
+	-DBENCH_COMPILER=\"$(COMPILER)\"
+
+BENCH_O0 = $(BUILD_DIR)/bench_datalog_O0
+BENCH_O2 = $(BUILD_DIR)/bench_datalog_O2
+
+.PHONY: bench bench-linux clean clean-results
+
+bench: $(BENCH_O0) $(BENCH_O2)
+	bash bench/run_benchmarks.sh "$(BENCH_O0)" "$(BENCH_O2)"
+
+$(BENCH_O0): $(BENCH_SRCS) | $(BUILD_DIR)
+	$(CC) $(CFLAGS_COMMON) -O0 $(BENCH_DEFS) -DBENCH_OPT_LEVEL=\"-O0\" -DBENCH_CFLAGS=\"-Wall_-Wextra_-g_-I._-O0\" $(BENCH_SRCS) -o $@
+
+$(BENCH_O2): $(BENCH_SRCS) | $(BUILD_DIR)
+	$(CC) $(CFLAGS_COMMON) -O2 $(BENCH_DEFS) -DBENCH_OPT_LEVEL=\"-O2\" -DBENCH_CFLAGS=\"-Wall_-Wextra_-g_-I._-O2\" $(BENCH_SRCS) -o $@
+
+$(BUILD_DIR):
+	mkdir -p $@
+
+clean-results:
+	rm -f $(RESULT_DIR)/*.csv $(RESULT_DIR)/*.json
+	rm -rf $(RESULT_DIR)/graphs
+	rm -f $(REPORT_DIR)/P3-C49-performance-report.md
+
+clean:
+	rm -rf $(BUILD_DIR)
+	rm -f $(RESULT_DIR)/*.csv $(RESULT_DIR)/*.json
+	rm -rf $(RESULT_DIR)/graphs
+	rm -f $(REPORT_DIR)/P3-C49-performance-report.md
+
+bench-linux:
+	@echo "==> Standalone Linux benchmark run in Docker"
+	@docker run --rm \
+	  $(DOCKER_PLATFORM_ARG) \
+	  -v "$(CURDIR):/src:ro" \
+	  -w /work \
+	  $(ASAN_IMAGE) \
+	  bash -c 'set -euo pipefail; tar --exclude=.git --exclude=build --exclude=.cache -C /src -cf - . | tar -C /work -xf -; make -f Makefile.bench bench'
