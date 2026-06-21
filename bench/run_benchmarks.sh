@@ -37,7 +37,16 @@ generated_artifacts_dirty_after_run=$(test -n "$(git status --short bench/result
 host=$(hostname 2>/dev/null || echo unknown)
 os=$(uname -srm 2>/dev/null || echo unknown)
 compiler=$(cc --version 2>/dev/null | head -n 1 || echo unknown)
-cpu=$(sysctl -n machdep.cpu.brand_string 2>/dev/null || sysctl -n hw.model 2>/dev/null || uname -m)
+cpu=$(sysctl -n machdep.cpu.brand_string 2>/dev/null || true)
+if [[ -z "$cpu" || "$cpu" == "arm64" ]]; then
+  cpu=$(sysctl -n hw.model 2>/dev/null || true)
+fi
+if [[ -z "$cpu" || "$cpu" == "arm64" ]]; then
+  cpu=$(system_profiler SPHardwareDataType 2>/dev/null | awk -F': ' '/Chip:/ { print $2; exit }')
+fi
+if [[ -z "$cpu" ]]; then
+  cpu=$(uname -m)
+fi
 date_utc=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
 speedup() {
