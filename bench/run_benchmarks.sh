@@ -1,31 +1,32 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [[ $# -ne 2 ]]; then
-  echo "usage: $0 <bench_O0> <bench_O2>" >&2
+if [[ $# -ne 3 ]]; then
+  echo "usage: $0 <profile> <bench_O0> <bench_O2>" >&2
   exit 2
 fi
 
-bench_o0=$1
-bench_o2=$2
+profile=$1
+bench_o0=$2
+bench_o2=$3
 
 result_dir=bench/results
 report_dir=bench/reports
 mkdir -p "$result_dir" "$report_dir"
-rm -f "$result_dir"/datalog-bench-*.csv
-rm -f "$result_dir"/datalog-bench-*.json
+rm -f "$result_dir"/datalog-bench-"$profile"-*.csv
+rm -f "$result_dir"/datalog-bench-"$profile"-*.json
 rm -rf "$result_dir"/graphs
 
 "$bench_o0" \
-  "$result_dir/datalog-bench-O0.csv" \
-  "$result_dir/datalog-bench-O0.json"
+  "$result_dir/datalog-bench-$profile-O0.csv" \
+  "$result_dir/datalog-bench-$profile-O0.json"
 "$bench_o2" \
-  "$result_dir/datalog-bench-O2.csv" \
-  "$result_dir/datalog-bench-O2.json"
+  "$result_dir/datalog-bench-$profile-O2.csv" \
+  "$result_dir/datalog-bench-$profile-O2.json"
 
-report="$report_dir/datalog-performance-report.md"
+report="$report_dir/datalog-performance-report-$profile.md"
 commit=$(git rev-parse HEAD 2>/dev/null || echo unknown)
-source_dirty_before_run=$(python3 - <<'PY' "$result_dir/datalog-bench-O2.json" 2>/dev/null || echo unknown
+source_dirty_before_run=$(python3 - <<'PY' "$result_dir/datalog-bench-$profile-O2.json" 2>/dev/null || echo unknown
 import json
 import sys
 with open(sys.argv[1], "r", encoding="utf-8") as fp:
@@ -49,6 +50,20 @@ if [[ -z "$cpu" ]]; then
 fi
 date_utc=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
+if [[ "$profile" == "large" ]]; then
+  cflags_o0="-Wall -Wextra -g -I. -DMAELYS_DATALOG_PROFILE_LARGE -O0"
+  cflags_o2="-Wall -Wextra -g -I. -DMAELYS_DATALOG_PROFILE_LARGE -O2"
+  max_edb=2048
+  max_idb=2048
+  max_per_pred=256
+else
+  cflags_o0="-Wall -Wextra -g -I. -O0"
+  cflags_o2="-Wall -Wextra -g -I. -O2"
+  max_edb=1024
+  max_idb=1024
+  max_per_pred=64
+fi
+
 speedup() {
   local csv=$1 bench=$2 mode_a=$3 mode_b=$4 size=$5
   awk -F, -v b="$bench" -v a="$mode_a" -v c="$mode_b" -v s="$size" '
@@ -65,10 +80,10 @@ speedup() {
   ' "$csv"
 }
 
-c39_unary=$(speedup "$result_dir/datalog-bench-O2.csv" "edb_symbol_id_insert" "unit_unary" "batch_unary" 64)
-c39_binary=$(speedup "$result_dir/datalog-bench-O2.csv" "edb_symbol_id_insert" "unit_binary" "batch_binary" 64)
-c41_unary=$(speedup "$result_dir/datalog-bench-O2.csv" "edb_runtime_string_insert" "unit_unary" "batch_unary" 64)
-c41_binary=$(speedup "$result_dir/datalog-bench-O2.csv" "edb_runtime_string_pair_insert" "composed_unit_binary" "batch_binary" 64)
+c39_unary=$(speedup "$result_dir/datalog-bench-$profile-O2.csv" "edb_symbol_id_insert" "unit_unary" "batch_unary" 64)
+c39_binary=$(speedup "$result_dir/datalog-bench-$profile-O2.csv" "edb_symbol_id_insert" "unit_binary" "batch_binary" 64)
+c41_unary=$(speedup "$result_dir/datalog-bench-$profile-O2.csv" "edb_runtime_string_insert" "unit_unary" "batch_unary" 64)
+c41_binary=$(speedup "$result_dir/datalog-bench-$profile-O2.csv" "edb_runtime_string_pair_insert" "composed_unit_binary" "batch_binary" 64)
 
 cat > "$report" <<REPORT
 # Datalog Performance Report
@@ -91,12 +106,14 @@ Generated artifacts dirty after benchmark run: \`$generated_artifacts_dirty_afte
 
 Optimization levels: \`-O0\` and \`-O2\`
 
+Engine size profile: \`$profile\`
+
 ## Build Matrix
 
 | opt_level | compiler | cflags |
 |---|---|---|
-| -O0 | $compiler | -Wall -Wextra -g -I. -O0 |
-| -O2 | $compiler | -Wall -Wextra -g -I. -O2 |
+| -O0 | $compiler | $cflags_o0 |
+| -O2 | $compiler | $cflags_o2 |
 
 ## Methodology
 
@@ -133,9 +150,9 @@ the symbol table with \`maelys_datalog_symbol_table_init\`, not just the EDB.
 ## Engine Bounds
 
 - \`MAELYS_DATALOG_MAX_SYMBOLS = 512\`
-- \`MAELYS_DATALOG_MAX_EDB_FACTS = 1024\`
-- \`MAELYS_DATALOG_MAX_IDB_FACTS = 1024\`
-- \`MAELYS_DATALOG_MAX_FACTS_PER_PRED = 64\`
+- \`MAELYS_DATALOG_MAX_EDB_FACTS = $max_edb\`
+- \`MAELYS_DATALOG_MAX_IDB_FACTS = $max_idb\`
+- \`MAELYS_DATALOG_MAX_FACTS_PER_PRED = $max_per_pred\`
 - \`MAELYS_DATALOG_MAX_PREDICATES = 128\`
 - \`MAELYS_DATALOG_STRING_POOL_BYTES = 32768\`
 - \`MAELYS_DATALOG_MAX_STRING_BYTES = 1024\`
@@ -156,6 +173,8 @@ résolution (solve). Les features couvertes :
 | Insertion de chaînes runtime | edb_runtime_string_insert / pair | unit/composed vs batch |
 | Plages denses par prédicat | solver_predicate_dense_ranges | temps de solve par sélectivité/bruit |
 | Discipline de copie des bindings du solveur | scénarios solver_* | temps de solve |
+| Sélectivité pure du solveur | solver_selectivity_pure | sélectivité variable à taille fixe |
+| Taille pure du solveur | solver_size_pure | taille variable à sélectivité fixe |
 
 Non mesuré dans cette pass (axe différent du harnais actuel) :
 
@@ -192,7 +211,7 @@ graph/report consumers.
 |---|---|---|---|---:|---:|---:|---:|---|
 REPORT
 
-for csv in "$result_dir"/datalog-bench-O0.csv "$result_dir"/datalog-bench-O2.csv; do
+for csv in "$result_dir"/datalog-bench-"$profile"-O0.csv "$result_dir"/datalog-bench-"$profile"-O2.csv; do
   awk -F, '
     function feature_name(bench) {
       if (bench == "intern_distinct_symbols") return "Interning de symboles distincts"
@@ -204,6 +223,8 @@ for csv in "$result_dir"/datalog-bench-O0.csv "$result_dir"/datalog-bench-O2.csv
       if (bench == "solver_predicate_dense_ranges") return "Résolution : plages denses par prédicat"
       if (bench == "solver_repeated_solve") return "Résolution répétée (même policy/EDB)"
       if (bench == "solver_join_bindings") return "Résolution : jointures"
+      if (bench == "solver_selectivity_pure") return "Résolution : sélectivité pure"
+      if (bench == "solver_size_pure") return "Résolution : taille pure"
       return bench
     }
     NR == 1 {
@@ -263,7 +284,7 @@ if command -v python3 >/dev/null 2>&1; then
 import matplotlib
 PY
   then
-    python3 bench/plot_results.py "$result_dir"/datalog-bench-*.csv || true
+    python3 bench/plot_results.py "$result_dir"/datalog-bench-"$profile"-*.csv || true
   fi
 fi
 

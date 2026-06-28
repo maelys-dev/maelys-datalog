@@ -17,7 +17,17 @@
 
 static int test_datalog_headers_owner_types_available(void) {
     TEST_BEGIN();
+#if defined(MAELYS_DATALOG_PROFILE_LARGE)
+    TEST_ASSERT_EQUAL((size_t)2048u, (size_t)MAELYS_DATALOG_MAX_EDB_FACTS, "%zu");
+    TEST_ASSERT_EQUAL((size_t)2048u, (size_t)MAELYS_DATALOG_MAX_IDB_FACTS, "%zu");
+    TEST_ASSERT_EQUAL((size_t)256u, (size_t)MAELYS_DATALOG_MAX_FACTS_PER_PRED, "%zu");
+    TEST_ASSERT_EQUAL_STRING("LARGE", MAELYS_DATALOG_SIZE_PROFILE_NAME);
+#else
     TEST_ASSERT_EQUAL((size_t)1024u, (size_t)MAELYS_DATALOG_MAX_EDB_FACTS, "%zu");
+    TEST_ASSERT_EQUAL((size_t)1024u, (size_t)MAELYS_DATALOG_MAX_IDB_FACTS, "%zu");
+    TEST_ASSERT_EQUAL((size_t)64u, (size_t)MAELYS_DATALOG_MAX_FACTS_PER_PRED, "%zu");
+    TEST_ASSERT_EQUAL_STRING("SMALL", MAELYS_DATALOG_SIZE_PROFILE_NAME);
+#endif
     TEST_ASSERT_EQUAL(MAELYS_DATALOG_SYMBOL_ID_INVALID,
                       (maelys_datalog_symbol_id_t)0u,
                       "%u");

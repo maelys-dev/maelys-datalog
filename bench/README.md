@@ -1,6 +1,6 @@
 # Maelys Datalog Benchmarks
 
-This directory contains the native benchmark harness for P3-C49.
+This directory contains the native benchmark harness for the Datalog engine.
 
 Run from the repository root:
 
@@ -8,14 +8,34 @@ Run from the repository root:
 make -f Makefile.bench bench
 ```
 
-The harness builds two production-style native binaries, one with `-O0` and one
-with `-O2`, then writes:
+`bench` is the compatibility alias for the SMALL size profile. The harness also
+supports the LARGE profile:
 
-- `bench/results/datalog-bench-O0.csv`
-- `bench/results/datalog-bench-O2.csv`
-- `bench/results/datalog-bench-O0.json`
-- `bench/results/datalog-bench-O2.json`
-- `bench/reports/datalog-performance-report.md`
+```sh
+make -f Makefile.bench bench-small
+make -f Makefile.bench bench-large
+make -f Makefile.bench bench-all
+```
+
+For each profile, the harness builds two production-style native binaries, one
+with `-O0` and one with `-O2`, then writes:
+
+- `bench/results/datalog-bench-small-O0.csv`
+- `bench/results/datalog-bench-small-O2.csv`
+- `bench/results/datalog-bench-small-O0.json`
+- `bench/results/datalog-bench-small-O2.json`
+- `bench/results/datalog-bench-large-O0.csv`
+- `bench/results/datalog-bench-large-O2.csv`
+- `bench/results/datalog-bench-large-O0.json`
+- `bench/results/datalog-bench-large-O2.json`
+- `bench/reports/datalog-performance-report-small.md`
+- `bench/reports/datalog-performance-report-large.md`
+
+The SMALL profile is the default and preserves the historical engine bounds.
+The LARGE profile is selected globally at compile time with
+`-DMAELYS_DATALOG_PROFILE_LARGE`; build outputs are separated by profile and
+optimization level under `bench/build/bench-small-O0`, `bench/build/bench-small-O2`,
+`bench/build/bench-large-O0`, and `bench/build/bench-large-O2`.
 
 The default sample count is 1000. Override it only for local iteration:
 
@@ -34,9 +54,28 @@ After a native or container benchmark run, use:
 make -f Makefile.bench check
 ```
 
+`check` is the compatibility alias for `check-small`. Use profile-specific
+targets when both profiles have been produced:
+
+```sh
+make -f Makefile.bench check-small
+make -f Makefile.bench check-large
+make -f Makefile.bench check-all
+```
+
 `check` reads the existing CSV/JSON artifacts. It does not build the engine and
 does not rerun benchmarks. Missing `-O2` artifacts are reported as an evidence
 setup error; malformed artifacts or regressions return a non-zero exit code.
+
+To prove the gate fails on degraded evidence without touching real artifacts:
+
+```sh
+make -f Makefile.bench check-selftest
+```
+
+The selftest copies artifacts into a temporary directory, corrupts the copies,
+and verifies ratio failures, malformed timing failures, profile mismatch skips,
+and legacy SMALL baseline matching.
 
 Two classes of guard are intentionally separate:
 
@@ -45,8 +84,9 @@ Two classes of guard are intentionally separate:
   more than `5x` slower than the unit or composed-unit path. A batch path that
   is merely slower than unit is reported as a warning, not a hard regression.
 - Absolute baseline comparison is evaluated only when the current `-O2` JSON
-  metadata matches the container baseline environment: Linux, arm64/aarch64,
-  clang 18, `-O2`. Native Apple clang runs normally report `ratios-only`.
+  metadata matches the container baseline environment and profile: Linux,
+  arm64/aarch64, clang 18, `-O2`, SMALL. Native Apple clang runs normally report
+  `ratios-only`; LARGE is ratios-only until a dedicated LARGE baseline exists.
 
 The container baseline lives at:
 
@@ -65,8 +105,9 @@ To refresh the container baseline deliberately:
 make -f Makefile.bench bench-baseline-update
 ```
 
-This target runs `bench-linux`, then copies the generated `-O2` JSON to the
-baseline path. It is never a dependency of `check`.
+This target runs the SMALL container benchmark, then copies
+`datalog-bench-small-O2.json` to the baseline path. It is never a dependency of
+`check`.
 
 Baseline refresh procedure:
 

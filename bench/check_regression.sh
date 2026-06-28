@@ -2,10 +2,10 @@
 set -euo pipefail
 
 RESULTS_DIR=${MAELYS_BENCH_RESULTS_DIR:-bench/results}
-CSV_O0=${MAELYS_BENCH_CSV_O0:-$RESULTS_DIR/datalog-bench-O0.csv}
-CSV_O2=${MAELYS_BENCH_CSV_O2:-$RESULTS_DIR/datalog-bench-O2.csv}
-JSON_O0=${MAELYS_BENCH_JSON_O0:-$RESULTS_DIR/datalog-bench-O0.json}
-JSON_O2=${MAELYS_BENCH_JSON_O2:-$RESULTS_DIR/datalog-bench-O2.json}
+CSV_O0=${MAELYS_BENCH_CSV_O0:-$RESULTS_DIR/datalog-bench-small-O0.csv}
+CSV_O2=${MAELYS_BENCH_CSV_O2:-$RESULTS_DIR/datalog-bench-small-O2.csv}
+JSON_O0=${MAELYS_BENCH_JSON_O0:-$RESULTS_DIR/datalog-bench-small-O0.json}
+JSON_O2=${MAELYS_BENCH_JSON_O2:-$RESULTS_DIR/datalog-bench-small-O2.json}
 BASELINE_JSON=${MAELYS_BENCH_BASELINE_JSON:-bench/baseline/linux-arm64-clang18-O2.json}
 
 failures=()
@@ -207,7 +207,7 @@ else
 fi
 
 if grep -q ',full_scan,' "$CSV_O2"; then
-  echo "DENSE_RANGE: full_scan reference present, ratio check not implemented for C49-BIS"
+  echo "DENSE_RANGE: full_scan reference present, ratio check not implemented"
 else
   echo "DENSE_RANGE: full_scan reference absent, skipped"
 fi
@@ -221,6 +221,10 @@ current_os=$(json_field "$JSON_O2" os)
 current_compiler=$(json_field "$JSON_O2" compiler)
 current_opt=$(json_field "$JSON_O2" opt_level)
 current_cpu=$(json_field "$JSON_O2" cpu)
+current_profile=$(json_field "$JSON_O2" profile)
+if [[ -z "$current_profile" ]]; then
+  current_profile=SMALL
+fi
 
 os_l=$(lower "$current_os")
 compiler_l=$(lower "$current_compiler")
@@ -247,6 +251,15 @@ if [[ "$env_matches" != true ]]; then
   finish
 fi
 
+baseline_profile=$(json_field "$BASELINE_JSON" profile)
+if [[ -z "$baseline_profile" ]]; then
+  baseline_profile=SMALL
+fi
+if [[ "$(lower "$baseline_profile")" != "$(lower "$current_profile")" ]]; then
+  echo "BASELINE: profile mismatch baseline=$baseline_profile current=$current_profile, ratios-only check"
+  finish
+fi
+
 if ! command -v jq >/dev/null 2>&1; then
   echo "BASELINE: jq unavailable for matching baseline, ratios-only check"
   finish
@@ -259,7 +272,7 @@ if ! jq -e '.metadata and (.results | type == "array")' "$BASELINE_JSON" >/dev/n
 fi
 
 mode="ratios+baseline"
-echo "BASELINE: current artifact env linux/arm64/clang-18/-O2 matches baseline"
+echo "BASELINE: current artifact env linux/arm64/clang-18/-O2 profile=$current_profile matches baseline"
 
 baseline_tmp=$(mktemp "${TMPDIR:-/tmp}/maelys-baseline.XXXXXX")
 current_tmp=$(mktemp "${TMPDIR:-/tmp}/maelys-current.XXXXXX")

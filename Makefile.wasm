@@ -1,11 +1,20 @@
 EMCC = emcc
 EM_CACHE ?= $(CURDIR)/../../build/emscripten-cache
+WASM_PROFILE ?= small
+
+ifeq ($(WASM_PROFILE),large)
+WASM_PROFILE_CFLAGS = -DMAELYS_DATALOG_PROFILE_LARGE
+WASM_BUILD_DIR ?= build/wasm-large
+else
+WASM_PROFILE_CFLAGS =
 WASM_BUILD_DIR ?= build/wasm
+endif
 
 WASM_CFLAGS = \
 	-O2 \
 	-I. \
-	-DMAELYS_WASM=1
+	-DMAELYS_WASM=1 \
+	$(WASM_PROFILE_CFLAGS)
 
 ENGINE_SRCS = \
 	src/core/maelys_datalog_audit.c \
@@ -116,6 +125,9 @@ $(WASM_BUILD_DIR)/maelys_datalog_dynamic.wasm: $(WASM_BUILD_DIR)/maelys_datalog_
 maelys_datalog.js:         $(WASM_BUILD_DIR)/maelys_datalog.js
 maelys_datalog_examples.js: $(WASM_BUILD_DIR)/maelys_datalog_examples.js
 maelys_datalog_dynamic.js: $(WASM_BUILD_DIR)/maelys_datalog_dynamic.js
+
+maelys_datalog_dynamic_large.js:
+	$(MAKE) -f Makefile.wasm maelys_datalog_dynamic.js WASM_PROFILE=large WASM_BUILD_DIR=build/wasm-large
 
 clean:
 	rm -rf $(EM_CACHE)

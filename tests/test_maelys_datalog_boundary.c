@@ -286,13 +286,14 @@ static int init_edb_registry(maelys_datalog_ruleset_t *r, size_t edb_pred_count)
 
 static int test_boundary_max_edb_facts_at_limit(void) {
     TEST_BEGIN();
+    const size_t pred_count = MAELYS_DATALOG_MAX_EDB_FACTS / MAELYS_DATALOG_MAX_FACTS_PER_PRED;
     maelys_datalog_ruleset_t r;
-    TEST_ASSERT_EQUAL(MAELYS_OK, init_edb_registry(&r, 16u), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK, init_edb_registry(&r, pred_count), "%d");
     maelys_datalog_fact_t pool[MAELYS_DATALOG_MAX_EDB_FACTS];
     maelys_datalog_edb_t edb;
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_init(&edb, pool, MAELYS_DATALOG_MAX_EDB_FACTS, &r.symbols, &r.registry), "%d");
     char name[64];
-    for (size_t p = 0; p < 16u; p++) {
+    for (size_t p = 0; p < pred_count; p++) {
         pred_name(name, sizeof(name), "e", p);
         for (size_t i = 0; i < MAELYS_DATALOG_MAX_FACTS_PER_PRED; i++) {
             maelys_datalog_term_t term = int_term((long long)i);
@@ -309,13 +310,14 @@ static int test_boundary_max_edb_facts_at_limit(void) {
 
 static int test_boundary_max_edb_facts_over_limit(void) {
     TEST_BEGIN();
+    const size_t pred_count = MAELYS_DATALOG_MAX_EDB_FACTS / MAELYS_DATALOG_MAX_FACTS_PER_PRED;
     maelys_datalog_ruleset_t r;
-    TEST_ASSERT_EQUAL(MAELYS_OK, init_edb_registry(&r, 17u), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK, init_edb_registry(&r, pred_count + 1u), "%d");
     maelys_datalog_fact_t pool[MAELYS_DATALOG_MAX_EDB_FACTS];
     maelys_datalog_edb_t edb;
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_init(&edb, pool, MAELYS_DATALOG_MAX_EDB_FACTS, &r.symbols, &r.registry), "%d");
     char name[64];
-    for (size_t p = 0; p < 16u; p++) {
+    for (size_t p = 0; p < pred_count; p++) {
         pred_name(name, sizeof(name), "e", p);
         for (size_t i = 0; i < MAELYS_DATALOG_MAX_FACTS_PER_PRED; i++) {
             maelys_datalog_term_t term = int_term((long long)i);
@@ -323,8 +325,9 @@ static int test_boundary_max_edb_facts_over_limit(void) {
         }
     }
     size_t before = edb.fact_count;
+    pred_name(name, sizeof(name), "e", pred_count);
     maelys_datalog_term_t term = int_term(1000);
-    TEST_ASSERT_EQUAL(MAELYS_ERR_PAYLOAD_TOO_LARGE, maelys_datalog_edb_add_fact(&edb, "e016", &term, 1u), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_ERR_PAYLOAD_TOO_LARGE, maelys_datalog_edb_add_fact(&edb, name, &term, 1u), "%d");
     TEST_ASSERT_EQUAL(before, edb.fact_count, "%zu");
     TEST_ASSERT_EQUAL((size_t)0u, r.symbols.count, "%zu");
     maelys_datalog_edb_clear(&edb);

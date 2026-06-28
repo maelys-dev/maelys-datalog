@@ -39,6 +39,9 @@
 #ifndef BENCH_OPT_LEVEL
 #define BENCH_OPT_LEVEL "unknown"
 #endif
+#ifndef BENCH_PROFILE
+#define BENCH_PROFILE MAELYS_DATALOG_SIZE_PROFILE_NAME
+#endif
 
 #define WARMUP_MIN_NS 300000000ULL
 #define WARMUP_MIN_ITERS 500u
@@ -47,14 +50,32 @@
 #define DEFAULT_SAMPLES 1000u
 #define MAX_RESULTS 128u
 #define MAX_VALUES (MAELYS_DATALOG_MAX_EDB_FACTS * 2u)
+#define BENCH_NOISE_PREDICATES 32u
+
+static const char *const k_bench_fixed_predicates[] = {
+    "bench", "item", "pair", "allow", "user", "owns", "target", "missing_edb"};
+
+#define BENCH_FIXED_PREDICATES \
+  (sizeof(k_bench_fixed_predicates) / sizeof(k_bench_fixed_predicates[0]))
+
+_Static_assert(BENCH_NOISE_PREDICATES + BENCH_FIXED_PREDICATES <=
+                   MAELYS_DATALOG_MAX_PREDICATES,
+               "bench predicate registry capacity");
+_Static_assert(BENCH_NOISE_PREDICATES * MAELYS_DATALOG_MAX_FACTS_PER_PRED >=
+                   MAELYS_DATALOG_MAX_EDB_FACTS,
+               "bench noise predicates cover the maximum EDB fact count");
 
 static volatile uint64_t bench_sink;
+static size_t s_max_noise_predicates_used;
+static size_t s_max_facts_per_pred_observed;
+static size_t s_max_solver_symbols_observed;
 
 typedef struct {
   const char *benchmark;
   const char *group;
   const char *mode;
   size_t size;
+  size_t useful_count;
   double selectivity;
   const char *op_unit;
   size_t op_count;
@@ -105,6 +126,8 @@ typedef struct {
   uint64_t acc;
 } repeated_payload_t;
 
+static bench_ctx_t s_bench_ctx;
+
 typedef void (*prepare_fn_t)(bench_ctx_t *ctx, const bench_case_t *bench);
 typedef uint64_t (*run_fn_t)(bench_ctx_t *ctx, const bench_case_t *bench);
 
@@ -153,6 +176,19 @@ static void require_true(bool ok, const char *what) {
   }
 }
 
+static void observe_max_size(size_t *slot, size_t value) {
+  if (value > *slot) {
+    *slot = value;
+  }
+}
+
+static void observe_solver_bounds(const bench_ctx_t *ctx) {
+  observe_max_size(&s_max_solver_symbols_observed, ctx->ruleset.symbols.count);
+  for (size_t i = 0; i < ctx->ruleset.registry.count; ++i) {
+    observe_max_size(&s_max_facts_per_pred_observed, ctx->edb.facts_per_pred[i]);
+  }
+}
+
 static void copy_string(char *dst, size_t dst_len, const char *src) {
   if (dst_len == 0u) {
     return;
@@ -160,11 +196,31 @@ static void copy_string(char *dst, size_t dst_len, const char *src) {
   snprintf(dst, dst_len, "%s", src);
 }
 
+static void validate_fixed_predicate_list(void) {
+  for (size_t i = 0; i < BENCH_FIXED_PREDICATES; ++i) {
+    require_true(k_bench_fixed_predicates[i] != NULL && k_bench_fixed_predicates[i][0] != '\0',
+                 "bench fixed predicate name");
+  }
+}
+
 static void fill_date_utc(char out[32]) {
   time_t t = time(NULL);
   struct tm tm_utc;
   gmtime_r(&t, &tm_utc);
   strftime(out, 32, "%Y-%m-%dT%H:%M:%SZ", &tm_utc);
+}
+
+static size_t useful_for_percent(size_t total, uint32_t pct_num, uint32_t pct_den) {
+  if (pct_den == 0u) {
+    fprintf(stderr, "invalid percent denominator\n");
+    exit(2);
+  }
+  uint32_t useful = ((uint32_t)total * (uint32_t)pct_num + (uint32_t)pct_den / 2u) /
+                    (uint32_t)pct_den;
+  if (useful == 0u && pct_num > 0u) {
+    useful = 1u;
+  }
+  return (size_t)useful;
 }
 
 static size_t sample_count(void) {
@@ -201,7 +257,7 @@ static void init_registry(bench_ctx_t *ctx) {
                                                           MAELYS_DATALOG_PRED_KIND_EDB),
              "add pair domain");
 
-  for (unsigned i = 0; i < 32u; ++i) {
+  for (unsigned i = 0; i < BENCH_NOISE_PREDICATES; ++i) {
     char name[32];
     snprintf(name, sizeof(name), "noise_%03u", i);
     require_ok(maelys_datalog_predicate_registry_add_domain(&ctx->registry,
@@ -437,7 +493,7 @@ static void prepare_solve_base(bench_ctx_t *ctx, const bench_case_t *bench) {
                                                           1u,
                                                           MAELYS_DATALOG_PRED_KIND_EDB),
              "ruleset missing");
-  for (unsigned i = 0; i < 32u; ++i) {
+  for (unsigned i = 0; i < BENCH_NOISE_PREDICATES; ++i) {
     char name[32];
     snprintf(name, sizeof(name), "noise_%03u", i);
     require_ok(maelys_datalog_predicate_registry_add_domain(&ctx->ruleset.registry,
@@ -458,6 +514,13 @@ static void prepare_solve_base(bench_ctx_t *ctx, const bench_case_t *bench) {
 }
 
 static void add_noise_facts(bench_ctx_t *ctx, size_t total_noise, size_t symbol_mod) {
+  require_true(symbol_mod > 0u && symbol_mod <= MAELYS_DATALOG_MAX_FACTS_PER_PRED,
+               "noise symbol mod");
+  const size_t max_pred_index =
+      total_noise == 0u ? 0u : (total_noise - 1u) / MAELYS_DATALOG_MAX_FACTS_PER_PRED;
+  require_true(max_pred_index < BENCH_NOISE_PREDICATES,
+               "noise predicate index within declared BENCH_NOISE_PREDICATES");
+  observe_max_size(&s_max_noise_predicates_used, total_noise == 0u ? 0u : max_pred_index + 1u);
   for (size_t i = 0; i < total_noise; ++i) {
     char pred_name[32];
     char value[32];
@@ -467,6 +530,22 @@ static void add_noise_facts(bench_ctx_t *ctx, size_t total_noise, size_t symbol_
     require_ok(maelys_datalog_edb_add_runtime_symbol_fact(&ctx->edb, pred_name, value),
                "add noise");
   }
+}
+
+static void populate_user_noise_total(bench_ctx_t *ctx, size_t total, size_t useful) {
+  require_true(useful <= total, "useful <= total");
+  require_true(useful <= MAELYS_DATALOG_MAX_FACTS_PER_PRED, "useful per-predicate cap");
+  require_true(total <= MAELYS_DATALOG_MAX_EDB_FACTS, "total EDB cap");
+  for (size_t i = 0; i < useful; ++i) {
+    char value[32];
+    snprintf(value, sizeof(value), "u%03zu", i);
+    require_ok(maelys_datalog_edb_add_runtime_symbol_fact(&ctx->edb, "user", value),
+               "add user");
+  }
+  if (total > useful) {
+    add_noise_facts(ctx, total - useful, MAELYS_DATALOG_MAX_FACTS_PER_PRED);
+  }
+  require_true(ctx->edb.fact_count == total, "single-factor fact total");
 }
 
 static void populate_selectivity(bench_ctx_t *ctx, const bench_case_t *bench) {
@@ -555,7 +634,13 @@ static void populate_noisy_join(bench_ctx_t *ctx, const bench_case_t *bench) {
 
 static void prepare_solver(bench_ctx_t *ctx, const bench_case_t *bench) {
   prepare_solve_base(ctx, bench);
-  if (strncmp(bench->mode, "selectivity_", 12) == 0) {
+  if (strcmp(bench->mode, "selectivity_pure") == 0 ||
+             strcmp(bench->mode, "size_pure") == 0) {
+    require_true(bench->useful_count <= bench->size, "useful_count within total size");
+    require_true(bench->useful_count <= MAELYS_DATALOG_MAX_FACTS_PER_PRED,
+                 "useful_count within per-predicate bound");
+    populate_user_noise_total(ctx, bench->size, bench->useful_count);
+  } else if (strncmp(bench->mode, "selectivity_", 12) == 0) {
     populate_selectivity(ctx, bench);
   } else if (strcmp(bench->mode, "noise_total") == 0) {
     populate_noise_total(ctx, bench);
@@ -573,6 +658,9 @@ static void prepare_solver(bench_ctx_t *ctx, const bench_case_t *bench) {
                                                       "u000",
                                                       &ctx->query_terms[0].as.symbol),
              "intern query symbol");
+  require_true(ctx->ruleset.symbols.count <= MAELYS_DATALOG_MAX_SYMBOLS,
+               "symbol universe within MAX_SYMBOLS");
+  observe_solver_bounds(ctx);
 }
 
 static uint64_t run_solver_once(bench_ctx_t *ctx, const bench_case_t *bench) {
@@ -660,18 +748,18 @@ static void measure_case(bench_output_t *out,
                          prepare_fn_t prepare,
                          run_fn_t run,
                          bool cleanup_ruleset) {
-  bench_ctx_t ctx;
-  memset(&ctx, 0, sizeof(ctx));
-  init_registry(&ctx);
+  bench_ctx_t *ctx = &s_bench_ctx;
+  memset(ctx, 0, sizeof(*ctx));
+  init_registry(ctx);
   const size_t inner_repeats =
-      calibrate_inner_repeats(&ctx, bench, prepare, run, cleanup_ruleset);
+      calibrate_inner_repeats(ctx, bench, prepare, run, cleanup_ruleset);
 
   uint64_t warmup_start = now_ns();
   uint64_t warmup_elapsed = 0;
   size_t warmup_iters = 0;
   while (warmup_elapsed < WARMUP_MIN_NS || warmup_iters < WARMUP_MIN_ITERS) {
     repeated_payload_t measured =
-        run_payload_repeats(&ctx, bench, prepare, run, cleanup_ruleset, 1u);
+        run_payload_repeats(ctx, bench, prepare, run, cleanup_ruleset, 1u);
     consume_u64(measured.acc);
     ++warmup_iters;
     warmup_elapsed = now_ns() - warmup_start;
@@ -691,7 +779,7 @@ static void measure_case(bench_output_t *out,
     size_t sample_repeats = inner_repeats;
     repeated_payload_t measured = {0};
     while (sample_repeats <= INNER_REPEAT_MAX) {
-      measured = run_payload_repeats(&ctx, bench, prepare, run, cleanup_ruleset, sample_repeats);
+      measured = run_payload_repeats(ctx, bench, prepare, run, cleanup_ruleset, sample_repeats);
       if (measured.payload_ns > 0u) {
         break;
       }
@@ -820,10 +908,11 @@ static void write_json(const char *path, const bench_output_t *out) {
           "    \"compiler\": \"%s\",\n"
           "    \"cflags\": \"%s\",\n"
           "    \"opt_level\": \"%s\",\n"
+          "    \"profile\": \"%s\",\n"
           "    \"host\": \"%s\",\n"
           "    \"os\": \"%s %s\",\n"
           "    \"cpu\": \"%s\",\n"
-          "    \"notes\": \"hot-cache / warm-pool native microbenchmarks; timing-only C49 run\"\n"
+          "    \"notes\": \"hot-cache / warm-pool native microbenchmarks; timing-only run\"\n"
           "  },\n"
           "  \"results\": [\n",
           BENCH_COMMIT,
@@ -832,6 +921,7 @@ static void write_json(const char *path, const bench_output_t *out) {
           BENCH_COMPILER,
           BENCH_CFLAGS,
           BENCH_OPT_LEVEL,
+          BENCH_PROFILE,
           host,
           sysname,
           release,
@@ -886,12 +976,15 @@ static void run_all(bench_output_t *out) {
   static const size_t repeat_sizes[] = {1u, 10u, 100u, 1000u};
   static const size_t join_sizes[] = {8u, 16u, 32u, 64u};
   static const size_t noisy_join_sizes[] = {128u, 512u, 960u};
+  static const uint32_t selectivity_pct_num[] = {1u, 5u, 10u, 25u, 50u, 100u};
+  static const size_t size_pure_candidates[] = {64u, 128u, 256u, 512u, 1024u, 2048u};
 
   for (size_t i = 0; i < sizeof(intern_sizes) / sizeof(intern_sizes[0]); ++i) {
     bench_case_t bench = {"intern_distinct_symbols",
                           "ingestion",
                           "distinct",
                           intern_sizes[i],
+                          0u,
                           1.0,
                           "symbols/sec",
                           intern_sizes[i]};
@@ -906,7 +999,14 @@ static void run_all(bench_output_t *out) {
 
   for (size_t i = 0; i < sizeof(fact_sizes) / sizeof(fact_sizes[0]); ++i) {
     const size_t n = fact_sizes[i];
-    bench_case_t bench = {"edb_symbol_id_insert", "ingestion", "unit_unary", n, 1.0, "facts/sec", n};
+    bench_case_t bench = {"edb_symbol_id_insert",
+                          "ingestion",
+                          "unit_unary",
+                          n,
+                          0u,
+                          1.0,
+                          "facts/sec",
+                          n};
     measure_case(out, &bench, prepare_symbol_insert, run_symbol_unit_unary, false);
     bench.mode = "batch_unary";
     measure_case(out, &bench, prepare_symbol_insert, run_symbol_batch_unary, false);
@@ -933,6 +1033,7 @@ static void run_all(bench_output_t *out) {
                           "solver",
                           selectivity_modes[i],
                           selectivity_totals[i],
+                          0u,
                           selectivities[i],
                           "solve_calls/sec",
                           1u};
@@ -944,7 +1045,47 @@ static void run_all(bench_output_t *out) {
                           "solver",
                           "noise_total",
                           noise_totals[i],
+                          0u,
                           noise_totals[i] == 64u ? 0.125 : (16.0 / (double)noise_totals[i]),
+                          "solve_calls/sec",
+                          1u};
+    measure_case(out, &bench, prepare_solver, run_solver_once, true);
+  }
+
+  /* Single-factor solver families:
+   * - solver_selectivity_pure fixes total at MAX_FACTS_PER_PRED so 100% useful
+   *   fits in one user/1 dense range for both SMALL and LARGE profiles.
+   * - solver_size_pure fixes selectivity near 10% and includes only totals whose
+   *   useful count fits MAX_FACTS_PER_PRED; invalid larger SMALL totals are
+   *   excluded rather than capped.
+   */
+  const size_t sel_fixed_total = MAELYS_DATALOG_MAX_FACTS_PER_PRED;
+  for (size_t i = 0; i < sizeof(selectivity_pct_num) / sizeof(selectivity_pct_num[0]); ++i) {
+    const size_t useful = useful_for_percent(sel_fixed_total, selectivity_pct_num[i], 100u);
+    bench_case_t bench = {"solver_selectivity_pure",
+                          "solver",
+                          "selectivity_pure",
+                          sel_fixed_total,
+                          useful,
+                          (double)useful / (double)sel_fixed_total,
+                          "solve_calls/sec",
+                          1u};
+    measure_case(out, &bench, prepare_solver, run_solver_once, true);
+  }
+
+  for (size_t i = 0; i < sizeof(size_pure_candidates) / sizeof(size_pure_candidates[0]); ++i) {
+    const size_t total = size_pure_candidates[i];
+    const size_t useful = useful_for_percent(total, 10u, 100u);
+    if (total > MAELYS_DATALOG_MAX_EDB_FACTS ||
+        useful > MAELYS_DATALOG_MAX_FACTS_PER_PRED) {
+      continue;
+    }
+    bench_case_t bench = {"solver_size_pure",
+                          "solver",
+                          "size_pure",
+                          total,
+                          useful,
+                          (double)useful / (double)total,
                           "solve_calls/sec",
                           1u};
     measure_case(out, &bench, prepare_solver, run_solver_once, true);
@@ -954,6 +1095,7 @@ static void run_all(bench_output_t *out) {
                          "solver",
                          "absent_predicate",
                          512u,
+                         0u,
                          0.0,
                          "solve_calls/sec",
                          1u};
@@ -964,6 +1106,7 @@ static void run_all(bench_output_t *out) {
                           "solver",
                           "repeated",
                           repeat_sizes[i],
+                          0u,
                           1.0,
                           "solve_calls/sec",
                           repeat_sizes[i]};
@@ -975,6 +1118,7 @@ static void run_all(bench_output_t *out) {
                           "solver",
                           "simple_join",
                           join_sizes[i],
+                          0u,
                           0.5,
                           "solve_calls/sec",
                           1u};
@@ -986,6 +1130,7 @@ static void run_all(bench_output_t *out) {
                           "solver",
                           "noisy_join",
                           noisy_join_sizes[i],
+                          0u,
                           0.5,
                           "solve_calls/sec",
                           1u};
@@ -1003,6 +1148,7 @@ int main(int argc, char **argv) {
   memset(&out, 0, sizeof(out));
   out.samples = sample_count();
   fill_date_utc(out.date_utc);
+  validate_fixed_predicate_list();
 
   out.csv = fopen(argv[1], "w");
   if (!out.csv) {
@@ -1024,5 +1170,15 @@ int main(int argc, char **argv) {
           argv[1],
           argv[2],
           (uint64_t)bench_sink);
+  fprintf(stderr,
+          "[bench] profile=%s max_noise_predicates_used=%zu/%u "
+          "max_facts_per_pred=%zu/%u max_distinct_symbols=%zu/%u\n",
+          BENCH_PROFILE,
+          s_max_noise_predicates_used,
+          (unsigned)BENCH_NOISE_PREDICATES,
+          s_max_facts_per_pred_observed,
+          (unsigned)MAELYS_DATALOG_MAX_FACTS_PER_PRED,
+          s_max_solver_symbols_observed,
+          (unsigned)MAELYS_DATALOG_MAX_SYMBOLS);
   return 0;
 }

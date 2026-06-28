@@ -7,9 +7,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-_Static_assert(sizeof(maelys_datalog_symbol_id_t) * 2u * MAELYS_DATALOG_MAX_EDB_FACTS <= 8192u,
-               "Binary scratch buffer is too large for the Wasm stack");
-
 static int term_cmp(const maelys_datalog_term_t *a, const maelys_datalog_term_t *b) {
     if (a->kind != b->kind) return (int)a->kind - (int)b->kind;
     switch (a->kind) {
@@ -212,7 +209,7 @@ maelys_result_t maelys_datalog_edb_init(maelys_datalog_edb_t *edb,
                                         maelys_datalog_symbol_table_t *symbols,
                                         const maelys_datalog_predicate_registry_t *registry) {
     if (!edb || !fact_pool || fact_capacity == 0 || !symbols || !registry) return MAELYS_ERR_INVALID_ARGUMENT;
-    memset(edb, 0, sizeof(*edb));
+    memset(edb, 0, offsetof(maelys_datalog_edb_t, runtime_pair_ids_scratch));
     edb->facts = fact_pool;
     edb->fact_capacity = fact_capacity;
     maelys_datalog_fact_set_init(&edb->fact_set, fact_pool, fact_capacity);
@@ -460,7 +457,7 @@ maelys_result_t maelys_datalog_edb_add_runtime_symbol_facts(
     maelys_result_t rc = validate_edb_symbol_batch_target(edb, predicate, 1, value_count);
     if (rc != MAELYS_OK) return rc;
 
-    maelys_datalog_symbol_id_t ids[MAELYS_DATALOG_MAX_EDB_FACTS];
+    maelys_datalog_symbol_id_t *ids = edb->runtime_pair_ids_scratch;
     for (size_t i = 0; i < value_count; i++) {
         rc = maelys_datalog_edb_intern_runtime_symbol(edb, values[i], &ids[i]);
         if (rc != MAELYS_OK) return rc;
@@ -483,7 +480,7 @@ maelys_result_t maelys_datalog_edb_add_runtime_symbol_pair_facts(
     if (rc != MAELYS_OK) return rc;
 
     const size_t symbol_count = pair_count * 2u;
-    maelys_datalog_symbol_id_t ids[2u * MAELYS_DATALOG_MAX_EDB_FACTS];
+    maelys_datalog_symbol_id_t *ids = edb->runtime_pair_ids_scratch;
     for (size_t i = 0; i < symbol_count; i++) {
         rc = maelys_datalog_edb_intern_runtime_symbol(edb, flat_pairs[i], &ids[i]);
         if (rc != MAELYS_OK) return rc;

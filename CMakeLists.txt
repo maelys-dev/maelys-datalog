@@ -29,6 +29,12 @@ target_include_directories(maelys_datalog PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>)
 target_compile_options(maelys_datalog PRIVATE -Wall -Wextra)
 
+option(MAELYS_DATALOG_PROFILE_LARGE "Build with the LARGE Datalog size profile" OFF)
+
+if(MAELYS_DATALOG_PROFILE_LARGE)
+    target_compile_definitions(maelys_datalog PUBLIC MAELYS_DATALOG_PROFILE_LARGE)
+endif()
+
 option(MAELYS_DATALOG_BUILD_EXAMPLES "Build example domains" OFF)
 
 if(MAELYS_DATALOG_BUILD_EXAMPLES)

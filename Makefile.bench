@@ -1,6 +1,6 @@
 CC ?= clang
 CFLAGS_COMMON = -Wall -Wextra -g -I.
-BUILD_DIR ?= bench/build
+BUILD_ROOT ?= bench/build
 RESULT_DIR ?= bench/results
 REPORT_DIR ?= bench/reports
 BASELINE_DIR ?= bench/baseline
@@ -33,8 +33,8 @@ VENDOR_SRCS = vendor/yyjson/yyjson.c
 BENCH_SRC = bench/bench_datalog.c
 BENCH_SRCS = $(ENGINE_SRCS) $(COMMON_SRCS) $(VENDOR_SRCS) $(BENCH_SRC)
 
-COMMIT := $(shell git rev-parse HEAD 2>/dev/null || echo unknown)
-DIRTY := $(shell test -z "$$(git status --short 2>/dev/null)" && echo false || echo true)
+COMMIT ?= $(shell git rev-parse HEAD 2>/dev/null || echo unknown)
+DIRTY ?= $(shell test -z "$$(git status --short 2>/dev/null)" && echo false || echo true)
 COMPILER := $(shell $(CC) --version 2>/dev/null | head -n 1 | sed 's/[^A-Za-z0-9._-]/_/g')
 
 BENCH_DEFS = \
@@ -42,39 +42,85 @@ BENCH_DEFS = \
 	-DBENCH_DIRTY=\"$(DIRTY)\" \
 	-DBENCH_COMPILER=\"$(COMPILER)\"
 
-BENCH_O0 = $(BUILD_DIR)/bench_datalog_O0
-BENCH_O2 = $(BUILD_DIR)/bench_datalog_O2
+SMALL_O0_DIR = $(BUILD_ROOT)/bench-small-O0
+SMALL_O2_DIR = $(BUILD_ROOT)/bench-small-O2
+LARGE_O0_DIR = $(BUILD_ROOT)/bench-large-O0
+LARGE_O2_DIR = $(BUILD_ROOT)/bench-large-O2
 
-.PHONY: bench bench-linux bench-baseline-update check clean clean-results
+BENCH_SMALL_O0 = $(SMALL_O0_DIR)/bench_datalog
+BENCH_SMALL_O2 = $(SMALL_O2_DIR)/bench_datalog
+BENCH_LARGE_O0 = $(LARGE_O0_DIR)/bench_datalog
+BENCH_LARGE_O2 = $(LARGE_O2_DIR)/bench_datalog
 
-bench: $(BENCH_O0) $(BENCH_O2)
-	bash bench/run_benchmarks.sh "$(BENCH_O0)" "$(BENCH_O2)"
+SMALL_DEFS = -DBENCH_PROFILE=\"SMALL\"
+LARGE_DEFS = -DMAELYS_DATALOG_PROFILE_LARGE -DBENCH_PROFILE=\"LARGE\"
 
-check:
+.PHONY: bench bench-small bench-large bench-all \
+	check check-small check-large check-all check-selftest \
+	bench-linux bench-linux-small bench-linux-large bench-baseline-update \
+	clean clean-results
+
+bench: bench-small
+
+bench-small: $(BENCH_SMALL_O0) $(BENCH_SMALL_O2)
+	bash bench/run_benchmarks.sh small "$(BENCH_SMALL_O0)" "$(BENCH_SMALL_O2)"
+
+bench-large: $(BENCH_LARGE_O0) $(BENCH_LARGE_O2)
+	bash bench/run_benchmarks.sh large "$(BENCH_LARGE_O0)" "$(BENCH_LARGE_O2)"
+
+bench-all: bench-small bench-large
+
+check: check-small
+
+check-small:
+	MAELYS_BENCH_CSV_O0="$(RESULT_DIR)/datalog-bench-small-O0.csv" \
+	MAELYS_BENCH_CSV_O2="$(RESULT_DIR)/datalog-bench-small-O2.csv" \
+	MAELYS_BENCH_JSON_O0="$(RESULT_DIR)/datalog-bench-small-O0.json" \
+	MAELYS_BENCH_JSON_O2="$(RESULT_DIR)/datalog-bench-small-O2.json" \
 	bash bench/check_regression.sh
 
-$(BENCH_O0): $(BENCH_SRCS) | $(BUILD_DIR)
-	$(CC) $(CFLAGS_COMMON) -O0 $(BENCH_DEFS) -DBENCH_OPT_LEVEL=\"-O0\" -DBENCH_CFLAGS=\"-Wall_-Wextra_-g_-I._-O0\" $(BENCH_SRCS) -o $@
+check-large:
+	MAELYS_BENCH_CSV_O0="$(RESULT_DIR)/datalog-bench-large-O0.csv" \
+	MAELYS_BENCH_CSV_O2="$(RESULT_DIR)/datalog-bench-large-O2.csv" \
+	MAELYS_BENCH_JSON_O0="$(RESULT_DIR)/datalog-bench-large-O0.json" \
+	MAELYS_BENCH_JSON_O2="$(RESULT_DIR)/datalog-bench-large-O2.json" \
+	bash bench/check_regression.sh
 
-$(BENCH_O2): $(BENCH_SRCS) | $(BUILD_DIR)
-	$(CC) $(CFLAGS_COMMON) -O2 $(BENCH_DEFS) -DBENCH_OPT_LEVEL=\"-O2\" -DBENCH_CFLAGS=\"-Wall_-Wextra_-g_-I._-O2\" $(BENCH_SRCS) -o $@
+check-all: check-small check-large
 
-$(BUILD_DIR):
+check-selftest:
+	bash bench/check_selftest.sh
+
+$(BENCH_SMALL_O0): $(BENCH_SRCS) | $(SMALL_O0_DIR)
+	$(CC) $(CFLAGS_COMMON) -O0 $(BENCH_DEFS) $(SMALL_DEFS) -DBENCH_OPT_LEVEL=\"-O0\" -DBENCH_CFLAGS=\"-Wall_-Wextra_-g_-I._-O0\" $(BENCH_SRCS) -o $@
+
+$(BENCH_SMALL_O2): $(BENCH_SRCS) | $(SMALL_O2_DIR)
+	$(CC) $(CFLAGS_COMMON) -O2 $(BENCH_DEFS) $(SMALL_DEFS) -DBENCH_OPT_LEVEL=\"-O2\" -DBENCH_CFLAGS=\"-Wall_-Wextra_-g_-I._-O2\" $(BENCH_SRCS) -o $@
+
+$(BENCH_LARGE_O0): $(BENCH_SRCS) | $(LARGE_O0_DIR)
+	$(CC) $(CFLAGS_COMMON) -O0 $(LARGE_DEFS) $(BENCH_DEFS) -DBENCH_OPT_LEVEL=\"-O0\" -DBENCH_CFLAGS=\"-Wall_-Wextra_-g_-I._-DMAELYS_DATALOG_PROFILE_LARGE_-O0\" $(BENCH_SRCS) -o $@
+
+$(BENCH_LARGE_O2): $(BENCH_SRCS) | $(LARGE_O2_DIR)
+	$(CC) $(CFLAGS_COMMON) -O2 $(LARGE_DEFS) $(BENCH_DEFS) -DBENCH_OPT_LEVEL=\"-O2\" -DBENCH_CFLAGS=\"-Wall_-Wextra_-g_-I._-DMAELYS_DATALOG_PROFILE_LARGE_-O2\" $(BENCH_SRCS) -o $@
+
+$(SMALL_O0_DIR) $(SMALL_O2_DIR) $(LARGE_O0_DIR) $(LARGE_O2_DIR):
 	mkdir -p $@
 
 clean-results:
 	rm -f $(RESULT_DIR)/*.csv $(RESULT_DIR)/*.json
 	rm -rf $(RESULT_DIR)/graphs
-	rm -f $(REPORT_DIR)/datalog-performance-report.md
+	rm -f $(REPORT_DIR)/datalog-performance-report*.md
 
 clean:
-	rm -rf $(BUILD_DIR)
+	rm -rf $(BUILD_ROOT)
 	rm -f $(RESULT_DIR)/*.csv $(RESULT_DIR)/*.json
 	rm -rf $(RESULT_DIR)/graphs
-	rm -f $(REPORT_DIR)/datalog-performance-report.md
+	rm -f $(REPORT_DIR)/datalog-performance-report*.md
 
-bench-linux:
-	@echo "==> Standalone Linux benchmark run in Docker"
+bench-linux: bench-linux-small
+
+bench-linux-small:
+	@echo "==> Standalone Linux SMALL benchmark run in Docker"
 	@mkdir -p "$(RESULT_DIR)"
 	@$(MAKE) --no-print-directory -f Makefile.asan asan-linux-image
 	@docker run --rm \
@@ -83,9 +129,21 @@ bench-linux:
 	  -v "$(CURDIR)/$(RESULT_DIR):/work/bench/results:rw" \
 	  -w /work \
 	  $(ASAN_IMAGE) \
-	  bash -c 'set -euo pipefail; tar --exclude=.git --exclude=build --exclude=.cache --exclude=bench/results -C /src -cf - . | tar -C /work -xf -; make --no-print-directory -f Makefile.bench "$(BENCH_O0)" "$(BENCH_O2)" COMMIT="$(COMMIT)" DIRTY="$(DIRTY)"; rm -f "$(RESULT_DIR)"/datalog-bench-*.csv "$(RESULT_DIR)"/datalog-bench-*.json; "$(BENCH_O0)" "$(RESULT_DIR)/datalog-bench-O0.csv" "$(RESULT_DIR)/datalog-bench-O0.json"; "$(BENCH_O2)" "$(RESULT_DIR)/datalog-bench-O2.csv" "$(RESULT_DIR)/datalog-bench-O2.json"; chmod -R a+rw /work/bench/results || true'
+	  bash -c 'set -euo pipefail; tar --exclude=.git --exclude=build --exclude=.cache --exclude=bench/results -C /src -cf - . | tar -C /work -xf -; make --no-print-directory -f Makefile.bench bench-small COMMIT="$(COMMIT)" DIRTY="$(DIRTY)"; chmod -R a+rw /work/bench/results || true'
+
+bench-linux-large:
+	@echo "==> Standalone Linux LARGE benchmark run in Docker"
+	@mkdir -p "$(RESULT_DIR)"
+	@$(MAKE) --no-print-directory -f Makefile.asan asan-linux-image
+	@docker run --rm \
+	  $(DOCKER_PLATFORM_ARG) \
+	  -v "$(CURDIR):/src:ro" \
+	  -v "$(CURDIR)/$(RESULT_DIR):/work/bench/results:rw" \
+	  -w /work \
+	  $(ASAN_IMAGE) \
+	  bash -c 'set -euo pipefail; tar --exclude=.git --exclude=build --exclude=.cache --exclude=bench/results -C /src -cf - . | tar -C /work -xf -; make --no-print-directory -f Makefile.bench bench-large COMMIT="$(COMMIT)" DIRTY="$(DIRTY)"; chmod -R a+rw /work/bench/results || true'
 
 bench-baseline-update:
 	@mkdir -p "$(BASELINE_DIR)"
-	@$(MAKE) --no-print-directory -f Makefile.bench bench-linux
-	cp "$(RESULT_DIR)/datalog-bench-O2.json" "$(BASELINE_JSON)"
+	@$(MAKE) --no-print-directory -f Makefile.bench bench-linux-small
+	cp "$(RESULT_DIR)/datalog-bench-small-O2.json" "$(BASELINE_JSON)"

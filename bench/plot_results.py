@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Optional SVG graph generation for P3-C49 benchmark CSV files."""
+"""Optional SVG graph generation for Datalog benchmark CSV files."""
 
 from __future__ import annotations
 

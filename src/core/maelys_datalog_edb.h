@@ -7,6 +7,13 @@
 #include "src/core/maelys_datalog_symbol_table.h"
 #include "src/core/maelys_datalog_types.h"
 
+typedef maelys_datalog_symbol_id_t
+    maelys_datalog_batch_scratch_t[2u * MAELYS_DATALOG_MAX_EDB_FACTS];
+
+_Static_assert(sizeof(maelys_datalog_batch_scratch_t)
+                   <= MAELYS_DATALOG_MAX_BATCH_SCRATCH_BYTES,
+               "EDB batch scratch buffer exceeds the configured per-profile budget");
+
 typedef struct {
     maelys_datalog_fact_t *facts;
     size_t fact_capacity;
@@ -16,7 +23,18 @@ typedef struct {
     int immutable;
     maelys_datalog_symbol_table_t *symbols;
     const maelys_datalog_predicate_registry_t *registry;
+    /* Scratch storage for atomic batch insertion of binary runtime facts.
+     * Kept inside the EDB instance to avoid large Wasm stack frames while
+     * preserving multi-instance isolation (no hidden shared mutable state, no
+     * dynamic allocation). Transient: contents are only valid for the duration
+     * of add_runtime_symbol_pair_facts(). Declared last to keep hot EDB fields
+     * cache-contiguous. */
+    maelys_datalog_batch_scratch_t runtime_pair_ids_scratch;
 } maelys_datalog_edb_t;
+
+_Static_assert(offsetof(maelys_datalog_edb_t, runtime_pair_ids_scratch)
+                   + sizeof(maelys_datalog_batch_scratch_t) == sizeof(maelys_datalog_edb_t),
+               "runtime_pair_ids_scratch must remain the last EDB field");
 
 maelys_result_t maelys_datalog_edb_init(maelys_datalog_edb_t *edb,
                                         maelys_datalog_fact_t *fact_pool,

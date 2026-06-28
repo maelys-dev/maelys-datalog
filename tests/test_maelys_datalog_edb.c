@@ -512,9 +512,15 @@ static int test_edb_batch_per_predicate_capacity_atomicity(void) {
     init_runtime_symbol_registry(&reg);
     maelys_datalog_symbol_table_t sym;
     maelys_datalog_symbol_table_init(&sym);
-    maelys_datalog_fact_t pool[160];
+    maelys_datalog_fact_t pool[MAELYS_DATALOG_MAX_FACTS_PER_PRED + 2u];
     maelys_datalog_edb_t edb;
-    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_init(&edb, pool, 160, &sym, &reg), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK,
+                      maelys_datalog_edb_init(&edb,
+                                              pool,
+                                              sizeof(pool) / sizeof(pool[0]),
+                                              &sym,
+                                              &reg),
+                      "%d");
 
     for (size_t i = 0; i < MAELYS_DATALOG_MAX_FACTS_PER_PRED - 1u; i++) {
         char text[32];
@@ -535,6 +541,7 @@ static int test_edb_batch_per_predicate_capacity_atomicity(void) {
     TEST_ASSERT_EQUAL(before, edb.fact_count, "%zu");
 
     maelys_datalog_edb_clear(&edb);
+    maelys_datalog_symbol_table_init(&sym);
     for (size_t i = 0; i < MAELYS_DATALOG_MAX_FACTS_PER_PRED - 1u; i++) {
         char left_text[32];
         char right_text[32];
@@ -547,11 +554,15 @@ static int test_edb_batch_per_predicate_capacity_atomicity(void) {
         TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_add_symbol_ids_fact(&edb, "owns", left, right), "%d");
     }
     before = edb.fact_count;
+    maelys_datalog_symbol_id_t owner_a = 0;
+    maelys_datalog_symbol_id_t owner_b = 0;
     maelys_datalog_symbol_id_t doc_a = 0;
     maelys_datalog_symbol_id_t doc_b = 0;
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_intern_runtime_symbol(&edb, "owner_000", &owner_a), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_intern_runtime_symbol(&edb, "owner_001", &owner_b), "%d");
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_intern_runtime_symbol(&edb, "new_doc_a", &doc_a), "%d");
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_intern_runtime_symbol(&edb, "new_doc_b", &doc_b), "%d");
-    maelys_datalog_symbol_id_t pairs[4] = {extra_a, doc_a, extra_b, doc_b};
+    maelys_datalog_symbol_id_t pairs[4] = {owner_a, doc_a, owner_b, doc_b};
     TEST_ASSERT_EQUAL(MAELYS_ERR_PAYLOAD_TOO_LARGE,
                       maelys_datalog_edb_add_symbol_ids_facts(&edb, "owns", pairs, 2),
                       "%d");

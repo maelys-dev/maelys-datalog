@@ -27,9 +27,26 @@ extern "C" {
 #define MAELYS_DATALOG_MAX_STRATA 4u
 #define MAELYS_DATALOG_NAMED_VARIABLE_COUNT 26u
 #define MAELYS_DATALOG_MAX_RULE_VARIABLES 32u
-#define MAELYS_DATALOG_MAX_EDB_FACTS 1024u
-#define MAELYS_DATALOG_MAX_IDB_FACTS 1024u
-#define MAELYS_DATALOG_MAX_FACTS_PER_PRED 64u
+#if !defined(MAELYS_DATALOG_PROFILE_SMALL) && !defined(MAELYS_DATALOG_PROFILE_LARGE)
+#  define MAELYS_DATALOG_PROFILE_SMALL 1
+#endif
+#if defined(MAELYS_DATALOG_PROFILE_SMALL) && defined(MAELYS_DATALOG_PROFILE_LARGE)
+#  error "Define at most one of MAELYS_DATALOG_PROFILE_SMALL / _LARGE"
+#endif
+
+#if defined(MAELYS_DATALOG_PROFILE_LARGE)
+#  define MAELYS_DATALOG_SIZE_PROFILE_NAME "LARGE"
+#  define MAELYS_DATALOG_MAX_EDB_FACTS 2048u
+#  define MAELYS_DATALOG_MAX_IDB_FACTS 2048u
+#  define MAELYS_DATALOG_MAX_FACTS_PER_PRED 256u
+#  define MAELYS_DATALOG_MAX_BATCH_SCRATCH_BYTES (16u * 1024u)
+#else
+#  define MAELYS_DATALOG_SIZE_PROFILE_NAME "SMALL"
+#  define MAELYS_DATALOG_MAX_EDB_FACTS 1024u
+#  define MAELYS_DATALOG_MAX_IDB_FACTS 1024u
+#  define MAELYS_DATALOG_MAX_FACTS_PER_PRED 64u
+#  define MAELYS_DATALOG_MAX_BATCH_SCRATCH_BYTES (8u * 1024u)
+#endif
 #define MAELYS_DATALOG_MAX_QUERY_WHITELIST 64u
 #define MAELYS_DATALOG_MAX_DEPTH 10u
 #define MAELYS_DATALOG_MAX_PROOF_NODES 64u
@@ -45,6 +62,14 @@ _Static_assert(MAELYS_DATALOG_MAX_PREDICATES <= 128u,
                "strata array indexed by predicate_id");
 _Static_assert(MAELYS_DATALOG_MAX_STRATA <= MAELYS_DATALOG_MAX_PREDICATES,
                "strata count cannot exceed predicate id capacity");
+_Static_assert(MAELYS_DATALOG_MAX_FACTS_PER_PRED <= MAELYS_DATALOG_MAX_EDB_FACTS,
+               "per-predicate fact cap cannot exceed total EDB capacity");
+_Static_assert(MAELYS_DATALOG_MAX_EDB_FACTS <= UINT16_MAX,
+               "EDB fact capacity must fit dense range counters");
+_Static_assert(MAELYS_DATALOG_MAX_IDB_FACTS <= UINT16_MAX,
+               "IDB fact capacity must fit solver counters");
+_Static_assert(MAELYS_DATALOG_MAX_FACTS_PER_PRED <= UINT16_MAX,
+               "per-predicate fact capacity must fit predicate counters");
 
 typedef uint32_t maelys_datalog_symbol_id_t;
 typedef uint16_t maelys_datalog_predicate_id_t;

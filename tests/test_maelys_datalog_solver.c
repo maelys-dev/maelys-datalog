@@ -230,6 +230,12 @@ static void add_int_int_binary(maelys_datalog_edb_t *edb,
     (void)maelys_datalog_edb_add_fact(edb, predicate, terms, 2);
 }
 
+static size_t overflow_square_side_for_fact_limit(void) {
+    size_t side = 1u;
+    while (side * side <= (size_t)MAELYS_DATALOG_MAX_FACTS_PER_PRED) side++;
+    return side;
+}
+
 static maelys_datalog_term_t int_term(long long value) {
     maelys_datalog_term_t t = {.kind = MAELYS_DATALOG_TERM_INT};
     t.as.integer = value;
@@ -1162,14 +1168,20 @@ static int test_datalog_edb_dense_ranges_fact_dense_stress(void) {
         "path(U, R) :- user(U), resource(R), owns(U, R).\n"
         "base_only(U) :- q(U, U).";
     TEST_ASSERT_EQUAL(MAELYS_OK, make_ruleset(&r, src), "%d");
-    maelys_datalog_fact_t facts[256];
+    maelys_datalog_fact_t facts[MAELYS_DATALOG_MAX_EDB_FACTS];
     maelys_datalog_edb_t edb;
-    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_init(&edb, facts, 256, &r.symbols, &r.registry), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK,
+                      maelys_datalog_edb_init(&edb,
+                                              facts,
+                                              sizeof(facts) / sizeof(facts[0]),
+                                              &r.symbols,
+                                              &r.registry),
+                      "%d");
 
     char user[32];
     char resource[32];
     for (size_t i = 0; i < MAELYS_DATALOG_MAX_FACTS_PER_PRED; i++) {
-        snprintf(user, sizeof(user), "u%02zu", i);
+        snprintf(user, sizeof(user), "u%03zu", i);
         snprintf(resource, sizeof(resource), "r%02zu", i % 16u);
         add_symbol_unary(&r, &edb, "user", user);
         add_symbol_symbol_binary(&r, &edb, "owns", user, resource);
@@ -1179,7 +1191,7 @@ static int test_datalog_edb_dense_ranges_fact_dense_stress(void) {
         add_symbol_unary(&r, &edb, "resource", resource);
     }
     for (size_t i = 0; i < MAELYS_DATALOG_MAX_FACTS_PER_PRED; i++) {
-        snprintf(user, sizeof(user), "noise%02zu", i);
+        snprintf(user, sizeof(user), "u%03zu", i);
         add_parent(&r, &edb, user, "bob");
     }
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_finalize(&edb), "%d");
@@ -1316,11 +1328,18 @@ static int test_maelys_datalog_cartesian_product_overflow_fails_closed(void) {
     TEST_BEGIN();
     maelys_datalog_ruleset_t r;
     TEST_ASSERT_EQUAL(MAELYS_OK, make_ruleset(&r, "path(U, R) :- user(U), resource(R)."), "%d");
-    maelys_datalog_fact_t facts[32];
+    const size_t side = overflow_square_side_for_fact_limit();
+    maelys_datalog_fact_t facts[2u * (MAELYS_DATALOG_MAX_FACTS_PER_PRED + 1u)];
     maelys_datalog_edb_t edb;
-    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_init(&edb, facts, 32, &r.symbols, &r.registry), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK,
+                      maelys_datalog_edb_init(&edb,
+                                              facts,
+                                              sizeof(facts) / sizeof(facts[0]),
+                                              &r.symbols,
+                                              &r.registry),
+                      "%d");
     char name[16];
-    for (size_t i = 0; i < 9; i++) {
+    for (size_t i = 0; i < side; i++) {
         snprintf(name, sizeof(name), "u%zu", i);
         add_symbol_unary(&r, &edb, "user", name);
         snprintf(name, sizeof(name), "r%zu", i);
@@ -1980,11 +1999,18 @@ static int test_datalog_solve_once_failed_solve_cleanup(void) {
     TEST_BEGIN();
     maelys_datalog_ruleset_t r;
     TEST_ASSERT_EQUAL(MAELYS_OK, make_ruleset(&r, "path(U, R) :- user(U), resource(R)."), "%d");
-    maelys_datalog_fact_t facts[32];
+    const size_t side = overflow_square_side_for_fact_limit();
+    maelys_datalog_fact_t facts[2u * (MAELYS_DATALOG_MAX_FACTS_PER_PRED + 1u)];
     maelys_datalog_edb_t edb;
-    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_init(&edb, facts, 32, &r.symbols, &r.registry), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK,
+                      maelys_datalog_edb_init(&edb,
+                                              facts,
+                                              sizeof(facts) / sizeof(facts[0]),
+                                              &r.symbols,
+                                              &r.registry),
+                      "%d");
     char name[16];
-    for (size_t i = 0; i < 9; i++) {
+    for (size_t i = 0; i < side; i++) {
         snprintf(name, sizeof(name), "u%zu", i);
         add_symbol_unary(&r, &edb, "user", name);
         snprintf(name, sizeof(name), "r%zu", i);
@@ -2634,11 +2660,18 @@ static int test_solve_once_diag_idb_overflow(void) {
     TEST_BEGIN();
     maelys_datalog_ruleset_t r;
     TEST_ASSERT_EQUAL(MAELYS_OK, make_ruleset(&r, "path(U, R) :- user(U), resource(R)."), "%d");
-    maelys_datalog_fact_t facts[32];
+    const size_t side = overflow_square_side_for_fact_limit();
+    maelys_datalog_fact_t facts[2u * (MAELYS_DATALOG_MAX_FACTS_PER_PRED + 1u)];
     maelys_datalog_edb_t edb;
-    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_init(&edb, facts, 32, &r.symbols, &r.registry), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK,
+                      maelys_datalog_edb_init(&edb,
+                                              facts,
+                                              sizeof(facts) / sizeof(facts[0]),
+                                              &r.symbols,
+                                              &r.registry),
+                      "%d");
     char name[16];
-    for (size_t i = 0; i < 9; i++) {
+    for (size_t i = 0; i < side; i++) {
         snprintf(name, sizeof(name), "u%zu", i);
         add_symbol_unary(&r, &edb, "user", name);
         snprintf(name, sizeof(name), "r%zu", i);
