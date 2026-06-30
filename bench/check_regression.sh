@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
+export LC_ALL=C
+export LC_NUMERIC=C
 
 RESULTS_DIR=${MAELYS_BENCH_RESULTS_DIR:-bench/results}
 CSV_O0=${MAELYS_BENCH_CSV_O0:-$RESULTS_DIR/datalog-bench-small-O0.csv}
