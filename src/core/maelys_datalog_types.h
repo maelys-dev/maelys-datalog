@@ -71,6 +71,27 @@ _Static_assert(MAELYS_DATALOG_MAX_IDB_FACTS <= UINT16_MAX,
 _Static_assert(MAELYS_DATALOG_MAX_FACTS_PER_PRED <= UINT16_MAX,
                "per-predicate fact capacity must fit predicate counters");
 
+typedef struct {
+    /* Observable engine capacities (shared across profiles). */
+    size_t max_symbols;        /* MAELYS_DATALOG_MAX_SYMBOLS */
+    size_t string_pool_bytes;  /* MAELYS_DATALOG_STRING_POOL_BYTES */
+    size_t max_predicates;     /* MAELYS_DATALOG_MAX_PREDICATES */
+    size_t max_rules;          /* MAELYS_DATALOG_MAX_RULES */
+    size_t max_arity;          /* MAELYS_DATALOG_MAX_ARITY */
+    size_t max_body_literals;  /* MAELYS_DATALOG_MAX_BODY_LITERALS */
+    size_t max_depth;          /* MAELYS_DATALOG_MAX_DEPTH */
+    /* Profile-specific observable capacities. */
+    size_t max_edb_facts;      /* MAELYS_DATALOG_MAX_EDB_FACTS */
+    size_t max_idb_facts;      /* MAELYS_DATALOG_MAX_IDB_FACTS */
+    size_t max_facts_per_pred; /* MAELYS_DATALOG_MAX_FACTS_PER_PRED */
+} maelys_datalog_build_limits_t;
+
+/* Build limits expose user-observable engine capacities, not internal
+ * implementation constants. The reported values describe the active build
+ * profile; they are not runtime occupancy, EDB usage, solve statistics, or
+ * mutable engine state. out_limits is required and must not be NULL. */
+void maelys_datalog_get_build_limits(maelys_datalog_build_limits_t *out_limits);
+
 typedef uint32_t maelys_datalog_symbol_id_t;
 typedef uint16_t maelys_datalog_predicate_id_t;
 
