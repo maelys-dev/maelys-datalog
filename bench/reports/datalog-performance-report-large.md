@@ -1,8 +1,8 @@
 # Datalog Performance Report
 
-Generated: 2026-06-28T11:49:59Z
+Generated: 2026-06-30T12:19:26Z
 
-Measured commit: `3be8b71340786098d5befda29fcb6e6cf4f27050`
+Measured commit: `53b3ed789ef5b19d91e05e17e7d519b78187175f`
 
 Host: `MAC-QXQWJGVJXW`
 
@@ -102,10 +102,10 @@ machine.
 
 | Feature | Comparaison | Accélération |
 |---|---:|---:|
-| Insertion par identifiants de symboles (unaire) | unit / batch | 1.18x |
-| Insertion par identifiants de symboles (binaire) | unit / batch | 1.14x |
-| Insertion de chaînes runtime (unaire) | unit / batch | 1.15x |
-| Insertion de paires de chaînes runtime (binaire) | composed-unit / batch | 1.13x |
+| Insertion par identifiants de symboles (unaire) | unit / batch | 1,17x |
+| Insertion par identifiants de symboles (binaire) | unit / batch | 1,17x |
+| Insertion de chaînes runtime (unaire) | unit / batch | 1,14x |
+| Insertion de paires de chaînes runtime (binaire) | composed-unit / batch | 1,14x |
 
 Predicate dense range full-scan reference is not measured in the production
 benchmark binary because the full-scan reference path is `MAELYS_TESTING`-only.
@@ -121,200 +121,190 @@ graph/report consumers.
 
 | opt_level | feature | benchmark | mode | size | median_us | p95_us | ops_per_sec | op_unit |
 |---|---|---|---|---:|---:|---:|---:|---|
-| -O0 | Interning de symboles distincts | intern_distinct_symbols | distinct | 1 | 0.042000 | 0.042000 | 24578781.14 | symbols/sec |
-| -O0 | Re-interning de symboles existants | reintern_existing_symbols | reintern | 1 | 0.030677 | 0.035065 | 33403156.71 | symbols/sec |
-| -O0 | Interning mixte (nouveaux + existants) | mixed_intern_symbols | mixed | 1 | 0.034903 | 0.039032 | 29014861.22 | symbols/sec |
-| -O0 | Interning de symboles distincts | intern_distinct_symbols | distinct | 8 | 0.202714 | 0.220143 | 38980710.12 | symbols/sec |
-| -O0 | Re-interning de symboles existants | reintern_existing_symbols | reintern | 8 | 0.184214 | 0.196429 | 43885152.56 | symbols/sec |
-| -O0 | Interning mixte (nouveaux + existants) | mixed_intern_symbols | mixed | 8 | 0.208571 | 0.226000 | 37773775.56 | symbols/sec |
-| -O0 | Interning de symboles distincts | intern_distinct_symbols | distinct | 16 | 0.389000 | 0.416667 | 40486069.00 | symbols/sec |
-| -O0 | Re-interning de symboles existants | reintern_existing_symbols | reintern | 16 | 0.347000 | 0.361000 | 46662784.58 | symbols/sec |
-| -O0 | Interning mixte (nouveaux + existants) | mixed_intern_symbols | mixed | 16 | 0.388667 | 0.403000 | 41602998.19 | symbols/sec |
-| -O0 | Interning de symboles distincts | intern_distinct_symbols | distinct | 32 | 0.750000 | 0.777333 | 42849166.03 | symbols/sec |
-| -O0 | Re-interning de symboles existants | reintern_existing_symbols | reintern | 32 | 0.653000 | 0.680333 | 48730989.20 | symbols/sec |
-| -O0 | Interning mixte (nouveaux + existants) | mixed_intern_symbols | mixed | 32 | 0.722333 | 0.750000 | 43803174.09 | symbols/sec |
-| -O0 | Interning de symboles distincts | intern_distinct_symbols | distinct | 64 | 1.417000 | 1.500000 | 43924639.05 | symbols/sec |
-| -O0 | Re-interning de symboles existants | reintern_existing_symbols | reintern | 64 | 1.333000 | 1.375000 | 48492930.64 | symbols/sec |
-| -O0 | Interning mixte (nouveaux + existants) | mixed_intern_symbols | mixed | 64 | 1.375000 | 1.417000 | 46434113.98 | symbols/sec |
-| -O0 | Interning de symboles distincts | intern_distinct_symbols | distinct | 128 | 2.875000 | 2.917000 | 44684702.30 | symbols/sec |
-| -O0 | Re-interning de symboles existants | reintern_existing_symbols | reintern | 128 | 2.667000 | 2.709000 | 48109810.64 | symbols/sec |
-| -O0 | Interning mixte (nouveaux + existants) | mixed_intern_symbols | mixed | 128 | 2.917000 | 3.000000 | 43682324.39 | symbols/sec |
-| -O0 | Interning de symboles distincts | intern_distinct_symbols | distinct | 256 | 6.042000 | 6.625000 | 41671509.35 | symbols/sec |
-| -O0 | Re-interning de symboles existants | reintern_existing_symbols | reintern | 256 | 5.584000 | 5.708000 | 45590799.78 | symbols/sec |
-| -O0 | Interning mixte (nouveaux + existants) | mixed_intern_symbols | mixed | 256 | 5.750000 | 5.875000 | 44335668.11 | symbols/sec |
-| -O0 | Interning de symboles distincts | intern_distinct_symbols | distinct | 512 | 13.292000 | 13.625000 | 38226453.81 | symbols/sec |
-| -O0 | Re-interning de symboles existants | reintern_existing_symbols | reintern | 512 | 12.958000 | 13.208000 | 39322386.20 | symbols/sec |
-| -O0 | Interning mixte (nouveaux + existants) | mixed_intern_symbols | mixed | 512 | 13.417000 | 13.666000 | 37942120.18 | symbols/sec |
-| -O0 | Insertion par identifiants de symboles | edb_symbol_id_insert | unit_unary | 1 | 0.083000 | 0.125000 | 12699380.27 | facts/sec |
-| -O0 | Insertion par identifiants de symboles | edb_symbol_id_insert | batch_unary | 1 | 0.065429 | 0.083286 | 15551857.67 | facts/sec |
-| -O0 | Insertion par identifiants de symboles | edb_symbol_id_insert | unit_binary | 1 | 0.077857 | 0.084000 | 12859916.92 | facts/sec |
-| -O0 | Insertion par identifiants de symboles | edb_symbol_id_insert | batch_binary | 1 | 0.069533 | 0.080400 | 14231607.07 | facts/sec |
-| -O0 | Insertion de chaînes runtime | edb_runtime_string_insert | unit_unary | 1 | 0.101286 | 0.119143 | 9678467.48 | facts/sec |
-| -O0 | Insertion de chaînes runtime | edb_runtime_string_insert | batch_unary | 1 | 0.119143 | 0.131000 | 8223568.28 | facts/sec |
-| -O0 | Insertion de paires de chaînes runtime | edb_runtime_string_pair_insert | composed_unit_binary | 1 | 0.125000 | 0.167000 | 6940973.96 | facts/sec |
-| -O0 | Insertion de paires de chaînes runtime | edb_runtime_string_pair_insert | batch_binary | 1 | 0.166000 | 0.167000 | 6481091.42 | facts/sec |
-| -O0 | Insertion par identifiants de symboles | edb_symbol_id_insert | unit_unary | 8 | 0.791000 | 0.792000 | 10099441.63 | facts/sec |
-| -O0 | Insertion par identifiants de symboles | edb_symbol_id_insert | batch_unary | 8 | 0.583000 | 0.584000 | 13953082.76 | facts/sec |
-| -O0 | Insertion par identifiants de symboles | edb_symbol_id_insert | unit_binary | 8 | 0.833000 | 0.834000 | 9755371.86 | facts/sec |
-| -O0 | Insertion par identifiants de symboles | edb_symbol_id_insert | batch_binary | 8 | 0.625000 | 0.625000 | 13057536.40 | facts/sec |
-| -O0 | Insertion de chaînes runtime | edb_runtime_string_insert | unit_unary | 8 | 1.000000 | 1.042000 | 7975793.47 | facts/sec |
-| -O0 | Insertion de chaînes runtime | edb_runtime_string_insert | batch_unary | 8 | 0.833000 | 0.875000 | 9664263.49 | facts/sec |
-| -O0 | Insertion de paires de chaînes runtime | edb_runtime_string_pair_insert | composed_unit_binary | 8 | 1.292000 | 1.375000 | 6113875.52 | facts/sec |
-| -O0 | Insertion de paires de chaînes runtime | edb_runtime_string_pair_insert | batch_binary | 8 | 1.083000 | 1.084000 | 7491022.48 | facts/sec |
-| -O0 | Insertion par identifiants de symboles | edb_symbol_id_insert | unit_unary | 16 | 2.042000 | 2.084000 | 7785857.77 | facts/sec |
-| -O0 | Insertion par identifiants de symboles | edb_symbol_id_insert | batch_unary | 16 | 1.625000 | 1.666000 | 9863142.73 | facts/sec |
-| -O0 | Insertion par identifiants de symboles | edb_symbol_id_insert | unit_binary | 16 | 2.125000 | 2.167000 | 7426058.50 | facts/sec |
-| -O0 | Insertion par identifiants de symboles | edb_symbol_id_insert | batch_binary | 16 | 1.709000 | 1.750000 | 9293291.64 | facts/sec |
-| -O0 | Insertion de chaînes runtime | edb_runtime_string_insert | unit_unary | 16 | 2.500000 | 2.583000 | 6382478.82 | facts/sec |
-| -O0 | Insertion de chaînes runtime | edb_runtime_string_insert | batch_unary | 16 | 2.084000 | 2.125000 | 7634483.82 | facts/sec |
-| -O0 | Insertion de paires de chaînes runtime | edb_runtime_string_pair_insert | composed_unit_binary | 16 | 3.167000 | 3.292000 | 5032291.59 | facts/sec |
-| -O0 | Insertion de paires de chaînes runtime | edb_runtime_string_pair_insert | batch_binary | 16 | 2.625000 | 2.667000 | 6107476.31 | facts/sec |
-| -O0 | Insertion par identifiants de symboles | edb_symbol_id_insert | unit_unary | 32 | 6.250000 | 6.417000 | 5088513.10 | facts/sec |
-| -O0 | Insertion par identifiants de symboles | edb_symbol_id_insert | batch_unary | 32 | 5.375000 | 5.541000 | 5929304.53 | facts/sec |
-| -O0 | Insertion par identifiants de symboles | edb_symbol_id_insert | unit_binary | 32 | 6.333000 | 6.500000 | 5006029.14 | facts/sec |
-| -O0 | Insertion par identifiants de symboles | edb_symbol_id_insert | batch_binary | 32 | 5.459000 | 5.667000 | 5787795.89 | facts/sec |
-| -O0 | Insertion de chaînes runtime | edb_runtime_string_insert | unit_unary | 32 | 7.042000 | 7.250000 | 4489779.37 | facts/sec |
-| -O0 | Insertion de chaînes runtime | edb_runtime_string_insert | batch_unary | 32 | 6.167000 | 6.417000 | 5127694.00 | facts/sec |
-| -O0 | Insertion de paires de chaînes runtime | edb_runtime_string_pair_insert | composed_unit_binary | 32 | 8.292000 | 8.833000 | 3816427.91 | facts/sec |
-| -O0 | Insertion de paires de chaînes runtime | edb_runtime_string_pair_insert | batch_binary | 32 | 7.084000 | 7.167000 | 4490805.15 | facts/sec |
-| -O0 | Insertion par identifiants de symboles | edb_symbol_id_insert | unit_unary | 64 | 20.750000 | 21.750000 | 3055027.20 | facts/sec |
-| -O0 | Insertion par identifiants de symboles | edb_symbol_id_insert | batch_unary | 64 | 19.250000 | 19.375000 | 3320907.09 | facts/sec |
-| -O0 | Insertion par identifiants de symboles | edb_symbol_id_insert | unit_binary | 64 | 21.334000 | 21.500000 | 2985864.27 | facts/sec |
-| -O0 | Insertion par identifiants de symboles | edb_symbol_id_insert | batch_binary | 64 | 19.625000 | 20.583000 | 3232411.06 | facts/sec |
-| -O0 | Insertion de chaînes runtime | edb_runtime_string_insert | unit_unary | 64 | 22.500000 | 29.041000 | 2714275.86 | facts/sec |
-| -O0 | Insertion de chaînes runtime | edb_runtime_string_insert | batch_unary | 64 | 20.708000 | 26.375000 | 2972235.65 | facts/sec |
-| -O0 | Insertion de paires de chaînes runtime | edb_runtime_string_pair_insert | composed_unit_binary | 64 | 25.209000 | 32.125000 | 2446912.98 | facts/sec |
-| -O0 | Insertion de paires de chaînes runtime | edb_runtime_string_pair_insert | batch_binary | 64 | 22.583000 | 28.417000 | 2762838.42 | facts/sec |
-| -O0 | Résolution : plages denses par prédicat | solver_predicate_dense_ranges | selectivity_1pct | 800 | 25.250000 | 33.000000 | 37383.53 | solve_calls/sec |
-| -O0 | Résolution : plages denses par prédicat | solver_predicate_dense_ranges | selectivity_10pct | 640 | 124.708000 | 129.166000 | 7970.11 | solve_calls/sec |
-| -O0 | Résolution : plages denses par prédicat | solver_predicate_dense_ranges | selectivity_50pct | 128 | 78.209000 | 85.750000 | 12255.69 | solve_calls/sec |
-| -O0 | Résolution : plages denses par prédicat | solver_predicate_dense_ranges | selectivity_100pct | 64 | 62.000000 | 64.167000 | 16072.53 | solve_calls/sec |
-| -O0 | Résolution : plages denses par prédicat | solver_predicate_dense_ranges | noise_total | 64 | 13.750000 | 14.792000 | 70469.02 | solve_calls/sec |
-| -O0 | Résolution : plages denses par prédicat | solver_predicate_dense_ranges | noise_total | 128 | 26.792000 | 27.083000 | 38023.71 | solve_calls/sec |
-| -O0 | Résolution : plages denses par prédicat | solver_predicate_dense_ranges | noise_total | 256 | 26.792000 | 27.875000 | 40873.30 | solve_calls/sec |
-| -O0 | Résolution : plages denses par prédicat | solver_predicate_dense_ranges | noise_total | 512 | 27.333000 | 28.375000 | 36298.96 | solve_calls/sec |
-| -O0 | Résolution : plages denses par prédicat | solver_predicate_dense_ranges | noise_total | 960 | 47.750000 | 48.292000 | 21730.87 | solve_calls/sec |
-| -O0 | Résolution : sélectivité pure | solver_selectivity_pure | selectivity_pure | 256 | 27.209000 | 27.666000 | 39385.87 | solve_calls/sec |
-| -O0 | Résolution : sélectivité pure | solver_selectivity_pure | selectivity_pure | 256 | 36.959000 | 42.708000 | 26627.08 | solve_calls/sec |
-| -O0 | Résolution : sélectivité pure | solver_selectivity_pure | selectivity_pure | 256 | 56.583000 | 58.333000 | 17568.54 | solve_calls/sec |
-| -O0 | Résolution : sélectivité pure | solver_selectivity_pure | selectivity_pure | 256 | 129.354500 | 134.750000 | 7764.46 | solve_calls/sec |
-| -O0 | Résolution : sélectivité pure | solver_selectivity_pure | selectivity_pure | 256 | 268.875000 | 278.792000 | 3723.62 | solve_calls/sec |
-| -O0 | Résolution : sélectivité pure | solver_selectivity_pure | selectivity_pure | 256 | 654.834000 | 670.542000 | 1524.50 | solve_calls/sec |
-| -O0 | Résolution : taille pure | solver_size_pure | size_pure | 64 | 15.791000 | 16.042000 | 67531.09 | solve_calls/sec |
-| -O0 | Résolution : taille pure | solver_size_pure | size_pure | 128 | 29.750000 | 29.959000 | 33686.36 | solve_calls/sec |
-| -O0 | Résolution : taille pure | solver_size_pure | size_pure | 256 | 62.458000 | 63.167000 | 16007.06 | solve_calls/sec |
-| -O0 | Résolution : taille pure | solver_size_pure | size_pure | 512 | 176.167000 | 183.791000 | 5637.10 | solve_calls/sec |
-| -O0 | Résolution : taille pure | solver_size_pure | size_pure | 1024 | 623.937500 | 637.875000 | 1595.12 | solve_calls/sec |
-| -O0 | Résolution : taille pure | solver_size_pure | size_pure | 2048 | 2405.041000 | 2500.042000 | 414.77 | solve_calls/sec |
-| -O0 | Résolution : plages denses par prédicat | solver_predicate_dense_ranges | absent_predicate | 512 | 7.167000 | 8.042000 | 135826.22 | solve_calls/sec |
-| -O0 | Résolution répétée (même policy/EDB) | solver_repeated_solve | repeated | 1 | 13.625000 | 13.709000 | 73207.12 | solve_calls/sec |
-| -O0 | Résolution répétée (même policy/EDB) | solver_repeated_solve | repeated | 10 | 121.750000 | 132.416000 | 80843.62 | solve_calls/sec |
-| -O0 | Résolution répétée (même policy/EDB) | solver_repeated_solve | repeated | 100 | 1233.500000 | 1919.625000 | 74495.07 | solve_calls/sec |
-| -O0 | Résolution répétée (même policy/EDB) | solver_repeated_solve | repeated | 1000 | 13372.958000 | 19249.042000 | 65949.86 | solve_calls/sec |
-| -O0 | Résolution : jointures | solver_join_bindings | simple_join | 8 | 12.083000 | 15.417000 | 74180.17 | solve_calls/sec |
-| -O0 | Résolution : jointures | solver_join_bindings | simple_join | 16 | 28.375000 | 28.541000 | 35149.08 | solve_calls/sec |
-| -O0 | Résolution : jointures | solver_join_bindings | simple_join | 32 | 60.375000 | 60.584000 | 16939.31 | solve_calls/sec |
-| -O0 | Résolution : jointures | solver_join_bindings | simple_join | 64 | 177.791000 | 182.250000 | 5604.19 | solve_calls/sec |
-| -O0 | Résolution : jointures | solver_join_bindings | noisy_join | 128 | 75.375000 | 76.500000 | 13555.54 | solve_calls/sec |
-| -O0 | Résolution : jointures | solver_join_bindings | noisy_join | 512 | 79.333000 | 84.375000 | 12567.47 | solve_calls/sec |
-| -O0 | Résolution : jointures | solver_join_bindings | noisy_join | 960 | 99.792000 | 101.917000 | 10097.77 | solve_calls/sec |
-| -O2 | Interning de symboles distincts | intern_distinct_symbols | distinct | 1 | 0.017419 | 0.024129 | 57672058.07 | symbols/sec |
-| -O2 | Re-interning de symboles existants | reintern_existing_symbols | reintern | 1 | 0.014508 | 0.019127 | 69176340.37 | symbols/sec |
-| -O2 | Interning mixte (nouveaux + existants) | mixed_intern_symbols | mixed | 1 | 0.016524 | 0.018540 | 60780420.60 | symbols/sec |
-| -O2 | Interning de symboles distincts | intern_distinct_symbols | distinct | 8 | 0.097267 | 0.105667 | 81326213.68 | symbols/sec |
-| -O2 | Re-interning de symboles existants | reintern_existing_symbols | reintern | 8 | 0.099933 | 0.116600 | 79912628.86 | symbols/sec |
-| -O2 | Interning mixte (nouveaux + existants) | mixed_intern_symbols | mixed | 8 | 0.094400 | 0.113933 | 83655464.97 | symbols/sec |
-| -O2 | Interning de symboles distincts | intern_distinct_symbols | distinct | 16 | 0.178714 | 0.232000 | 85721939.46 | symbols/sec |
-| -O2 | Re-interning de symboles existants | reintern_existing_symbols | reintern | 16 | 0.178571 | 0.226571 | 85977790.09 | symbols/sec |
-| -O2 | Interning mixte (nouveaux + existants) | mixed_intern_symbols | mixed | 16 | 0.196429 | 0.208429 | 81699525.19 | symbols/sec |
-| -O2 | Interning de symboles distincts | intern_distinct_symbols | distinct | 32 | 0.347000 | 0.375000 | 91909036.86 | symbols/sec |
-| -O2 | Re-interning de symboles existants | reintern_existing_symbols | reintern | 32 | 0.347000 | 0.361000 | 93027041.80 | symbols/sec |
-| -O2 | Interning mixte (nouveaux + existants) | mixed_intern_symbols | mixed | 32 | 0.361333 | 0.375000 | 87958161.23 | symbols/sec |
-| -O2 | Interning de symboles distincts | intern_distinct_symbols | distinct | 64 | 0.694667 | 0.709000 | 91106228.91 | symbols/sec |
-| -O2 | Re-interning de symboles existants | reintern_existing_symbols | reintern | 64 | 0.680667 | 0.708333 | 93744415.62 | symbols/sec |
-| -O2 | Interning mixte (nouveaux + existants) | mixed_intern_symbols | mixed | 64 | 0.708333 | 0.722667 | 90040321.18 | symbols/sec |
-| -O2 | Interning de symboles distincts | intern_distinct_symbols | distinct | 128 | 1.375000 | 1.417000 | 92421308.31 | symbols/sec |
-| -O2 | Re-interning de symboles existants | reintern_existing_symbols | reintern | 128 | 1.333000 | 1.334000 | 95927215.23 | symbols/sec |
-| -O2 | Interning mixte (nouveaux + existants) | mixed_intern_symbols | mixed | 128 | 1.458000 | 1.459000 | 88329529.87 | symbols/sec |
-| -O2 | Interning de symboles distincts | intern_distinct_symbols | distinct | 256 | 2.958000 | 3.083000 | 85569304.95 | symbols/sec |
-| -O2 | Re-interning de symboles existants | reintern_existing_symbols | reintern | 256 | 2.917000 | 2.959000 | 86930271.40 | symbols/sec |
-| -O2 | Interning mixte (nouveaux + existants) | mixed_intern_symbols | mixed | 256 | 2.916000 | 2.917000 | 88094660.47 | symbols/sec |
-| -O2 | Interning de symboles distincts | intern_distinct_symbols | distinct | 512 | 6.708000 | 6.792000 | 76257610.12 | symbols/sec |
-| -O2 | Re-interning de symboles existants | reintern_existing_symbols | reintern | 512 | 6.958000 | 7.042000 | 73655308.69 | symbols/sec |
-| -O2 | Interning mixte (nouveaux + existants) | mixed_intern_symbols | mixed | 512 | 6.833000 | 6.917000 | 74807691.63 | symbols/sec |
-| -O2 | Insertion par identifiants de symboles | edb_symbol_id_insert | unit_unary | 1 | 0.042000 | 0.042000 | 24377163.47 | facts/sec |
-| -O2 | Insertion par identifiants de symboles | edb_symbol_id_insert | batch_unary | 1 | 0.026871 | 0.033065 | 36129820.27 | facts/sec |
-| -O2 | Insertion par identifiants de symboles | edb_symbol_id_insert | unit_binary | 1 | 0.032355 | 0.037613 | 30750093.99 | facts/sec |
-| -O2 | Insertion par identifiants de symboles | edb_symbol_id_insert | batch_binary | 1 | 0.028444 | 0.032381 | 35072990.79 | facts/sec |
-| -O2 | Insertion de chaînes runtime | edb_runtime_string_insert | unit_unary | 1 | 0.049774 | 0.055226 | 19864002.07 | facts/sec |
-| -O2 | Insertion de chaînes runtime | edb_runtime_string_insert | batch_unary | 1 | 0.055016 | 0.059129 | 18245661.95 | facts/sec |
-| -O2 | Insertion de paires de chaînes runtime | edb_runtime_string_pair_insert | composed_unit_binary | 1 | 0.063733 | 0.069733 | 15941911.92 | facts/sec |
-| -O2 | Insertion de paires de chaînes runtime | edb_runtime_string_pair_insert | batch_binary | 1 | 0.066800 | 0.075000 | 14509043.00 | facts/sec |
-| -O2 | Insertion par identifiants de symboles | edb_symbol_id_insert | unit_unary | 8 | 0.347667 | 0.375000 | 22580711.93 | facts/sec |
-| -O2 | Insertion par identifiants de symboles | edb_symbol_id_insert | batch_unary | 8 | 0.220143 | 0.226286 | 36582824.49 | facts/sec |
-| -O2 | Insertion par identifiants de symboles | edb_symbol_id_insert | unit_binary | 8 | 0.347000 | 0.361333 | 23208205.65 | facts/sec |
-| -O2 | Insertion par identifiants de symboles | edb_symbol_id_insert | batch_binary | 8 | 0.226143 | 0.238000 | 35418357.21 | facts/sec |
-| -O2 | Insertion de chaînes runtime | edb_runtime_string_insert | unit_unary | 8 | 0.445000 | 0.458667 | 17753921.77 | facts/sec |
-| -O2 | Insertion de chaînes runtime | edb_runtime_string_insert | batch_unary | 8 | 0.333000 | 0.375000 | 23505767.73 | facts/sec |
-| -O2 | Insertion de paires de chaînes runtime | edb_runtime_string_pair_insert | composed_unit_binary | 8 | 0.541667 | 0.542000 | 14583699.19 | facts/sec |
-| -O2 | Insertion de paires de chaînes runtime | edb_runtime_string_pair_insert | batch_binary | 8 | 0.417000 | 0.444667 | 18814055.98 | facts/sec |
-| -O2 | Insertion par identifiants de symboles | edb_symbol_id_insert | unit_unary | 16 | 0.875000 | 0.917000 | 17712948.39 | facts/sec |
-| -O2 | Insertion par identifiants de symboles | edb_symbol_id_insert | batch_unary | 16 | 0.625000 | 0.639000 | 25553961.98 | facts/sec |
-| -O2 | Insertion par identifiants de symboles | edb_symbol_id_insert | unit_binary | 16 | 0.875000 | 0.875000 | 18531967.06 | facts/sec |
-| -O2 | Insertion par identifiants de symboles | edb_symbol_id_insert | batch_binary | 16 | 0.652667 | 0.667000 | 24647983.15 | facts/sec |
-| -O2 | Insertion de chaînes runtime | edb_runtime_string_insert | unit_unary | 16 | 1.083000 | 1.125000 | 14665605.85 | facts/sec |
-| -O2 | Insertion de chaînes runtime | edb_runtime_string_insert | batch_unary | 16 | 0.833000 | 0.875000 | 18961142.69 | facts/sec |
-| -O2 | Insertion de paires de chaînes runtime | edb_runtime_string_pair_insert | composed_unit_binary | 16 | 1.250000 | 1.375000 | 12466010.64 | facts/sec |
-| -O2 | Insertion de paires de chaînes runtime | edb_runtime_string_pair_insert | batch_binary | 16 | 1.000000 | 1.041000 | 15776478.85 | facts/sec |
-| -O2 | Insertion par identifiants de symboles | edb_symbol_id_insert | unit_unary | 32 | 2.417000 | 2.417000 | 13218858.02 | facts/sec |
-| -O2 | Insertion par identifiants de symboles | edb_symbol_id_insert | batch_unary | 32 | 1.875000 | 1.958000 | 16881314.34 | facts/sec |
-| -O2 | Insertion par identifiants de symboles | edb_symbol_id_insert | unit_binary | 32 | 2.375000 | 2.375000 | 13455984.63 | facts/sec |
-| -O2 | Insertion par identifiants de symboles | edb_symbol_id_insert | batch_binary | 32 | 1.917000 | 1.917000 | 16611623.36 | facts/sec |
-| -O2 | Insertion de chaînes runtime | edb_runtime_string_insert | unit_unary | 32 | 2.791000 | 2.833000 | 11492952.49 | facts/sec |
-| -O2 | Insertion de chaînes runtime | edb_runtime_string_insert | batch_unary | 32 | 2.292000 | 2.292000 | 13937282.23 | facts/sec |
-| -O2 | Insertion de paires de chaînes runtime | edb_runtime_string_pair_insert | composed_unit_binary | 32 | 3.167000 | 3.209000 | 10082201.45 | facts/sec |
-| -O2 | Insertion de paires de chaînes runtime | edb_runtime_string_pair_insert | batch_binary | 32 | 2.750000 | 2.750000 | 11682724.94 | facts/sec |
-| -O2 | Insertion par identifiants de symboles | edb_symbol_id_insert | unit_unary | 64 | 7.500000 | 7.708000 | 8518447.63 | facts/sec |
-| -O2 | Insertion par identifiants de symboles | edb_symbol_id_insert | batch_unary | 64 | 6.375000 | 6.500000 | 9992519.66 | facts/sec |
-| -O2 | Insertion par identifiants de symboles | edb_symbol_id_insert | unit_binary | 64 | 7.292000 | 7.334000 | 8764709.99 | facts/sec |
-| -O2 | Insertion par identifiants de symboles | edb_symbol_id_insert | batch_binary | 64 | 6.375000 | 6.459000 | 9993376.27 | facts/sec |
-| -O2 | Insertion de chaînes runtime | edb_runtime_string_insert | unit_unary | 64 | 8.125000 | 8.292000 | 7852124.86 | facts/sec |
-| -O2 | Insertion de chaînes runtime | edb_runtime_string_insert | batch_unary | 64 | 7.042000 | 7.208000 | 8998882.73 | facts/sec |
-| -O2 | Insertion de paires de chaînes runtime | edb_runtime_string_pair_insert | composed_unit_binary | 64 | 8.812500 | 8.875000 | 7245031.49 | facts/sec |
-| -O2 | Insertion de paires de chaînes runtime | edb_runtime_string_pair_insert | batch_binary | 64 | 7.833000 | 7.917000 | 8158715.57 | facts/sec |
-| -O2 | Résolution : plages denses par prédicat | solver_predicate_dense_ranges | selectivity_1pct | 800 | 12.250000 | 13.333000 | 79393.25 | solve_calls/sec |
-| -O2 | Résolution : plages denses par prédicat | solver_predicate_dense_ranges | selectivity_10pct | 640 | 47.250000 | 50.084000 | 20920.79 | solve_calls/sec |
-| -O2 | Résolution : plages denses par prédicat | solver_predicate_dense_ranges | selectivity_50pct | 128 | 36.708000 | 37.083000 | 28194.21 | solve_calls/sec |
-| -O2 | Résolution : plages denses par prédicat | solver_predicate_dense_ranges | selectivity_100pct | 64 | 28.875000 | 29.084000 | 34588.12 | solve_calls/sec |
-| -O2 | Résolution : plages denses par prédicat | solver_predicate_dense_ranges | noise_total | 64 | 14.625000 | 14.792000 | 68071.82 | solve_calls/sec |
-| -O2 | Résolution : plages denses par prédicat | solver_predicate_dense_ranges | noise_total | 128 | 16.708000 | 16.792000 | 60335.16 | solve_calls/sec |
-| -O2 | Résolution : plages denses par prédicat | solver_predicate_dense_ranges | noise_total | 256 | 13.042000 | 16.709000 | 68742.07 | solve_calls/sec |
-| -O2 | Résolution : plages denses par prédicat | solver_predicate_dense_ranges | noise_total | 512 | 13.542000 | 19.292000 | 65547.72 | solve_calls/sec |
-| -O2 | Résolution : plages denses par prédicat | solver_predicate_dense_ranges | noise_total | 960 | 18.042000 | 18.625000 | 55146.27 | solve_calls/sec |
-| -O2 | Résolution : sélectivité pure | solver_selectivity_pure | selectivity_pure | 256 | 10.875000 | 11.917000 | 89445.35 | solve_calls/sec |
-| -O2 | Résolution : sélectivité pure | solver_selectivity_pure | selectivity_pure | 256 | 22.458000 | 22.750000 | 45302.57 | solve_calls/sec |
-| -O2 | Résolution : sélectivité pure | solver_selectivity_pure | selectivity_pure | 256 | 29.375000 | 29.625000 | 34671.82 | solve_calls/sec |
-| -O2 | Résolution : sélectivité pure | solver_selectivity_pure | selectivity_pure | 256 | 52.584000 | 53.333000 | 19006.84 | solve_calls/sec |
-| -O2 | Résolution : sélectivité pure | solver_selectivity_pure | selectivity_pure | 256 | 102.583000 | 106.417000 | 9797.95 | solve_calls/sec |
-| -O2 | Résolution : sélectivité pure | solver_selectivity_pure | selectivity_pure | 256 | 242.542000 | 249.625000 | 4109.28 | solve_calls/sec |
-| -O2 | Résolution : taille pure | solver_size_pure | size_pure | 64 | 7.750000 | 7.834000 | 127962.48 | solve_calls/sec |
-| -O2 | Résolution : taille pure | solver_size_pure | size_pure | 128 | 12.083000 | 12.208000 | 85205.48 | solve_calls/sec |
-| -O2 | Résolution : taille pure | solver_size_pure | size_pure | 256 | 28.792000 | 28.958000 | 34677.64 | solve_calls/sec |
-| -O2 | Résolution : taille pure | solver_size_pure | size_pure | 512 | 71.291000 | 72.334000 | 14076.76 | solve_calls/sec |
-| -O2 | Résolution : taille pure | solver_size_pure | size_pure | 1024 | 229.625000 | 235.958000 | 4341.08 | solve_calls/sec |
-| -O2 | Résolution : taille pure | solver_size_pure | size_pure | 2048 | 864.791000 | 901.708000 | 1152.04 | solve_calls/sec |
-| -O2 | Résolution : plages denses par prédicat | solver_predicate_dense_ranges | absent_predicate | 512 | 5.250000 | 7.416000 | 181141.34 | solve_calls/sec |
-| -O2 | Résolution répétée (même policy/EDB) | solver_repeated_solve | repeated | 1 | 7.209000 | 9.084000 | 134046.19 | solve_calls/sec |
-| -O2 | Résolution répétée (même policy/EDB) | solver_repeated_solve | repeated | 10 | 69.375000 | 85.959000 | 138731.12 | solve_calls/sec |
-| -O2 | Résolution répétée (même policy/EDB) | solver_repeated_solve | repeated | 100 | 685.375000 | 771.125000 | 143428.68 | solve_calls/sec |
-| -O2 | Résolution répétée (même policy/EDB) | solver_repeated_solve | repeated | 1000 | 7925.583500 | 14239.416000 | 105111.02 | solve_calls/sec |
-| -O2 | Résolution : jointures | solver_join_bindings | simple_join | 8 | 7.167000 | 7.250000 | 138487.45 | solve_calls/sec |
-| -O2 | Résolution : jointures | solver_join_bindings | simple_join | 16 | 14.541000 | 15.042000 | 68489.13 | solve_calls/sec |
-| -O2 | Résolution : jointures | solver_join_bindings | simple_join | 32 | 31.459000 | 31.750000 | 31617.11 | solve_calls/sec |
-| -O2 | Résolution : jointures | solver_join_bindings | simple_join | 64 | 80.291000 | 80.834000 | 12719.72 | solve_calls/sec |
-| -O2 | Résolution : jointures | solver_join_bindings | noisy_join | 128 | 37.958000 | 38.125000 | 26853.95 | solve_calls/sec |
-| -O2 | Résolution : jointures | solver_join_bindings | noisy_join | 512 | 41.333000 | 43.583000 | 24065.76 | solve_calls/sec |
-| -O2 | Résolution : jointures | solver_join_bindings | noisy_join | 960 | 42.458000 | 47.833000 | 22811.22 | solve_calls/sec |
+| -O0 | Interning de symboles distincts | intern_distinct_symbols | distinct | 1 | 0.035714 | 0.041857 | 28147945,00 | symbols/sec |
+| -O0 | Re-interning de symboles existants | reintern_existing_symbols | reintern | 1 | 0.029581 | 0.034903 | 33458966,00 | symbols/sec |
+| -O0 | Interning mixte (nouveaux + existants) | mixed_intern_symbols | mixed | 1 | 0.033613 | 0.039032 | 29040003,00 | symbols/sec |
+| -O0 | Interning de symboles distincts | intern_distinct_symbols | distinct | 8 | 0.202571 | 0.220429 | 38627029,00 | symbols/sec |
+| -O0 | Re-interning de symboles existants | reintern_existing_symbols | reintern | 8 | 0.178286 | 0.190714 | 43812604,00 | symbols/sec |
+| -O0 | Interning mixte (nouveaux + existants) | mixed_intern_symbols | mixed | 8 | 0.208286 | 0.226286 | 36787746,00 | symbols/sec |
+| -O0 | Interning de symboles distincts | intern_distinct_symbols | distinct | 16 | 0.389000 | 0.472000 | 40145930,00 | symbols/sec |
+| -O0 | Re-interning de symboles existants | reintern_existing_symbols | reintern | 16 | 0.347000 | 0.361333 | 46581093,00 | symbols/sec |
+| -O0 | Interning mixte (nouveaux + existants) | mixed_intern_symbols | mixed | 16 | 0.375000 | 0.430667 | 41415942,00 | symbols/sec |
+| -O0 | Interning de symboles distincts | intern_distinct_symbols | distinct | 32 | 0.764000 | 0.805333 | 41784548,00 | symbols/sec |
+| -O0 | Re-interning de symboles existants | reintern_existing_symbols | reintern | 32 | 0.653000 | 0.694333 | 48538044,00 | symbols/sec |
+| -O0 | Interning mixte (nouveaux + existants) | mixed_intern_symbols | mixed | 32 | 0.722333 | 0.750000 | 43942845,00 | symbols/sec |
+| -O0 | Interning de symboles distincts | intern_distinct_symbols | distinct | 64 | 1.458000 | 1.542000 | 42856320,00 | symbols/sec |
+| -O0 | Re-interning de symboles existants | reintern_existing_symbols | reintern | 64 | 1.333000 | 1.375000 | 47616355,00 | symbols/sec |
+| -O0 | Interning mixte (nouveaux + existants) | mixed_intern_symbols | mixed | 64 | 1.375000 | 1.458000 | 45685047,00 | symbols/sec |
+| -O0 | Interning de symboles distincts | intern_distinct_symbols | distinct | 128 | 2.834000 | 2.917000 | 44657575,00 | symbols/sec |
+| -O0 | Re-interning de symboles existants | reintern_existing_symbols | reintern | 128 | 2.666000 | 2.709000 | 47991067,00 | symbols/sec |
+| -O0 | Interning mixte (nouveaux + existants) | mixed_intern_symbols | mixed | 128 | 2.917000 | 3.083000 | 42698192,00 | symbols/sec |
+| -O0 | Interning de symboles distincts | intern_distinct_symbols | distinct | 256 | 6.000000 | 6.333000 | 41513046,00 | symbols/sec |
+| -O0 | Re-interning de symboles existants | reintern_existing_symbols | reintern | 256 | 5.625000 | 5.834000 | 44523318,00 | symbols/sec |
+| -O0 | Interning mixte (nouveaux + existants) | mixed_intern_symbols | mixed | 256 | 5.833000 | 6.167000 | 42911311,00 | symbols/sec |
+| -O0 | Interning de symboles distincts | intern_distinct_symbols | distinct | 512 | 13.458000 | 17.208000 | 36907745,00 | symbols/sec |
+| -O0 | Re-interning de symboles existants | reintern_existing_symbols | reintern | 512 | 12.958000 | 16.458000 | 38526870,00 | symbols/sec |
+| -O0 | Interning mixte (nouveaux + existants) | mixed_intern_symbols | mixed | 512 | 13.459000 | 15.792000 | 37322109,00 | symbols/sec |
+| -O0 | Insertion par identifiants de symboles | edb_symbol_id_insert | unit_unary | 1 | 0.083000 | 0.084000 | 13575520,00 | facts/sec |
+| -O0 | Insertion par identifiants de symboles | edb_symbol_id_insert | batch_unary | 1 | 0.063867 | 0.075133 | 15608854,00 | facts/sec |
+| -O0 | Insertion par identifiants de symboles | edb_symbol_id_insert | unit_binary | 1 | 0.077800 | 0.083733 | 12526744,00 | facts/sec |
+| -O0 | Insertion par identifiants de symboles | edb_symbol_id_insert | batch_binary | 1 | 0.072400 | 0.083000 | 13507052,00 | facts/sec |
+| -O0 | Insertion de chaînes runtime | edb_runtime_string_insert | unit_unary | 1 | 0.101429 | 0.119143 | 9643201,00 | facts/sec |
+| -O0 | Insertion de chaînes runtime | edb_runtime_string_insert | batch_unary | 1 | 0.125000 | 0.125000 | 8307027,00 | facts/sec |
+| -O0 | Insertion de paires de chaînes runtime | edb_runtime_string_pair_insert | composed_unit_binary | 1 | 0.152667 | 0.167000 | 6024580,00 | facts/sec |
+| -O0 | Insertion de paires de chaînes runtime | edb_runtime_string_pair_insert | batch_binary | 1 | 0.153000 | 0.167000 | 6403661,00 | facts/sec |
+| -O0 | Insertion par identifiants de symboles | edb_symbol_id_insert | unit_unary | 8 | 0.791000 | 0.792000 | 9968487,00 | facts/sec |
+| -O0 | Insertion par identifiants de symboles | edb_symbol_id_insert | batch_unary | 8 | 0.569667 | 0.680333 | 13516869,00 | facts/sec |
+| -O0 | Insertion par identifiants de symboles | edb_symbol_id_insert | unit_binary | 8 | 0.833000 | 0.917000 | 9689687,00 | facts/sec |
+| -O0 | Insertion par identifiants de symboles | edb_symbol_id_insert | batch_binary | 8 | 0.625000 | 0.625000 | 12743297,00 | facts/sec |
+| -O0 | Insertion de chaînes runtime | edb_runtime_string_insert | unit_unary | 8 | 1.000000 | 1.042000 | 7932006,00 | facts/sec |
+| -O0 | Insertion de chaînes runtime | edb_runtime_string_insert | batch_unary | 8 | 0.833000 | 0.875000 | 9701885,00 | facts/sec |
+| -O0 | Insertion de paires de chaînes runtime | edb_runtime_string_pair_insert | composed_unit_binary | 8 | 1.292000 | 1.375000 | 5940385,00 | facts/sec |
+| -O0 | Insertion de paires de chaînes runtime | edb_runtime_string_pair_insert | batch_binary | 8 | 1.083000 | 1.084000 | 7462867,00 | facts/sec |
+| -O0 | Insertion par identifiants de symboles | edb_symbol_id_insert | unit_unary | 16 | 2.084000 | 2.167000 | 7598210,00 | facts/sec |
+| -O0 | Insertion par identifiants de symboles | edb_symbol_id_insert | batch_unary | 16 | 1.666000 | 1.709000 | 9667253,00 | facts/sec |
+| -O0 | Insertion par identifiants de symboles | edb_symbol_id_insert | unit_binary | 16 | 2.125000 | 2.250000 | 7273686,00 | facts/sec |
+| -O0 | Insertion par identifiants de symboles | edb_symbol_id_insert | batch_binary | 16 | 1.708000 | 1.791000 | 9058299,00 | facts/sec |
+| -O0 | Insertion de chaînes runtime | edb_runtime_string_insert | unit_unary | 16 | 2.500000 | 2.625000 | 6200771,00 | facts/sec |
+| -O0 | Insertion de chaînes runtime | edb_runtime_string_insert | batch_unary | 16 | 2.083000 | 2.209000 | 7473974,00 | facts/sec |
+| -O0 | Insertion de paires de chaînes runtime | edb_runtime_string_pair_insert | composed_unit_binary | 16 | 3.125000 | 3.250000 | 4940301,00 | facts/sec |
+| -O0 | Insertion de paires de chaînes runtime | edb_runtime_string_pair_insert | batch_binary | 16 | 2.583000 | 2.708000 | 5980624,00 | facts/sec |
+| -O0 | Insertion par identifiants de symboles | edb_symbol_id_insert | unit_unary | 32 | 6.250000 | 6.458000 | 5094726,00 | facts/sec |
+| -O0 | Insertion par identifiants de symboles | edb_symbol_id_insert | batch_unary | 32 | 5.334000 | 5.458000 | 5873706,00 | facts/sec |
+| -O0 | Insertion par identifiants de symboles | edb_symbol_id_insert | unit_binary | 32 | 6.375000 | 6.458000 | 5010499,00 | facts/sec |
+| -O0 | Insertion par identifiants de symboles | edb_symbol_id_insert | batch_binary | 32 | 5.542000 | 5.584000 | 5768433,00 | facts/sec |
+| -O0 | Insertion de chaînes runtime | edb_runtime_string_insert | unit_unary | 32 | 7.041000 | 8.083000 | 4390782,00 | facts/sec |
+| -O0 | Insertion de chaînes runtime | edb_runtime_string_insert | batch_unary | 32 | 6.125000 | 6.209000 | 5186278,00 | facts/sec |
+| -O0 | Insertion de paires de chaînes runtime | edb_runtime_string_pair_insert | composed_unit_binary | 32 | 8.292000 | 8.500000 | 3831093,00 | facts/sec |
+| -O0 | Insertion de paires de chaînes runtime | edb_runtime_string_pair_insert | batch_binary | 32 | 7.208000 | 7.333000 | 4425335,00 | facts/sec |
+| -O0 | Insertion par identifiants de symboles | edb_symbol_id_insert | unit_unary | 64 | 20.750000 | 21.125000 | 3053544,00 | facts/sec |
+| -O0 | Insertion par identifiants de symboles | edb_symbol_id_insert | batch_unary | 64 | 19.000000 | 21.000000 | 3300642,00 | facts/sec |
+| -O0 | Insertion par identifiants de symboles | edb_symbol_id_insert | unit_binary | 64 | 21.042000 | 25.167000 | 2965291,00 | facts/sec |
+| -O0 | Insertion par identifiants de symboles | edb_symbol_id_insert | batch_binary | 64 | 19.583000 | 20.167000 | 3222165,00 | facts/sec |
+| -O0 | Insertion de chaînes runtime | edb_runtime_string_insert | unit_unary | 64 | 22.750000 | 26.584000 | 2759787,00 | facts/sec |
+| -O0 | Insertion de chaînes runtime | edb_runtime_string_insert | batch_unary | 64 | 20.917000 | 25.208000 | 2959927,00 | facts/sec |
+| -O0 | Insertion de paires de chaînes runtime | edb_runtime_string_pair_insert | composed_unit_binary | 64 | 25.458000 | 30.166000 | 2445439,00 | facts/sec |
+| -O0 | Insertion de paires de chaînes runtime | edb_runtime_string_pair_insert | batch_binary | 64 | 22.583000 | 22.792000 | 2793339,00 | facts/sec |
+| -O0 | Résolution : plages denses par prédicat | solver_predicate_dense_ranges | selectivity_1pct | 800 | 25.208000 | 28.416000 | 38760,00 | solve_calls/sec |
+| -O0 | Résolution : plages denses par prédicat | solver_predicate_dense_ranges | selectivity_10pct | 640 | 124.625000 | 135.625000 | 7918,00 | solve_calls/sec |
+| -O0 | Résolution : plages denses par prédicat | solver_predicate_dense_ranges | selectivity_50pct | 128 | 78.916000 | 86.708000 | 12478,00 | solve_calls/sec |
+| -O0 | Résolution : plages denses par prédicat | solver_predicate_dense_ranges | selectivity_100pct | 64 | 56.083500 | 62.000000 | 17642,00 | solve_calls/sec |
+| -O0 | Résolution : sélectivité pure | solver_selectivity_pure | selectivity_pure | 256 | 20.750000 | 27.125000 | 46185,00 | solve_calls/sec |
+| -O0 | Résolution : sélectivité pure | solver_selectivity_pure | selectivity_pure | 256 | 35.583000 | 39.958000 | 27542,00 | solve_calls/sec |
+| -O0 | Résolution : sélectivité pure | solver_selectivity_pure | selectivity_pure | 256 | 56.583000 | 63.375000 | 17393,00 | solve_calls/sec |
+| -O0 | Résolution : sélectivité pure | solver_selectivity_pure | selectivity_pure | 256 | 125.125000 | 138.708000 | 7814,00 | solve_calls/sec |
+| -O0 | Résolution : sélectivité pure | solver_selectivity_pure | selectivity_pure | 256 | 267.875000 | 291.708000 | 3678,00 | solve_calls/sec |
+| -O0 | Résolution : sélectivité pure | solver_selectivity_pure | selectivity_pure | 256 | 651.104500 | 701.833000 | 1516,00 | solve_calls/sec |
+| -O0 | Résolution : taille pure | solver_size_pure | size_pure | 64 | 12.708000 | 13.458000 | 78032,00 | solve_calls/sec |
+| -O0 | Résolution : taille pure | solver_size_pure | size_pure | 128 | 23.000000 | 26.459000 | 42639,00 | solve_calls/sec |
+| -O0 | Résolution : taille pure | solver_size_pure | size_pure | 256 | 56.625000 | 61.042000 | 17432,00 | solve_calls/sec |
+| -O0 | Résolution : taille pure | solver_size_pure | size_pure | 512 | 173.167000 | 184.208000 | 5702,00 | solve_calls/sec |
+| -O0 | Résolution : taille pure | solver_size_pure | size_pure | 1024 | 629.687500 | 691.375000 | 1553,00 | solve_calls/sec |
+| -O0 | Résolution : taille pure | solver_size_pure | size_pure | 2048 | 2391.916500 | 2481.250000 | 409,00 | solve_calls/sec |
+| -O0 | Résolution : plages denses par prédicat | solver_predicate_dense_ranges | absent_predicate | 512 | 8.167000 | 8.209000 | 122351,00 | solve_calls/sec |
+| -O0 | Résolution répétée (même policy/EDB) | solver_repeated_solve | repeated | 1 | 12.959000 | 13.042000 | 76979,00 | solve_calls/sec |
+| -O0 | Résolution répétée (même policy/EDB) | solver_repeated_solve | repeated | 10 | 121.500000 | 135.083000 | 80865,00 | solve_calls/sec |
+| -O0 | Résolution répétée (même policy/EDB) | solver_repeated_solve | repeated | 100 | 1894.687500 | 1962.167000 | 60644,00 | solve_calls/sec |
+| -O0 | Résolution répétée (même policy/EDB) | solver_repeated_solve | repeated | 1000 | 14415.042000 | 19263.292000 | 63938,00 | solve_calls/sec |
+| -O0 | Résolution : jointures | solver_join_bindings | simple_join | 8 | 12.083000 | 12.292000 | 82440,00 | solve_calls/sec |
+| -O0 | Résolution : jointures | solver_join_bindings | simple_join | 16 | 28.166000 | 28.416000 | 35394,00 | solve_calls/sec |
+| -O0 | Résolution : jointures | solver_join_bindings | simple_join | 32 | 60.125000 | 63.250000 | 16548,00 | solve_calls/sec |
+| -O0 | Résolution : jointures | solver_join_bindings | simple_join | 64 | 173.958000 | 186.042000 | 5682,00 | solve_calls/sec |
+| -O0 | Résolution : jointures | solver_join_bindings | noisy_join | 128 | 75.333000 | 78.542000 | 13200,00 | solve_calls/sec |
+| -O0 | Résolution : jointures | solver_join_bindings | noisy_join | 512 | 79.459000 | 81.750000 | 12596,00 | solve_calls/sec |
+| -O0 | Résolution : jointures | solver_join_bindings | noisy_join | 960 | 100.125000 | 111.417000 | 9936,00 | solve_calls/sec |
+| -O2 | Interning de symboles distincts | intern_distinct_symbols | distinct | 1 | 0.017714 | 0.023857 | 61804697,00 | symbols/sec |
+| -O2 | Re-interning de symboles existants | reintern_existing_symbols | reintern | 1 | 0.014540 | 0.017873 | 67430666,00 | symbols/sec |
+| -O2 | Interning mixte (nouveaux + existants) | mixed_intern_symbols | mixed | 1 | 0.016409 | 0.017732 | 60556644,00 | symbols/sec |
+| -O2 | Interning de symboles distincts | intern_distinct_symbols | distinct | 8 | 0.094467 | 0.113933 | 83242864,00 | symbols/sec |
+| -O2 | Re-interning de symboles existants | reintern_existing_symbols | reintern | 8 | 0.097267 | 0.108333 | 81167513,00 | symbols/sec |
+| -O2 | Interning mixte (nouveaux + existants) | mixed_intern_symbols | mixed | 8 | 0.105533 | 0.111200 | 75560469,00 | symbols/sec |
+| -O2 | Interning de symboles distincts | intern_distinct_symbols | distinct | 16 | 0.178857 | 0.196000 | 88507114,00 | symbols/sec |
+| -O2 | Re-interning de symboles existants | reintern_existing_symbols | reintern | 16 | 0.178571 | 0.190429 | 89134078,00 | symbols/sec |
+| -O2 | Interning mixte (nouveaux + existants) | mixed_intern_symbols | mixed | 16 | 0.196429 | 0.208286 | 81206496,00 | symbols/sec |
+| -O2 | Interning de symboles distincts | intern_distinct_symbols | distinct | 32 | 0.347333 | 0.375000 | 91606025,00 | symbols/sec |
+| -O2 | Re-interning de symboles existants | reintern_existing_symbols | reintern | 32 | 0.334000 | 0.375000 | 93191035,00 | symbols/sec |
+| -O2 | Interning mixte (nouveaux + existants) | mixed_intern_symbols | mixed | 32 | 0.375000 | 0.375000 | 87025969,00 | symbols/sec |
+| -O2 | Interning de symboles distincts | intern_distinct_symbols | distinct | 64 | 0.694000 | 0.708667 | 92247686,00 | symbols/sec |
+| -O2 | Re-interning de symboles existants | reintern_existing_symbols | reintern | 64 | 0.680667 | 0.708333 | 94016487,00 | symbols/sec |
+| -O2 | Interning mixte (nouveaux + existants) | mixed_intern_symbols | mixed | 64 | 0.708333 | 0.722333 | 88101522,00 | symbols/sec |
+| -O2 | Interning de symboles distincts | intern_distinct_symbols | distinct | 128 | 1.375000 | 1.375000 | 93273861,00 | symbols/sec |
+| -O2 | Re-interning de symboles existants | reintern_existing_symbols | reintern | 128 | 1.333000 | 1.334000 | 96232714,00 | symbols/sec |
+| -O2 | Interning mixte (nouveaux + existants) | mixed_intern_symbols | mixed | 128 | 1.458000 | 1.459000 | 88539771,00 | symbols/sec |
+| -O2 | Interning de symboles distincts | intern_distinct_symbols | distinct | 256 | 2.917000 | 3.000000 | 86772248,00 | symbols/sec |
+| -O2 | Re-interning de symboles existants | reintern_existing_symbols | reintern | 256 | 2.917000 | 3.042000 | 86283632,00 | symbols/sec |
+| -O2 | Interning mixte (nouveaux + existants) | mixed_intern_symbols | mixed | 256 | 2.917000 | 2.958000 | 87863087,00 | symbols/sec |
+| -O2 | Interning de symboles distincts | intern_distinct_symbols | distinct | 512 | 6.708000 | 8.417000 | 72845460,00 | symbols/sec |
+| -O2 | Re-interning de symboles existants | reintern_existing_symbols | reintern | 512 | 6.958000 | 7.084000 | 71751231,00 | symbols/sec |
+| -O2 | Interning mixte (nouveaux + existants) | mixed_intern_symbols | mixed | 512 | 6.833000 | 7.125000 | 73985199,00 | symbols/sec |
+| -O2 | Insertion par identifiants de symboles | edb_symbol_id_insert | unit_unary | 1 | 0.032290 | 0.034968 | 30769444,00 | facts/sec |
+| -O2 | Insertion par identifiants de symboles | edb_symbol_id_insert | batch_unary | 1 | 0.026823 | 0.032226 | 36936465,00 | facts/sec |
+| -O2 | Insertion par identifiants de symboles | edb_symbol_id_insert | unit_binary | 1 | 0.032258 | 0.037613 | 31146419,00 | facts/sec |
+| -O2 | Insertion par identifiants de symboles | edb_symbol_id_insert | batch_binary | 1 | 0.027867 | 0.038533 | 34008747,00 | facts/sec |
+| -O2 | Insertion de chaînes runtime | edb_runtime_string_insert | unit_unary | 1 | 0.049933 | 0.052933 | 19574170,00 | facts/sec |
+| -O2 | Insertion de chaînes runtime | edb_runtime_string_insert | batch_unary | 1 | 0.055533 | 0.061067 | 17530983,00 | facts/sec |
+| -O2 | Insertion de paires de chaînes runtime | edb_runtime_string_pair_insert | composed_unit_binary | 1 | 0.061133 | 0.069533 | 16239126,00 | facts/sec |
+| -O2 | Insertion de paires de chaînes runtime | edb_runtime_string_pair_insert | batch_binary | 1 | 0.069333 | 0.069667 | 13994364,00 | facts/sec |
+| -O2 | Insertion par identifiants de symboles | edb_symbol_id_insert | unit_unary | 8 | 0.361000 | 0.375000 | 22576081,00 | facts/sec |
+| -O2 | Insertion par identifiants de symboles | edb_symbol_id_insert | batch_unary | 8 | 0.220286 | 0.232143 | 36272977,00 | facts/sec |
+| -O2 | Insertion par identifiants de symboles | edb_symbol_id_insert | unit_binary | 8 | 0.347000 | 0.361333 | 23138819,00 | facts/sec |
+| -O2 | Insertion par identifiants de symboles | edb_symbol_id_insert | batch_binary | 8 | 0.226214 | 0.244143 | 35204427,00 | facts/sec |
+| -O2 | Insertion de chaînes runtime | edb_runtime_string_insert | unit_unary | 8 | 0.458000 | 0.458667 | 17742607,00 | facts/sec |
+| -O2 | Insertion de chaînes runtime | edb_runtime_string_insert | batch_unary | 8 | 0.333000 | 0.334000 | 24406614,00 | facts/sec |
+| -O2 | Insertion de paires de chaînes runtime | edb_runtime_string_pair_insert | composed_unit_binary | 8 | 0.541667 | 0.542000 | 14707477,00 | facts/sec |
+| -O2 | Insertion de paires de chaînes runtime | edb_runtime_string_pair_insert | batch_binary | 8 | 0.417000 | 0.445000 | 18253490,00 | facts/sec |
+| -O2 | Insertion par identifiants de symboles | edb_symbol_id_insert | unit_unary | 16 | 0.875000 | 0.958000 | 17613832,00 | facts/sec |
+| -O2 | Insertion par identifiants de symboles | edb_symbol_id_insert | batch_unary | 16 | 0.625000 | 0.652667 | 25285249,00 | facts/sec |
+| -O2 | Insertion par identifiants de symboles | edb_symbol_id_insert | unit_binary | 16 | 0.875000 | 0.875000 | 18424264,00 | facts/sec |
+| -O2 | Insertion par identifiants de symboles | edb_symbol_id_insert | batch_binary | 16 | 0.625000 | 0.667000 | 25140511,00 | facts/sec |
+| -O2 | Insertion de chaînes runtime | edb_runtime_string_insert | unit_unary | 16 | 1.083000 | 1.084000 | 14585019,00 | facts/sec |
+| -O2 | Insertion de chaînes runtime | edb_runtime_string_insert | batch_unary | 16 | 0.833000 | 0.834000 | 19246244,00 | facts/sec |
+| -O2 | Insertion de paires de chaînes runtime | edb_runtime_string_pair_insert | composed_unit_binary | 16 | 1.250000 | 1.292000 | 12569604,00 | facts/sec |
+| -O2 | Insertion de paires de chaînes runtime | edb_runtime_string_pair_insert | batch_binary | 16 | 1.000000 | 1.042000 | 15895992,00 | facts/sec |
+| -O2 | Insertion par identifiants de symboles | edb_symbol_id_insert | unit_unary | 32 | 2.417000 | 2.541000 | 13204441,00 | facts/sec |
+| -O2 | Insertion par identifiants de symboles | edb_symbol_id_insert | batch_unary | 32 | 1.875000 | 1.917000 | 16994122,00 | facts/sec |
+| -O2 | Insertion par identifiants de symboles | edb_symbol_id_insert | unit_binary | 32 | 2.375000 | 2.417000 | 12888123,00 | facts/sec |
+| -O2 | Insertion par identifiants de symboles | edb_symbol_id_insert | batch_binary | 32 | 1.917000 | 1.917000 | 16612891,00 | facts/sec |
+| -O2 | Insertion de chaînes runtime | edb_runtime_string_insert | unit_unary | 32 | 2.791000 | 2.792000 | 11505737,00 | facts/sec |
+| -O2 | Insertion de chaînes runtime | edb_runtime_string_insert | batch_unary | 32 | 2.292000 | 2.292000 | 13999989,00 | facts/sec |
+| -O2 | Insertion de paires de chaînes runtime | edb_runtime_string_pair_insert | composed_unit_binary | 32 | 3.250000 | 3.500000 | 9755746,00 | facts/sec |
+| -O2 | Insertion de paires de chaînes runtime | edb_runtime_string_pair_insert | batch_binary | 32 | 2.666000 | 2.667000 | 12052199,00 | facts/sec |
+| -O2 | Insertion par identifiants de symboles | edb_symbol_id_insert | unit_unary | 64 | 7.459000 | 7.709000 | 8502996,00 | facts/sec |
+| -O2 | Insertion par identifiants de symboles | edb_symbol_id_insert | batch_unary | 64 | 6.334000 | 6.458000 | 10029191,00 | facts/sec |
+| -O2 | Insertion par identifiants de symboles | edb_symbol_id_insert | unit_binary | 64 | 7.291000 | 7.333000 | 8751096,00 | facts/sec |
+| -O2 | Insertion par identifiants de symboles | edb_symbol_id_insert | batch_binary | 64 | 6.375000 | 6.417000 | 9998628,00 | facts/sec |
+| -O2 | Insertion de chaînes runtime | edb_runtime_string_insert | unit_unary | 64 | 8.125000 | 8.167000 | 7836497,00 | facts/sec |
+| -O2 | Insertion de chaînes runtime | edb_runtime_string_insert | batch_unary | 64 | 7.042000 | 7.084000 | 9062761,00 | facts/sec |
+| -O2 | Insertion de paires de chaînes runtime | edb_runtime_string_pair_insert | composed_unit_binary | 64 | 8.792000 | 9.000000 | 7194871,00 | facts/sec |
+| -O2 | Insertion de paires de chaînes runtime | edb_runtime_string_pair_insert | batch_binary | 64 | 7.833000 | 7.916000 | 8008119,00 | facts/sec |
+| -O2 | Résolution : plages denses par prédicat | solver_predicate_dense_ranges | selectivity_1pct | 800 | 12.292000 | 13.292000 | 79233,00 | solve_calls/sec |
+| -O2 | Résolution : plages denses par prédicat | solver_predicate_dense_ranges | selectivity_10pct | 640 | 47.229500 | 50.875000 | 20778,00 | solve_calls/sec |
+| -O2 | Résolution : plages denses par prédicat | solver_predicate_dense_ranges | selectivity_50pct | 128 | 36.834000 | 45.000000 | 26451,00 | solve_calls/sec |
+| -O2 | Résolution : plages denses par prédicat | solver_predicate_dense_ranges | selectivity_100pct | 64 | 28.750000 | 28.917000 | 34688,00 | solve_calls/sec |
+| -O2 | Résolution : sélectivité pure | solver_selectivity_pure | selectivity_pure | 256 | 16.417000 | 16.542000 | 60815,00 | solve_calls/sec |
+| -O2 | Résolution : sélectivité pure | solver_selectivity_pure | selectivity_pure | 256 | 21.584000 | 21.792000 | 45960,00 | solve_calls/sec |
+| -O2 | Résolution : sélectivité pure | solver_selectivity_pure | selectivity_pure | 256 | 29.166000 | 32.333000 | 33965,00 | solve_calls/sec |
+| -O2 | Résolution : sélectivité pure | solver_selectivity_pure | selectivity_pure | 256 | 47.500000 | 53.458000 | 20671,00 | solve_calls/sec |
+| -O2 | Résolution : sélectivité pure | solver_selectivity_pure | selectivity_pure | 256 | 98.417000 | 102.750000 | 10087,00 | solve_calls/sec |
+| -O2 | Résolution : sélectivité pure | solver_selectivity_pure | selectivity_pure | 256 | 244.625000 | 259.625000 | 4061,00 | solve_calls/sec |
+| -O2 | Résolution : taille pure | solver_size_pure | size_pure | 64 | 14.167000 | 14.417000 | 70000,00 | solve_calls/sec |
+| -O2 | Résolution : taille pure | solver_size_pure | size_pure | 128 | 17.917000 | 18.000000 | 55740,00 | solve_calls/sec |
+| -O2 | Résolution : taille pure | solver_size_pure | size_pure | 256 | 29.208000 | 36.166000 | 33466,00 | solve_calls/sec |
+| -O2 | Résolution : taille pure | solver_size_pure | size_pure | 512 | 67.417000 | 73.750000 | 14592,00 | solve_calls/sec |
+| -O2 | Résolution : taille pure | solver_size_pure | size_pure | 1024 | 230.333000 | 242.875000 | 4308,00 | solve_calls/sec |
+| -O2 | Résolution : taille pure | solver_size_pure | size_pure | 2048 | 867.750000 | 928.583000 | 1140,00 | solve_calls/sec |
+| -O2 | Résolution : plages denses par prédicat | solver_predicate_dense_ranges | absent_predicate | 512 | 9.000000 | 9.125000 | 110265,00 | solve_calls/sec |
+| -O2 | Résolution répétée (même policy/EDB) | solver_repeated_solve | repeated | 1 | 10.125000 | 10.250000 | 98597,00 | solve_calls/sec |
+| -O2 | Résolution répétée (même policy/EDB) | solver_repeated_solve | repeated | 10 | 68.708000 | 76.750000 | 142524,00 | solve_calls/sec |
+| -O2 | Résolution répétée (même policy/EDB) | solver_repeated_solve | repeated | 100 | 678.500000 | 758.292000 | 145876,00 | solve_calls/sec |
+| -O2 | Résolution répétée (même policy/EDB) | solver_repeated_solve | repeated | 1000 | 6997.166500 | 13552.125000 | 127074,00 | solve_calls/sec |
+| -O2 | Résolution : jointures | solver_join_bindings | simple_join | 8 | 7.250000 | 7.334000 | 134916,00 | solve_calls/sec |
+| -O2 | Résolution : jointures | solver_join_bindings | simple_join | 16 | 11.209000 | 11.292000 | 87631,00 | solve_calls/sec |
+| -O2 | Résolution : jointures | solver_join_bindings | simple_join | 32 | 24.666000 | 27.834000 | 38811,00 | solve_calls/sec |
+| -O2 | Résolution : jointures | solver_join_bindings | simple_join | 64 | 79.937000 | 89.583000 | 12753,00 | solve_calls/sec |
+| -O2 | Résolution : jointures | solver_join_bindings | noisy_join | 128 | 31.084000 | 38.125000 | 31363,00 | solve_calls/sec |
+| -O2 | Résolution : jointures | solver_join_bindings | noisy_join | 512 | 34.417000 | 39.000000 | 28558,00 | solve_calls/sec |
+| -O2 | Résolution : jointures | solver_join_bindings | noisy_join | 960 | 41.083000 | 48.625000 | 23613,00 | solve_calls/sec |
 
 ## Limits
 

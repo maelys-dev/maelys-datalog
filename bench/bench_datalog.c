@@ -532,7 +532,7 @@ static void add_noise_facts(bench_ctx_t *ctx, size_t total_noise, size_t symbol_
   }
 }
 
-static void populate_user_noise_total(bench_ctx_t *ctx, size_t total, size_t useful) {
+static void populate_single_factor_user(bench_ctx_t *ctx, size_t total, size_t useful) {
   require_true(useful <= total, "useful <= total");
   require_true(useful <= MAELYS_DATALOG_MAX_FACTS_PER_PRED, "useful per-predicate cap");
   require_true(total <= MAELYS_DATALOG_MAX_EDB_FACTS, "total EDB cap");
@@ -565,17 +565,6 @@ static void populate_selectivity(bench_ctx_t *ctx, const bench_case_t *bench) {
   if (total > useful) {
     add_noise_facts(ctx, total - useful, 64u);
   }
-}
-
-static void populate_noise_total(bench_ctx_t *ctx, const bench_case_t *bench) {
-  const size_t useful = bench->size == 64u ? 8u : 16u;
-  for (size_t i = 0; i < useful; ++i) {
-    char value[32];
-    snprintf(value, sizeof(value), "target%03zu", i);
-    require_ok(maelys_datalog_edb_add_runtime_symbol_fact(&ctx->edb, "user", value),
-               "add target users");
-  }
-  add_noise_facts(ctx, bench->size - useful, 64u);
 }
 
 static void populate_repeated_solve(bench_ctx_t *ctx) {
@@ -639,11 +628,9 @@ static void prepare_solver(bench_ctx_t *ctx, const bench_case_t *bench) {
     require_true(bench->useful_count <= bench->size, "useful_count within total size");
     require_true(bench->useful_count <= MAELYS_DATALOG_MAX_FACTS_PER_PRED,
                  "useful_count within per-predicate bound");
-    populate_user_noise_total(ctx, bench->size, bench->useful_count);
+    populate_single_factor_user(ctx, bench->size, bench->useful_count);
   } else if (strncmp(bench->mode, "selectivity_", 12) == 0) {
     populate_selectivity(ctx, bench);
-  } else if (strcmp(bench->mode, "noise_total") == 0) {
-    populate_noise_total(ctx, bench);
   } else if (strcmp(bench->mode, "simple_join") == 0) {
     populate_simple_join(ctx, bench);
   } else if (strcmp(bench->mode, "noisy_join") == 0) {
@@ -972,7 +959,6 @@ static void run_all(bench_output_t *out) {
   static const char *selectivity_modes[] = {
       "selectivity_1pct", "selectivity_10pct", "selectivity_50pct", "selectivity_100pct"};
   static const double selectivities[] = {0.01, 0.10, 0.50, 1.00};
-  static const size_t noise_totals[] = {64u, 128u, 256u, 512u, 960u};
   static const size_t repeat_sizes[] = {1u, 10u, 100u, 1000u};
   static const size_t join_sizes[] = {8u, 16u, 32u, 64u};
   static const size_t noisy_join_sizes[] = {128u, 512u, 960u};
@@ -1035,18 +1021,6 @@ static void run_all(bench_output_t *out) {
                           selectivity_totals[i],
                           0u,
                           selectivities[i],
-                          "solve_calls/sec",
-                          1u};
-    measure_case(out, &bench, prepare_solver, run_solver_once, true);
-  }
-
-  for (size_t i = 0; i < sizeof(noise_totals) / sizeof(noise_totals[0]); ++i) {
-    bench_case_t bench = {"solver_predicate_dense_ranges",
-                          "solver",
-                          "noise_total",
-                          noise_totals[i],
-                          0u,
-                          noise_totals[i] == 64u ? 0.125 : (16.0 / (double)noise_totals[i]),
                           "solve_calls/sec",
                           1u};
     measure_case(out, &bench, prepare_solver, run_solver_once, true);
