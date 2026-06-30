@@ -11,6 +11,8 @@
 extern "C" {
 #endif
 
+void maelys_datalog_wasm_get_build_limits(uint32_t *out);
+
 maelys_result_t maelys_datalog_wasm_domain_begin(const char *name);
 maelys_result_t maelys_datalog_wasm_domain_add_predicate(const char *name,
                                                          unsigned arity,

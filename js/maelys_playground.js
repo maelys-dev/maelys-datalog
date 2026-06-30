@@ -38,6 +38,7 @@ const MAELYS_ERR_PAYLOAD_TOO_LARGE = -12;
 const MAELYS_ERR_INVALID_STATE = -13;
 const MAELYS_DATALOG_WASM_PACKED_STRING_BYTES_MAX = 32768;
 const INT32_MAX = 0x7fffffff;
+const BUILD_LIMITS_COUNT = 10;
 
 function makeError(name, rc, msg) {
   return new Error(`${name} failed (rc=${rc})${msg ? ': ' + msg : ''}`);
@@ -97,6 +98,35 @@ class MaelysPlayground {
    */
   _check(rc, name) {
     if (rc !== MAELYS_OK) throw makeError(name, rc, this._diag());
+  }
+
+  /**
+   * @returns {{ maxSymbols: number, stringPoolBytes: number, maxPredicates: number, maxRules: number, maxArity: number, maxBodyLiterals: number, maxDepth: number, maxEdbFacts: number, maxIdbFacts: number, maxFactsPerPred: number }}
+   */
+  buildLimits() {
+    const ptr = this._mod._malloc(BUILD_LIMITS_COUNT * 4);
+    if (!ptr) {
+      throw new Error('Failed to allocate build limits buffer');
+    }
+    try {
+      this._call('maelys_datalog_wasm_get_build_limits', null, ['number'], [ptr]);
+      /* ABI: slot order must stay aligned with maelys_datalog_wasm_get_build_limits. */
+      const readU32 = (i) => this._mod.getValue(ptr + i * 4, 'i32') >>> 0;
+      return {
+        maxSymbols: readU32(0),
+        stringPoolBytes: readU32(1),
+        maxPredicates: readU32(2),
+        maxRules: readU32(3),
+        maxArity: readU32(4),
+        maxBodyLiterals: readU32(5),
+        maxDepth: readU32(6),
+        maxEdbFacts: readU32(7),
+        maxIdbFacts: readU32(8),
+        maxFactsPerPred: readU32(9),
+      };
+    } finally {
+      this._mod._free(ptr);
+    }
   }
 
   /**

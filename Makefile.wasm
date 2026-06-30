@@ -21,6 +21,7 @@ ENGINE_SRCS = \
 	src/core/maelys_datalog_diagnostic.c \
 	src/core/maelys_datalog_domain_registry.c \
 	src/core/maelys_datalog_edb.c \
+	src/core/maelys_datalog_introspection.c \
 	src/core/maelys_datalog_lexer.c \
 	src/core/maelys_datalog_parser.c \
 	src/core/maelys_datalog_predicate_registry.c \
@@ -72,6 +73,7 @@ WASM_EXAMPLES_LDFLAGS = \
 
 WASM_DYNAMIC_EXPORTS = \
 	$(WASM_EXPORTS), \
+	'_maelys_datalog_wasm_get_build_limits', \
 	'_maelys_datalog_load_policy_inline', \
 	'_maelys_datalog_wasm_domain_begin', \
 	'_maelys_datalog_wasm_domain_add_predicate', \

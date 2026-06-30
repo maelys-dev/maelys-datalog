@@ -5,9 +5,12 @@
 #include "src/core/maelys_datalog_edb.h"
 #include "src/core/maelys_datalog_solver.h"
 #include "src/core/maelys_datalog_symbol_table.h"
+#include "src/core/maelys_datalog_types.h"
 #include "src/manifest/maelys_datalog_manifest.h"
 
 #include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
 #include <string.h>
 
 #define MAELYS_DATALOG_WASM_VALID_KIND_MASK \
@@ -16,6 +19,12 @@
 
 /* WASM boundary only: caps packed-buffer scans; not a core string-pool rule. */
 #define MAELYS_DATALOG_WASM_PACKED_STRING_BYTES_MAX MAELYS_DATALOG_STRING_POOL_BYTES
+
+#define MAELYS_DATALOG_WASM_BUILD_LIMITS_COUNT 10u
+
+#if defined(__EMSCRIPTEN__) && SIZE_MAX > UINT32_MAX
+#  error "maelys_datalog_wasm_get_build_limits assumes a 32-bit size_t WASM ABI"
+#endif
 
 typedef enum {
     WASM_EDB_STATE_EMPTY = 0,
@@ -35,6 +44,35 @@ static maelys_datalog_fact_t s_fact_pool[MAELYS_DATALOG_MAX_EDB_FACTS];
 static maelys_datalog_symbol_id_t s_id_scratch[MAELYS_DATALOG_MAX_EDB_FACTS * 2u];
 static maelys_datalog_solve_result_t *s_solve_result = NULL;
 static wasm_edb_state_t s_edb_state = WASM_EDB_STATE_EMPTY;
+
+/* Flat uint32_t ABI for JS build limits.
+ * Slots mirror maelys_datalog_build_limits_t declaration order:
+ *   0 max_symbols
+ *   1 string_pool_bytes
+ *   2 max_predicates
+ *   3 max_rules
+ *   4 max_arity
+ *   5 max_body_literals
+ *   6 max_depth
+ *   7 max_edb_facts
+ *   8 max_idb_facts
+ *   9 max_facts_per_pred
+ */
+void maelys_datalog_wasm_get_build_limits(uint32_t *out) {
+    if (!out) return;
+    maelys_datalog_build_limits_t limits;
+    maelys_datalog_get_build_limits(&limits);
+    out[0] = (uint32_t)limits.max_symbols;
+    out[1] = (uint32_t)limits.string_pool_bytes;
+    out[2] = (uint32_t)limits.max_predicates;
+    out[3] = (uint32_t)limits.max_rules;
+    out[4] = (uint32_t)limits.max_arity;
+    out[5] = (uint32_t)limits.max_body_literals;
+    out[6] = (uint32_t)limits.max_depth;
+    out[7] = (uint32_t)limits.max_edb_facts;
+    out[8] = (uint32_t)limits.max_idb_facts;
+    out[9] = (uint32_t)limits.max_facts_per_pred;
+}
 
 static void builder_clear_current(void) {
     memset(s_domain_name, 0, sizeof(s_domain_name));
