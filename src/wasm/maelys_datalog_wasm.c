@@ -559,6 +559,10 @@ const char *maelys_datalog_wasm_last_diag_message(void) {
     return s_last_diag.message[0] ? s_last_diag.message : "";
 }
 
+const char *maelys_datalog_wasm_last_diag_hint(void) {
+    return s_last_diag.hint[0] ? s_last_diag.hint : "";
+}
+
 int maelys_datalog_wasm_last_diag_code(void) {
     return (int)s_last_diag.code;
 }

@@ -137,6 +137,7 @@ await test('playground_two_evaluations', async () => {
 
 await test('playground_error_throw', async () => {
   const pg = await createPlayground();
+  if (pg.diagHint !== '') throw new Error(`expected empty initial diag hint, got "${pg.diagHint}"`);
   pg.domainBegin('err_domain');
   pg.domainAddPredicate('safe', 1, PredKind.EDB);
   pg.domainCommit();
@@ -150,6 +151,29 @@ await test('playground_error_throw', async () => {
     }
   }
   if (!threw) throw new Error('must throw on invalid source');
+});
+
+await test('playground_diagnostic_hint_round_trip', async () => {
+  const pg = await createPlayground();
+  pg.domainBegin('hint_domain');
+  pg.domainAddPredicate('safe', 1, PredKind.EDB);
+  pg.domainAddPredicate('allow', 1, PredKind.IDB | PredKind.QUERY);
+  pg.domainCommit();
+  let threw = false;
+  try {
+    pg.loadRuleset('hint_domain', 'hint.main', 'allow(X) :- safe(Y).\n');
+  } catch {
+    threw = true;
+  }
+  if (!threw) throw new Error('unsafe rule must throw');
+  const expectedMessage = 'head variable not bound by positive body atom';
+  const expectedHint = 'bind every head variable in a positive body atom';
+  if (pg.diagMessage !== expectedMessage) {
+    throw new Error(`expected message "${expectedMessage}", got "${pg.diagMessage}"`);
+  }
+  if (pg.diagHint !== expectedHint) {
+    throw new Error(`expected hint "${expectedHint}", got "${pg.diagHint}"`);
+  }
 });
 
 await test('playground_query_unknown_readonly', async () => {

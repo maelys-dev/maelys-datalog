@@ -495,6 +495,13 @@ class MaelysPlayground {
   }
 
   /**
+   * @returns {string}
+   */
+  get diagHint() {
+    return this._call('maelys_datalog_wasm_last_diag_hint', 'string', [], []);
+  }
+
+  /**
    * @returns {number}
    */
   get diagCode() {

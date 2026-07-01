@@ -96,6 +96,7 @@ WASM_DYNAMIC_EXPORTS = \
 	'_maelys_datalog_wasm_load_ruleset', \
 	'_maelys_datalog_wasm_ruleset_ptr', \
 	'_maelys_datalog_wasm_last_diag_message', \
+	'_maelys_datalog_wasm_last_diag_hint', \
 	'_maelys_datalog_wasm_last_diag_code'
 
 WASM_DYNAMIC_LDFLAGS = \

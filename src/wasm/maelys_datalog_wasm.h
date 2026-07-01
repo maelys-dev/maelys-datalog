@@ -60,6 +60,7 @@ maelys_result_t maelys_datalog_wasm_load_ruleset(const char *domain_name,
                                                 size_t src_len);
 uintptr_t maelys_datalog_wasm_ruleset_ptr(void);
 const char *maelys_datalog_wasm_last_diag_message(void);
+const char *maelys_datalog_wasm_last_diag_hint(void);
 int maelys_datalog_wasm_last_diag_code(void);
 
 #ifdef __cplusplus
