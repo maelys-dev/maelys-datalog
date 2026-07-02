@@ -74,6 +74,21 @@ maelys_result_t maelys_datalog_extract_proof_for_fact(
 maelys_result_t maelys_datalog_solve_result_derived_fact_count(
     const maelys_datalog_solve_result_t *result,
     size_t *out_count);
+/* Enumerates already-materialized IDB facts for a query-capable predicate.
+ * This accessor never derives new facts, never resolves symbols to text, and
+ * never allocates. The caller owns out_facts and chooses out_capacity.
+ *
+ * out_capacity == 0 is a valid count-only mode; out_facts may be NULL only in
+ * that mode. On success, *out_count is the total number of matching facts found,
+ * not just the number copied. Truncation is therefore observable by the caller
+ * as *out_count > out_capacity. No ordering guarantee is made for copied facts. */
+maelys_result_t maelys_datalog_solve_result_enumerate_predicate_facts(
+    const maelys_datalog_solve_result_t *result,
+    const char *predicate,
+    size_t arity,
+    maelys_datalog_fact_t *out_facts,
+    size_t out_capacity,
+    size_t *out_count);
 
 #ifdef __cplusplus
 }
