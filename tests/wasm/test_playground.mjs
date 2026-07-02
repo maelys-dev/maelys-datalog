@@ -116,6 +116,39 @@ await test('playground_basic', async () => {
   pg.freeResult();
 });
 
+await test('playground_derived_fact_count_before_solve_throws', async () => {
+  const pg = await createPlayground();
+  expectThrowRc(() => pg.derivedFactCount(), -1, 'derivedFactCount before solve');
+});
+
+await test('playground_derived_fact_count_known_count', async () => {
+  const pg = await createPlayground();
+  pg.domainBegin('derived_count_known');
+  pg.domainAddPredicate('edge', 2, PredKind.EDB);
+  pg.domainAddPredicate('path', 2, PredKind.IDB | PredKind.QUERY);
+  pg.domainCommit();
+  pg.loadRuleset(
+    'derived_count_known',
+    'derived_count_known.main',
+    'path(X, Y) :- edge(X, Y).\npath(X, Z) :- edge(X, Y), path(Y, Z).\n',
+  );
+  pg.edbBegin();
+  pg.addFact2('edge', 'a', 'b');
+  pg.addFact2('edge', 'b', 'c');
+  pg.solve();
+  const count = pg.derivedFactCount();
+  if (count !== 3) throw new Error(`expected derived fact count 3, got ${count}`);
+  pg.freeResult();
+});
+
+await test('playground_derived_fact_count_zero_valid', async () => {
+  const pg = await setupUnaryAccess('derived_count_zero');
+  pg.solve();
+  const count = pg.derivedFactCount();
+  if (count !== 0) throw new Error(`expected derived fact count 0, got ${count}`);
+  pg.freeResult();
+});
+
 await test('playground_two_evaluations', async () => {
   const pg = await createPlayground();
   pg.domainBegin('access2');

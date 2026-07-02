@@ -480,6 +480,15 @@ class MaelysPlayground {
   }
 
   /**
+   * @returns {number}
+   */
+  derivedFactCount() {
+    const rc = this._call('maelys_datalog_wasm_derived_fact_count', 'number', [], []);
+    if (rc === -1) throw makeError('derivedFactCount', -1, this._diag());
+    return rc;
+  }
+
+  /**
    * @returns {MaelysPlayground}
    */
   freeResult() {

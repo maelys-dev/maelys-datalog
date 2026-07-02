@@ -509,6 +509,20 @@ int maelys_datalog_wasm_query_symbol2(const char *pred,
     return present ? 1 : 0;
 }
 
+int32_t maelys_datalog_wasm_derived_fact_count(void) {
+    if (s_edb_state != WASM_EDB_STATE_SOLVED || !s_solve_result) return -1;
+    size_t count = 0u;
+    maelys_result_t rc =
+        maelys_datalog_solve_result_derived_fact_count(s_solve_result, &count);
+    if (rc != MAELYS_OK) return -1;
+    /* Current profiles keep derived fact counts well below INT32_MAX
+     * (MAX_IDB_FACTS = 1024/2048, vs INT32_MAX = 2147483647). solver.c keeps
+     * idb_current_end <= idb_merge_end <= MAELYS_DATALOG_MAX_IDB_FACTS through
+     * assertions plus the runtime IDB_OVERFLOW guard, which fails the solve
+     * before publication. Therefore -1 remains an unambiguous sentinel. */
+    return (int32_t)count;
+}
+
 void maelys_datalog_wasm_solve_result_free(void) {
     free_solve_result_only();
     maelys_datalog_edb_clear(&s_edb);

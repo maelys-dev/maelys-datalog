@@ -92,6 +92,7 @@ WASM_DYNAMIC_EXPORTS = \
 	'_maelys_datalog_wasm_solve', \
 	'_maelys_datalog_wasm_query_symbol', \
 	'_maelys_datalog_wasm_query_symbol2', \
+	'_maelys_datalog_wasm_derived_fact_count', \
 	'_maelys_datalog_wasm_solve_result_free', \
 	'_maelys_datalog_wasm_load_ruleset', \
 	'_maelys_datalog_wasm_ruleset_ptr', \

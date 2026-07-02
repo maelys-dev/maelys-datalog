@@ -52,6 +52,13 @@ int maelys_datalog_wasm_query_symbol(const char *pred, const char *arg0);
 int maelys_datalog_wasm_query_symbol2(const char *pred,
                                       const char *arg0,
                                       const char *arg1);
+/* Returns the derived fact count for the current solved WASM result.
+ * Non-negative values are valid counts, including 0. -1 is the sentinel for
+ * "no solved result available" or an underlying C accessor failure; it is not
+ * the same as zero derived facts. This mirrors the existing query_symbol
+ * implicit-state API, except the success range is a count rather than a
+ * boolean presence flag. */
+int32_t maelys_datalog_wasm_derived_fact_count(void);
 void maelys_datalog_wasm_solve_result_free(void);
 
 maelys_result_t maelys_datalog_wasm_load_ruleset(const char *domain_name,
