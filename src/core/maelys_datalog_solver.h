@@ -71,6 +71,9 @@ maelys_result_t maelys_datalog_extract_proof_for_fact(
     const maelys_datalog_solve_result_t *result,
     const maelys_datalog_fact_t *queried_fact,
     maelys_datalog_proof_tree_t *out_proof);
+maelys_result_t maelys_datalog_solve_result_derived_fact_count(
+    const maelys_datalog_solve_result_t *result,
+    size_t *out_count);
 
 #ifdef __cplusplus
 }

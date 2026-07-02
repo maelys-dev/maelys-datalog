@@ -66,6 +66,7 @@ ASAN_TEST_SRCS = \
 	tests/test_maelys_datalog_wasm_builder.c \
 	tests/test_maelys_datalog_headers.c \
 	tests/test_maelys_datalog_solver.c \
+	tests/test_maelys_datalog_solver_statistics.c \
 	tests/test_maelys_datalog_atom_vocabulary.c \
 	tests/test_maelys_datalog_boundary.c \
 	tests/test_maelys_datalog_determinism.c \

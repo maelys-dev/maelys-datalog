@@ -2358,6 +2358,15 @@ maelys_result_t maelys_datalog_extract_proof_for_fact(
     return MAELYS_OK;
 }
 
+maelys_result_t maelys_datalog_solve_result_derived_fact_count(
+    const maelys_datalog_solve_result_t *result,
+    size_t *out_count) {
+    if (!result || !out_count) return MAELYS_ERR_INVALID_ARGUMENT;
+    if (!result->finalized || result->failed) return MAELYS_ERR_INVALID_STATE;
+    *out_count = result->idb_current_end;
+    return MAELYS_OK;
+}
+
 void maelys_datalog_solve_result_free(maelys_datalog_solve_result_t *result) {
     if (!result) return;
     memset(result, 0, sizeof(*result));
