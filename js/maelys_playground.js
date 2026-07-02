@@ -23,12 +23,12 @@
 
 'use strict';
 
-/** @type {{ readonly EDB: 1; readonly IDB: 2; readonly QUERY: 4; readonly RULESET_FACT: 8 }} */
+/** @type {{ readonly EDB: 1; readonly IDB: 2; readonly QUERY: 4; readonly POLICY_FACT: 8 }} */
 const PredKind = Object.freeze({
   EDB: 1,
   IDB: 2,
   QUERY: 4,
-  RULESET_FACT: 8,
+  POLICY_FACT: 8,
 });
 
 const MAELYS_OK = 0;
