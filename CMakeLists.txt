@@ -8,6 +8,7 @@ set(ENGINE_SRCS
     src/core/maelys_datalog_diagnostic.c
     src/core/maelys_datalog_domain_registry.c
     src/core/maelys_datalog_edb.c
+    src/core/maelys_datalog_introspection.c
     src/core/maelys_datalog_lexer.c
     src/core/maelys_datalog_parser.c
     src/core/maelys_datalog_predicate_registry.c
@@ -35,6 +36,28 @@ if(MAELYS_DATALOG_PROFILE_LARGE)
     target_compile_definitions(maelys_datalog PUBLIC MAELYS_DATALOG_PROFILE_LARGE)
 endif()
 
+add_library(maelys_datalog_shared SHARED ${ENGINE_SRCS} ${COMMON_SRCS})
+target_include_directories(maelys_datalog_shared PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>)
+target_compile_options(maelys_datalog_shared PRIVATE -Wall -Wextra)
+
+if(MAELYS_DATALOG_PROFILE_LARGE)
+    target_compile_definitions(maelys_datalog_shared PUBLIC MAELYS_DATALOG_PROFILE_LARGE)
+endif()
+
+if(APPLE)
+    set(_maelys_rpath "@loader_path")
+else()
+    set(_maelys_rpath "$ORIGIN")
+endif()
+
+set_target_properties(maelys_datalog_shared PROPERTIES
+    BUILD_RPATH "${_maelys_rpath}"
+    INSTALL_RPATH "${_maelys_rpath}"
+    BUILD_WITH_INSTALL_RPATH TRUE
+    MACOSX_RPATH TRUE
+    INSTALL_NAME_DIR "@rpath")
+
 option(MAELYS_DATALOG_BUILD_EXAMPLES "Build example domains" OFF)
 
 if(MAELYS_DATALOG_BUILD_EXAMPLES)
@@ -43,4 +66,42 @@ if(MAELYS_DATALOG_BUILD_EXAMPLES)
     target_include_directories(maelys_datalog_examples PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>)
     target_link_libraries(maelys_datalog_examples maelys_datalog)
+endif()
+
+option(MAELYS_DATALOG_BUILD_PYTHON_BINDING "Build the Python cffi shim" OFF)
+
+if(MAELYS_DATALOG_BUILD_PYTHON_BINDING)
+    add_library(maelys_py_bind SHARED bindings/python/maelys_py_bind.c)
+    target_include_directories(maelys_py_bind PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>)
+    target_compile_options(maelys_py_bind PRIVATE -Wall -Wextra)
+    target_link_libraries(maelys_py_bind PRIVATE maelys_datalog_shared)
+    set_target_properties(maelys_py_bind PROPERTIES
+        BUILD_RPATH "${_maelys_rpath}"
+        INSTALL_RPATH "${_maelys_rpath}"
+        BUILD_WITH_INSTALL_RPATH TRUE
+        MACOSX_RPATH TRUE
+        INSTALL_NAME_DIR "@rpath")
+
+    add_custom_command(TARGET maelys_py_bind POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory
+                "${CMAKE_CURRENT_SOURCE_DIR}/bindings/python/maelys_datalog"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "$<TARGET_FILE:maelys_datalog_shared>"
+                "${CMAKE_CURRENT_SOURCE_DIR}/bindings/python/maelys_datalog/"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "$<TARGET_FILE:maelys_py_bind>"
+                "${CMAKE_CURRENT_SOURCE_DIR}/bindings/python/maelys_datalog/")
+
+    enable_testing()
+    add_executable(test_maelys_py_bind
+        tests/python/test_maelys_py_bind.c
+        tests/helpers/test_framework.c
+        tests/helpers/test_log.c)
+    target_include_directories(test_maelys_py_bind PRIVATE
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>)
+    target_link_libraries(test_maelys_py_bind PRIVATE maelys_py_bind maelys_datalog_shared)
+    set_target_properties(test_maelys_py_bind PROPERTIES
+        BUILD_RPATH "${_maelys_rpath};$<TARGET_FILE_DIR:maelys_py_bind>;$<TARGET_FILE_DIR:maelys_datalog_shared>")
+    add_test(NAME maelys_py_bind COMMAND test_maelys_py_bind)
 endif()

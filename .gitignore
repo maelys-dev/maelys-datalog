@@ -1,5 +1,6 @@
 *.o
 *.dSYM/
+__pycache__/
 build/
 libmaelys_datalog.a
 maelys_datalog.js
@@ -7,3 +8,7 @@ maelys_datalog.wasm
 maelys_datalog_examples.js
 maelys_datalog_examples.wasm
 examples/maelys_datalog_examples_check
+bindings/python/maelys_datalog/_maelys_cffi*.so
+bindings/python/maelys_datalog/_maelys_cffi*.dylib
+bindings/python/maelys_datalog/libmaelys_*.so
+bindings/python/maelys_datalog/libmaelys_*.dylib
