@@ -36,6 +36,10 @@ def test_import_build_limits_and_abi_constants():
         assert engine.limits.max_facts_per_pred in (64, 256)
     assert md.TERM_SYMBOL != md.TERM_INT
     assert md.PRED_QUERY != 0
+    assert md.InputTerm is not None
+    assert md.ResolvedTerm is not None
+    assert md.Fact is not None
+    assert md.RawFact is not None
 
 
 def test_register_load_solve_enumerate_and_symbol_resolution():
@@ -159,3 +163,137 @@ def test_domain_saturation_runs_in_subprocess(tmp_path):
         check=False,
     )
     assert completed.returncode == 0, completed.stderr + completed.stdout
+
+
+def test_python_validates_build_arity_before_native_registration():
+    domain = "py_test_invalid_build_arity"
+    with md.Engine() as engine:
+        with pytest.raises(ValueError, match="outside supported range"):
+            engine.register_domain(
+                domain,
+                [md.Predicate("too_wide", engine.limits.max_arity + 1, md.PRED_EDB)],
+            )
+        found, _inspectable, _predicates = engine._find_domain(domain)
+        assert not found
+
+
+def test_python_argument_taxonomy_and_explicit_symbol_validation():
+    with md.Engine() as engine:
+        ruleset = make_ruleset(engine, "py_test_argument_taxonomy")
+        edb = ruleset.edb()
+
+        for invalid_terms in ("alice", b"alice"):
+            with pytest.raises(TypeError, match="sequence"):
+                edb.add_fact("edge", invalid_terms)
+        with pytest.raises(TypeError, match="predicate"):
+            edb.add_fact(123, ["a", "b"])
+        with pytest.raises(ValueError, match="outside supported range"):
+            edb.add_fact(
+                "edge",
+                [0] * (engine.limits.max_arity + 1),
+            )
+        with pytest.raises(md.MaelysDatalogError) as exc:
+            edb.add_fact(
+                "edge",
+                [md.Term.symbol_id(engine.limits.max_symbols), md.Term.integer(1)],
+            )
+        assert exc.value.code == md.C.ERR_INVALID_FIELD
+
+        valid_symbol = ruleset.intern_symbol("known")
+        edb.add_fact("edge", [md.Term.symbol_id(valid_symbol), "target"])
+        ruleset.close()
+
+
+def test_raw_enumeration_matches_resolved_and_never_resolves_symbols(monkeypatch):
+    class RecordingRLock:
+        def __init__(self):
+            self._lock = threading.RLock()
+            self.depth = 0
+            self.events = []
+
+        def __enter__(self):
+            self._lock.acquire()
+            self.depth += 1
+            self.events.append(("enter", self.depth))
+            return self
+
+        def __exit__(self, *_exc):
+            self.events.append(("exit", self.depth))
+            self.depth -= 1
+            self._lock.release()
+
+    with md.Engine() as engine:
+        ruleset = make_ruleset(engine, "py_test_raw_enumeration")
+        edb = ruleset.edb()
+        edb.add_fact("edge", ["a", "b"])
+        result = ruleset.solve(edb)
+
+        raw = result.enumerate_predicate_facts_raw("path", 2)
+        recording_lock = RecordingRLock()
+        ruleset._symbol_lock = recording_lock
+        resolved = result.enumerate_predicate_facts("path", 2)
+        assert len(raw) == len(resolved) == 1
+        assert resolved == [("a", "b")]
+        assert all(isinstance(term, md.Term) for term in raw[0])
+        assert recording_lock.events[0] == ("enter", 1)
+        assert recording_lock.events[-1] == ("exit", 1)
+        assert ("exit", 1) not in recording_lock.events[:-1]
+        assert max(depth for _event, depth in recording_lock.events) == 2
+
+        def fail_symbol_text(_symbol_id):
+            raise AssertionError("raw enumeration must not resolve symbols")
+
+        monkeypatch.setattr(ruleset, "symbol_text", fail_symbol_text)
+        assert result.enumerate_predicate_facts_raw("path", 2) == raw
+
+        with pytest.raises(TypeError, match="arity"):
+            result.enumerate_predicate_facts_raw("path", True)
+        with pytest.raises(ValueError, match="outside supported range"):
+            result.enumerate_predicate_facts(
+                "path", engine.limits.max_arity + 1
+            )
+
+
+def test_distinct_edbs_serialize_symbol_updates_then_solve_sequentially():
+    predicates = [
+        md.Predicate("seen", 2, md.PRED_EDB),
+        md.Predicate("out", 2, md.PRED_IDB | md.PRED_QUERY),
+    ]
+    with md.Engine() as engine:
+        engine.register_domain("py_test_symbol_lock", predicates)
+        ruleset = engine.load_inline_ruleset(
+            "py_test_symbol_lock",
+            "policy",
+            "out(T, S) :- seen(T, S).",
+        )
+        edb1 = ruleset.edb()
+        edb2 = ruleset.edb()
+        barrier = threading.Barrier(2)
+        errors = []
+
+        def feed(edb, thread_name, value_prefix):
+            try:
+                barrier.wait()
+                for index in range(16):
+                    edb.add_fact("seen", [thread_name, f"{value_prefix}_{index}"])
+            except BaseException as exc:  # pragma: no cover - surfaced below
+                errors.append(exc)
+
+        threads = [
+            threading.Thread(target=feed, args=(edb1, "t1", "a")),
+            threading.Thread(target=feed, args=(edb2, "t2", "b")),
+        ]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+        assert errors == []
+
+        result1 = ruleset.solve(edb1)
+        result2 = ruleset.solve(edb2)
+        assert set(result1.enumerate_predicate_facts("out", 2)) == {
+            ("t1", f"a_{index}") for index in range(16)
+        }
+        assert set(result2.enumerate_predicate_facts("out", 2)) == {
+            ("t2", f"b_{index}") for index in range(16)
+        }

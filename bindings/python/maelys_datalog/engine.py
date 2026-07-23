@@ -1,11 +1,19 @@
 from __future__ import annotations
 
+from collections.abc import Iterable, Sequence
 import threading
-from typing import Iterable, Sequence
 import weakref
 
 from ._ffi import C, ffi, lib
-from ._types import BuildLimits, Predicate, Term, limits_from_c
+from ._types import (
+    BuildLimits,
+    Fact,
+    InputTerm,
+    Predicate,
+    RawFact,
+    Term,
+    limits_from_c,
+)
 from .errors import (
     DomainAlreadyRegisteredError,
     DomainRegistryFullError,
@@ -24,15 +32,33 @@ def _raise_rc(rc: int, message: str = "", hint: str = "") -> None:
     raise MaelysDatalogError(rc, message, hint)
 
 
-def _normalize(predicates: Iterable[Predicate]) -> tuple[Predicate, ...]:
+def _validate_arity(arity: int, max_arity: int) -> None:
+    if isinstance(arity, bool) or not isinstance(arity, int):
+        raise TypeError("arity must be an int, not bool")
+    if arity < 0 or arity > max_arity:
+        raise ValueError(f"arity {arity} outside supported range 0..{max_arity}")
+
+
+def _validate_predicate(predicate: str) -> None:
+    if not isinstance(predicate, str):
+        raise TypeError("predicate must be a str")
+
+
+def _normalize(predicates: Iterable[Predicate], max_arity: int) -> tuple[Predicate, ...]:
     normalized = []
     for predicate in predicates:
         if not isinstance(predicate, Predicate):
-            predicate = Predicate(predicate.name, predicate.arity, predicate.kind_flags)
-        if not predicate.name or predicate.arity < 0:
-            raise ValueError("predicate name and arity are required")
+            try:
+                predicate = Predicate(predicate.name, predicate.arity, predicate.kind_flags)
+            except AttributeError as exc:
+                raise TypeError("predicates must contain Predicate-compatible values") from exc
+        if not isinstance(predicate.name, str):
+            raise TypeError("predicate name must be a str")
+        _validate_arity(predicate.arity, max_arity)
+        if not predicate.name:
+            raise ValueError("predicate name is required")
         normalized.append(
-            Predicate(str(predicate.name), int(predicate.arity), int(predicate.kind_flags))
+            Predicate(predicate.name, predicate.arity, int(predicate.kind_flags))
         )
     return tuple(normalized)
 
@@ -97,7 +123,7 @@ class Engine:
 
     def register_domain(self, domain_name: str, predicates: Iterable[Predicate]) -> None:
         self._require_open()
-        normalized = _normalize(predicates)
+        normalized = _normalize(predicates, self.limits.max_arity)
         with _DOMAIN_REGISTRY_LOCK:
             found, inspectable, existing = self._find_domain(domain_name)
             if found and not inspectable:
@@ -152,6 +178,7 @@ class Ruleset:
     def __init__(self, handle, engine: Engine):
         self._handle = handle
         self.engine = engine
+        self._symbol_lock = threading.RLock()
         self._closed = False
         self._edbs = weakref.WeakSet()
         self._results = weakref.WeakSet()
@@ -177,18 +204,20 @@ class Ruleset:
             raise RuntimeError("Ruleset is closed")
 
     def intern_symbol(self, text: str) -> int:
-        self._require_open()
-        text_b = text.encode("utf-8")
-        out = ffi.new("uint32_t *")
-        _raise_rc(lib.maelys_py_intern_symbol(self._handle, text_b, out))
-        return int(out[0])
+        with self._symbol_lock:
+            self._require_open()
+            text_b = text.encode("utf-8")
+            out = ffi.new("uint32_t *")
+            _raise_rc(lib.maelys_py_intern_symbol(self._handle, text_b, out))
+            return int(out[0])
 
     def symbol_text(self, symbol_id: int) -> str:
-        self._require_open()
-        text = lib.maelys_py_symbol_text(self._handle, int(symbol_id))
-        if text == ffi.NULL:
-            raise MaelysDatalogError(C.ERR_INVALID_FIELD, "unknown symbol id")
-        return ffi.string(text).decode("utf-8")
+        with self._symbol_lock:
+            self._require_open()
+            text = lib.maelys_py_symbol_text(self._handle, int(symbol_id))
+            if text == ffi.NULL:
+                raise MaelysDatalogError(C.ERR_INVALID_FIELD, "unknown symbol id")
+            return ffi.string(text).decode("utf-8")
 
     def edb(self) -> "Edb":
         self._require_open()
@@ -239,6 +268,8 @@ class Edb:
 
     def _term(self, value) -> Term:
         if isinstance(value, Term):
+            if value.kind == C.TERM_SYMBOL:
+                self.ruleset.symbol_text(value.value)
             return value
         if isinstance(value, bool):
             return Term.boolean(value)
@@ -248,17 +279,28 @@ class Edb:
             return Term.symbol_id(self.ruleset.intern_symbol(value))
         raise TypeError(f"unsupported term value {value!r}")
 
-    def add_fact(self, predicate: str, terms: Sequence[object]) -> None:
-        self._require_open()
-        if self._closed_for_mutation:
-            raise RuntimeError("Edb is closed for mutation after solve()")
-        converted = [self._term(value) for value in terms]
-        arr = ffi.new("maelys_py_term_t[]", len(converted))
-        for i, term in enumerate(converted):
-            arr[i].kind = term.kind
-            arr[i].value = term.value
-        predicate_b = predicate.encode("utf-8")
-        _raise_rc(lib.maelys_py_edb_add_fact(self._handle, predicate_b, arr, len(converted)))
+    def add_fact(self, predicate: str, terms: Sequence[InputTerm]) -> None:
+        _validate_predicate(predicate)
+        if isinstance(terms, (str, bytes)) or not isinstance(terms, Sequence):
+            raise TypeError("terms must be a sequence, not str or bytes")
+        if len(terms) > self.ruleset.engine.limits.max_arity:
+            raise ValueError(
+                f"arity {len(terms)} outside supported range "
+                f"0..{self.ruleset.engine.limits.max_arity}"
+            )
+        with self.ruleset._symbol_lock:
+            self._require_open()
+            if self._closed_for_mutation:
+                raise RuntimeError("Edb is closed for mutation after solve()")
+            converted = [self._term(value) for value in terms]
+            arr = ffi.new("maelys_py_term_t[]", len(converted))
+            for i, term in enumerate(converted):
+                arr[i].kind = term.kind
+                arr[i].value = term.value
+            predicate_b = predicate.encode("utf-8")
+            _raise_rc(
+                lib.maelys_py_edb_add_fact(self._handle, predicate_b, arr, len(converted))
+            )
 
 
 class SolveResult:
@@ -289,8 +331,10 @@ class SolveResult:
         _raise_rc(lib.maelys_py_result_derived_fact_count(self._handle, out))
         return int(out[0])
 
-    def enumerate_predicate_facts(self, predicate: str, arity: int) -> list[tuple[object, ...]]:
+    def _enumerate_predicate_facts_raw(self, predicate: str, arity: int) -> list[RawFact]:
         self._require_open()
+        _validate_predicate(predicate)
+        _validate_arity(arity, self.ruleset.engine.limits.max_arity)
         predicate_b = predicate.encode("utf-8")
         count = ffi.new("size_t *")
         _raise_rc(
@@ -306,18 +350,42 @@ class SolveResult:
                 self._handle, predicate_b, arity, terms, count[0], count
             )
         )
-        facts = []
+        facts: list[RawFact] = []
         for i in range(count[0]):
-            row = []
+            row: list[Term] = []
             for j in range(arity):
                 term = terms[i * arity + j]
                 if term.kind == C.TERM_SYMBOL:
-                    row.append(self.ruleset.symbol_text(term.value))
+                    row.append(Term.symbol_id(term.value))
                 elif term.kind == C.TERM_INT:
-                    row.append(int(term.value))
+                    row.append(Term.integer(term.value))
                 elif term.kind == C.TERM_BOOL:
-                    row.append(bool(term.value))
+                    row.append(Term.boolean(bool(term.value)))
                 else:
                     row.append(Term(int(term.kind), int(term.value)))
             facts.append(tuple(row))
         return facts
+
+    def enumerate_predicate_facts_raw(self, predicate: str, arity: int) -> list[RawFact]:
+        return self._enumerate_predicate_facts_raw(predicate, arity)
+
+    def enumerate_predicate_facts(self, predicate: str, arity: int) -> list[Fact]:
+        raw_facts = self._enumerate_predicate_facts_raw(predicate, arity)
+        with self.ruleset._symbol_lock:
+            facts: list[Fact] = []
+            for raw_fact in raw_facts:
+                row = []
+                for term in raw_fact:
+                    if term.kind == C.TERM_SYMBOL:
+                        row.append(self.ruleset.symbol_text(term.value))
+                    elif term.kind == C.TERM_INT:
+                        row.append(term.value)
+                    elif term.kind == C.TERM_BOOL:
+                        row.append(bool(term.value))
+                    else:
+                        raise MaelysDatalogError(
+                            C.ERR_INVALID_FIELD,
+                            f"unexpected unresolved term kind {term.kind}",
+                        )
+                facts.append(tuple(row))
+            return facts

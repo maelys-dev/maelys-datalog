@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TypeAlias
 
 from ._ffi import C
 
@@ -42,6 +43,12 @@ class Term:
     @staticmethod
     def boolean(value: bool) -> "Term":
         return Term(C.TERM_BOOL, 1 if value else 0)
+
+
+InputTerm: TypeAlias = str | int | bool | Term
+ResolvedTerm: TypeAlias = str | int | bool
+Fact: TypeAlias = tuple[ResolvedTerm, ...]
+RawFact: TypeAlias = tuple[Term, ...]
 
 
 def limits_from_c(ptr) -> BuildLimits:

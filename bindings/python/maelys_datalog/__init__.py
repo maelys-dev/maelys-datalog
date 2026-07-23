@@ -3,7 +3,15 @@ from __future__ import annotations
 # Import _ffi first so ABI layout and constants are checked at package import.
 from . import _ffi as _ffi
 from ._ffi import C
-from ._types import BuildLimits, Predicate, Term
+from ._types import (
+    BuildLimits,
+    Fact,
+    InputTerm,
+    Predicate,
+    RawFact,
+    ResolvedTerm,
+    Term,
+)
 from .engine import Edb, Engine, Ruleset, SolveResult
 from .errors import (
     DomainAlreadyRegisteredError,
@@ -30,12 +38,16 @@ __all__ = [
     "DomainRegistryFullError",
     "Edb",
     "Engine",
+    "Fact",
+    "InputTerm",
     "MaelysDatalogError",
     "PRED_EDB",
     "PRED_IDB",
     "PRED_POLICY_FACT",
     "PRED_QUERY",
     "Predicate",
+    "RawFact",
+    "ResolvedTerm",
     "Ruleset",
     "SolveResult",
     "TERM_BOOL",
