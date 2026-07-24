@@ -211,6 +211,28 @@ class Ruleset:
             _raise_rc(lib.maelys_py_intern_symbol(self._handle, text_b, out))
             return int(out[0])
 
+    def _lookup_symbol_readonly(self, text: str) -> tuple[bool, int]:
+        self._require_open()
+        text_b = text.encode("utf-8")
+        out = ffi.new("uint32_t *")
+        found = ffi.new("int *")
+        _raise_rc(
+            lib.maelys_py_symbol_lookup_readonly(
+                self._handle, text_b, len(text_b), out, found
+            )
+        )
+        return bool(found[0]), int(out[0])
+
+    def _symbol_id_is_valid(self, symbol_id: int) -> bool:
+        self._require_open()
+        valid = ffi.new("int *")
+        _raise_rc(
+            lib.maelys_py_symbol_id_is_valid(
+                self._handle, int(symbol_id), valid
+            )
+        )
+        return bool(valid[0])
+
     def symbol_text(self, symbol_id: int) -> str:
         with self._symbol_lock:
             self._require_open()
@@ -330,6 +352,107 @@ class SolveResult:
         out = ffi.new("size_t *")
         _raise_rc(lib.maelys_py_result_derived_fact_count(self._handle, out))
         return int(out[0])
+
+    def _validate_query_predicate(self, predicate: str, arity: int) -> None:
+        predicate_b = predicate.encode("utf-8")
+        _raise_rc(
+            lib.maelys_py_result_validate_query_predicate(
+                self._handle, predicate_b, arity
+            )
+        )
+
+    def _contains_fact_resolved(
+        self,
+        predicate: str,
+        terms: Sequence[Term],
+    ) -> bool:
+        arr = ffi.NULL
+        if terms:
+            arr = ffi.new("maelys_py_term_t[]", len(terms))
+            for i, term in enumerate(terms):
+                arr[i].kind = term.kind
+                arr[i].value = term.value
+        present = ffi.new("int *")
+        predicate_b = predicate.encode("utf-8")
+        _raise_rc(
+            lib.maelys_py_result_contains_fact(
+                self._handle,
+                predicate_b,
+                arr,
+                len(terms),
+                present,
+            )
+        )
+        return bool(present[0])
+
+    def contains_fact(
+        self,
+        predicate: str,
+        terms: Sequence[InputTerm],
+    ) -> bool:
+        _validate_predicate(predicate)
+        if isinstance(terms, (str, bytes)) or not isinstance(terms, Sequence):
+            raise TypeError("terms must be a sequence, not str or bytes")
+        arity = len(terms)
+        _validate_arity(arity, self.ruleset.engine.limits.max_arity)
+        with self.ruleset._symbol_lock:
+            self._require_open()
+            self.ruleset._require_open()
+            self._validate_query_predicate(predicate, arity)
+            resolved: list[Term] = []
+            missing_symbol = False
+            for value in terms:
+                if isinstance(value, str):
+                    found, symbol_id = self.ruleset._lookup_symbol_readonly(value)
+                    if found:
+                        resolved.append(Term.symbol_id(symbol_id))
+                    else:
+                        missing_symbol = True
+                    continue
+                if isinstance(value, Term):
+                    if value.kind == C.TERM_SYMBOL:
+                        if (
+                            isinstance(value.value, bool)
+                            or not isinstance(value.value, int)
+                            or value.value <= 0
+                            or value.value > 0xFFFFFFFF
+                            or not self.ruleset._symbol_id_is_valid(value.value)
+                        ):
+                            raise MaelysDatalogError(
+                                C.ERR_INVALID_FIELD,
+                                "unknown symbol id for this Ruleset",
+                            )
+                    elif value.kind == C.TERM_BOOL:
+                        if value.value not in (0, 1):
+                            raise MaelysDatalogError(
+                                C.ERR_INVALID_FIELD,
+                                "boolean term value must be 0 or 1",
+                            )
+                    elif value.kind == C.TERM_INT:
+                        if (
+                            isinstance(value.value, bool)
+                            or not isinstance(value.value, int)
+                            or value.value < -(1 << 63)
+                            or value.value > (1 << 63) - 1
+                        ):
+                            raise MaelysDatalogError(
+                                C.ERR_INVALID_FIELD,
+                                "integer term value outside int64 range",
+                            )
+                    else:
+                        raise TypeError(f"unsupported term value {value!r}")
+                    resolved.append(value)
+                    continue
+                if isinstance(value, bool):
+                    resolved.append(Term.boolean(value))
+                    continue
+                if isinstance(value, int):
+                    resolved.append(Term.integer(value))
+                    continue
+                raise TypeError(f"unsupported term value {value!r}")
+            if missing_symbol:
+                return False
+            return self._contains_fact_resolved(predicate, resolved)
 
     def _enumerate_predicate_facts_raw(self, predicate: str, arity: int) -> list[RawFact]:
         self._require_open()

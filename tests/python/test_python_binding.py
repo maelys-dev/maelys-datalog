@@ -11,6 +11,16 @@ import pytest
 import maelys_datalog as md
 
 
+def test_ground_query_cffi_exports_are_present():
+    for name in (
+        "maelys_py_symbol_lookup_readonly",
+        "maelys_py_symbol_id_is_valid",
+        "maelys_py_result_validate_query_predicate",
+        "maelys_py_result_contains_fact",
+    ):
+        assert hasattr(md._ffi.lib, name)
+
+
 def predicates():
     return [
         md.Predicate("edge", 2, md.PRED_EDB),
@@ -59,6 +69,107 @@ def test_register_load_solve_enumerate_and_symbol_resolution():
         result.close()
         edb.close()
         ruleset.close()
+
+
+def test_contains_fact_covers_policy_edb_and_idb_without_interning(monkeypatch):
+    query_predicates = [
+        md.Predicate(
+            "policy_enabled",
+            1,
+            md.PRED_POLICY_FACT | md.PRED_QUERY,
+        ),
+        md.Predicate("observed", 1, md.PRED_EDB | md.PRED_QUERY),
+        md.Predicate("derived", 1, md.PRED_IDB | md.PRED_QUERY),
+        md.Predicate("access", 2, md.PRED_EDB),
+        md.Predicate("allow", 2, md.PRED_IDB | md.PRED_QUERY),
+    ]
+    with md.Engine() as engine:
+        engine.register_domain("py_test_contains_fact", query_predicates)
+        ruleset = engine.load_inline_ruleset(
+            "py_test_contains_fact",
+            "policy",
+            "policy_enabled(true).\n"
+            "derived(X) :- observed(X).\n"
+            "allow(U, D) :- access(U, D).",
+        )
+        edb = ruleset.edb()
+        edb.add_fact("observed", ["alice"])
+        edb.add_fact("access", ["alice", "roadmap.pdf"])
+        result = ruleset.solve(edb)
+
+        assert result.contains_fact("policy_enabled", [True])
+        assert not result.contains_fact("policy_enabled", [1])
+        assert result.contains_fact("observed", ["alice"])
+        assert result.contains_fact("derived", ["alice"])
+        assert result.contains_fact("allow", ["alice", "roadmap.pdf"])
+        assert result.enumerate_predicate_facts("policy_enabled", 1) == []
+        assert result.enumerate_predicate_facts("observed", 1) == []
+        assert result.enumerate_predicate_facts("derived", 1) == [("alice",)]
+
+        found_before, id_before = ruleset._lookup_symbol_readonly("unknown")
+        assert not found_before
+        assert id_before == 0
+
+        def fail_intern(_text):
+            raise AssertionError("contains_fact must never intern symbols")
+
+        monkeypatch.setattr(ruleset, "intern_symbol", fail_intern)
+        assert not result.contains_fact("allow", ["unknown", "roadmap.pdf"])
+        found_after, id_after = ruleset._lookup_symbol_readonly("unknown")
+        assert not found_after
+        assert id_after == 0
+
+        with pytest.raises(md.MaelysDatalogError) as exc:
+            result.contains_fact("missing", ["unknown"])
+        assert exc.value.code == md.C.ERR_INVALID_FIELD
+
+def test_contains_fact_validates_python_inputs_and_explicit_terms():
+    with md.Engine() as engine:
+        ruleset = make_ruleset(engine, "py_test_contains_validation")
+        edb = ruleset.edb()
+        edb.add_fact("edge", ["a", "b"])
+        result = ruleset.solve(edb)
+
+        for invalid_terms in ("a", b"a"):
+            with pytest.raises(TypeError, match="sequence"):
+                result.contains_fact("path", invalid_terms)
+        with pytest.raises(TypeError, match="predicate"):
+            result.contains_fact(123, ["a", "b"])
+        with pytest.raises(ValueError, match="outside supported range"):
+            result.contains_fact(
+                "path",
+                [0] * (engine.limits.max_arity + 1),
+            )
+        with pytest.raises(TypeError, match="unsupported term"):
+            result.contains_fact("path", [object(), "b"])
+        with pytest.raises(TypeError, match="unsupported term"):
+            result.contains_fact("path", [md.Term(md.TERM_VAR, 0), "b"])
+
+        for invalid_id in (0, -1, 1 << 40):
+            with pytest.raises(md.MaelysDatalogError) as exc:
+                result.contains_fact(
+                    "path",
+                    [md.Term.symbol_id(invalid_id), "b"],
+                )
+            assert exc.value.code == md.C.ERR_INVALID_FIELD
+
+        with pytest.raises(md.MaelysDatalogError) as exc:
+            result.contains_fact(
+                "path",
+                ["unknown", md.Term.symbol_id(999999)],
+            )
+        assert exc.value.code == md.C.ERR_INVALID_FIELD
+
+        assert not result.contains_fact(
+            "path",
+            [md.Term.boolean(True), "b"],
+        )
+        with pytest.raises(md.MaelysDatalogError) as exc:
+            result.contains_fact(
+                "path",
+                [md.Term(md.TERM_BOOL, 2), "b"],
+            )
+        assert exc.value.code == md.C.ERR_INVALID_FIELD
 
 
 def test_load_failure_reports_engine_diag_before_ruleset_exists():

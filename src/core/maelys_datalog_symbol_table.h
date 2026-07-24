@@ -28,12 +28,20 @@ _Static_assert(MAELYS_DATALOG_SYMBOL_INDEX_BUCKETS >=
                "symbol index load factor must stay <= 0.5");
 _Static_assert(MAELYS_DATALOG_MAX_SYMBOLS < UINT16_MAX,
                "symbol index bucket values store entry_index + 1");
+_Static_assert(MAELYS_DATALOG_MAX_STRING_BYTES <= UINT16_MAX,
+               "symbol entry length must represent every accepted symbol");
 
 void maelys_datalog_symbol_table_init(maelys_datalog_symbol_table_t *table);
 maelys_result_t maelys_datalog_symbol_intern(maelys_datalog_symbol_table_t *table,
                                              const char *text,
                                              size_t len,
                                              maelys_datalog_symbol_id_t *out_id);
+maelys_result_t maelys_datalog_symbol_lookup_readonly(
+    const maelys_datalog_symbol_table_t *table,
+    const char *text,
+    size_t len,
+    maelys_datalog_symbol_id_t *out_id,
+    int *out_found);
 int maelys_datalog_symbol_id_is_valid(const maelys_datalog_symbol_table_t *table,
                                       maelys_datalog_symbol_id_t id);
 const char *maelys_datalog_symbol_text(const maelys_datalog_symbol_table_t *table,

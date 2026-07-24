@@ -59,6 +59,10 @@ maelys_result_t maelys_datalog_solve_once_ex(
     maelys_datalog_solve_result_t **out_result,
     maelys_datalog_solve_diagnostic_t *out_diag);
 void maelys_datalog_solve_result_free(maelys_datalog_solve_result_t *result);
+maelys_result_t maelys_datalog_validate_solved_ground_query(
+    const maelys_datalog_solve_result_t *result,
+    const char *predicate,
+    size_t arity);
 maelys_result_t maelys_datalog_query_solved_ground_fact(
     const maelys_datalog_solve_result_t *result,
     const char *predicate,

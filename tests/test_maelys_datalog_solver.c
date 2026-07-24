@@ -1944,6 +1944,61 @@ static int test_datalog_query_non_ground_rejected(void) {
     TEST_END();
 }
 
+static int test_datalog_validate_query_predicate_shares_guards_and_preserves_order(void) {
+    TEST_BEGIN();
+    maelys_datalog_ruleset_t r;
+    TEST_ASSERT_EQUAL(MAELYS_OK, make_ruleset(&r, "p(X) :- q(X, _)."), "%d");
+    maelys_datalog_fact_t facts[1];
+    maelys_datalog_edb_t edb;
+    TEST_ASSERT_EQUAL(MAELYS_OK,
+                      maelys_datalog_edb_init(
+                          &edb, facts, 1, &r.symbols, &r.registry),
+                      "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_finalize(&edb), "%d");
+    maelys_datalog_solve_result_t *result = NULL;
+    TEST_ASSERT_EQUAL(MAELYS_OK,
+                      maelys_datalog_solve_once(&r, &edb, &result),
+                      "%d");
+
+    TEST_ASSERT_EQUAL(
+        MAELYS_OK,
+        maelys_datalog_validate_solved_ground_query(result, "p", 1u),
+        "%d");
+    TEST_ASSERT_EQUAL(
+        MAELYS_ERR_INVALID_FIELD,
+        maelys_datalog_validate_solved_ground_query(result, "p", 0u),
+        "%d");
+
+    r.enforces_query_whitelist = 1;
+    r.query_whitelist_count = 1u;
+    snprintf(r.query_whitelist[0].name,
+             sizeof(r.query_whitelist[0].name),
+             "%s",
+             "p");
+    r.query_whitelist[0].arity = 1u;
+
+    TEST_ASSERT_EQUAL(
+        MAELYS_ERR_FORBIDDEN,
+        maelys_datalog_validate_solved_ground_query(result, "q", 2u),
+        "%d");
+    TEST_ASSERT_EQUAL(
+        MAELYS_ERR_INVALID_ARGUMENT,
+        maelys_datalog_validate_solved_ground_query(NULL, "p", 1u),
+        "%d");
+
+    maelys_datalog_term_t var = {.kind = MAELYS_DATALOG_TERM_VAR};
+    bool present = true;
+    TEST_ASSERT_EQUAL(
+        MAELYS_ERR_INVALID_FIELD,
+        maelys_datalog_query_solved_ground_fact(
+            result, "q", &var, 1u, &present),
+        "%d");
+    TEST_ASSERT_FALSE(present);
+
+    maelys_datalog_solve_result_free(result);
+    TEST_END();
+}
+
 static int test_datalog_query_does_not_sort_or_mutate(void) {
     TEST_BEGIN();
     maelys_datalog_ruleset_t r;
@@ -4197,6 +4252,7 @@ int main(int argc, char **argv) {
         {"maelys_datalog_solver/query_arity_mismatch_rejected", TEST_MODE_NON_BLOCKING, test_datalog_query_arity_mismatch_rejected},
         {"maelys_datalog_solver/query_arity_above_max_rejected", TEST_MODE_NON_BLOCKING, test_datalog_query_arity_above_max_rejected},
         {"maelys_datalog_solver/query_non_ground_rejected", TEST_MODE_NON_BLOCKING, test_datalog_query_non_ground_rejected},
+        {"maelys_datalog_solver/validate_query_predicate_shares_guards_and_preserves_order", TEST_MODE_NON_BLOCKING, test_datalog_validate_query_predicate_shares_guards_and_preserves_order},
         {"maelys_datalog_solver/query_does_not_sort_or_mutate", TEST_MODE_NON_BLOCKING, test_datalog_query_does_not_sort_or_mutate},
         {"maelys_datalog_solver/solve_once_no_per_insert_memmove_required", TEST_MODE_NON_BLOCKING, test_datalog_solve_once_no_per_insert_memmove_required},
         {"maelys_datalog_solver/solve_once_preserves_policy_fact_boundary", TEST_MODE_NON_BLOCKING, test_datalog_solve_once_preserves_policy_fact_boundary},

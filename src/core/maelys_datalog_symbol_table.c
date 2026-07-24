@@ -55,6 +55,35 @@ maelys_result_t maelys_datalog_symbol_intern(maelys_datalog_symbol_table_t *tabl
     return MAELYS_OK;
 }
 
+maelys_result_t maelys_datalog_symbol_lookup_readonly(
+    const maelys_datalog_symbol_table_t *table,
+    const char *text,
+    size_t len,
+    maelys_datalog_symbol_id_t *out_id,
+    int *out_found) {
+    if (!out_id || !out_found) {
+        return MAELYS_ERR_INVALID_ARGUMENT;
+    }
+    *out_id = MAELYS_DATALOG_SYMBOL_ID_INVALID;
+    *out_found = 0;
+    if (!table || !text) {
+        return MAELYS_ERR_INVALID_ARGUMENT;
+    }
+    if (len > MAELYS_DATALOG_MAX_STRING_BYTES) {
+        return MAELYS_ERR_INVALID_ARGUMENT;
+    }
+    for (size_t i = 0u; i < table->count; i++) {
+        const size_t offset = (size_t)table->entries[i].offset;
+        if ((size_t)table->entries[i].len == len &&
+            memcmp(table->storage + offset, text, len) == 0) {
+            *out_id = (maelys_datalog_symbol_id_t)(i + 1u);
+            *out_found = 1;
+            return MAELYS_OK;
+        }
+    }
+    return MAELYS_OK;
+}
+
 const char *maelys_datalog_symbol_text(const maelys_datalog_symbol_table_t *table,
                                        maelys_datalog_symbol_id_t id) {
     if (!maelys_datalog_symbol_id_is_valid(table, id)) return NULL;

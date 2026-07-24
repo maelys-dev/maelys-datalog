@@ -285,7 +285,7 @@ int maelys_py_load_inline_ruleset(maelys_py_engine_t *engine,
         free(ruleset);
         return (int)rc;
     }
-    if (ruleset->policy_set.policy_count == 0u) {
+    if (ruleset->policy_set.policy_count != 1u) {
         maelys_datalog_policy_set_clear(&ruleset->policy_set);
         free(ruleset);
         return (int)MAELYS_ERR_INVALID_STATE;
@@ -366,6 +366,44 @@ int maelys_py_intern_symbol(maelys_py_ruleset_t *ruleset,
     return (int)MAELYS_OK;
 }
 
+int maelys_py_symbol_lookup_readonly(maelys_py_ruleset_t *ruleset,
+                                     const char *text,
+                                     size_t len,
+                                     uint32_t *out_symbol_id,
+                                     int *out_found) {
+    if (!out_symbol_id || !out_found) {
+        return (int)MAELYS_ERR_INVALID_ARGUMENT;
+    }
+    *out_symbol_id = (uint32_t)MAELYS_DATALOG_SYMBOL_ID_INVALID;
+    *out_found = 0;
+    if (!ruleset || !ruleset->ruleset || !text) {
+        return (int)MAELYS_ERR_INVALID_ARGUMENT;
+    }
+    maelys_datalog_symbol_id_t id = MAELYS_DATALOG_SYMBOL_ID_INVALID;
+    int found = 0;
+    maelys_result_t rc = maelys_datalog_symbol_lookup_readonly(
+        &ruleset->ruleset->symbols, text, len, &id, &found);
+    if (rc != MAELYS_OK) return (int)rc;
+    *out_symbol_id = (uint32_t)id;
+    *out_found = found;
+    return (int)MAELYS_OK;
+}
+
+int maelys_py_symbol_id_is_valid(maelys_py_ruleset_t *ruleset,
+                                 uint32_t symbol_id,
+                                 int *out_valid) {
+    if (!out_valid) {
+        return (int)MAELYS_ERR_INVALID_ARGUMENT;
+    }
+    *out_valid = 0;
+    if (!ruleset || !ruleset->ruleset) {
+        return (int)MAELYS_ERR_INVALID_ARGUMENT;
+    }
+    *out_valid = maelys_datalog_symbol_id_is_valid(
+        &ruleset->ruleset->symbols, (maelys_datalog_symbol_id_t)symbol_id);
+    return (int)MAELYS_OK;
+}
+
 const char *maelys_py_symbol_text(maelys_py_ruleset_t *ruleset,
                                   uint32_t symbol_id) {
     if (!ruleset || !ruleset->ruleset) return NULL;
@@ -409,6 +447,49 @@ int maelys_py_result_derived_fact_count(maelys_py_result_t *result,
                                         size_t *out_count) {
     if (!result || !result->result || !out_count) return (int)MAELYS_ERR_INVALID_ARGUMENT;
     return (int)maelys_datalog_solve_result_derived_fact_count(result->result, out_count);
+}
+
+int maelys_py_result_validate_query_predicate(maelys_py_result_t *result,
+                                              const char *predicate,
+                                              size_t arity) {
+    if (!result || !result->ruleset || !result->result || !predicate) {
+        return (int)MAELYS_ERR_INVALID_ARGUMENT;
+    }
+    return (int)maelys_datalog_validate_solved_ground_query(
+        result->result, predicate, arity);
+}
+
+int maelys_py_result_contains_fact(maelys_py_result_t *result,
+                                   const char *predicate,
+                                   const maelys_py_term_t *terms,
+                                   size_t arity,
+                                   int *out_present) {
+    if (!out_present) {
+        return (int)MAELYS_ERR_INVALID_ARGUMENT;
+    }
+    *out_present = 0;
+    if (!result || !result->ruleset || !result->result || !predicate ||
+        (!terms && arity > 0u)) {
+        return (int)MAELYS_ERR_INVALID_ARGUMENT;
+    }
+    if (arity > MAELYS_DATALOG_MAX_ARITY) {
+        return (int)MAELYS_ERR_INVALID_FIELD;
+    }
+    maelys_datalog_term_t native_terms[MAELYS_DATALOG_MAX_ARITY];
+    for (size_t i = 0u; i < arity; i++) {
+        maelys_result_t rc = py_term_to_native(&terms[i], &native_terms[i]);
+        if (rc != MAELYS_OK) return (int)rc;
+    }
+    bool present = false;
+    maelys_result_t rc = maelys_datalog_query_solved_ground_fact(
+        result->result,
+        predicate,
+        arity > 0u ? native_terms : NULL,
+        arity,
+        &present);
+    if (rc != MAELYS_OK) return (int)rc;
+    *out_present = present ? 1 : 0;
+    return (int)MAELYS_OK;
 }
 
 int maelys_py_result_enumerate_predicate_facts(maelys_py_result_t *result,

@@ -87,6 +87,14 @@ int maelys_py_edb_add_fact(maelys_py_edb_t *edb,
 int maelys_py_intern_symbol(maelys_py_ruleset_t *ruleset,
                             const char *text,
                             uint32_t *out_symbol_id);
+int maelys_py_symbol_lookup_readonly(maelys_py_ruleset_t *ruleset,
+                                     const char *text,
+                                     size_t len,
+                                     uint32_t *out_symbol_id,
+                                     int *out_found);
+int maelys_py_symbol_id_is_valid(maelys_py_ruleset_t *ruleset,
+                                 uint32_t symbol_id,
+                                 int *out_valid);
 const char *maelys_py_symbol_text(maelys_py_ruleset_t *ruleset,
                                   uint32_t symbol_id);
 int maelys_py_solve(maelys_py_ruleset_t *ruleset,
@@ -95,6 +103,14 @@ int maelys_py_solve(maelys_py_ruleset_t *ruleset,
 void maelys_py_result_free(maelys_py_result_t *result);
 int maelys_py_result_derived_fact_count(maelys_py_result_t *result,
                                         size_t *out_count);
+int maelys_py_result_validate_query_predicate(maelys_py_result_t *result,
+                                              const char *predicate,
+                                              size_t arity);
+int maelys_py_result_contains_fact(maelys_py_result_t *result,
+                                   const char *predicate,
+                                   const maelys_py_term_t *terms,
+                                   size_t arity,
+                                   int *out_present);
 int maelys_py_result_enumerate_predicate_facts(maelys_py_result_t *result,
                                                const char *predicate,
                                                size_t arity,

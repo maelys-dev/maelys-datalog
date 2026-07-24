@@ -17,7 +17,17 @@ static int same_name(const char *a, const char *b) {
 
 static int valid_kind_flags(unsigned kind_flags) {
     if (kind_flags == MAELYS_DATALOG_PRED_KIND_EDB) return 1;
+    if (kind_flags ==
+        (MAELYS_DATALOG_PRED_KIND_EDB |
+         MAELYS_DATALOG_PRED_KIND_QUERY)) {
+        return 1;
+    }
     if (kind_flags == MAELYS_DATALOG_PRED_KIND_POLICY_FACT) return 1;
+    if (kind_flags ==
+        (MAELYS_DATALOG_PRED_KIND_POLICY_FACT |
+         MAELYS_DATALOG_PRED_KIND_QUERY)) {
+        return 1;
+    }
     if (kind_flags == MAELYS_DATALOG_PRED_KIND_IDB) return 1;
     if (kind_flags == (MAELYS_DATALOG_PRED_KIND_QUERY | MAELYS_DATALOG_PRED_KIND_IDB)) return 1;
     return 0;

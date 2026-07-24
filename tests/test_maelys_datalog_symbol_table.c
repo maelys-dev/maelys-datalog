@@ -219,6 +219,99 @@ static int test_symbol_table_probe_guard_returns_invalid_state(void) {
     TEST_END();
 }
 
+static int test_symbol_table_lookup_readonly_exact_and_non_mutating(void) {
+    TEST_BEGIN();
+    maelys_datalog_symbol_table_t table;
+    maelys_datalog_symbol_table_init(&table);
+    maelys_datalog_symbol_table_t before = table;
+    maelys_datalog_symbol_id_t id = 99u;
+    int found = 1;
+
+    TEST_ASSERT_EQUAL(
+        MAELYS_OK,
+        maelys_datalog_symbol_lookup_readonly(
+            &table, "missing", strlen("missing"), &id, &found),
+        "%d");
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_SYMBOL_ID_INVALID, id, "%u");
+    TEST_ASSERT_FALSE(found);
+    TEST_ASSERT_EQUAL(0, memcmp(&before, &table, sizeof(table)), "%d");
+
+    TEST_ASSERT_EQUAL(
+        MAELYS_OK,
+        maelys_datalog_symbol_lookup_readonly(&table, "", 0u, &id, &found),
+        "%d");
+    TEST_ASSERT_FALSE(found);
+    TEST_ASSERT_EQUAL(MAELYS_OK,
+                      maelys_datalog_symbol_intern(&table, "", 0u, &id),
+                      "%d");
+    maelys_datalog_symbol_id_t empty_id = id;
+    before = table;
+    TEST_ASSERT_EQUAL(
+        MAELYS_OK,
+        maelys_datalog_symbol_lookup_readonly(&table, "", 0u, &id, &found),
+        "%d");
+    TEST_ASSERT_TRUE(found);
+    TEST_ASSERT_EQUAL(empty_id, id, "%u");
+    TEST_ASSERT_EQUAL(0, memcmp(&before, &table, sizeof(table)), "%d");
+
+    const char embedded[] = {'a', '\0', 'b'};
+    const char different[] = {'a', '\0', 'c'};
+    TEST_ASSERT_EQUAL(
+        MAELYS_OK,
+        maelys_datalog_symbol_intern(&table, embedded, sizeof(embedded), &id),
+        "%d");
+    maelys_datalog_symbol_id_t embedded_id = id;
+    before = table;
+    TEST_ASSERT_EQUAL(
+        MAELYS_OK,
+        maelys_datalog_symbol_lookup_readonly(
+            &table, embedded, sizeof(embedded), &id, &found),
+        "%d");
+    TEST_ASSERT_TRUE(found);
+    TEST_ASSERT_EQUAL(embedded_id, id, "%u");
+    TEST_ASSERT_EQUAL(0, memcmp(&before, &table, sizeof(table)), "%d");
+    TEST_ASSERT_EQUAL(
+        MAELYS_OK,
+        maelys_datalog_symbol_lookup_readonly(
+            &table, different, sizeof(different), &id, &found),
+        "%d");
+    TEST_ASSERT_FALSE(found);
+    TEST_ASSERT_EQUAL(0, memcmp(&before, &table, sizeof(table)), "%d");
+
+    id = 99u;
+    found = 1;
+    TEST_ASSERT_EQUAL(
+        MAELYS_ERR_INVALID_ARGUMENT,
+        maelys_datalog_symbol_lookup_readonly(
+            &table, "x", MAELYS_DATALOG_MAX_STRING_BYTES + 1u, &id, &found),
+        "%d");
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_SYMBOL_ID_INVALID, id, "%u");
+    TEST_ASSERT_FALSE(found);
+    TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_ARGUMENT,
+                      maelys_datalog_symbol_lookup_readonly(
+                          NULL, "x", 1u, &id, &found),
+                      "%d");
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_SYMBOL_ID_INVALID, id, "%u");
+    TEST_ASSERT_FALSE(found);
+    id = 99u;
+    found = 1;
+    TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_ARGUMENT,
+                      maelys_datalog_symbol_lookup_readonly(
+                          &table, NULL, 1u, &id, &found),
+                      "%d");
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_SYMBOL_ID_INVALID, id, "%u");
+    TEST_ASSERT_FALSE(found);
+    TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_ARGUMENT,
+                      maelys_datalog_symbol_lookup_readonly(
+                          &table, "x", 1u, NULL, &found),
+                      "%d");
+    TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_ARGUMENT,
+                      maelys_datalog_symbol_lookup_readonly(
+                          &table, "x", 1u, &id, NULL),
+                      "%d");
+    TEST_END();
+}
+
 int main(int argc, char **argv) {
     test_case_t cases[] = {
         {"maelys_datalog_symbol_table/interns_and_dedupes", TEST_MODE_NON_BLOCKING, test_symbol_table_interns_and_dedupes},
@@ -229,6 +322,7 @@ int main(int argc, char **argv) {
         {"maelys_datalog_symbol_table/pool_refusal_does_not_write_bucket", TEST_MODE_NON_BLOCKING, test_symbol_table_pool_refusal_does_not_write_bucket},
         {"maelys_datalog_symbol_table/copy_preserves_index", TEST_MODE_NON_BLOCKING, test_symbol_table_copy_preserves_index},
         {"maelys_datalog_symbol_table/probe_guard_returns_invalid_state", TEST_MODE_NON_BLOCKING, test_symbol_table_probe_guard_returns_invalid_state},
+        {"maelys_datalog_symbol_table/lookup_readonly_exact_and_non_mutating", TEST_MODE_NON_BLOCKING, test_symbol_table_lookup_readonly_exact_and_non_mutating},
     };
     return test_main("maelys_datalog_symbol_table", cases, (int)(sizeof(cases) / sizeof(cases[0])), argc, argv);
 }

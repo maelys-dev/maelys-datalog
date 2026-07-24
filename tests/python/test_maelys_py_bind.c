@@ -65,6 +65,27 @@ static int exercise_success_once(void) {
         TEST_ASSERT_TRUE(a != 0u);
         TEST_ASSERT_TRUE(b != 0u);
         TEST_ASSERT_TRUE(c != 0u);
+
+        uint32_t lookup_id = 99u;
+        int found = 0;
+        call_rc = maelys_py_symbol_lookup_readonly(
+            ruleset, "a", strlen("a"), &lookup_id, &found);
+        TEST_ASSERT_EQUAL((int)MAELYS_OK, call_rc, "%d");
+        TEST_ASSERT_TRUE(found);
+        TEST_ASSERT_EQUAL(a, lookup_id, "%u");
+        call_rc = maelys_py_symbol_lookup_readonly(
+            ruleset, "never-interned", strlen("never-interned"), &lookup_id, &found);
+        TEST_ASSERT_EQUAL((int)MAELYS_OK, call_rc, "%d");
+        TEST_ASSERT_FALSE(found);
+        TEST_ASSERT_EQUAL((uint32_t)MAELYS_DATALOG_SYMBOL_ID_INVALID, lookup_id, "%u");
+
+        int valid = 0;
+        call_rc = maelys_py_symbol_id_is_valid(ruleset, a, &valid);
+        TEST_ASSERT_EQUAL((int)MAELYS_OK, call_rc, "%d");
+        TEST_ASSERT_TRUE(valid);
+        call_rc = maelys_py_symbol_id_is_valid(ruleset, UINT32_MAX, &valid);
+        TEST_ASSERT_EQUAL((int)MAELYS_OK, call_rc, "%d");
+        TEST_ASSERT_FALSE(valid);
     }
 
     if (edb) {
@@ -111,6 +132,55 @@ static int exercise_success_once(void) {
             TEST_ASSERT_NOT_NULL(text);
             if (text) TEST_ASSERT_TRUE(text[0] != '\0');
         }
+
+        call_rc = maelys_py_result_validate_query_predicate(result, "path", 2u);
+        TEST_ASSERT_EQUAL((int)MAELYS_OK, call_rc, "%d");
+        call_rc = maelys_py_result_validate_query_predicate(result, "edge", 2u);
+        TEST_ASSERT_EQUAL((int)MAELYS_ERR_INVALID_FIELD, call_rc, "%d");
+        call_rc = maelys_py_result_validate_query_predicate(result, "missing", 2u);
+        TEST_ASSERT_EQUAL((int)MAELYS_ERR_INVALID_FIELD, call_rc, "%d");
+
+        maelys_py_term_t path_ac[2] = {
+            {(int32_t)MAELYS_DATALOG_TERM_SYMBOL, (int64_t)a},
+            {(int32_t)MAELYS_DATALOG_TERM_SYMBOL, (int64_t)c},
+        };
+        int present = 0;
+        call_rc = maelys_py_result_contains_fact(
+            result, "path", path_ac, 2u, &present);
+        TEST_ASSERT_EQUAL((int)MAELYS_OK, call_rc, "%d");
+        TEST_ASSERT_TRUE(present);
+
+        maelys_py_term_t path_ca[2] = {
+            {(int32_t)MAELYS_DATALOG_TERM_SYMBOL, (int64_t)c},
+            {(int32_t)MAELYS_DATALOG_TERM_SYMBOL, (int64_t)a},
+        };
+        call_rc = maelys_py_result_contains_fact(
+            result, "path", path_ca, 2u, &present);
+        TEST_ASSERT_EQUAL((int)MAELYS_OK, call_rc, "%d");
+        TEST_ASSERT_FALSE(present);
+
+        call_rc = maelys_py_result_contains_fact(
+            result, "path", NULL, 2u, &present);
+        TEST_ASSERT_EQUAL((int)MAELYS_ERR_INVALID_ARGUMENT, call_rc, "%d");
+        call_rc = maelys_py_result_contains_fact(
+            result, "path", NULL, 0u, &present);
+        TEST_ASSERT_EQUAL((int)MAELYS_ERR_INVALID_FIELD, call_rc, "%d");
+        maelys_py_term_t oversized_terms[MAELYS_DATALOG_MAX_ARITY + 1u];
+        memset(oversized_terms, 0, sizeof(oversized_terms));
+        present = 1;
+        call_rc = maelys_py_result_contains_fact(
+            result,
+            "path",
+            oversized_terms,
+            MAELYS_DATALOG_MAX_ARITY + 1u,
+            &present);
+        TEST_ASSERT_EQUAL((int)MAELYS_ERR_INVALID_FIELD, call_rc, "%d");
+        TEST_ASSERT_FALSE(present);
+        present = 1;
+        call_rc = maelys_py_result_contains_fact(
+            NULL, "path", path_ac, 2u, &present);
+        TEST_ASSERT_EQUAL((int)MAELYS_ERR_INVALID_ARGUMENT, call_rc, "%d");
+        TEST_ASSERT_FALSE(present);
     }
 
     maelys_py_result_free(result);

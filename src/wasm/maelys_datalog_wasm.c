@@ -110,16 +110,10 @@ static int lookup_symbol_readonly(const char *text, maelys_datalog_symbol_id_t *
     size_t len = strnlen(text, MAELYS_DATALOG_MAX_STRING_BYTES + 1u);
     if (len == 0u) return -1;
     if (len > MAELYS_DATALOG_MAX_STRING_BYTES) return -1;
-    for (maelys_datalog_symbol_id_t id = 1u;
-         id <= (maelys_datalog_symbol_id_t)tbl->count;
-         id++) {
-        const char *entry = maelys_datalog_symbol_text(tbl, id);
-        if (entry && strncmp(entry, text, len) == 0 && entry[len] == '\0') {
-            *out_id = id;
-            return 1;
-        }
-    }
-    return 0;
+    int found = 0;
+    maelys_result_t rc =
+        maelys_datalog_symbol_lookup_readonly(tbl, text, len, out_id, &found);
+    return rc == MAELYS_OK ? found : -1;
 }
 
 static maelys_result_t wasm_validate_symbol_id(int32_t symbol_id_from_js,

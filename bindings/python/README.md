@@ -65,6 +65,40 @@ guarantee. Do not call `close()` concurrently with use of a dependent object.
 `enumerate_predicate_facts_raw()` returns `RawFact` tuples of `Term` values and
 does not resolve symbol ids to text.
 
+## Ground query versus enumeration
+
+`SolveResult.contains_fact(predicate, terms)` performs an exact ground query:
+
+```python
+if result.contains_fact("path", ["a", "c"]):
+    print("reachable")
+```
+
+Its `terms` parameter is a `Sequence[InputTerm]`. String terms are resolved
+read-only under the owning `Ruleset` lock: an unknown string returns `False`
+without interning or mutating the symbol table. An explicit
+`Term.symbol_id(n)` must be valid in that same ruleset or
+`MaelysDatalogError(ERR_INVALID_FIELD)` is raised. Symbol ids are local to one
+ruleset; a numeric id copied from another ruleset has no portable meaning and
+cannot carry its provenance.
+
+Predicate validation happens before string resolution. A forbidden, unknown,
+wrong-arity, or non-`PRED_QUERY` predicate raises the native error even when a
+string term is unknown. Passing a non-string predicate, a top-level `str` or
+`bytes` instead of a term sequence, or an unsupported term value raises
+`TypeError`.
+
+Ground query and enumeration deliberately have different scopes:
+
+- `contains_fact()` searches query-capable policy facts, the finalized EDB
+  snapshot, and derived IDB facts;
+- `enumerate_predicate_facts()` and its raw variant enumerate derived IDB facts
+  only.
+
+A query-capable policy or EDB fact can therefore make `contains_fact()` return
+`True` while enumeration returns no matching row. Neither API derives new
+facts.
+
 ## EDB finalization
 
 `Ruleset.solve(edb)` finalizes the EDB exactly once before calling the native
