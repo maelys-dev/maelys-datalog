@@ -139,6 +139,8 @@ static int exercise_success_once(void) {
         TEST_ASSERT_EQUAL((int)MAELYS_ERR_INVALID_FIELD, call_rc, "%d");
         call_rc = maelys_py_result_validate_query_predicate(result, "missing", 2u);
         TEST_ASSERT_EQUAL((int)MAELYS_ERR_INVALID_FIELD, call_rc, "%d");
+        call_rc = maelys_py_result_validate_query_predicate(NULL, "path", 2u);
+        TEST_ASSERT_EQUAL((int)MAELYS_ERR_INVALID_ARGUMENT, call_rc, "%d");
 
         maelys_py_term_t path_ac[2] = {
             {(int32_t)MAELYS_DATALOG_TERM_SYMBOL, (int64_t)a},
