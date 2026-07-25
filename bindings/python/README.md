@@ -77,10 +77,27 @@ if result.contains_fact("path", ["a", "c"]):
 Its `terms` parameter is a `Sequence[InputTerm]`. String terms are resolved
 read-only under the owning `Ruleset` lock: an unknown string returns `False`
 without interning or mutating the symbol table. An explicit
-`Term.symbol_id(n)` must be valid in that same ruleset or
-`MaelysDatalogError(ERR_INVALID_FIELD)` is raised. Symbol ids are local to one
-ruleset; a numeric id copied from another ruleset has no portable meaning and
-cannot carry its provenance.
+`Term.symbol_id(n)` must be valid in that same ruleset or the native call
+raises a `MaelysDatalogError` whose `.code == ERR_INVALID_FIELD`
+(`MaelysDatalogError` is the binding's single exception type; there is no
+`ERR_INVALID_FIELD` exception subclass). Symbol ids are local to one ruleset; a
+numeric id copied from another ruleset has no portable meaning and cannot carry
+its provenance.
+
+To branch on a specific code, catch the exception and compare its `.code`
+against the matching constant on `C`, the exported namespace of engine values
+(the same `C` behind `PRED_EDB = C.PRED_EDB`). There is no top-level
+`ERR_INVALID_FIELD` to import — the codes live on `C`:
+
+```python
+from maelys_datalog import C, MaelysDatalogError
+
+try:
+    result.contains_fact("owns", [Term.symbol_id(bad_id)])
+except MaelysDatalogError as exc:
+    if exc.code == C.ERR_INVALID_FIELD:
+        ...   # unknown symbol id, or a wrong (predicate, arity) pair
+```
 
 Predicate validation happens before string resolution. A forbidden, unknown,
 wrong-arity, or non-`PRED_QUERY` predicate raises the native error even when a
