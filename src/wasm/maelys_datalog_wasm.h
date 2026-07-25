@@ -52,6 +52,19 @@ int maelys_datalog_wasm_query_symbol(const char *pred, const char *arg0);
 int maelys_datalog_wasm_query_symbol2(const char *pred,
                                       const char *arg0,
                                       const char *arg1);
+/* Enumerates already-derived IDB facts for a QUERY-authorized predicate.
+ * Returns the total fact count (including facts beyond capacity), or -1 on
+ * invalid state/arguments/accessor failure. out_terms uses three int32 words
+ * per term: kind, value_lo, value_hi. capacity == 0 is count-only mode. */
+int32_t maelys_datalog_wasm_enumerate_predicate_facts(const char *predicate,
+                                                       int32_t arity,
+                                                       int32_t *out_terms,
+                                                       int32_t capacity);
+/* Resolves an id through the current mono-policy symbol table without
+ * interning. Returns NULL for an invalid id or absent table. A non-NULL
+ * pointer may designate a valid zero-length symbol; callers must distinguish
+ * the pointer value before decoding the UTF-8 text. */
+const char *maelys_datalog_wasm_symbol_text_by_id(int32_t symbol_id);
 /* Returns the derived fact count for the current solved WASM result.
  * Non-negative values are valid counts, including 0. -1 is the sentinel for
  * "no solved result available" or an underlying C accessor failure; it is not

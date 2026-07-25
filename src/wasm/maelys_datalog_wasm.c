@@ -42,6 +42,8 @@ static maelys_datalog_diagnostic_t s_last_diag;
 static maelys_datalog_edb_t s_edb;
 static maelys_datalog_fact_t s_fact_pool[MAELYS_DATALOG_MAX_EDB_FACTS];
 static maelys_datalog_symbol_id_t s_id_scratch[MAELYS_DATALOG_MAX_EDB_FACTS * 2u];
+static maelys_datalog_fact_t
+    s_enumerate_facts_scratch[MAELYS_DATALOG_MAX_FACTS_PER_PRED];
 static maelys_datalog_solve_result_t *s_solve_result = NULL;
 static wasm_edb_state_t s_edb_state = WASM_EDB_STATE_EMPTY;
 
@@ -501,6 +503,74 @@ int maelys_datalog_wasm_query_symbol2(const char *pred,
                                                                   &present);
     if (rc != MAELYS_OK) return -1;
     return present ? 1 : 0;
+}
+
+int32_t maelys_datalog_wasm_enumerate_predicate_facts(const char *predicate,
+                                                       int32_t arity,
+                                                       int32_t *out_terms,
+                                                       int32_t capacity) {
+    if (s_edb_state != WASM_EDB_STATE_SOLVED || !s_solve_result) return -1;
+    if (!predicate || arity < 0 || (size_t)arity > MAELYS_DATALOG_MAX_ARITY) return -1;
+    if (capacity < 0 || (!out_terms && capacity > 0)) return -1;
+    if ((size_t)capacity > MAELYS_DATALOG_MAX_FACTS_PER_PRED) return -1;
+
+    size_t cap = (size_t)capacity;
+    maelys_datalog_fact_t *facts = cap > 0u ? s_enumerate_facts_scratch : NULL;
+    size_t count = 0u;
+    maelys_result_t rc =
+        maelys_datalog_solve_result_enumerate_predicate_facts(s_solve_result,
+                                                               predicate,
+                                                               (size_t)arity,
+                                                               facts,
+                                                               cap,
+                                                               &count);
+    if (rc != MAELYS_OK) return -1;
+
+    size_t copied = count < cap ? count : cap;
+    for (size_t fact_index = 0u; fact_index < copied; fact_index++) {
+        for (size_t term_index = 0u; term_index < (size_t)arity; term_index++) {
+            const maelys_datalog_term_t *term =
+                &facts[fact_index].terms[term_index];
+            int32_t *slot =
+                &out_terms[(fact_index * (size_t)arity + term_index) * 3u];
+            slot[0] = (int32_t)term->kind;
+            switch (term->kind) {
+                case MAELYS_DATALOG_TERM_SYMBOL:
+                    slot[1] = (int32_t)term->as.symbol;
+                    slot[2] = 0;
+                    break;
+                case MAELYS_DATALOG_TERM_INT: {
+                    uint64_t encoded = (uint64_t)term->as.integer;
+                    slot[1] =
+                        (int32_t)(uint32_t)(encoded & UINT64_C(0xffffffff));
+                    slot[2] = (int32_t)(uint32_t)(encoded >> 32);
+                    break;
+                }
+                case MAELYS_DATALOG_TERM_BOOL:
+                    slot[1] = term->as.boolean ? 1 : 0;
+                    slot[2] = 0;
+                    break;
+                case MAELYS_DATALOG_TERM_VAR:
+                default:
+                    slot[1] = (int32_t)term->as.variable;
+                    slot[2] = 0;
+                    break;
+            }
+        }
+    }
+    if (count > (size_t)INT32_MAX) return -1;
+    return (int32_t)count;
+}
+
+const char *maelys_datalog_wasm_symbol_text_by_id(int32_t symbol_id) {
+    if (s_edb_state == WASM_EDB_STATE_EMPTY ||
+        s_policy_set.policy_count != 1u) {
+        return NULL;
+    }
+    maelys_datalog_symbol_id_t id = MAELYS_DATALOG_SYMBOL_ID_INVALID;
+    maelys_result_t rc = wasm_validate_symbol_id(symbol_id, &id);
+    if (rc != MAELYS_OK) return NULL;
+    return maelys_datalog_symbol_text(&s_policy_set.policies[0].symbols, id);
 }
 
 int32_t maelys_datalog_wasm_derived_fact_count(void) {

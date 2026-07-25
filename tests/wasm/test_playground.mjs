@@ -1,5 +1,7 @@
 import MaelysDatalogDynamic from '../../build/wasm/maelys_datalog_dynamic.js';
 import playgroundPkg from '../../js/maelys_playground.js';
+import { readFileSync } from 'node:fs';
+import { runInNewContext } from 'node:vm';
 
 const {
   MaelysPlayground,
@@ -59,6 +61,16 @@ function expectThrowType(fn, type, label) {
   }
   throw new Error(`${label}: expected ${type.name}`);
 }
+
+const playgroundSource = readFileSync(
+  new URL('../../js/maelys_playground.js', import.meta.url),
+  'utf8',
+);
+const decodeEnumeratedTermForTest = runInNewContext(
+  `${playgroundSource}\ndecodeEnumeratedTerm;`,
+  {},
+  { filename: 'maelys_playground.js' },
+);
 
 function packStrings(pg, values) {
   const byteLen = values.reduce((sum, value) => sum + pg._mod.lengthBytesUTF8(value) + 1, 0);
@@ -147,6 +159,223 @@ await test('playground_derived_fact_count_zero_valid', async () => {
   const count = pg.derivedFactCount();
   if (count !== 0) throw new Error(`expected derived fact count 0, got ${count}`);
   pg.freeResult();
+});
+
+await test('playground_enumerate_predicate_facts_symbol_set', async () => {
+  const pg = await setupUnaryAccess('enumerate_symbol_set');
+  pg.addFact('safe', 'alice');
+  pg.addFact('safe', 'bob');
+  pg.solve();
+  const facts = pg.enumeratePredicateFacts('allow', 1);
+  const symbols = new Set(
+    facts.map((terms) => {
+      if (terms.length !== 1 || terms[0].kind !== 'symbol') {
+        throw new Error(`expected unary symbol fact, got ${JSON.stringify(terms)}`);
+      }
+      return pg.symbolText(terms[0].symbolId);
+    }),
+  );
+  if (facts.length !== 2 || symbols.size !== 2 ||
+      !symbols.has('alice') || !symbols.has('bob')) {
+    throw new Error(`unexpected enumerated symbols: ${JSON.stringify([...symbols])}`);
+  }
+  pg.freeResult();
+});
+
+await test('playground_enumerate_predicate_facts_empty_query', async () => {
+  const pg = await setupUnaryAccess('enumerate_empty_query');
+  pg.solve();
+  const facts = pg.enumeratePredicateFacts('allow', 1);
+  if (!Array.isArray(facts) || facts.length !== 0) {
+    throw new Error(`expected [], got ${JSON.stringify(facts)}`);
+  }
+  pg.freeResult();
+});
+
+await test('playground_enumerate_predicate_facts_zero_arity_without_malloc', async () => {
+  const pg = await createPlayground();
+  pg.domainBegin('enumerate_zero_arity');
+  pg.domainAddPredicate('seed', 0, PredKind.POLICY_FACT);
+  pg.domainAddPredicate('ready', 0, PredKind.IDB | PredKind.QUERY);
+  pg.domainCommit();
+  pg.loadRuleset(
+    'enumerate_zero_arity',
+    'enumerate_zero_arity.main',
+    'seed().\nready() :- seed().\n',
+  );
+  pg.edbBegin();
+  pg.solve();
+  const originalMalloc = pg._mod._malloc;
+  let mallocCalls = 0;
+  pg._mod._malloc = (bytes) => {
+    mallocCalls++;
+    return originalMalloc(bytes);
+  };
+  try {
+    const facts = pg.enumeratePredicateFacts('ready', 0);
+    if (JSON.stringify(facts) !== '[[]]') {
+      throw new Error(`expected one zero-arity fact, got ${JSON.stringify(facts)}`);
+    }
+    if (mallocCalls !== 0) {
+      throw new Error(`zero-arity enumeration called malloc ${mallocCalls} time(s)`);
+    }
+  } finally {
+    pg._mod._malloc = originalMalloc;
+    pg.freeResult();
+  }
+});
+
+await test('playground_enumerate_predicate_facts_symbol_and_max_int', async () => {
+  const pg = await createPlayground();
+  pg.domainBegin('enumerate_symbol_int');
+  pg.domainAddPredicate('safe', 1, PredKind.EDB);
+  pg.domainAddPredicate('mixed', 2, PredKind.IDB | PredKind.QUERY);
+  pg.domainCommit();
+  pg.loadRuleset(
+    'enumerate_symbol_int',
+    'enumerate_symbol_int.main',
+    'mixed(X, 2147483647) :- safe(X).\n',
+  );
+  pg.edbBegin();
+  pg.addFact('safe', 'alice');
+  pg.solve();
+  const facts = pg.enumeratePredicateFacts('mixed', 2);
+  if (facts.length !== 1 || facts[0].length !== 2) {
+    throw new Error(`expected one binary fact, got ${JSON.stringify(facts)}`);
+  }
+  const [symbol, integer] = facts[0];
+  if (symbol.kind !== 'symbol' || pg.symbolText(symbol.symbolId) !== 'alice') {
+    throw new Error(`unexpected symbol term: ${JSON.stringify(symbol)}`);
+  }
+  if (integer.kind !== 'int' || integer.text !== '2147483647' ||
+      integer.value !== 2147483647) {
+    throw new Error(`unexpected integer term: ${JSON.stringify(integer)}`);
+  }
+  pg.freeResult();
+});
+
+await test('playground_decode_int64_synthetic_boundaries', async () => {
+  const values = [
+    0n,
+    -1n,
+    2147483647n,
+    -2147483648n,
+    9007199254740993n,
+    -9007199254740993n,
+  ];
+  for (const expected of values) {
+    const encoded = BigInt.asUintN(64, expected);
+    const lo = Number(BigInt.asIntN(32, encoded & 0xffffffffn));
+    const hi = Number(BigInt.asIntN(32, encoded >> 32n));
+    const decoded = decodeEnumeratedTermForTest(2, lo, hi);
+    if (decoded.kind !== 'int' || decoded.text !== expected.toString()) {
+      throw new Error(`decode mismatch for ${expected}: ${JSON.stringify(decoded)}`);
+    }
+    const expectedNumber =
+      expected >= BigInt(Number.MIN_SAFE_INTEGER) &&
+      expected <= BigInt(Number.MAX_SAFE_INTEGER)
+        ? Number(expected)
+        : null;
+    if (decoded.value !== expectedNumber) {
+      throw new Error(`number safety mismatch for ${expected}: ${decoded.value}`);
+    }
+  }
+});
+
+await test('playground_enumerate_predicate_facts_rejects_non_query_and_absent', async () => {
+  const pg = await createPlayground();
+  pg.domainBegin('enumerate_rejections');
+  pg.domainAddPredicate('safe', 1, PredKind.EDB);
+  pg.domainAddPredicate('hidden', 1, PredKind.IDB);
+  pg.domainCommit();
+  pg.loadRuleset(
+    'enumerate_rejections',
+    'enumerate_rejections.main',
+    'hidden(X) :- safe(X).\n',
+  );
+  pg.edbBegin();
+  pg.addFact('safe', 'alice');
+  pg.solve();
+  expectThrowRc(
+    () => pg.enumeratePredicateFacts('hidden', 1),
+    -1,
+    'non-query enumeration',
+  );
+  expectThrowRc(
+    () => pg.enumeratePredicateFacts('absent', 1),
+    -1,
+    'absent predicate enumeration',
+  );
+  pg.freeResult();
+});
+
+await test('playground_symbol_text_before_and_after_solve', async () => {
+  const empty = await createPlayground();
+  if (empty.symbolText(1) !== null) {
+    throw new Error('empty state resolved an invalid symbol id');
+  }
+
+  const pg = await setupUnaryAccess('symbol_text_states');
+  const emptyId = pg.internRuntimeSymbol('');
+  if (pg.symbolText(emptyId) !== '') {
+    throw new Error('symbolText confused an interned empty symbol with an invalid id');
+  }
+  const id = pg.internRuntimeSymbol('visible');
+  if (pg.symbolText(id) !== 'visible') {
+    throw new Error('symbolText failed before solve');
+  }
+  if (pg.symbolText(0) !== null || pg.symbolText(id + 1) !== null) {
+    throw new Error('symbolText accepted an invalid id');
+  }
+  pg.addSymbolIdFact('safe', id);
+  pg.solve();
+  if (pg.symbolText(id) !== 'visible') {
+    throw new Error('symbolText failed after solve');
+  }
+  pg.freeResult();
+});
+
+await test('playground_enumeration_guards_and_argument_types', async () => {
+  const fresh = await createPlayground();
+  expectThrowRc(
+    () => fresh.enumeratePredicateFacts('allow', 1),
+    -1,
+    'enumeration before solve',
+  );
+  expectThrowType(
+    () => fresh.enumeratePredicateFacts(1, 1),
+    TypeError,
+    'enumeration predicate type',
+  );
+  expectThrowType(
+    () => fresh.enumeratePredicateFacts('allow', 1.5),
+    TypeError,
+    'enumeration arity integer',
+  );
+  expectThrowType(
+    () => fresh.enumeratePredicateFacts('allow', -1),
+    TypeError,
+    'enumeration arity non-negative',
+  );
+  expectThrowType(() => fresh.symbolText(1.5), TypeError, 'symbol id integer');
+
+  const pg = await setupUnaryAccess('enumerate_capacity_guard');
+  pg.addFact('safe', 'alice');
+  pg.solve();
+  const ptr = pg._mod._malloc(4);
+  if (!ptr) throw new Error('capacity guard malloc returned 0');
+  try {
+    const rc = pg._call(
+      'maelys_datalog_wasm_enumerate_predicate_facts',
+      'number',
+      ['string', 'number', 'number', 'number'],
+      ['allow', 1, ptr, pg.buildLimits().maxFactsPerPred + 1],
+    );
+    expectRc(rc, -1, 'enumeration capacity beyond maxFactsPerPred');
+  } finally {
+    pg._mod._free(ptr);
+    pg.freeResult();
+  }
 });
 
 await test('playground_two_evaluations', async () => {
