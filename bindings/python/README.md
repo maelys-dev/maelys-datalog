@@ -85,9 +85,11 @@ numeric id copied from another ruleset has no portable meaning and cannot carry
 its provenance.
 
 To branch on a specific code, catch the exception and compare its `.code`
-against the matching constant on `C`, the exported namespace of engine values
-(the same `C` behind `PRED_EDB = C.PRED_EDB`). There is no top-level
-`ERR_INVALID_FIELD` to import — the codes live on `C`:
+against the matching constant on `C`, the namespace of engine constants the
+package exports (`from maelys_datalog import C`). Note the asymmetry: the
+predicate-kind flags have plain top-level names — you import `PRED_EDB`
+directly — but the error codes live **only** on `C`, so it is
+`C.ERR_INVALID_FIELD`; there is no top-level `ERR_INVALID_FIELD` to import:
 
 ```python
 from maelys_datalog import C, MaelysDatalogError
