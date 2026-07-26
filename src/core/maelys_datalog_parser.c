@@ -66,6 +66,11 @@ static int token_is_cmp(maelys_datalog_token_kind_t k) {
            k == MAELYS_DATALOG_TOKEN_GT || k == MAELYS_DATALOG_TOKEN_GTE;
 }
 
+static int token_is_contextual_or(const maelys_datalog_token_t *tok) {
+    return tok && tok->kind == MAELYS_DATALOG_TOKEN_PREDICATE &&
+           tok->len == 2u && memcmp(tok->text, "or", 2u) == 0;
+}
+
 static maelys_result_t allocate_anonymous_variable(parser_t *p, maelys_datalog_term_t *term) {
     unsigned id = MAELYS_DATALOG_NAMED_VARIABLE_COUNT + p->anonymous_var_count;
     if (id >= MAELYS_DATALOG_MAX_RULE_VARIABLES) {
@@ -676,6 +681,57 @@ static maelys_result_t validate_rule(parser_t *p, const maelys_datalog_rule_t *r
     return MAELYS_OK;
 }
 
+static void clear_staged_rules(maelys_datalog_ruleset_t *ruleset,
+                               size_t base,
+                               size_t count) {
+    if (!ruleset || base >= MAELYS_DATALOG_MAX_RULES) return;
+    size_t available = MAELYS_DATALOG_MAX_RULES - base;
+    if (count > available) count = available;
+    memset(&ruleset->rules[base], 0, count * sizeof(ruleset->rules[0]));
+}
+
+static maelys_result_t normalize_anonymous_variables(parser_t *p,
+                                                     maelys_datalog_rule_t *rule) {
+    unsigned next_anonymous = MAELYS_DATALOG_NAMED_VARIABLE_COUNT;
+    for (size_t i = 0; i < rule->body_count; i++) {
+        maelys_datalog_literal_t *literal = &rule->body[i];
+        if (literal->kind != MAELYS_DATALOG_LITERAL_ATOM &&
+            literal->kind != MAELYS_DATALOG_LITERAL_NEGATED_ATOM) {
+            continue;
+        }
+        for (size_t t = 0; t < literal->atom.arity; t++) {
+            maelys_datalog_term_t *term = &literal->atom.terms[t];
+            if (term->kind != MAELYS_DATALOG_TERM_VAR ||
+                term->as.variable < MAELYS_DATALOG_NAMED_VARIABLE_COUNT) {
+                continue;
+            }
+            if (next_anonymous >= MAELYS_DATALOG_MAX_RULE_VARIABLES) {
+                parser_diag(p,
+                            MAELYS_DATALOG_DIAG_PARSER_TOO_MANY_VARIABLES,
+                            "rule variable limit exceeded",
+                            "reduce anonymous variables or split the rule");
+                maelys_datalog_diagnostic_set_limit(
+                    p->diag,
+                    (size_t)next_anonymous + 1u,
+                    MAELYS_DATALOG_MAX_RULE_VARIABLES);
+                return MAELYS_ERR_PAYLOAD_TOO_LARGE;
+            }
+            term->as.variable = next_anonymous++;
+        }
+    }
+    return MAELYS_OK;
+}
+
+static void parser_rule_expansion_overflow(parser_t *p, size_t requested) {
+    parser_diag(p,
+                MAELYS_DATALOG_DIAG_PARSER_RULE_BODY_LITERAL_OVERFLOW,
+                "OR expansion exceeds rule capacity",
+                "reduce OR alternatives or split the policy");
+    maelys_datalog_diagnostic_set_limit(p->diag,
+                                        requested,
+                                        MAELYS_DATALOG_MAX_RULES);
+}
+
 static maelys_result_t assign_strata(parser_t *p) {
     if (!p || !p->ruleset) return MAELYS_ERR_INVALID_ARGUMENT;
     maelys_datalog_ruleset_t *ruleset = p->ruleset;
@@ -808,13 +864,18 @@ static maelys_result_t parse_clause(parser_t *p) {
     }
     rc = next(p);
     if (rc != MAELYS_OK) return rc;
-    if (p->ruleset->rule_count >= MAELYS_DATALOG_MAX_RULES) return MAELYS_ERR_PAYLOAD_TOO_LARGE;
-    maelys_datalog_rule_t rule;
-    memset(&rule, 0, sizeof(rule));
-    rule.head = head;
-    rule.rule_id = p->ruleset->rule_count + 1u;
+    if (p->ruleset->rule_count >= MAELYS_DATALOG_MAX_RULES) {
+        parser_rule_expansion_overflow(p, p->ruleset->rule_count + 1u);
+        return MAELYS_ERR_PAYLOAD_TOO_LARGE;
+    }
+    const size_t staged_base = p->ruleset->rule_count;
+    const size_t staged_capacity = MAELYS_DATALOG_MAX_RULES - staged_base;
+    size_t staged_count = 1u;
+    maelys_datalog_rule_t *first = &p->ruleset->rules[staged_base];
+    memset(first, 0, sizeof(*first));
+    first->head = head;
     for (;;) {
-        if (rule.body_count >= MAELYS_DATALOG_MAX_BODY_LITERALS) {
+        if (first->body_count >= MAELYS_DATALOG_MAX_BODY_LITERALS) {
             const maelys_datalog_predicate_def_t *def =
                 maelys_datalog_predicate_registry_get(&p->ruleset->registry, head.predicate_id);
             parser_diag(p,
@@ -823,15 +884,87 @@ static maelys_result_t parse_clause(parser_t *p) {
                         "split rule into IDB helper predicates");
             if (def) maelys_datalog_diagnostic_set_predicate(p->diag, def->name, def->arity);
             maelys_datalog_diagnostic_set_limit(p->diag,
-                                                rule.body_count + 1u,
+                                                first->body_count + 1u,
                                                 MAELYS_DATALOG_MAX_BODY_LITERALS);
-            return MAELYS_ERR_PAYLOAD_TOO_LARGE;
+            rc = MAELYS_ERR_PAYLOAD_TOO_LARGE;
+            goto fail_staged_clause;
         }
-        rc = parse_literal(p, &rule, &rule.body[rule.body_count++]);
-        if (rc != MAELYS_OK) return rc;
+
+        const size_t body_index = first->body_count;
+        const uint8_t expr_count_before = first->expr_node_count;
+        const unsigned anonymous_before = p->anonymous_var_count;
+        maelys_datalog_rule_t first_before = *first;
+
+        rc = parse_literal(p, first, &first->body[body_index]);
+        if (rc != MAELYS_OK) goto fail_staged_clause;
+
+        if (first->body[body_index].kind == MAELYS_DATALOG_LITERAL_ATOM &&
+            token_is_contextual_or(&p->tok)) {
+            maelys_datalog_fact_t alternatives[MAELYS_DATALOG_MAX_RULES];
+            size_t alternative_count = 1u;
+            unsigned max_anonymous = p->anonymous_var_count;
+            alternatives[0] = first->body[body_index].atom;
+
+            while (token_is_contextual_or(&p->tok)) {
+                if (alternative_count >= staged_capacity / staged_count) {
+                    parser_rule_expansion_overflow(
+                        p,
+                        staged_base + staged_count * (alternative_count + 1u));
+                    rc = MAELYS_ERR_PAYLOAD_TOO_LARGE;
+                    goto fail_staged_clause;
+                }
+                rc = next(p);
+                if (rc != MAELYS_OK) goto fail_staged_clause;
+                p->anonymous_var_count = anonymous_before;
+                int has_anonymous = 0;
+                rc = parse_atom(p,
+                                &alternatives[alternative_count],
+                                MAELYS_DATALOG_TERM_CTX_BODY_ATOM,
+                                &has_anonymous);
+                if (rc != MAELYS_OK) goto fail_staged_clause;
+                if (p->anonymous_var_count > max_anonymous) {
+                    max_anonymous = p->anonymous_var_count;
+                }
+                alternative_count++;
+            }
+            p->anonymous_var_count = max_anonymous;
+
+            const size_t expanded_count = staged_count * alternative_count;
+            for (size_t i = staged_count; i-- > 0u;) {
+                maelys_datalog_rule_t base_rule =
+                    i == 0u ? first_before : p->ruleset->rules[staged_base + i];
+                for (size_t a = 0; a < alternative_count; a++) {
+                    maelys_datalog_rule_t *expanded =
+                        &p->ruleset->rules[staged_base + i * alternative_count + a];
+                    *expanded = base_rule;
+                    maelys_datalog_literal_t *literal =
+                        &expanded->body[expanded->body_count++];
+                    memset(literal, 0, sizeof(*literal));
+                    literal->kind = MAELYS_DATALOG_LITERAL_ATOM;
+                    literal->lhs_expr_root = MAELYS_DATALOG_ARITH_EXPR_NO_NODE;
+                    literal->rhs_expr_root = MAELYS_DATALOG_ARITH_EXPR_NO_NODE;
+                    literal->atom = alternatives[a];
+                }
+            }
+            staged_count = expanded_count;
+            first = &p->ruleset->rules[staged_base];
+        } else {
+            first->body_count++;
+            for (size_t i = 1u; i < staged_count; i++) {
+                maelys_datalog_rule_t *candidate =
+                    &p->ruleset->rules[staged_base + i];
+                candidate->body[body_index] = first->body[body_index];
+                for (uint8_t e = expr_count_before; e < first->expr_node_count; e++) {
+                    candidate->expr_nodes[e] = first->expr_nodes[e];
+                }
+                candidate->expr_node_count = first->expr_node_count;
+                candidate->body_count++;
+            }
+        }
+
         if (p->tok.kind == MAELYS_DATALOG_TOKEN_COMMA) {
             rc = next(p);
-            if (rc != MAELYS_OK) return rc;
+            if (rc != MAELYS_OK) goto fail_staged_clause;
             continue;
         }
         break;
@@ -841,12 +974,31 @@ static maelys_result_t parse_clause(parser_t *p) {
                     MAELYS_DATALOG_DIAG_PARSER_EXPECTED_DOT,
                     "expected clause terminator",
                     "terminate facts and rules with a dot");
-        return MAELYS_ERR_INVALID_FIELD;
+        rc = MAELYS_ERR_INVALID_FIELD;
+        goto fail_staged_clause;
     }
-    rc = validate_rule(p, &rule);
-    if (rc != MAELYS_OK) return rc;
-    p->ruleset->rules[p->ruleset->rule_count++] = rule;
+
+    const int had_positive_recursion = p->ruleset->has_positive_recursion;
+    for (size_t i = 0; i < staged_count; i++) {
+        maelys_datalog_rule_t *candidate = &p->ruleset->rules[staged_base + i];
+        candidate->rule_id = staged_base + i + 1u;
+        rc = normalize_anonymous_variables(p, candidate);
+        if (rc != MAELYS_OK) {
+            p->ruleset->has_positive_recursion = had_positive_recursion;
+            goto fail_staged_clause;
+        }
+        rc = validate_rule(p, candidate);
+        if (rc != MAELYS_OK) {
+            p->ruleset->has_positive_recursion = had_positive_recursion;
+            goto fail_staged_clause;
+        }
+    }
+    p->ruleset->rule_count = staged_base + staged_count;
     return next(p);
+
+fail_staged_clause:
+    clear_staged_rules(p->ruleset, staged_base, staged_capacity);
+    return rc;
 }
 
 maelys_result_t maelys_datalog_parse_ruleset(maelys_datalog_ruleset_t *ruleset,

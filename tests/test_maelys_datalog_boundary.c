@@ -123,6 +123,76 @@ static int test_boundary_max_rules_over_limit(void) {
     TEST_END();
 }
 
+static int test_boundary_or_expansion_at_rule_limit(void) {
+    TEST_BEGIN();
+    maelys_datalog_ruleset_t r;
+    TEST_ASSERT_EQUAL(MAELYS_OK, init_parse_fixture(&r, 0u, 0u), "%d");
+    char src[4096];
+    size_t len = 0;
+    TEST_ASSERT_TRUE(appendf(src, sizeof(src), &len, "p(X) :- "));
+    for (size_t i = 0; i < MAELYS_DATALOG_MAX_RULES; i++) {
+        int ok = appendf(src,
+                         sizeof(src),
+                         &len,
+                         "%sseed(X)",
+                         i == 0u ? "" : " or ");
+        TEST_ASSERT_TRUE(ok);
+    }
+    TEST_ASSERT_TRUE(appendf(src, sizeof(src), &len, ".\n"));
+    TEST_ASSERT_EQUAL(MAELYS_OK,
+                      maelys_datalog_parse_ruleset(&r, src, len),
+                      "%d");
+    TEST_ASSERT_EQUAL((size_t)MAELYS_DATALOG_MAX_RULES,
+                      r.rule_count,
+                      "%zu");
+    for (size_t i = 0; i < r.rule_count; i++) {
+        TEST_ASSERT_EQUAL(i + 1u, r.rules[i].rule_id, "%zu");
+    }
+    maelys_datalog_ruleset_clear(&r);
+    TEST_END();
+}
+
+static int test_boundary_or_expansion_over_limit_is_clause_atomic(void) {
+    TEST_BEGIN();
+    maelys_datalog_ruleset_t r;
+    maelys_datalog_diagnostic_t diag;
+    TEST_ASSERT_EQUAL(MAELYS_OK, init_parse_fixture(&r, 0u, 0u), "%d");
+    char src[4096];
+    size_t len = 0;
+    TEST_ASSERT_TRUE(appendf(src,
+                             sizeof(src),
+                             &len,
+                             "p(X) :- seed(X).\np(X) :- "));
+    for (size_t i = 0; i < MAELYS_DATALOG_MAX_RULES; i++) {
+        int ok = appendf(src,
+                         sizeof(src),
+                         &len,
+                         "%sseed(X)",
+                         i == 0u ? "" : " or ");
+        TEST_ASSERT_TRUE(ok);
+    }
+    TEST_ASSERT_TRUE(appendf(src, sizeof(src), &len, ".\n"));
+    TEST_ASSERT_EQUAL(
+        MAELYS_ERR_PAYLOAD_TOO_LARGE,
+        maelys_datalog_parse_ruleset_ex(&r,
+                                        src,
+                                        len,
+                                        "boundary_or.dl",
+                                        &diag),
+        "%d");
+    TEST_ASSERT_EQUAL((size_t)1u, r.rule_count, "%zu");
+    TEST_ASSERT_EQUAL((size_t)1u, r.rules[0].rule_id, "%zu");
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_DIAG_PARSER_RULE_BODY_LITERAL_OVERFLOW,
+                      diag.code,
+                      "%d");
+    TEST_ASSERT_EQUAL((size_t)(MAELYS_DATALOG_MAX_RULES + 1u),
+                      diag.count,
+                      "%zu");
+    TEST_ASSERT_EQUAL((size_t)MAELYS_DATALOG_MAX_RULES, diag.limit, "%zu");
+    maelys_datalog_ruleset_clear(&r);
+    TEST_END();
+}
+
 static int test_boundary_max_body_literals_at_limit(void) {
     TEST_BEGIN();
     maelys_datalog_ruleset_t r;
@@ -534,6 +604,8 @@ int main(int argc, char **argv) {
     const test_case_t cases[] = {
         {"maelys_datalog_boundary/max_rules_at_limit", TEST_MODE_NON_BLOCKING, test_boundary_max_rules_at_limit},
         {"maelys_datalog_boundary/max_rules_over_limit", TEST_MODE_NON_BLOCKING, test_boundary_max_rules_over_limit},
+        {"maelys_datalog_boundary/or_expansion_at_rule_limit", TEST_MODE_NON_BLOCKING, test_boundary_or_expansion_at_rule_limit},
+        {"maelys_datalog_boundary/or_expansion_over_limit_is_clause_atomic", TEST_MODE_NON_BLOCKING, test_boundary_or_expansion_over_limit_is_clause_atomic},
         {"maelys_datalog_boundary/max_body_literals_at_limit", TEST_MODE_NON_BLOCKING, test_boundary_max_body_literals_at_limit},
         {"maelys_datalog_boundary/max_body_literals_over_limit", TEST_MODE_NON_BLOCKING, test_boundary_max_body_literals_over_limit},
         {"maelys_datalog_boundary/named_variables_at_limit", TEST_MODE_NON_BLOCKING, test_boundary_named_variables_at_limit},

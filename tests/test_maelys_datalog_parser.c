@@ -32,6 +32,7 @@ static int init_parser_ruleset(maelys_datalog_ruleset_t *r) {
     maelys_datalog_predicate_registry_add_domain(&r->registry, "value", 1, MAELYS_DATALOG_PRED_KIND_EDB);
     maelys_datalog_predicate_registry_add_domain(&r->registry, "left", 1, MAELYS_DATALOG_PRED_KIND_EDB);
     maelys_datalog_predicate_registry_add_domain(&r->registry, "right", 1, MAELYS_DATALOG_PRED_KIND_EDB);
+    maelys_datalog_predicate_registry_add_domain(&r->registry, "or", 1, MAELYS_DATALOG_PRED_KIND_EDB);
     maelys_datalog_predicate_registry_add_domain(&r->registry, "edge", 2, MAELYS_DATALOG_PRED_KIND_EDB);
     maelys_datalog_predicate_registry_add_domain(&r->registry, "denied", 2, MAELYS_DATALOG_PRED_KIND_EDB);
     maelys_datalog_predicate_registry_add_domain(&r->registry, "safe", 1, MAELYS_DATALOG_PRED_KIND_EDB);
@@ -959,6 +960,225 @@ static int test_parser_arithmetic_expression_depth_limit(void) {
     TEST_END();
 }
 
+static maelys_datalog_predicate_id_t parser_predicate_id(
+    const maelys_datalog_ruleset_t *ruleset,
+    const char *name,
+    size_t arity) {
+    maelys_datalog_predicate_id_t id = 0;
+    (void)maelys_datalog_predicate_registry_find(&ruleset->registry, name, arity, &id);
+    return id;
+}
+
+static int test_parser_or_expands_two_alternatives_with_common_context(void) {
+    TEST_BEGIN();
+    maelys_datalog_ruleset_t r;
+    TEST_ASSERT_EQUAL(MAELYS_OK, init_parser_ruleset(&r), "%d");
+    const char *src = "p(X) :- value(X), left(X) or right(X), safe(X).";
+    TEST_ASSERT_EQUAL(MAELYS_OK,
+                      maelys_datalog_parse_ruleset(&r, src, strlen(src)),
+                      "%d");
+    TEST_ASSERT_EQUAL((size_t)2u, r.rule_count, "%zu");
+    maelys_datalog_predicate_id_t value = parser_predicate_id(&r, "value", 1u);
+    maelys_datalog_predicate_id_t left = parser_predicate_id(&r, "left", 1u);
+    maelys_datalog_predicate_id_t right = parser_predicate_id(&r, "right", 1u);
+    maelys_datalog_predicate_id_t safe = parser_predicate_id(&r, "safe", 1u);
+    for (size_t i = 0; i < r.rule_count; i++) {
+        TEST_ASSERT_EQUAL(i + 1u, r.rules[i].rule_id, "%zu");
+        TEST_ASSERT_EQUAL((size_t)3u, r.rules[i].body_count, "%zu");
+        TEST_ASSERT_EQUAL(value, r.rules[i].body[0].atom.predicate_id, "%u");
+        TEST_ASSERT_EQUAL(i == 0u ? left : right,
+                          r.rules[i].body[1].atom.predicate_id,
+                          "%u");
+        TEST_ASSERT_EQUAL(safe, r.rules[i].body[2].atom.predicate_id, "%u");
+    }
+    maelys_datalog_ruleset_clear(&r);
+    TEST_END();
+}
+
+static int test_parser_or_cartesian_order_is_lexical(void) {
+    TEST_BEGIN();
+    maelys_datalog_ruleset_t r;
+    TEST_ASSERT_EQUAL(MAELYS_OK, init_parser_ruleset(&r), "%d");
+    const char *src = "p(X) :- left(X) or right(X), safe(X) or blocked(X).";
+    TEST_ASSERT_EQUAL(MAELYS_OK,
+                      maelys_datalog_parse_ruleset(&r, src, strlen(src)),
+                      "%d");
+    TEST_ASSERT_EQUAL((size_t)4u, r.rule_count, "%zu");
+    maelys_datalog_predicate_id_t left = parser_predicate_id(&r, "left", 1u);
+    maelys_datalog_predicate_id_t right = parser_predicate_id(&r, "right", 1u);
+    maelys_datalog_predicate_id_t safe = parser_predicate_id(&r, "safe", 1u);
+    maelys_datalog_predicate_id_t blocked = parser_predicate_id(&r, "blocked", 1u);
+    const maelys_datalog_predicate_id_t expected[][2] = {
+        {left, safe},
+        {left, blocked},
+        {right, safe},
+        {right, blocked},
+    };
+    for (size_t i = 0; i < r.rule_count; i++) {
+        TEST_ASSERT_EQUAL(i + 1u, r.rules[i].rule_id, "%zu");
+        TEST_ASSERT_EQUAL((size_t)2u, r.rules[i].body_count, "%zu");
+        TEST_ASSERT_EQUAL(expected[i][0], r.rules[i].body[0].atom.predicate_id, "%u");
+        TEST_ASSERT_EQUAL(expected[i][1], r.rules[i].body[1].atom.predicate_id, "%u");
+    }
+    maelys_datalog_ruleset_clear(&r);
+    TEST_END();
+}
+
+static int test_parser_or_validates_each_complete_expanded_rule(void) {
+    TEST_BEGIN();
+    maelys_datalog_ruleset_t r;
+    TEST_ASSERT_EQUAL(MAELYS_OK, init_parser_ruleset(&r), "%d");
+    const char *unsafe = "pair(X, Y) :- edge(X, Y) or left(X).";
+    TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_FIELD,
+                      maelys_datalog_parse_ruleset(&r, unsafe, strlen(unsafe)),
+                      "%d");
+    TEST_ASSERT_EQUAL((size_t)0u, r.rule_count, "%zu");
+    maelys_datalog_ruleset_clear(&r);
+
+    TEST_ASSERT_EQUAL(MAELYS_OK, init_parser_ruleset(&r), "%d");
+    const char *safe =
+        "pair(X, Y) :- edge(X, Y) or left(X), right(Y).";
+    TEST_ASSERT_EQUAL(MAELYS_OK,
+                      maelys_datalog_parse_ruleset(&r, safe, strlen(safe)),
+                      "%d");
+    TEST_ASSERT_EQUAL((size_t)2u, r.rule_count, "%zu");
+    maelys_datalog_ruleset_clear(&r);
+    TEST_END();
+}
+
+static int test_parser_or_rejects_unsafe_comparison_and_negation_branches(void) {
+    TEST_BEGIN();
+    TEST_ASSERT_EQUAL(
+        MAELYS_ERR_INVALID_FIELD,
+        parse_text("p(X) :- edge(X, Y) or left(X), Y > 0."),
+        "%d");
+    TEST_ASSERT_EQUAL(
+        MAELYS_ERR_INVALID_FIELD,
+        parse_text("p(X) :- edge(X, Y) or left(X), not(blocked(Y))."),
+        "%d");
+    TEST_END();
+}
+
+static int test_parser_or_contextual_predicate_name_remains_usable(void) {
+    TEST_BEGIN();
+    maelys_datalog_ruleset_t r;
+    TEST_ASSERT_EQUAL(MAELYS_OK, init_parser_ruleset(&r), "%d");
+    const char *after_comma = "p(X) :- left(X), or(X).";
+    TEST_ASSERT_EQUAL(MAELYS_OK,
+                      maelys_datalog_parse_ruleset(&r,
+                                                  after_comma,
+                                                  strlen(after_comma)),
+                      "%d");
+    TEST_ASSERT_EQUAL((size_t)1u, r.rule_count, "%zu");
+    maelys_datalog_ruleset_clear(&r);
+
+    TEST_ASSERT_EQUAL(MAELYS_OK, init_parser_ruleset(&r), "%d");
+    const char *operator_then_predicate = "p(X) :- left(X) or or(X).";
+    TEST_ASSERT_EQUAL(MAELYS_OK,
+                      maelys_datalog_parse_ruleset(&r,
+                                                  operator_then_predicate,
+                                                  strlen(operator_then_predicate)),
+                      "%d");
+    TEST_ASSERT_EQUAL((size_t)2u, r.rule_count, "%zu");
+    TEST_ASSERT_EQUAL(parser_predicate_id(&r, "left", 1u),
+                      r.rules[0].body[0].atom.predicate_id,
+                      "%u");
+    TEST_ASSERT_EQUAL(parser_predicate_id(&r, "or", 1u),
+                      r.rules[1].body[0].atom.predicate_id,
+                      "%u");
+    maelys_datalog_ruleset_clear(&r);
+    TEST_END();
+}
+
+static int test_parser_or_rejects_out_of_scope_and_malformed_forms(void) {
+    TEST_BEGIN();
+    TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_FIELD,
+                      parse_text("p(X) :- left(X), X = 1 or right(X)."),
+                      "%d");
+    TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_FIELD,
+                      parse_text("p(X) :- left(X) or not(right(X))."),
+                      "%d");
+    TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_FIELD,
+                      parse_text("p(X) :- or left(X)."),
+                      "%d");
+    TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_FIELD,
+                      parse_text("p(X) :- left(X) or."),
+                      "%d");
+    TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_FIELD,
+                      parse_text("p(X) :- left(X) or or right(X)."),
+                      "%d");
+    TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_FIELD,
+                      parse_text("p(X) :- left(X) OR right(X)."),
+                      "%d");
+    TEST_END();
+}
+
+static int test_parser_or_preserves_common_arithmetic_literal(void) {
+    TEST_BEGIN();
+    maelys_datalog_ruleset_t r;
+    TEST_ASSERT_EQUAL(MAELYS_OK, init_parser_ruleset(&r), "%d");
+    const char *src = "p(X) :- left(X) or right(X), X + 1 > 0.";
+    TEST_ASSERT_EQUAL(MAELYS_OK,
+                      maelys_datalog_parse_ruleset(&r, src, strlen(src)),
+                      "%d");
+    TEST_ASSERT_EQUAL((size_t)2u, r.rule_count, "%zu");
+    TEST_ASSERT_EQUAL(r.rules[0].expr_node_count,
+                      r.rules[1].expr_node_count,
+                      "%u");
+    TEST_ASSERT_TRUE(r.rules[0].expr_node_count > 0u);
+    TEST_ASSERT_EQUAL(
+        0,
+        memcmp(r.rules[0].expr_nodes,
+               r.rules[1].expr_nodes,
+               sizeof(r.rules[0].expr_nodes)),
+        "%d");
+    TEST_ASSERT_EQUAL(
+        0,
+        memcmp(&r.rules[0].body[1],
+               &r.rules[1].body[1],
+               sizeof(r.rules[0].body[1])),
+        "%d");
+    maelys_datalog_ruleset_clear(&r);
+    TEST_END();
+}
+
+static int test_parser_or_anonymous_variables_match_manual_expansion(void) {
+    TEST_BEGIN();
+    maelys_datalog_ruleset_t or_ruleset;
+    maelys_datalog_ruleset_t manual_ruleset;
+    TEST_ASSERT_EQUAL(MAELYS_OK, init_parser_ruleset(&or_ruleset), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK, init_parser_ruleset(&manual_ruleset), "%d");
+    const char *or_source =
+        "p(X) :- wide(X, _, _, _) or q(X, _), blocked(_).";
+    const char *manual_source =
+        "p(X) :- wide(X, _, _, _), blocked(_).\n"
+        "p(X) :- q(X, _), blocked(_).";
+    TEST_ASSERT_EQUAL(
+        MAELYS_OK,
+        maelys_datalog_parse_ruleset(&or_ruleset,
+                                     or_source,
+                                     strlen(or_source)),
+        "%d");
+    TEST_ASSERT_EQUAL(
+        MAELYS_OK,
+        maelys_datalog_parse_ruleset(&manual_ruleset,
+                                     manual_source,
+                                     strlen(manual_source)),
+        "%d");
+    TEST_ASSERT_EQUAL(manual_ruleset.rule_count, or_ruleset.rule_count, "%zu");
+    for (size_t i = 0; i < or_ruleset.rule_count; i++) {
+        TEST_ASSERT_EQUAL(
+            0,
+            memcmp(&manual_ruleset.rules[i],
+                   &or_ruleset.rules[i],
+                   sizeof(or_ruleset.rules[i])),
+            "%d");
+    }
+    maelys_datalog_ruleset_clear(&or_ruleset);
+    maelys_datalog_ruleset_clear(&manual_ruleset);
+    TEST_END();
+}
+
 int main(int argc, char **argv) {
     test_case_t cases[] = {
         {"maelys_datalog_parser/valid_fact_rule_recursion", TEST_MODE_NON_BLOCKING, test_parser_accepts_valid_fact_rule_and_recursion},
@@ -1035,6 +1255,14 @@ int main(int argc, char **argv) {
         {"maelys_datalog_parser/arithmetic_expression_filters_valid", TEST_MODE_NON_BLOCKING, test_parser_arithmetic_expression_filters_valid},
         {"maelys_datalog_parser/arithmetic_expression_filters_invalid", TEST_MODE_NON_BLOCKING, test_parser_arithmetic_expression_filters_invalid},
         {"maelys_datalog_parser/arithmetic_expression_depth_limit", TEST_MODE_NON_BLOCKING, test_parser_arithmetic_expression_depth_limit},
+        {"maelys_datalog_parser/or_expands_two_alternatives_with_common_context", TEST_MODE_NON_BLOCKING, test_parser_or_expands_two_alternatives_with_common_context},
+        {"maelys_datalog_parser/or_cartesian_order_is_lexical", TEST_MODE_NON_BLOCKING, test_parser_or_cartesian_order_is_lexical},
+        {"maelys_datalog_parser/or_validates_each_complete_expanded_rule", TEST_MODE_NON_BLOCKING, test_parser_or_validates_each_complete_expanded_rule},
+        {"maelys_datalog_parser/or_rejects_unsafe_comparison_and_negation_branches", TEST_MODE_NON_BLOCKING, test_parser_or_rejects_unsafe_comparison_and_negation_branches},
+        {"maelys_datalog_parser/or_contextual_predicate_name_remains_usable", TEST_MODE_NON_BLOCKING, test_parser_or_contextual_predicate_name_remains_usable},
+        {"maelys_datalog_parser/or_rejects_out_of_scope_and_malformed_forms", TEST_MODE_NON_BLOCKING, test_parser_or_rejects_out_of_scope_and_malformed_forms},
+        {"maelys_datalog_parser/or_preserves_common_arithmetic_literal", TEST_MODE_NON_BLOCKING, test_parser_or_preserves_common_arithmetic_literal},
+        {"maelys_datalog_parser/or_anonymous_variables_match_manual_expansion", TEST_MODE_NON_BLOCKING, test_parser_or_anonymous_variables_match_manual_expansion},
     };
     return test_main("maelys_datalog_parser", cases, (int)(sizeof(cases) / sizeof(cases[0])), argc, argv);
 }
