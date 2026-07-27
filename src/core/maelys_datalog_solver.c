@@ -22,6 +22,12 @@ _Static_assert(MAELYS_DATALOG_MAX_RULE_VARIABLES <= 32u,
                "solve_once_bindings_t bound_mask width insufficient for MAX_RULE_VARIABLES");
 _Static_assert(MAELYS_DATALOG_MAX_EDB_FACTS <= UINT16_MAX,
                "EDB predicate ranges require uint16_t fact indexes");
+_Static_assert(MAELYS_DATALOG_MAX_BODY_LITERALS <= 32u,
+               "witness_filled_mask width insufficient for MAX_BODY_LITERALS");
+_Static_assert(MAELYS_DATALOG_MAX_EXPLANATION_PREMISES <= UINT16_MAX,
+               "premise pool count must fit uint16 premise_pool_count");
+_Static_assert(MAELYS_DATALOG_MAX_PROOF_NODES <= UINT16_MAX,
+               "proof node index must fit uint16 witness range indices");
 
 typedef struct {
     uint16_t begin;
@@ -75,6 +81,26 @@ struct maelys_datalog_solve_result {
     uint32_t active_stratum;
     int stratified;
     maelys_datalog_proof_tree_t proof;
+    /* P4-C64 — Bounded Why-true provenance, stored in parallel with the
+     * historic proof tree. The proof tree layout/bytes are unchanged; this
+     * pool and its per-node ranges live only in the opaque solve_result.
+     *
+     *   premise_pool                : fixed pool, no per-premise malloc.
+     *   node_premise_begin/count    : range into premise_pool, parallel to
+     *                                 proof.nodes[], indexed by proof node idx.
+     *   node_has_premises           : range committed for that proof node.
+     *   witness_slots/filled_mask   : per-derivation builder, indexed by the
+     *                                 lexical body_index; read only at a
+     *                                 derivation terminal, committed only when
+     *                                 a real proof node is added and the whole
+     *                                 witness fits (atomic). */
+    maelys_datalog_explanation_premise_t premise_pool[MAELYS_DATALOG_MAX_EXPLANATION_PREMISES];
+    uint16_t node_premise_begin[MAELYS_DATALOG_MAX_PROOF_NODES];
+    uint16_t node_premise_count[MAELYS_DATALOG_MAX_PROOF_NODES];
+    uint8_t node_has_premises[MAELYS_DATALOG_MAX_PROOF_NODES];
+    uint16_t premise_pool_count;
+    maelys_datalog_explanation_premise_t witness_slots[MAELYS_DATALOG_MAX_BODY_LITERALS];
+    uint32_t witness_filled_mask;
     maelys_datalog_deny_reason_t failure_reason;
     maelys_result_t failure_error;
     maelys_datalog_diagnostic_t runtime_diag;
@@ -718,7 +744,9 @@ static maelys_datalog_compare_result_t solve_once_eval_arith_expr(
 static int solve_once_evaluate_comparison_literal(maelys_datalog_solve_result_t *result,
                                                   const maelys_datalog_rule_t *rule,
                                                   const maelys_datalog_literal_t *literal,
-                                                  const solve_once_bindings_t *bindings) {
+                                                  const solve_once_bindings_t *bindings,
+                                                  maelys_datalog_term_t *out_lhs,
+                                                  maelys_datalog_term_t *out_rhs) {
     if (!rule || !literal || literal->kind != MAELYS_DATALOG_LITERAL_COMPARISON) return 0;
     maelys_datalog_term_t lhs;
     maelys_datalog_term_t rhs;
@@ -777,6 +805,10 @@ static int solve_once_evaluate_comparison_literal(maelys_datalog_solve_result_t 
         solve_once_set_comparison_failure(result, cmp_rc, &lhs, literal->op, &rhs);
         return 0;
     }
+    /* Provenance: report the actually-evaluated ground terms (arith values
+     * included), never a partial AST and never a re-evaluation in the accessor. */
+    if (out_lhs) *out_lhs = lhs;
+    if (out_rhs) *out_rhs = rhs;
     return 2;
 }
 
@@ -789,11 +821,104 @@ static int solve_once_fact_in_base(const maelys_datalog_solve_result_t *result,
     return solve_once_fact_in_slice(result->edb_snapshot.facts, result->edb_snapshot.count, fact);
 }
 
+/* P4-C64 witness builder — write one lexical body slot. Positive candidates
+ * write their slot before recursion; negation/comparison write theirs only
+ * after success. Every write is by lexical body_index, so a terminal path holds
+ * exactly body_count filled slots in lexical order regardless of join order. */
+static void witness_record_positive(maelys_datalog_solve_result_t *result,
+                                    size_t body_index,
+                                    maelys_datalog_explanation_origin_t origin,
+                                    const maelys_datalog_fact_t *candidate,
+                                    uint16_t candidate_proof_index) {
+    if (!result || !candidate || body_index >= MAELYS_DATALOG_MAX_BODY_LITERALS) return;
+    maelys_datalog_explanation_premise_t *slot = &result->witness_slots[body_index];
+    memset(slot, 0, sizeof(*slot));
+    slot->kind = (uint8_t)MAELYS_DATALOG_EXPLANATION_PREMISE_POSITIVE_FACT;
+    slot->origin = (uint8_t)origin;
+    slot->body_index = (uint16_t)body_index;
+    slot->op = 0u;
+    slot->parent_step = (origin == MAELYS_DATALOG_EXPLANATION_ORIGIN_IDB)
+        ? candidate_proof_index
+        : (uint16_t)MAELYS_DATALOG_EXPLANATION_NO_STEP;
+    slot->as.fact = *candidate;
+    result->witness_filled_mask |= (uint32_t)1u << body_index;
+}
+
+static void witness_record_negation(maelys_datalog_solve_result_t *result,
+                                    size_t body_index,
+                                    maelys_datalog_explanation_origin_t origin,
+                                    const maelys_datalog_fact_t *ground) {
+    if (!result || !ground || body_index >= MAELYS_DATALOG_MAX_BODY_LITERALS) return;
+    maelys_datalog_explanation_premise_t *slot = &result->witness_slots[body_index];
+    memset(slot, 0, sizeof(*slot));
+    slot->kind = (uint8_t)MAELYS_DATALOG_EXPLANATION_PREMISE_NEGATED_ABSENCE;
+    slot->origin = (uint8_t)origin;
+    slot->body_index = (uint16_t)body_index;
+    slot->op = 0u;
+    slot->parent_step = (uint16_t)MAELYS_DATALOG_EXPLANATION_NO_STEP;
+    slot->as.fact = *ground;
+    result->witness_filled_mask |= (uint32_t)1u << body_index;
+}
+
+static void witness_record_comparison(maelys_datalog_solve_result_t *result,
+                                      size_t body_index,
+                                      maelys_datalog_cmp_op_t op,
+                                      const maelys_datalog_term_t *lhs,
+                                      const maelys_datalog_term_t *rhs) {
+    if (!result || !lhs || !rhs || body_index >= MAELYS_DATALOG_MAX_BODY_LITERALS) return;
+    maelys_datalog_explanation_premise_t *slot = &result->witness_slots[body_index];
+    memset(slot, 0, sizeof(*slot));
+    slot->kind = (uint8_t)MAELYS_DATALOG_EXPLANATION_PREMISE_COMPARISON_TRUE;
+    slot->origin = (uint8_t)MAELYS_DATALOG_EXPLANATION_ORIGIN_NOT_APPLICABLE;
+    slot->body_index = (uint16_t)body_index;
+    slot->op = (uint8_t)op;
+    slot->parent_step = (uint16_t)MAELYS_DATALOG_EXPLANATION_NO_STEP;
+    slot->as.comparison.lhs = *lhs;
+    slot->as.comparison.rhs = *rhs;
+    result->witness_filled_mask |= (uint32_t)1u << body_index;
+}
+
+/* Commit the current builder as the premise range of a freshly added proof
+ * node. Committed only when the complete witness fits (§5.4). If any slot is
+ * missing or the pool is full, nothing is committed and the node is left
+ * without a witness range (provenance unavailable/truncated for that fact) —
+ * the resolution result and the historic proof tree are never affected. */
+static void witness_commit_range(maelys_datalog_solve_result_t *result,
+                                 uint16_t proof_node_idx,
+                                 const maelys_datalog_rule_t *rule) {
+    if (!result || !rule || proof_node_idx >= MAELYS_DATALOG_MAX_PROOF_NODES) return;
+    const size_t body_count = rule->body_count;
+    if (body_count > MAELYS_DATALOG_MAX_BODY_LITERALS) return;
+    const uint32_t need_mask = (body_count == 0u)
+        ? 0u
+        : (((uint32_t)1u << body_count) - 1u);
+    if ((result->witness_filled_mask & need_mask) != need_mask) return;
+    for (size_t i = 0; i < body_count; i++) {
+        if (result->witness_slots[i].kind == 0u ||
+            result->witness_slots[i].body_index != (uint16_t)i) {
+            return;
+        }
+    }
+    if ((size_t)result->premise_pool_count + body_count >
+        (size_t)MAELYS_DATALOG_MAX_EXPLANATION_PREMISES) {
+        return;
+    }
+    const uint16_t begin = result->premise_pool_count;
+    for (size_t i = 0; i < body_count; i++) {
+        result->premise_pool[begin + i] = result->witness_slots[i];
+    }
+    result->node_premise_begin[proof_node_idx] = begin;
+    result->node_premise_count[proof_node_idx] = (uint16_t)body_count;
+    result->node_has_premises[proof_node_idx] = 1u;
+    result->premise_pool_count = (uint16_t)(begin + body_count);
+}
+
 static int solve_once_append_idb_merge(maelys_datalog_solve_result_t *result,
                                        const maelys_datalog_fact_t *fact,
                                        size_t rule_id,
                                        size_t depth,
-                                       uint16_t parent_proof_index) {
+                                       uint16_t parent_proof_index,
+                                       const maelys_datalog_rule_t *rule) {
     solve_once_assert_windows(result);
     if (!datalog_fact_structurally_valid(&result->ruleset->registry, fact)) {
         solve_once_set_invalid_fact(result, &result->ruleset->registry, fact);
@@ -841,6 +966,11 @@ static int solve_once_append_idb_merge(maelys_datalog_solve_result_t *result,
                               depth,
                               parent_proof_index);
     result->idb_proof_index[insert_index] = proof_node_idx;
+    /* Associate the complete witness only when a real proof node was added
+     * (proof_node_idx is a valid node index, i.e. capacity/depth allowed it). */
+    if (proof_node_idx != MAELYS_DATALOG_PROOF_NO_PARENT) {
+        witness_commit_range(result, proof_node_idx, rule);
+    }
     solve_once_assert_windows(result);
     return 1;
 }
@@ -1035,7 +1165,9 @@ static int solve_once_match_candidate(const maelys_datalog_ruleset_t *ruleset,
                                       const maelys_datalog_fact_t *candidate,
                                       size_t delta_literal_index,
                                       size_t depth,
-                                      uint16_t parent_proof_index) {
+                                      uint16_t parent_proof_index,
+                                      maelys_datalog_explanation_origin_t candidate_origin,
+                                      uint16_t candidate_proof_index) {
     /* Returns 0 on fatal internal overflow, 1 on match/skip.
      * Predicate mismatch is not an error: the candidate scan continues. */
     const maelys_datalog_literal_t *literal = &rule->body[literal_index];
@@ -1051,6 +1183,8 @@ static int solve_once_match_candidate(const maelys_datalog_ruleset_t *ruleset,
     for (size_t i = 0; i < candidate->arity; i++) {
         if (!solve_once_bind_or_match(&next, &literal->atom.terms[i], &candidate->terms[i])) return 1;
     }
+    /* Positive premise: capture the exact matched candidate before recursion. */
+    witness_record_positive(result, literal_index, candidate_origin, candidate, candidate_proof_index);
     return solve_once_derive_recursive(ruleset,
                                        result,
                                        rule,
@@ -1071,13 +1205,23 @@ static int solve_once_scan_candidates(const maelys_datalog_ruleset_t *ruleset,
                                       size_t delta_literal_index,
                                       size_t depth,
                                       const uint16_t *parent_proof_indices,
-                                      uint16_t parent_proof_index) {
+                                      uint16_t parent_proof_index,
+                                      maelys_datalog_explanation_origin_t candidate_origin,
+                                      const uint16_t *witness_proof_indices) {
     /* Scans all candidates exhaustively.
-     * Returns 0 only on fatal internal overflow; it does not stop on first match. */
+     * Returns 0 only on fatal internal overflow; it does not stop on first match.
+     *
+     * parent_proof_indices drives the historic delta parent_index (unchanged).
+     * witness_proof_indices is the independent per-candidate proof node used for
+     * Why-true provenance; it is read for EVERY IDB scan, delta or not, without
+     * altering the historic parent threaded to maelys_datalog_proof_add(). */
     for (size_t i = 0; i < fact_count; i++) {
         const uint16_t candidate_parent = parent_proof_indices
             ? parent_proof_indices[i]
             : parent_proof_index;
+        const uint16_t witness_proof = witness_proof_indices
+            ? witness_proof_indices[i]
+            : (uint16_t)MAELYS_DATALOG_EXPLANATION_NO_STEP;
         if (!solve_once_match_candidate(ruleset,
                                         result,
                                         rule,
@@ -1086,7 +1230,9 @@ static int solve_once_scan_candidates(const maelys_datalog_ruleset_t *ruleset,
                                         &facts[i],
                                         delta_literal_index,
                                         depth,
-                                        candidate_parent)) {
+                                        candidate_parent,
+                                        candidate_origin,
+                                        witness_proof)) {
             return 0;
         }
     }
@@ -1130,7 +1276,9 @@ static int solve_once_idb_scan_window(const maelys_datalog_ruleset_t *ruleset,
 static int solve_negated_literal(maelys_datalog_solve_result_t *result,
                                  const maelys_datalog_ruleset_t *ruleset,
                                  const maelys_datalog_literal_t *literal,
-                                 const solve_once_bindings_t *bindings) {
+                                 const solve_once_bindings_t *bindings,
+                                 maelys_datalog_fact_t *out_ground,
+                                 maelys_datalog_explanation_origin_t *out_origin) {
     if (!result || !ruleset || !literal ||
         literal->kind != MAELYS_DATALOG_LITERAL_NEGATED_ATOM ||
         literal->atom.predicate_id >= MAELYS_DATALOG_MAX_PREDICATES) {
@@ -1152,14 +1300,21 @@ static int solve_negated_literal(maelys_datalog_solve_result_t *result,
     const maelys_datalog_predicate_def_t *def =
         maelys_datalog_predicate_registry_get(&ruleset->registry, query.predicate_id);
     if (!def) return 0;
+    /* On a satisfied negation, publish the exact ground atom whose absence was
+     * verified and the store the absence was checked in. This is bounded to the
+     * evaluated snapshot/stratum, not a universal claim of impossibility. */
+    if (out_ground) *out_ground = query;
 
     if (def->kind_flags & MAELYS_DATALOG_PRED_KIND_EDB) {
+        if (out_origin) *out_origin = MAELYS_DATALOG_EXPLANATION_ORIGIN_EDB;
         return !maelys_datalog_fact_set_contains(&result->edb_snapshot, &query);
     }
     if (def->kind_flags & MAELYS_DATALOG_PRED_KIND_POLICY_FACT) {
+        if (out_origin) *out_origin = MAELYS_DATALOG_EXPLANATION_ORIGIN_POLICY_FACT;
         return !solve_once_fact_in_slice(ruleset->facts, ruleset->fact_count, &query);
     }
     if (def->kind_flags & MAELYS_DATALOG_PRED_KIND_IDB) {
+        if (out_origin) *out_origin = MAELYS_DATALOG_EXPLANATION_ORIGIN_IDB;
         if (!result->stratified) return 0;
         const uint32_t predicate_stratum = ruleset->strata[query.predicate_id];
         if (predicate_stratum >= result->active_stratum ||
@@ -1188,6 +1343,10 @@ static int solve_once_derive_recursive(const maelys_datalog_ruleset_t *ruleset,
                                        size_t delta_literal_index,
                                        size_t depth,
                                        uint16_t parent_proof_index) {
+    if (literal_index == 0) {
+        /* Outermost entry for this rule application: start a fresh witness. */
+        result->witness_filled_mask = 0u;
+    }
     if (literal_index == rule->body_count) {
         maelys_datalog_fact_t fact;
         memset(&fact, 0, sizeof(fact));
@@ -1196,14 +1355,20 @@ static int solve_once_derive_recursive(const maelys_datalog_ruleset_t *ruleset,
         for (size_t i = 0; i < fact.arity; i++) {
             if (!solve_once_instantiate_term(bindings, &rule->head.terms[i], &fact.terms[i])) return 1;
         }
-        return solve_once_append_idb_merge(result, &fact, rule->rule_id, depth, parent_proof_index);
+        return solve_once_append_idb_merge(result, &fact, rule->rule_id, depth, parent_proof_index, rule);
     }
 
     const maelys_datalog_literal_t *literal = &rule->body[literal_index];
     if (literal->kind == MAELYS_DATALOG_LITERAL_COMPARISON) {
-        int comparison = solve_once_evaluate_comparison_literal(result, rule, literal, bindings);
+        maelys_datalog_term_t cmp_lhs;
+        maelys_datalog_term_t cmp_rhs;
+        memset(&cmp_lhs, 0, sizeof(cmp_lhs));
+        memset(&cmp_rhs, 0, sizeof(cmp_rhs));
+        int comparison =
+            solve_once_evaluate_comparison_literal(result, rule, literal, bindings, &cmp_lhs, &cmp_rhs);
         if (comparison == 0) return 0;
         if (comparison == 1) return 1;
+        witness_record_comparison(result, literal_index, literal->op, &cmp_lhs, &cmp_rhs);
         return solve_once_derive_recursive(ruleset,
                                            result,
                                            rule,
@@ -1214,7 +1379,12 @@ static int solve_once_derive_recursive(const maelys_datalog_ruleset_t *ruleset,
                                            parent_proof_index);
     }
     if (literal->kind == MAELYS_DATALOG_LITERAL_NEGATED_ATOM) {
-        if (!solve_negated_literal(result, ruleset, literal, bindings)) return 1;
+        maelys_datalog_fact_t neg_ground;
+        maelys_datalog_explanation_origin_t neg_origin =
+            MAELYS_DATALOG_EXPLANATION_ORIGIN_NOT_APPLICABLE;
+        memset(&neg_ground, 0, sizeof(neg_ground));
+        if (!solve_negated_literal(result, ruleset, literal, bindings, &neg_ground, &neg_origin)) return 1;
+        witness_record_negation(result, literal_index, neg_origin, &neg_ground);
         return solve_once_derive_recursive(ruleset,
                                            result,
                                            rule,
@@ -1240,7 +1410,9 @@ static int solve_once_derive_recursive(const maelys_datalog_ruleset_t *ruleset,
                                           delta_literal_index,
                                           depth,
                                           &result->idb_proof_index[result->idb_delta_begin],
-                                          parent_proof_index);
+                                          parent_proof_index,
+                                          MAELYS_DATALOG_EXPLANATION_ORIGIN_IDB,
+                                          &result->idb_proof_index[result->idb_delta_begin]);
     }
 
     if ((def->kind_flags & MAELYS_DATALOG_PRED_KIND_POLICY_FACT) &&
@@ -1254,7 +1426,9 @@ static int solve_once_derive_recursive(const maelys_datalog_ruleset_t *ruleset,
                                     delta_literal_index,
                                     depth,
                                     NULL,
-                                    parent_proof_index)) {
+                                    parent_proof_index,
+                                    MAELYS_DATALOG_EXPLANATION_ORIGIN_POLICY_FACT,
+                                    NULL)) {
         return 0;
     }
     if (def->kind_flags & MAELYS_DATALOG_PRED_KIND_EDB) {
@@ -1271,7 +1445,9 @@ static int solve_once_derive_recursive(const maelys_datalog_ruleset_t *ruleset,
                                         delta_literal_index,
                                         depth,
                                         NULL,
-                                        parent_proof_index)) {
+                                        parent_proof_index,
+                                        MAELYS_DATALOG_EXPLANATION_ORIGIN_EDB,
+                                        NULL)) {
             return 0;
         }
     }
@@ -1292,7 +1468,9 @@ static int solve_once_derive_recursive(const maelys_datalog_ruleset_t *ruleset,
                                         delta_literal_index,
                                         depth,
                                         NULL,
-                                        parent_proof_index)) {
+                                        parent_proof_index,
+                                        MAELYS_DATALOG_EXPLANATION_ORIGIN_IDB,
+                                        &result->idb_proof_index[begin])) {
             return 0;
         }
     }
@@ -1320,7 +1498,9 @@ static int solve_once_match_candidate_ordered(const maelys_datalog_ruleset_t *ru
                                               const maelys_datalog_fact_t *candidate,
                                               size_t delta_literal_index,
                                               size_t depth,
-                                              uint16_t parent_proof_index) {
+                                              uint16_t parent_proof_index,
+                                              maelys_datalog_explanation_origin_t candidate_origin,
+                                              uint16_t candidate_proof_index) {
     if (!rule || !join_order || order_pos >= join_order_count) return 0;
     const size_t literal_index = join_order[order_pos];
     if (literal_index >= rule->body_count) return 0;
@@ -1334,6 +1514,9 @@ static int solve_once_match_candidate_ordered(const maelys_datalog_ruleset_t *ru
     for (size_t i = 0; i < candidate->arity; i++) {
         if (!solve_once_bind_or_match(&next, &literal->atom.terms[i], &candidate->terms[i])) return 1;
     }
+    /* Record into the lexical body slot (literal_index), not the join position,
+     * so provenance stays in body order even under the static join plan. */
+    witness_record_positive(result, literal_index, candidate_origin, candidate, candidate_proof_index);
     return solve_once_derive_ordered(ruleset,
                                      result,
                                      rule,
@@ -1358,11 +1541,16 @@ static int solve_once_scan_candidates_ordered(const maelys_datalog_ruleset_t *ru
                                               size_t delta_literal_index,
                                               size_t depth,
                                               const uint16_t *parent_proof_indices,
-                                              uint16_t parent_proof_index) {
+                                              uint16_t parent_proof_index,
+                                              maelys_datalog_explanation_origin_t candidate_origin,
+                                              const uint16_t *witness_proof_indices) {
     for (size_t i = 0; i < fact_count; i++) {
         const uint16_t candidate_parent = parent_proof_indices
             ? parent_proof_indices[i]
             : parent_proof_index;
+        const uint16_t witness_proof = witness_proof_indices
+            ? witness_proof_indices[i]
+            : (uint16_t)MAELYS_DATALOG_EXPLANATION_NO_STEP;
         if (!solve_once_match_candidate_ordered(ruleset,
                                                 result,
                                                 rule,
@@ -1373,7 +1561,9 @@ static int solve_once_scan_candidates_ordered(const maelys_datalog_ruleset_t *ru
                                                 &facts[i],
                                                 delta_literal_index,
                                                 depth,
-                                                candidate_parent)) {
+                                                candidate_parent,
+                                                candidate_origin,
+                                                witness_proof)) {
             return 0;
         }
     }
@@ -1390,6 +1580,10 @@ static int solve_once_derive_ordered(const maelys_datalog_ruleset_t *ruleset,
                                      size_t delta_literal_index,
                                      size_t depth,
                                      uint16_t parent_proof_index) {
+    if (order_pos == 0) {
+        /* Outermost entry for this rule application: start a fresh witness. */
+        result->witness_filled_mask = 0u;
+    }
     if (order_pos == join_order_count) {
         maelys_datalog_fact_t fact;
         memset(&fact, 0, sizeof(fact));
@@ -1398,7 +1592,7 @@ static int solve_once_derive_ordered(const maelys_datalog_ruleset_t *ruleset,
         for (size_t i = 0; i < fact.arity; i++) {
             if (!solve_once_instantiate_term(bindings, &rule->head.terms[i], &fact.terms[i])) return 1;
         }
-        return solve_once_append_idb_merge(result, &fact, rule->rule_id, depth, parent_proof_index);
+        return solve_once_append_idb_merge(result, &fact, rule->rule_id, depth, parent_proof_index, rule);
     }
 
     if (!join_order || order_pos >= join_order_count) return 0;
@@ -1406,9 +1600,15 @@ static int solve_once_derive_ordered(const maelys_datalog_ruleset_t *ruleset,
     if (literal_index >= rule->body_count) return 0;
     const maelys_datalog_literal_t *literal = &rule->body[literal_index];
     if (literal->kind == MAELYS_DATALOG_LITERAL_COMPARISON) {
-        int comparison = solve_once_evaluate_comparison_literal(result, rule, literal, bindings);
+        maelys_datalog_term_t cmp_lhs;
+        maelys_datalog_term_t cmp_rhs;
+        memset(&cmp_lhs, 0, sizeof(cmp_lhs));
+        memset(&cmp_rhs, 0, sizeof(cmp_rhs));
+        int comparison =
+            solve_once_evaluate_comparison_literal(result, rule, literal, bindings, &cmp_lhs, &cmp_rhs);
         if (comparison == 0) return 0;
         if (comparison == 1) return 1;
+        witness_record_comparison(result, literal_index, literal->op, &cmp_lhs, &cmp_rhs);
         return solve_once_derive_ordered(ruleset,
                                          result,
                                          rule,
@@ -1421,7 +1621,12 @@ static int solve_once_derive_ordered(const maelys_datalog_ruleset_t *ruleset,
                                          parent_proof_index);
     }
     if (literal->kind == MAELYS_DATALOG_LITERAL_NEGATED_ATOM) {
-        if (!solve_negated_literal(result, ruleset, literal, bindings)) return 1;
+        maelys_datalog_fact_t neg_ground;
+        maelys_datalog_explanation_origin_t neg_origin =
+            MAELYS_DATALOG_EXPLANATION_ORIGIN_NOT_APPLICABLE;
+        memset(&neg_ground, 0, sizeof(neg_ground));
+        if (!solve_negated_literal(result, ruleset, literal, bindings, &neg_ground, &neg_origin)) return 1;
+        witness_record_negation(result, literal_index, neg_origin, &neg_ground);
         return solve_once_derive_ordered(ruleset,
                                          result,
                                          rule,
@@ -1451,7 +1656,9 @@ static int solve_once_derive_ordered(const maelys_datalog_ruleset_t *ruleset,
                                                   delta_literal_index,
                                                   depth,
                                                   &result->idb_proof_index[result->idb_delta_begin],
-                                                  parent_proof_index);
+                                                  parent_proof_index,
+                                                  MAELYS_DATALOG_EXPLANATION_ORIGIN_IDB,
+                                                  &result->idb_proof_index[result->idb_delta_begin]);
     }
 
     if ((def->kind_flags & MAELYS_DATALOG_PRED_KIND_POLICY_FACT) &&
@@ -1467,7 +1674,9 @@ static int solve_once_derive_ordered(const maelys_datalog_ruleset_t *ruleset,
                                             delta_literal_index,
                                             depth,
                                             NULL,
-                                            parent_proof_index)) {
+                                            parent_proof_index,
+                                            MAELYS_DATALOG_EXPLANATION_ORIGIN_POLICY_FACT,
+                                            NULL)) {
         return 0;
     }
     if (def->kind_flags & MAELYS_DATALOG_PRED_KIND_EDB) {
@@ -1486,7 +1695,9 @@ static int solve_once_derive_ordered(const maelys_datalog_ruleset_t *ruleset,
                                                 delta_literal_index,
                                                 depth,
                                                 NULL,
-                                                parent_proof_index)) {
+                                                parent_proof_index,
+                                                MAELYS_DATALOG_EXPLANATION_ORIGIN_EDB,
+                                                NULL)) {
             return 0;
         }
     }
@@ -1509,7 +1720,9 @@ static int solve_once_derive_ordered(const maelys_datalog_ruleset_t *ruleset,
                                                 delta_literal_index,
                                                 depth,
                                                 NULL,
-                                                parent_proof_index)) {
+                                                parent_proof_index,
+                                                MAELYS_DATALOG_EXPLANATION_ORIGIN_IDB,
+                                                &result->idb_proof_index[begin])) {
             return 0;
         }
     }
@@ -2358,6 +2571,145 @@ maelys_result_t maelys_datalog_extract_proof_for_fact(
         }
     }
 
+    return MAELYS_OK;
+}
+
+/* Depth-first emission of the witness DAG rooted at a proof node.
+ *
+ * Emits ancestors before descendants, deduplicates shared parent nodes via
+ * local_step[], detects cycles/invalid indices via on_stack[], and remaps each
+ * IDB premise's parent to a local step index. Returns 1 on a complete subtree,
+ * 0 on any incompleteness (missing witness, dangling parent, capacity, cycle),
+ * which the caller turns into an atomically empty, truncated explanation.
+ *
+ * Recursion is bounded by MAELYS_DATALOG_MAX_PROOF_NODES (on_stack prevents
+ * revisiting any node already on the current path; local_step short-circuits
+ * already-emitted nodes). */
+static int explain_visit_node(const maelys_datalog_solve_result_t *result,
+                              uint16_t node_idx,
+                              maelys_datalog_explanation_t *out,
+                              uint16_t *local_step,
+                              uint8_t *on_stack,
+                              size_t recursion_depth) {
+    if (node_idx >= result->proof.node_count) return 0;
+    if (local_step[node_idx] != (uint16_t)MAELYS_DATALOG_EXPLANATION_NO_STEP) return 1;
+    if (on_stack[node_idx]) return 0;
+    if (recursion_depth > MAELYS_DATALOG_MAX_PROOF_NODES) return 0;
+    if (!result->node_has_premises[node_idx]) return 0;
+
+    const uint16_t begin = result->node_premise_begin[node_idx];
+    const uint16_t count = result->node_premise_count[node_idx];
+    if ((size_t)begin + (size_t)count > (size_t)result->premise_pool_count) return 0;
+
+    on_stack[node_idx] = 1u;
+    /* Ancestors first: emit every IDB premise parent before this step. */
+    for (uint16_t i = 0; i < count; i++) {
+        const maelys_datalog_explanation_premise_t *p = &result->premise_pool[begin + i];
+        if (p->kind == (uint8_t)MAELYS_DATALOG_EXPLANATION_PREMISE_POSITIVE_FACT &&
+            p->origin == (uint8_t)MAELYS_DATALOG_EXPLANATION_ORIGIN_IDB) {
+            if (p->parent_step == (uint16_t)MAELYS_DATALOG_EXPLANATION_NO_STEP) {
+                on_stack[node_idx] = 0u;
+                return 0;
+            }
+            if (!explain_visit_node(result, p->parent_step, out, local_step, on_stack,
+                                    recursion_depth + 1u)) {
+                on_stack[node_idx] = 0u;
+                return 0;
+            }
+        }
+    }
+
+    if (out->step_count >= MAELYS_DATALOG_MAX_EXPLANATION_STEPS ||
+        (size_t)out->premise_count + (size_t)count > (size_t)MAELYS_DATALOG_MAX_EXPLANATION_PREMISES) {
+        on_stack[node_idx] = 0u;
+        return 0;
+    }
+
+    const uint16_t premise_begin = out->premise_count;
+    for (uint16_t i = 0; i < count; i++) {
+        maelys_datalog_explanation_premise_t copy = result->premise_pool[begin + i];
+        if (copy.kind == (uint8_t)MAELYS_DATALOG_EXPLANATION_PREMISE_POSITIVE_FACT &&
+            copy.origin == (uint8_t)MAELYS_DATALOG_EXPLANATION_ORIGIN_IDB) {
+            const uint16_t raw = copy.parent_step;
+            if (raw >= result->proof.node_count) { on_stack[node_idx] = 0u; return 0; }
+            const uint16_t mapped = local_step[raw];
+            if (mapped == (uint16_t)MAELYS_DATALOG_EXPLANATION_NO_STEP) {
+                on_stack[node_idx] = 0u;
+                return 0;
+            }
+            copy.parent_step = mapped;
+        } else {
+            copy.parent_step = (uint16_t)MAELYS_DATALOG_EXPLANATION_NO_STEP;
+        }
+        out->premises[out->premise_count++] = copy;
+    }
+
+    maelys_datalog_explanation_step_t *step = &out->steps[out->step_count];
+    memset(step, 0, sizeof(*step));
+    step->rule_id = result->proof.nodes[node_idx].rule_id;
+    step->derived_fact = result->proof.nodes[node_idx].derived_fact;
+    step->premise_begin = premise_begin;
+    step->premise_count = count;
+    local_step[node_idx] = out->step_count;
+    out->step_count++;
+    on_stack[node_idx] = 0u;
+    return 1;
+}
+
+maelys_result_t maelys_datalog_explain_solved_fact(
+    const maelys_datalog_solve_result_t *result,
+    const maelys_datalog_fact_t *queried_fact,
+    maelys_datalog_explanation_t *out_explanation) {
+    if (!result || !queried_fact || !out_explanation) return MAELYS_ERR_INVALID_ARGUMENT;
+    if (!result->finalized || result->failed || !result->ruleset || !result->ruleset->loaded) {
+        return MAELYS_ERR_INVALID_STATE;
+    }
+    if (!datalog_fact_structurally_valid(&result->ruleset->registry, queried_fact)) {
+        return MAELYS_ERR_INVALID_FIELD;
+    }
+
+    /* All argument/state/field validation done; the output may now be touched. */
+    memset(out_explanation, 0, sizeof(*out_explanation));
+
+    /* Presence is defined by membership in the finalized IDB set. */
+    if (!maelys_datalog_fact_set_contains(&result->idb_final, queried_fact)) {
+        return MAELYS_OK; /* found=0, truncated=0, empty */
+    }
+    out_explanation->found = 1u;
+
+    /* Canonical witness: the first non-deny proof node deriving this fact — the
+     * same first-witness authority the historic proof tree already uses. */
+    size_t canonical = result->proof.node_count;
+    for (size_t n = 0; n < result->proof.node_count; n++) {
+        const maelys_datalog_proof_node_t *node = &result->proof.nodes[n];
+        if (node->deny_reason != MAELYS_DATALOG_DENY_NONE) continue;
+        if (maelys_datalog_fact_equals(&node->derived_fact, queried_fact)) {
+            canonical = n;
+            break;
+        }
+    }
+    if (canonical >= result->proof.node_count) {
+        out_explanation->truncated = 1u; /* present but no usable proof node */
+        return MAELYS_OK;
+    }
+
+    uint16_t local_step[MAELYS_DATALOG_MAX_PROOF_NODES];
+    uint8_t on_stack[MAELYS_DATALOG_MAX_PROOF_NODES];
+    for (size_t i = 0; i < MAELYS_DATALOG_MAX_PROOF_NODES; i++) {
+        local_step[i] = (uint16_t)MAELYS_DATALOG_EXPLANATION_NO_STEP;
+        on_stack[i] = 0u;
+    }
+
+    if (!explain_visit_node(result, (uint16_t)canonical, out_explanation,
+                            local_step, on_stack, 0u)) {
+        /* Incomplete provenance -> atomically empty, truncated (§3.3, §3.6). */
+        memset(out_explanation, 0, sizeof(*out_explanation));
+        out_explanation->found = 1u;
+        out_explanation->truncated = 1u;
+        return MAELYS_OK;
+    }
+
+    out_explanation->truncated = 0u;
     return MAELYS_OK;
 }
 

@@ -4190,6 +4190,662 @@ static int test_arithmetic_expr_overflow_fails_closed(void) {
     TEST_END();
 }
 
+/* ===================================================================
+ * P4-C64 — bounded Why-true premise provenance.
+ *
+ * The explanation_t objects are caller-owned and large (bounded to 64 KiB);
+ * per §3.6/§6.2 they are allocated OFF the stack — here as file-static buffers.
+ * =================================================================== */
+static maelys_datalog_explanation_t g_p4c64_exp;
+static maelys_datalog_explanation_t g_p4c64_exp_b;
+
+static int make_fact1(maelys_datalog_ruleset_t *r,
+                      const char *predicate,
+                      const char *a,
+                      maelys_datalog_fact_t *out) {
+    memset(out, 0, sizeof(*out));
+    if (!maelys_datalog_predicate_registry_find(&r->registry, predicate, 1, &out->predicate_id)) {
+        return 0;
+    }
+    out->arity = 1;
+    out->terms[0] = sym_term(r, a);
+    return 1;
+}
+
+static int make_fact1_int(maelys_datalog_ruleset_t *r,
+                          const char *predicate,
+                          long long value,
+                          maelys_datalog_fact_t *out) {
+    memset(out, 0, sizeof(*out));
+    if (!maelys_datalog_predicate_registry_find(&r->registry, predicate, 1, &out->predicate_id)) {
+        return 0;
+    }
+    out->arity = 1;
+    out->terms[0] = int_term(value);
+    return 1;
+}
+
+static const maelys_datalog_explanation_step_t *exp_find_step(
+    const maelys_datalog_explanation_t *e,
+    const maelys_datalog_fact_t *f) {
+    for (uint16_t i = 0; i < e->step_count; i++) {
+        if (maelys_datalog_fact_equals(&e->steps[i].derived_fact, f)) return &e->steps[i];
+    }
+    return NULL;
+}
+
+/* Verify the pad/unused bytes of every populated step and premise are zero. */
+static int exp_pads_zeroed(const maelys_datalog_explanation_t *e) {
+    if (e->_pad[0] != 0u || e->_pad[1] != 0u) return 0;
+    for (uint16_t i = 0; i < e->step_count; i++) {
+        const maelys_datalog_explanation_step_t *s = &e->steps[i];
+        for (size_t k = 0; k < sizeof(s->_pad); k++) if (s->_pad[k] != 0u) return 0;
+    }
+    for (uint16_t i = 0; i < e->premise_count; i++) {
+        if (e->premises[i]._pad0 != 0u) return 0;
+        if (e->premises[i].kind != (uint8_t)MAELYS_DATALOG_EXPLANATION_PREMISE_COMPARISON_TRUE &&
+            e->premises[i].op != 0u) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+static int test_p4c64_two_edb_premises_lexical(void) {
+    TEST_BEGIN();
+    maelys_datalog_ruleset_t r;
+    TEST_ASSERT_EQUAL(MAELYS_OK, make_ruleset(&r, "p(X) :- candidate(X), user(X)."), "%d");
+    maelys_datalog_fact_t facts[8];
+    maelys_datalog_edb_t edb;
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_init(&edb, facts, 8, &r.symbols, &r.registry), "%d");
+    add_symbol_unary(&r, &edb, "candidate", "alice");
+    add_symbol_unary(&r, &edb, "user", "alice");
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_finalize(&edb), "%d");
+    maelys_datalog_solve_result_t *result = NULL;
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_solve_once(&r, &edb, &result), "%d");
+
+    maelys_datalog_fact_t target;
+    TEST_ASSERT_TRUE(make_fact1(&r, "p", "alice", &target));
+    memset(&g_p4c64_exp, 0xEE, sizeof(g_p4c64_exp));
+    TEST_ASSERT_EQUAL(MAELYS_OK,
+                      maelys_datalog_explain_solved_fact(result, &target, &g_p4c64_exp), "%d");
+    TEST_ASSERT_EQUAL((uint8_t)1u, g_p4c64_exp.found, "%u");
+    TEST_ASSERT_EQUAL((uint8_t)0u, g_p4c64_exp.truncated, "%u");
+    TEST_ASSERT_EQUAL((uint16_t)1u, g_p4c64_exp.step_count, "%u");
+    TEST_ASSERT_EQUAL((uint16_t)2u, g_p4c64_exp.premise_count, "%u");
+    TEST_ASSERT_TRUE(exp_pads_zeroed(&g_p4c64_exp));
+
+    const maelys_datalog_explanation_step_t *step = &g_p4c64_exp.steps[0];
+    TEST_ASSERT_TRUE(maelys_datalog_fact_equals(&step->derived_fact, &target));
+    TEST_ASSERT_EQUAL((uint16_t)0u, step->premise_begin, "%u");
+    TEST_ASSERT_EQUAL((uint16_t)2u, step->premise_count, "%u");
+
+    maelys_datalog_fact_t cand;
+    maelys_datalog_fact_t usr;
+    TEST_ASSERT_TRUE(make_fact1(&r, "candidate", "alice", &cand));
+    TEST_ASSERT_TRUE(make_fact1(&r, "user", "alice", &usr));
+    const maelys_datalog_explanation_premise_t *p0 = &g_p4c64_exp.premises[0];
+    const maelys_datalog_explanation_premise_t *p1 = &g_p4c64_exp.premises[1];
+    TEST_ASSERT_EQUAL((uint16_t)0u, p0->body_index, "%u");
+    TEST_ASSERT_EQUAL((uint16_t)1u, p1->body_index, "%u");
+    TEST_ASSERT_EQUAL((uint8_t)MAELYS_DATALOG_EXPLANATION_PREMISE_POSITIVE_FACT, p0->kind, "%u");
+    TEST_ASSERT_EQUAL((uint8_t)MAELYS_DATALOG_EXPLANATION_PREMISE_POSITIVE_FACT, p1->kind, "%u");
+    TEST_ASSERT_EQUAL((uint8_t)MAELYS_DATALOG_EXPLANATION_ORIGIN_EDB, p0->origin, "%u");
+    TEST_ASSERT_EQUAL((uint8_t)MAELYS_DATALOG_EXPLANATION_ORIGIN_EDB, p1->origin, "%u");
+    TEST_ASSERT_EQUAL((uint16_t)MAELYS_DATALOG_EXPLANATION_NO_STEP, p0->parent_step, "%u");
+    TEST_ASSERT_EQUAL((uint16_t)MAELYS_DATALOG_EXPLANATION_NO_STEP, p1->parent_step, "%u");
+    TEST_ASSERT_TRUE(maelys_datalog_fact_equals(&p0->as.fact, &cand));
+    TEST_ASSERT_TRUE(maelys_datalog_fact_equals(&p1->as.fact, &usr));
+
+    maelys_datalog_solve_result_free(result);
+    maelys_datalog_ruleset_clear(&r);
+    TEST_END();
+}
+
+static int test_p4c64_policy_fact_and_edb_origins(void) {
+    TEST_BEGIN();
+    maelys_datalog_ruleset_t r;
+    TEST_ASSERT_EQUAL(MAELYS_OK,
+                      make_ruleset(&r,
+                                   "safe(\"alice\").\n"
+                                   "deny(X) :- safe(X), user(X)."),
+                      "%d");
+    maelys_datalog_fact_t facts[8];
+    maelys_datalog_edb_t edb;
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_init(&edb, facts, 8, &r.symbols, &r.registry), "%d");
+    add_symbol_unary(&r, &edb, "user", "alice");
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_finalize(&edb), "%d");
+    maelys_datalog_solve_result_t *result = NULL;
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_solve_once(&r, &edb, &result), "%d");
+
+    maelys_datalog_fact_t target;
+    TEST_ASSERT_TRUE(make_fact1(&r, "deny", "alice", &target));
+    TEST_ASSERT_EQUAL(MAELYS_OK,
+                      maelys_datalog_explain_solved_fact(result, &target, &g_p4c64_exp), "%d");
+    TEST_ASSERT_EQUAL((uint8_t)1u, g_p4c64_exp.found, "%u");
+    TEST_ASSERT_EQUAL((uint8_t)0u, g_p4c64_exp.truncated, "%u");
+    TEST_ASSERT_EQUAL((uint16_t)2u, g_p4c64_exp.premise_count, "%u");
+    TEST_ASSERT_EQUAL((uint8_t)MAELYS_DATALOG_EXPLANATION_ORIGIN_POLICY_FACT,
+                      g_p4c64_exp.premises[0].origin, "%u");
+    TEST_ASSERT_EQUAL((uint8_t)MAELYS_DATALOG_EXPLANATION_ORIGIN_EDB,
+                      g_p4c64_exp.premises[1].origin, "%u");
+    TEST_ASSERT_EQUAL((uint16_t)0u, g_p4c64_exp.premises[0].body_index, "%u");
+    TEST_ASSERT_EQUAL((uint16_t)1u, g_p4c64_exp.premises[1].body_index, "%u");
+
+    maelys_datalog_solve_result_free(result);
+    maelys_datalog_ruleset_clear(&r);
+    TEST_END();
+}
+
+static int test_p4c64_two_idb_premises_distinct_parents(void) {
+    TEST_BEGIN();
+    maelys_datalog_ruleset_t r;
+    TEST_ASSERT_EQUAL(MAELYS_OK,
+                      make_ruleset(&r,
+                                   "left(X) :- user(X).\n"
+                                   "right(X) :- user(X).\n"
+                                   "both(X) :- left(X), right(X)."),
+                      "%d");
+    maelys_datalog_fact_t facts[8];
+    maelys_datalog_edb_t edb;
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_init(&edb, facts, 8, &r.symbols, &r.registry), "%d");
+    add_symbol_unary(&r, &edb, "user", "alice");
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_finalize(&edb), "%d");
+    maelys_datalog_solve_result_t *result = NULL;
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_solve_once(&r, &edb, &result), "%d");
+
+    maelys_datalog_fact_t target;
+    maelys_datalog_fact_t left_fact;
+    maelys_datalog_fact_t right_fact;
+    TEST_ASSERT_TRUE(make_fact1(&r, "both", "alice", &target));
+    TEST_ASSERT_TRUE(make_fact1(&r, "left", "alice", &left_fact));
+    TEST_ASSERT_TRUE(make_fact1(&r, "right", "alice", &right_fact));
+    TEST_ASSERT_EQUAL(MAELYS_OK,
+                      maelys_datalog_explain_solved_fact(result, &target, &g_p4c64_exp), "%d");
+    TEST_ASSERT_EQUAL((uint8_t)1u, g_p4c64_exp.found, "%u");
+    TEST_ASSERT_EQUAL((uint8_t)0u, g_p4c64_exp.truncated, "%u");
+    /* left(alice), right(alice), both(alice): ancestors first, target last. */
+    TEST_ASSERT_EQUAL((uint16_t)3u, g_p4c64_exp.step_count, "%u");
+    const maelys_datalog_explanation_step_t *last =
+        &g_p4c64_exp.steps[g_p4c64_exp.step_count - 1u];
+    TEST_ASSERT_TRUE(maelys_datalog_fact_equals(&last->derived_fact, &target));
+    TEST_ASSERT_EQUAL((uint16_t)2u, last->premise_count, "%u");
+
+    const maelys_datalog_explanation_premise_t *pl = &g_p4c64_exp.premises[last->premise_begin];
+    const maelys_datalog_explanation_premise_t *pr = &g_p4c64_exp.premises[last->premise_begin + 1u];
+    TEST_ASSERT_EQUAL((uint8_t)MAELYS_DATALOG_EXPLANATION_ORIGIN_IDB, pl->origin, "%u");
+    TEST_ASSERT_EQUAL((uint8_t)MAELYS_DATALOG_EXPLANATION_ORIGIN_IDB, pr->origin, "%u");
+    TEST_ASSERT_TRUE(pl->parent_step != (uint16_t)MAELYS_DATALOG_EXPLANATION_NO_STEP);
+    TEST_ASSERT_TRUE(pr->parent_step != (uint16_t)MAELYS_DATALOG_EXPLANATION_NO_STEP);
+    /* Distinct ancestor steps. */
+    TEST_ASSERT_TRUE(pl->parent_step != pr->parent_step);
+    /* Each parent step is strictly earlier than the referencing step. */
+    TEST_ASSERT_TRUE(pl->parent_step < (uint16_t)(g_p4c64_exp.step_count - 1u));
+    TEST_ASSERT_TRUE(pr->parent_step < (uint16_t)(g_p4c64_exp.step_count - 1u));
+    TEST_ASSERT_TRUE(maelys_datalog_fact_equals(&g_p4c64_exp.steps[pl->parent_step].derived_fact, &left_fact));
+    TEST_ASSERT_TRUE(maelys_datalog_fact_equals(&g_p4c64_exp.steps[pr->parent_step].derived_fact, &right_fact));
+
+    maelys_datalog_solve_result_free(result);
+    maelys_datalog_ruleset_clear(&r);
+    TEST_END();
+}
+
+static int test_p4c64_shared_idb_parent_deduplicated(void) {
+    TEST_BEGIN();
+    maelys_datalog_ruleset_t r;
+    TEST_ASSERT_EQUAL(MAELYS_OK,
+                      make_ruleset(&r,
+                                   "left(X) :- user(X).\n"
+                                   "right(X) :- left(X).\n"
+                                   "both(X) :- left(X), right(X)."),
+                      "%d");
+    maelys_datalog_fact_t facts[8];
+    maelys_datalog_edb_t edb;
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_init(&edb, facts, 8, &r.symbols, &r.registry), "%d");
+    add_symbol_unary(&r, &edb, "user", "alice");
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_finalize(&edb), "%d");
+    maelys_datalog_solve_result_t *result = NULL;
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_solve_once(&r, &edb, &result), "%d");
+
+    maelys_datalog_fact_t target;
+    maelys_datalog_fact_t left_fact;
+    maelys_datalog_fact_t right_fact;
+    TEST_ASSERT_TRUE(make_fact1(&r, "both", "alice", &target));
+    TEST_ASSERT_TRUE(make_fact1(&r, "left", "alice", &left_fact));
+    TEST_ASSERT_TRUE(make_fact1(&r, "right", "alice", &right_fact));
+    TEST_ASSERT_EQUAL(MAELYS_OK,
+                      maelys_datalog_explain_solved_fact(result, &target, &g_p4c64_exp), "%d");
+    TEST_ASSERT_EQUAL((uint8_t)0u, g_p4c64_exp.truncated, "%u");
+    /* left(alice) is the shared parent of both right(alice) and both(alice):
+     * it must appear exactly once (dedup). Steps: left, right, both. */
+    TEST_ASSERT_EQUAL((uint16_t)3u, g_p4c64_exp.step_count, "%u");
+    int left_occurrences = 0;
+    const maelys_datalog_explanation_step_t *left_step = NULL;
+    for (uint16_t i = 0; i < g_p4c64_exp.step_count; i++) {
+        if (maelys_datalog_fact_equals(&g_p4c64_exp.steps[i].derived_fact, &left_fact)) {
+            left_occurrences++;
+            left_step = &g_p4c64_exp.steps[i];
+        }
+    }
+    TEST_ASSERT_EQUAL(1, left_occurrences, "%d");
+    TEST_ASSERT_NOT_NULL(left_step);
+    const uint16_t left_index = (uint16_t)(left_step - g_p4c64_exp.steps);
+    const maelys_datalog_explanation_step_t *right_step = exp_find_step(&g_p4c64_exp, &right_fact);
+    const maelys_datalog_explanation_step_t *both_step = exp_find_step(&g_p4c64_exp, &target);
+    TEST_ASSERT_NOT_NULL(right_step);
+    TEST_ASSERT_NOT_NULL(both_step);
+    /* right's single premise points to the shared left step. */
+    TEST_ASSERT_EQUAL((uint16_t)1u, right_step->premise_count, "%u");
+    TEST_ASSERT_EQUAL(left_index,
+                      g_p4c64_exp.premises[right_step->premise_begin].parent_step, "%u");
+    /* both's left premise also points to the SAME shared left step. */
+    const maelys_datalog_explanation_premise_t *bp0 =
+        &g_p4c64_exp.premises[both_step->premise_begin];
+    TEST_ASSERT_EQUAL(left_index, bp0->parent_step, "%u");
+
+    maelys_datalog_solve_result_free(result);
+    maelys_datalog_ruleset_clear(&r);
+    TEST_END();
+}
+
+static int test_p4c64_negation_satisfied_ground_atom(void) {
+    TEST_BEGIN();
+    maelys_datalog_ruleset_t r;
+    TEST_ASSERT_EQUAL(MAELYS_OK,
+                      make_ruleset(&r, "allow(U) :- user(U), not(blocked(U))."), "%d");
+    maelys_datalog_fact_t facts[8];
+    maelys_datalog_edb_t edb;
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_init(&edb, facts, 8, &r.symbols, &r.registry), "%d");
+    add_symbol_unary(&r, &edb, "user", "alice");
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_finalize(&edb), "%d");
+    maelys_datalog_solve_result_t *result = NULL;
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_solve_once(&r, &edb, &result), "%d");
+
+    maelys_datalog_fact_t target;
+    maelys_datalog_fact_t blocked_ground;
+    TEST_ASSERT_TRUE(make_fact1(&r, "allow", "alice", &target));
+    TEST_ASSERT_TRUE(make_fact1(&r, "blocked", "alice", &blocked_ground));
+    TEST_ASSERT_EQUAL(MAELYS_OK,
+                      maelys_datalog_explain_solved_fact(result, &target, &g_p4c64_exp), "%d");
+    TEST_ASSERT_EQUAL((uint8_t)1u, g_p4c64_exp.found, "%u");
+    TEST_ASSERT_EQUAL((uint8_t)0u, g_p4c64_exp.truncated, "%u");
+    TEST_ASSERT_EQUAL((uint16_t)2u, g_p4c64_exp.premise_count, "%u");
+    const maelys_datalog_explanation_premise_t *neg = &g_p4c64_exp.premises[1];
+    TEST_ASSERT_EQUAL((uint16_t)1u, neg->body_index, "%u");
+    TEST_ASSERT_EQUAL((uint8_t)MAELYS_DATALOG_EXPLANATION_PREMISE_NEGATED_ABSENCE, neg->kind, "%u");
+    TEST_ASSERT_EQUAL((uint8_t)MAELYS_DATALOG_EXPLANATION_ORIGIN_EDB, neg->origin, "%u");
+    TEST_ASSERT_EQUAL((uint16_t)MAELYS_DATALOG_EXPLANATION_NO_STEP, neg->parent_step, "%u");
+    TEST_ASSERT_TRUE(maelys_datalog_fact_equals(&neg->as.fact, &blocked_ground));
+
+    maelys_datalog_solve_result_free(result);
+    maelys_datalog_ruleset_clear(&r);
+    TEST_END();
+}
+
+static int test_p4c64_comparison_true_terms_and_op(void) {
+    TEST_BEGIN();
+    maelys_datalog_ruleset_t r;
+    TEST_ASSERT_EQUAL(MAELYS_OK, make_ruleset(&r, "reduce(X) :- value(X), X > 3."), "%d");
+    maelys_datalog_fact_t facts[8];
+    maelys_datalog_edb_t edb;
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_init(&edb, facts, 8, &r.symbols, &r.registry), "%d");
+    add_int_unary(&edb, "value", 5);
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_finalize(&edb), "%d");
+    maelys_datalog_solve_result_t *result = NULL;
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_solve_once(&r, &edb, &result), "%d");
+
+    maelys_datalog_fact_t target;
+    TEST_ASSERT_TRUE(make_fact1_int(&r, "reduce", 5, &target));
+    TEST_ASSERT_EQUAL(MAELYS_OK,
+                      maelys_datalog_explain_solved_fact(result, &target, &g_p4c64_exp), "%d");
+    TEST_ASSERT_EQUAL((uint16_t)2u, g_p4c64_exp.premise_count, "%u");
+    const maelys_datalog_explanation_premise_t *cmp = &g_p4c64_exp.premises[1];
+    TEST_ASSERT_EQUAL((uint8_t)MAELYS_DATALOG_EXPLANATION_PREMISE_COMPARISON_TRUE, cmp->kind, "%u");
+    TEST_ASSERT_EQUAL((uint8_t)MAELYS_DATALOG_EXPLANATION_ORIGIN_NOT_APPLICABLE, cmp->origin, "%u");
+    TEST_ASSERT_EQUAL((uint8_t)MAELYS_DATALOG_CMP_GT, cmp->op, "%u");
+    TEST_ASSERT_EQUAL((int)MAELYS_DATALOG_TERM_INT, (int)cmp->as.comparison.lhs.kind, "%d");
+    TEST_ASSERT_EQUAL(5LL, cmp->as.comparison.lhs.as.integer, "%lld");
+    TEST_ASSERT_EQUAL(3LL, cmp->as.comparison.rhs.as.integer, "%lld");
+
+    maelys_datalog_solve_result_free(result);
+    maelys_datalog_ruleset_clear(&r);
+    TEST_END();
+}
+
+static int test_p4c64_comparison_arithmetic_evaluated_values(void) {
+    TEST_BEGIN();
+    maelys_datalog_ruleset_t r;
+    TEST_ASSERT_EQUAL(MAELYS_OK, make_ruleset(&r, "reduce(X) :- value(X), X + 1 > 3."), "%d");
+    maelys_datalog_fact_t facts[8];
+    maelys_datalog_edb_t edb;
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_init(&edb, facts, 8, &r.symbols, &r.registry), "%d");
+    add_int_unary(&edb, "value", 5);
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_finalize(&edb), "%d");
+    maelys_datalog_solve_result_t *result = NULL;
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_solve_once(&r, &edb, &result), "%d");
+
+    maelys_datalog_fact_t target;
+    TEST_ASSERT_TRUE(make_fact1_int(&r, "reduce", 5, &target));
+    TEST_ASSERT_EQUAL(MAELYS_OK,
+                      maelys_datalog_explain_solved_fact(result, &target, &g_p4c64_exp), "%d");
+    const maelys_datalog_explanation_premise_t *cmp = &g_p4c64_exp.premises[1];
+    TEST_ASSERT_EQUAL((uint8_t)MAELYS_DATALOG_EXPLANATION_PREMISE_COMPARISON_TRUE, cmp->kind, "%u");
+    /* Evaluated left value is 5 + 1 = 6, not a partial AST. */
+    TEST_ASSERT_EQUAL(6LL, cmp->as.comparison.lhs.as.integer, "%lld");
+    TEST_ASSERT_EQUAL(3LL, cmp->as.comparison.rhs.as.integer, "%lld");
+
+    maelys_datalog_solve_result_free(result);
+    maelys_datalog_ruleset_clear(&r);
+    TEST_END();
+}
+
+static int test_p4c64_join_order_differs_output_lexical(void) {
+    TEST_BEGIN();
+    maelys_datalog_ruleset_t r;
+    TEST_ASSERT_EQUAL(MAELYS_OK,
+                      make_ruleset(&r,
+                                   "edge_seen(X) :- user(X).\n"
+                                   "next(X, Y) :- edge_seen(X), edge(X, Y)."),
+                      "%d");
+    /* The planner schedules the EDB literal (edge, body index 1) before the IDB
+     * literal (edge_seen, body index 0), so join order != lexical order. */
+    uint8_t order[MAELYS_DATALOG_MAX_BODY_LITERALS];
+    uint8_t order_count = 0;
+    TEST_ASSERT_EQUAL(MAELYS_OK,
+                      maelys_datalog_test_build_static_join_order(&r, &r.rules[1], -1, order, &order_count),
+                      "%d");
+    TEST_ASSERT_EQUAL((uint8_t)2u, order_count, "%u");
+    TEST_ASSERT_EQUAL((uint8_t)1u, order[0], "%u"); /* join starts on body index 1 */
+    TEST_ASSERT_EQUAL((uint8_t)0u, order[1], "%u");
+
+    maelys_datalog_fact_t facts[8];
+    maelys_datalog_edb_t edb;
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_init(&edb, facts, 8, &r.symbols, &r.registry), "%d");
+    add_symbol_unary(&r, &edb, "user", "alice");
+    add_symbol_symbol_binary(&r, &edb, "edge", "alice", "bob");
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_finalize(&edb), "%d");
+    maelys_datalog_solve_result_t *result = NULL;
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_solve_once(&r, &edb, &result), "%d");
+
+    maelys_datalog_fact_t target;
+    TEST_ASSERT_TRUE(make_fact2(&r, "next", "alice", "bob", &target));
+    TEST_ASSERT_EQUAL(MAELYS_OK,
+                      maelys_datalog_explain_solved_fact(result, &target, &g_p4c64_exp), "%d");
+    const maelys_datalog_explanation_step_t *step = exp_find_step(&g_p4c64_exp, &target);
+    TEST_ASSERT_NOT_NULL(step);
+    TEST_ASSERT_EQUAL((uint16_t)2u, step->premise_count, "%u");
+    /* Output is lexical: body index 0 (edge_seen, IDB) then 1 (edge, EDB). */
+    const maelys_datalog_explanation_premise_t *q0 = &g_p4c64_exp.premises[step->premise_begin];
+    const maelys_datalog_explanation_premise_t *q1 = &g_p4c64_exp.premises[step->premise_begin + 1u];
+    TEST_ASSERT_EQUAL((uint16_t)0u, q0->body_index, "%u");
+    TEST_ASSERT_EQUAL((uint16_t)1u, q1->body_index, "%u");
+    TEST_ASSERT_EQUAL((uint8_t)MAELYS_DATALOG_EXPLANATION_ORIGIN_IDB, q0->origin, "%u");
+    TEST_ASSERT_EQUAL((uint8_t)MAELYS_DATALOG_EXPLANATION_ORIGIN_EDB, q1->origin, "%u");
+
+    maelys_datalog_solve_result_free(result);
+    maelys_datalog_ruleset_clear(&r);
+    TEST_END();
+}
+
+static int build_multi_witness(maelys_datalog_ruleset_t *r,
+                               maelys_datalog_edb_t *edb,
+                               maelys_datalog_fact_t facts[8],
+                               maelys_datalog_solve_result_t **out_result) {
+    if (make_ruleset(r,
+                     "allow(X) :- user(X).\n"
+                     "allow(X) :- candidate(X).") != MAELYS_OK) {
+        return 0;
+    }
+    if (maelys_datalog_edb_init(edb, facts, 8, &r->symbols, &r->registry) != MAELYS_OK) return 0;
+    add_symbol_unary(r, edb, "user", "alice");
+    add_symbol_unary(r, edb, "candidate", "alice");
+    if (maelys_datalog_edb_finalize(edb) != MAELYS_OK) return 0;
+    return maelys_datalog_solve_once(r, edb, out_result) == MAELYS_OK;
+}
+
+static int test_p4c64_multiple_candidates_same_witness_two_solves(void) {
+    TEST_BEGIN();
+    maelys_datalog_ruleset_t r1;
+    maelys_datalog_ruleset_t r2;
+    maelys_datalog_fact_t f1[8];
+    maelys_datalog_fact_t f2[8];
+    maelys_datalog_edb_t e1;
+    maelys_datalog_edb_t e2;
+    maelys_datalog_solve_result_t *r1res = NULL;
+    maelys_datalog_solve_result_t *r2res = NULL;
+    TEST_ASSERT_TRUE(build_multi_witness(&r1, &e1, f1, &r1res));
+    TEST_ASSERT_TRUE(build_multi_witness(&r2, &e2, f2, &r2res));
+    maelys_datalog_fact_t target;
+    TEST_ASSERT_TRUE(make_fact1(&r1, "allow", "alice", &target));
+    TEST_ASSERT_EQUAL(MAELYS_OK,
+                      maelys_datalog_explain_solved_fact(r1res, &target, &g_p4c64_exp), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK,
+                      maelys_datalog_explain_solved_fact(r2res, &target, &g_p4c64_exp_b), "%d");
+    TEST_ASSERT_EQUAL((uint8_t)1u, g_p4c64_exp.found, "%u");
+    TEST_ASSERT_EQUAL((uint8_t)0u, g_p4c64_exp.truncated, "%u");
+    /* Same canonical witness on two independent solves: byte-identical. */
+    TEST_ASSERT_EQUAL(0, memcmp(&g_p4c64_exp, &g_p4c64_exp_b, sizeof(g_p4c64_exp)), "%d");
+    maelys_datalog_solve_result_free(r1res);
+    maelys_datalog_solve_result_free(r2res);
+    maelys_datalog_ruleset_clear(&r1);
+    maelys_datalog_ruleset_clear(&r2);
+    TEST_END();
+}
+
+static int test_p4c64_absent_fact_found_zero_empty(void) {
+    TEST_BEGIN();
+    maelys_datalog_ruleset_t r;
+    maelys_datalog_fact_t facts[8];
+    maelys_datalog_edb_t edb;
+    maelys_datalog_solve_result_t *result = NULL;
+    TEST_ASSERT_TRUE(build_multi_witness(&r, &edb, facts, &result));
+    maelys_datalog_fact_t absent;
+    TEST_ASSERT_TRUE(make_fact1(&r, "allow", "bob", &absent));
+    memset(&g_p4c64_exp, 0x7F, sizeof(g_p4c64_exp));
+    TEST_ASSERT_EQUAL(MAELYS_OK,
+                      maelys_datalog_explain_solved_fact(result, &absent, &g_p4c64_exp), "%d");
+    TEST_ASSERT_EQUAL((uint8_t)0u, g_p4c64_exp.found, "%u");
+    TEST_ASSERT_EQUAL((uint8_t)0u, g_p4c64_exp.truncated, "%u");
+    TEST_ASSERT_EQUAL((uint16_t)0u, g_p4c64_exp.step_count, "%u");
+    TEST_ASSERT_EQUAL((uint16_t)0u, g_p4c64_exp.premise_count, "%u");
+    maelys_datalog_solve_result_free(result);
+    maelys_datalog_ruleset_clear(&r);
+    TEST_END();
+}
+
+static int test_p4c64_proof_capacity_truncated_atomic(void) {
+    TEST_BEGIN();
+    const char *src =
+        "p(X) :- user(X).\n"
+        "p_same(X) :- user(X).\n"
+        "edge_seen(X) :- user(X).\n"
+        "allow(X) :- user(X).\n"
+        "deny(X) :- user(X).\n"
+        "left(X) :- user(X).\n"
+        "right(X) :- user(X).\n"
+        "both(X) :- user(X).\n"
+        "base_only(X) :- user(X).";
+    maelys_datalog_ruleset_t r;
+    TEST_ASSERT_EQUAL(MAELYS_OK, make_ruleset(&r, src), "%d");
+    maelys_datalog_fact_t facts[16];
+    maelys_datalog_edb_t edb;
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_init(&edb, facts, 16, &r.symbols, &r.registry), "%d");
+    static const char *const users[] = {"alice", "bob", "carol", "dave", "r1", "r2", "a", "b", "c"};
+    for (size_t i = 0; i < sizeof(users) / sizeof(users[0]); i++) {
+        add_symbol_unary(&r, &edb, "user", users[i]);
+    }
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_finalize(&edb), "%d");
+    maelys_datalog_solve_result_t *result = NULL;
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_solve_once(&r, &edb, &result), "%d");
+    const maelys_datalog_proof_tree_t *proof = maelys_datalog_solve_result_proof(result);
+    TEST_ASSERT_NOT_NULL(proof);
+    TEST_ASSERT_TRUE(proof->truncated);
+
+    /* Find a derived fact whose proof node was truncated away. */
+    const maelys_datalog_fact_t *idb = NULL;
+    const uint16_t *indices = NULL;
+    size_t fact_count = 0;
+    size_t index_count = 0;
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_test_solve_result_idb_facts(result, &idb, &fact_count), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK,
+                      maelys_datalog_test_solve_result_idb_proof_indices(result, &indices, &index_count),
+                      "%d");
+    int found_truncated = 0;
+    for (size_t i = 0; i < fact_count; i++) {
+        if (indices[i] != MAELYS_DATALOG_PROOF_NO_PARENT) continue;
+        found_truncated = 1;
+        maelys_datalog_fact_t target = idb[i];
+        memset(&g_p4c64_exp, 0x33, sizeof(g_p4c64_exp));
+        TEST_ASSERT_EQUAL(MAELYS_OK,
+                          maelys_datalog_explain_solved_fact(result, &target, &g_p4c64_exp), "%d");
+        TEST_ASSERT_EQUAL((uint8_t)1u, g_p4c64_exp.found, "%u");
+        TEST_ASSERT_EQUAL((uint8_t)1u, g_p4c64_exp.truncated, "%u");
+        TEST_ASSERT_EQUAL((uint16_t)0u, g_p4c64_exp.step_count, "%u");
+        TEST_ASSERT_EQUAL((uint16_t)0u, g_p4c64_exp.premise_count, "%u");
+        break;
+    }
+    TEST_ASSERT_TRUE(found_truncated);
+    maelys_datalog_solve_result_free(result);
+    maelys_datalog_ruleset_clear(&r);
+    TEST_END();
+}
+
+static int test_p4c64_error_paths_preserve_output(void) {
+    TEST_BEGIN();
+    maelys_datalog_ruleset_t r;
+    maelys_datalog_fact_t facts[8];
+    maelys_datalog_edb_t edb;
+    maelys_datalog_solve_result_t *result = NULL;
+    TEST_ASSERT_TRUE(build_multi_witness(&r, &edb, facts, &result));
+    maelys_datalog_fact_t valid;
+    TEST_ASSERT_TRUE(make_fact1(&r, "allow", "alice", &valid));
+
+    /* NULL arguments -> INVALID_ARGUMENT, sentinel output untouched. */
+    static maelys_datalog_explanation_t sentinel;
+    memset(&sentinel, 0x5A, sizeof(sentinel));
+    static maelys_datalog_explanation_t expected;
+    memset(&expected, 0x5A, sizeof(expected));
+    TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_ARGUMENT,
+                      maelys_datalog_explain_solved_fact(NULL, &valid, &sentinel), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_ARGUMENT,
+                      maelys_datalog_explain_solved_fact(result, NULL, &sentinel), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_ARGUMENT,
+                      maelys_datalog_explain_solved_fact(result, &valid, NULL), "%d");
+    TEST_ASSERT_EQUAL(0, memcmp(&sentinel, &expected, sizeof(sentinel)), "%d");
+
+    /* Structurally invalid fact (variable term) -> INVALID_FIELD, untouched. */
+    maelys_datalog_fact_t invalid = valid;
+    invalid.terms[0].kind = MAELYS_DATALOG_TERM_VAR;
+    invalid.terms[0].as.variable = 0u;
+    TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_FIELD,
+                      maelys_datalog_explain_solved_fact(result, &invalid, &sentinel), "%d");
+    TEST_ASSERT_EQUAL(0, memcmp(&sentinel, &expected, sizeof(sentinel)), "%d");
+
+    maelys_datalog_solve_result_free(result);
+    maelys_datalog_ruleset_clear(&r);
+    TEST_END();
+}
+
+static int test_p4c64_historic_proof_tree_unchanged(void) {
+    TEST_BEGIN();
+    /* Historic proof-tree layout bounds are unchanged. */
+    TEST_ASSERT_TRUE(sizeof(maelys_datalog_proof_node_t) <= 112u);
+    TEST_ASSERT_TRUE(sizeof(maelys_datalog_proof_tree_t) <= 8192u);
+
+    maelys_datalog_ruleset_t r;
+    maelys_datalog_fact_t facts[8];
+    maelys_datalog_edb_t edb;
+    maelys_datalog_solve_result_t *result = NULL;
+    TEST_ASSERT_TRUE(solve_ancestor_chain(&r, &edb, facts, &result));
+    maelys_datalog_fact_t target;
+    TEST_ASSERT_TRUE(make_fact2(&r, "ancestor", "alice", "dave", &target));
+
+    /* extract_proof_for_fact still behaves as before. */
+    maelys_datalog_proof_tree_t out;
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_extract_proof_for_fact(result, &target, &out), "%d");
+    TEST_ASSERT_TRUE(out.node_count >= 1);
+    TEST_ASSERT_TRUE(maelys_datalog_fact_equals(&out.nodes[out.node_count - 1u].derived_fact, &target));
+    for (size_t i = 0; i < out.node_count; i++) {
+        if (out.nodes[i].parent_index == MAELYS_DATALOG_PROOF_NO_PARENT) continue;
+        TEST_ASSERT_TRUE(out.nodes[i].parent_index < i);
+    }
+
+    /* explain_solved_fact coexists and produces a complete witness. */
+    TEST_ASSERT_EQUAL(MAELYS_OK,
+                      maelys_datalog_explain_solved_fact(result, &target, &g_p4c64_exp), "%d");
+    TEST_ASSERT_EQUAL((uint8_t)1u, g_p4c64_exp.found, "%u");
+    TEST_ASSERT_EQUAL((uint8_t)0u, g_p4c64_exp.truncated, "%u");
+    const maelys_datalog_explanation_step_t *last =
+        &g_p4c64_exp.steps[g_p4c64_exp.step_count - 1u];
+    TEST_ASSERT_TRUE(maelys_datalog_fact_equals(&last->derived_fact, &target));
+
+    maelys_datalog_solve_result_free(result);
+    maelys_datalog_ruleset_clear(&r);
+    TEST_END();
+}
+
+static int test_p4c64_ordered_and_reference_traversals_agree(void) {
+    TEST_BEGIN();
+    const char *src =
+        "ancestor(X, Y) :- parent(X, Y).\n"
+        "ancestor(X, Z) :- parent(X, Y), ancestor(Y, Z).";
+    maelys_datalog_ruleset_t r1;
+    maelys_datalog_ruleset_t r2;
+    TEST_ASSERT_EQUAL(MAELYS_OK, make_ruleset(&r1, src), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK, make_ruleset(&r2, src), "%d");
+    maelys_datalog_fact_t f1[8];
+    maelys_datalog_fact_t f2[8];
+    maelys_datalog_edb_t e1;
+    maelys_datalog_edb_t e2;
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_init(&e1, f1, 8, &r1.symbols, &r1.registry), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_init(&e2, f2, 8, &r2.symbols, &r2.registry), "%d");
+    add_parent(&r1, &e1, "alice", "bob");
+    add_parent(&r1, &e1, "bob", "carol");
+    add_parent(&r2, &e2, "alice", "bob");
+    add_parent(&r2, &e2, "bob", "carol");
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_finalize(&e1), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_finalize(&e2), "%d");
+
+    maelys_datalog_solve_result_t *ordered = NULL;   /* production static join order */
+    maelys_datalog_solve_result_t *reference = NULL; /* reference recursive traversal */
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_solve_once(&r1, &e1, &ordered), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK,
+                      maelys_datalog_test_solve_once_legacy_order(&r2, &e2, &reference, NULL), "%d");
+    /* IDB results and historic proof tree agree across the two traversals. */
+    TEST_ASSERT_TRUE(solve_results_byte_identical(ordered, reference));
+
+    maelys_datalog_fact_t target;
+    TEST_ASSERT_TRUE(make_fact2(&r1, "ancestor", "alice", "carol", &target));
+    TEST_ASSERT_EQUAL(MAELYS_OK,
+                      maelys_datalog_explain_solved_fact(ordered, &target, &g_p4c64_exp), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK,
+                      maelys_datalog_explain_solved_fact(reference, &target, &g_p4c64_exp_b), "%d");
+    TEST_ASSERT_EQUAL((uint8_t)1u, g_p4c64_exp.found, "%u");
+    TEST_ASSERT_EQUAL((uint8_t)0u, g_p4c64_exp.truncated, "%u");
+    /* Both traversals collect a complete witness; byte-identical here. */
+    TEST_ASSERT_EQUAL(0, memcmp(&g_p4c64_exp, &g_p4c64_exp_b, sizeof(g_p4c64_exp)), "%d");
+
+    maelys_datalog_solve_result_free(ordered);
+    maelys_datalog_solve_result_free(reference);
+    maelys_datalog_ruleset_clear(&r1);
+    maelys_datalog_ruleset_clear(&r2);
+    TEST_END();
+}
+
+static int test_p4c64_public_type_sizes_and_capacities(void) {
+    TEST_BEGIN();
+    TEST_ASSERT_TRUE(sizeof(maelys_datalog_explanation_premise_t) <= 96u);
+    TEST_ASSERT_TRUE(sizeof(maelys_datalog_explanation_step_t) <= 96u);
+    TEST_ASSERT_TRUE(sizeof(maelys_datalog_explanation_t) <= 65536u);
+    TEST_ASSERT_EQUAL((size_t)MAELYS_DATALOG_MAX_PROOF_NODES,
+                      (size_t)MAELYS_DATALOG_MAX_EXPLANATION_STEPS, "%zu");
+    TEST_ASSERT_EQUAL((size_t)(MAELYS_DATALOG_MAX_PROOF_NODES * MAELYS_DATALOG_MAX_BODY_LITERALS),
+                      (size_t)MAELYS_DATALOG_MAX_EXPLANATION_PREMISES, "%zu");
+    TEST_ASSERT_EQUAL((uint16_t)UINT16_MAX,
+                      (uint16_t)MAELYS_DATALOG_EXPLANATION_NO_STEP, "%u");
+    TEST_END();
+}
+
 int main(int argc, char **argv) {
     test_case_t cases[] = {
         {"maelys_datalog_solver/simple_and_query", TEST_MODE_NON_BLOCKING, test_solver_simple_and_query},
@@ -4351,6 +5007,21 @@ int main(int argc, char **argv) {
         {"maelys_datalog_solver/arithmetic_expr_candidate_filter_equality", TEST_MODE_NON_BLOCKING, test_arithmetic_expr_candidate_filter_equality},
         {"maelys_datalog_solver/arithmetic_expr_runtime_type_mismatch_fails_closed", TEST_MODE_NON_BLOCKING, test_arithmetic_expr_runtime_type_mismatch_fails_closed},
         {"maelys_datalog_solver/arithmetic_expr_overflow_fails_closed", TEST_MODE_NON_BLOCKING, test_arithmetic_expr_overflow_fails_closed},
+        {"maelys_datalog_solver/p4c64_two_edb_premises_lexical", TEST_MODE_NON_BLOCKING, test_p4c64_two_edb_premises_lexical},
+        {"maelys_datalog_solver/p4c64_policy_fact_and_edb_origins", TEST_MODE_NON_BLOCKING, test_p4c64_policy_fact_and_edb_origins},
+        {"maelys_datalog_solver/p4c64_two_idb_premises_distinct_parents", TEST_MODE_NON_BLOCKING, test_p4c64_two_idb_premises_distinct_parents},
+        {"maelys_datalog_solver/p4c64_shared_idb_parent_deduplicated", TEST_MODE_NON_BLOCKING, test_p4c64_shared_idb_parent_deduplicated},
+        {"maelys_datalog_solver/p4c64_negation_satisfied_ground_atom", TEST_MODE_NON_BLOCKING, test_p4c64_negation_satisfied_ground_atom},
+        {"maelys_datalog_solver/p4c64_comparison_true_terms_and_op", TEST_MODE_NON_BLOCKING, test_p4c64_comparison_true_terms_and_op},
+        {"maelys_datalog_solver/p4c64_comparison_arithmetic_evaluated_values", TEST_MODE_NON_BLOCKING, test_p4c64_comparison_arithmetic_evaluated_values},
+        {"maelys_datalog_solver/p4c64_join_order_differs_output_lexical", TEST_MODE_NON_BLOCKING, test_p4c64_join_order_differs_output_lexical},
+        {"maelys_datalog_solver/p4c64_multiple_candidates_same_witness_two_solves", TEST_MODE_NON_BLOCKING, test_p4c64_multiple_candidates_same_witness_two_solves},
+        {"maelys_datalog_solver/p4c64_absent_fact_found_zero_empty", TEST_MODE_NON_BLOCKING, test_p4c64_absent_fact_found_zero_empty},
+        {"maelys_datalog_solver/p4c64_proof_capacity_truncated_atomic", TEST_MODE_NON_BLOCKING, test_p4c64_proof_capacity_truncated_atomic},
+        {"maelys_datalog_solver/p4c64_error_paths_preserve_output", TEST_MODE_NON_BLOCKING, test_p4c64_error_paths_preserve_output},
+        {"maelys_datalog_solver/p4c64_historic_proof_tree_unchanged", TEST_MODE_NON_BLOCKING, test_p4c64_historic_proof_tree_unchanged},
+        {"maelys_datalog_solver/p4c64_ordered_and_reference_traversals_agree", TEST_MODE_NON_BLOCKING, test_p4c64_ordered_and_reference_traversals_agree},
+        {"maelys_datalog_solver/p4c64_public_type_sizes_and_capacities", TEST_MODE_NON_BLOCKING, test_p4c64_public_type_sizes_and_capacities},
     };
     return test_main("maelys_datalog_solver", cases, (int)(sizeof(cases) / sizeof(cases[0])), argc, argv);
 }

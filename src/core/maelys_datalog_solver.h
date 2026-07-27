@@ -75,6 +75,34 @@ maelys_result_t maelys_datalog_extract_proof_for_fact(
     const maelys_datalog_solve_result_t *result,
     const maelys_datalog_fact_t *queried_fact,
     maelys_datalog_proof_tree_t *out_proof);
+/* P4-C64 — Extract the bounded Why-true premise provenance of a canonical
+ * derivation of queried_fact. The witness is captured during the single solve
+ * traversal; this accessor never re-solves and never reconstructs premises.
+ *
+ * out_explanation is caller-owned and large (bounded, see the type). It must
+ * not be materialized on the stack.
+ *
+ * Contract:
+ *   - any NULL argument            -> MAELYS_ERR_INVALID_ARGUMENT, out untouched
+ *   - not finalized / failed /
+ *     ruleset not loaded           -> MAELYS_ERR_INVALID_STATE, out untouched
+ *   - structurally invalid fact    -> MAELYS_ERR_INVALID_FIELD, out untouched
+ *   - fact absent from finalized
+ *     IDB                          -> MAELYS_OK, found=0, truncated=0, empty
+ *   - fact present, complete
+ *     witness                      -> MAELYS_OK, found=1, truncated=0, full DAG
+ *   - fact present, witness or a
+ *     required premise unavailable -> MAELYS_OK, found=1, truncated=1,
+ *                                     step_count=0, premise_count=0 (atomic)
+ *
+ * Premises are always returned in the rule body's lexical order, independent of
+ * the solver's join order. The steps form a local, ancestors-first, deduplicated
+ * DAG whose parent_step links are remapped to local step indices; the queried
+ * fact's step is last. This does not change the historic proof tree. */
+maelys_result_t maelys_datalog_explain_solved_fact(
+    const maelys_datalog_solve_result_t *result,
+    const maelys_datalog_fact_t *queried_fact,
+    maelys_datalog_explanation_t *out_explanation);
 maelys_result_t maelys_datalog_solve_result_derived_fact_count(
     const maelys_datalog_solve_result_t *result,
     size_t *out_count);

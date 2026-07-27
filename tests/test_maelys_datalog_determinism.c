@@ -644,6 +644,99 @@ static int test_determinism_c44_canonical_sha_fixture(void) {
     TEST_END();
 }
 
+/* P4-C64 — off-stack (file-static) explanation buffers per §3.6/§6.2. */
+static maelys_datalog_explanation_t g_det_exp_a;
+static maelys_datalog_explanation_t g_det_exp_b;
+
+static int det_make_fact2(maelys_datalog_ruleset_t *ruleset,
+                          const char *predicate,
+                          const char *a,
+                          const char *b,
+                          maelys_datalog_fact_t *out) {
+    memset(out, 0, sizeof(*out));
+    if (!maelys_datalog_predicate_registry_find(&ruleset->registry, predicate, 2u, &out->predicate_id)) {
+        return 0;
+    }
+    out->arity = 2u;
+    out->terms[0] = symbol_term(ruleset, a);
+    out->terms[1] = symbol_term(ruleset, b);
+    return 1;
+}
+
+/* §6.1(14): an OR source and its manual expansion yield byte-identical
+ * Why-true explanations. */
+static int test_determinism_or_and_manual_explanation_byte_identical(void) {
+    TEST_BEGIN();
+    static const char or_source[] =
+        "allow(U, D) :- owns(U, D) or delegated(U, D), not(blocked(U)).\n";
+    static const char manual_source[] =
+        "allow(U, D) :- owns(U, D), not(blocked(U)).\n"
+        "allow(U, D) :- delegated(U, D), not(blocked(U)).\n";
+    maelys_datalog_ruleset_t or_ruleset;
+    maelys_datalog_ruleset_t manual_ruleset;
+    TEST_ASSERT_EQUAL(MAELYS_OK, init_or_equivalence_ruleset(&or_ruleset, or_source), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK, init_or_equivalence_ruleset(&manual_ruleset, manual_source), "%d");
+
+    maelys_datalog_fact_t or_facts[4];
+    maelys_datalog_fact_t manual_facts[4];
+    maelys_datalog_edb_t or_edb;
+    maelys_datalog_edb_t manual_edb;
+    TEST_ASSERT_EQUAL(MAELYS_OK, build_or_equivalence_edb(&or_ruleset, &or_edb, or_facts, 4u), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK, build_or_equivalence_edb(&manual_ruleset, &manual_edb, manual_facts, 4u), "%d");
+
+    maelys_datalog_solve_result_t *or_result = NULL;
+    maelys_datalog_solve_result_t *manual_result = NULL;
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_solve_once(&or_ruleset, &or_edb, &or_result), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_solve_once(&manual_ruleset, &manual_edb, &manual_result), "%d");
+
+    maelys_datalog_fact_t or_target;
+    maelys_datalog_fact_t manual_target;
+    TEST_ASSERT_TRUE(det_make_fact2(&or_ruleset, "allow", "alice", "doc.pdf", &or_target));
+    TEST_ASSERT_TRUE(det_make_fact2(&manual_ruleset, "allow", "alice", "doc.pdf", &manual_target));
+
+    TEST_ASSERT_EQUAL(MAELYS_OK,
+                      maelys_datalog_explain_solved_fact(or_result, &or_target, &g_det_exp_a), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK,
+                      maelys_datalog_explain_solved_fact(manual_result, &manual_target, &g_det_exp_b), "%d");
+    TEST_ASSERT_EQUAL((uint8_t)1u, g_det_exp_a.found, "%u");
+    TEST_ASSERT_EQUAL((uint8_t)0u, g_det_exp_a.truncated, "%u");
+    TEST_ASSERT_EQUAL(0, memcmp(&g_det_exp_a, &g_det_exp_b, sizeof(g_det_exp_a)), "%d");
+
+    maelys_datalog_solve_result_free(or_result);
+    maelys_datalog_solve_result_free(manual_result);
+    maelys_datalog_ruleset_clear(&or_ruleset);
+    maelys_datalog_ruleset_clear(&manual_ruleset);
+    TEST_END();
+}
+
+/* §6.3: the production (static join order) path yields a deterministic witness
+ * across repeated independent solves. */
+static int test_determinism_explanation_stable_across_repeated_solves(void) {
+    TEST_BEGIN();
+    static const char source[] =
+        "allow(U, D) :- owns(U, D), not(blocked(U)).\n";
+    for (int iteration = 0; iteration < 2; iteration++) {
+        maelys_datalog_ruleset_t ruleset;
+        TEST_ASSERT_EQUAL(MAELYS_OK, init_or_equivalence_ruleset(&ruleset, source), "%d");
+        maelys_datalog_fact_t facts[4];
+        maelys_datalog_edb_t edb;
+        TEST_ASSERT_EQUAL(MAELYS_OK, build_or_equivalence_edb(&ruleset, &edb, facts, 4u), "%d");
+        maelys_datalog_solve_result_t *result = NULL;
+        TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_solve_once(&ruleset, &edb, &result), "%d");
+        maelys_datalog_fact_t target;
+        TEST_ASSERT_TRUE(det_make_fact2(&ruleset, "allow", "alice", "doc.pdf", &target));
+        maelys_datalog_explanation_t *slot = (iteration == 0) ? &g_det_exp_a : &g_det_exp_b;
+        TEST_ASSERT_EQUAL(MAELYS_OK,
+                          maelys_datalog_explain_solved_fact(result, &target, slot), "%d");
+        TEST_ASSERT_EQUAL((uint8_t)1u, slot->found, "%u");
+        TEST_ASSERT_EQUAL((uint8_t)0u, slot->truncated, "%u");
+        maelys_datalog_solve_result_free(result);
+        maelys_datalog_ruleset_clear(&ruleset);
+    }
+    TEST_ASSERT_EQUAL(0, memcmp(&g_det_exp_a, &g_det_exp_b, sizeof(g_det_exp_a)), "%d");
+    TEST_END();
+}
+
 int main(int argc, char **argv) {
     test_case_t cases[] = {
         {"maelys_datalog_determinism/repeated_solve_same_result",
@@ -682,6 +775,12 @@ int main(int argc, char **argv) {
         {"maelys_datalog_determinism/or_matches_manual_rules_sha_results_and_proof",
          TEST_MODE_NON_BLOCKING,
          test_determinism_or_matches_manual_rules_sha_results_and_proof},
+        {"maelys_datalog_determinism/or_and_manual_explanation_byte_identical",
+         TEST_MODE_NON_BLOCKING,
+         test_determinism_or_and_manual_explanation_byte_identical},
+        {"maelys_datalog_determinism/explanation_stable_across_repeated_solves",
+         TEST_MODE_NON_BLOCKING,
+         test_determinism_explanation_stable_across_repeated_solves},
     };
     return test_main("maelys_datalog_determinism",
                      cases,

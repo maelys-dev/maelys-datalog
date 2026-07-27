@@ -231,6 +231,105 @@ typedef struct {
     maelys_datalog_proof_tree_t proof;
 } maelys_datalog_query_result_t;
 
+/* ---------------------------------------------------------------------------
+ * P4-C64 — Bounded Why-true premise provenance.
+ *
+ * A structured, complete and bounded witness for a retained canonical
+ * derivation of an IDB fact. These public types are the caller-owned output of
+ * maelys_datalog_explain_solved_fact() (declared in the solver header). They do
+ * NOT change maelys_datalog_proof_node_t / maelys_datalog_proof_tree_t, whose
+ * layout and bytes remain the historic proof-tree contract.
+ * ------------------------------------------------------------------------- */
+
+/* One explanation step per proof node; one premise per body literal. */
+#define MAELYS_DATALOG_MAX_EXPLANATION_STEPS \
+    MAELYS_DATALOG_MAX_PROOF_NODES
+#define MAELYS_DATALOG_MAX_EXPLANATION_PREMISES \
+    (MAELYS_DATALOG_MAX_PROOF_NODES * MAELYS_DATALOG_MAX_BODY_LITERALS)
+#define MAELYS_DATALOG_EXPLANATION_NO_STEP UINT16_MAX
+
+typedef enum {
+    MAELYS_DATALOG_EXPLANATION_PREMISE_POSITIVE_FACT = 1,
+    MAELYS_DATALOG_EXPLANATION_PREMISE_NEGATED_ABSENCE = 2,
+    MAELYS_DATALOG_EXPLANATION_PREMISE_COMPARISON_TRUE = 3
+} maelys_datalog_explanation_premise_kind_t;
+
+typedef enum {
+    MAELYS_DATALOG_EXPLANATION_ORIGIN_POLICY_FACT = 1,
+    MAELYS_DATALOG_EXPLANATION_ORIGIN_EDB = 2,
+    MAELYS_DATALOG_EXPLANATION_ORIGIN_IDB = 3,
+    MAELYS_DATALOG_EXPLANATION_ORIGIN_NOT_APPLICABLE = 4
+} maelys_datalog_explanation_origin_t;
+
+/* A single premise of a canonical derivation, in the rule body's lexical
+ * position `body_index`.
+ *
+ * kind == POSITIVE_FACT      -> as.fact is the exact matched ground atom;
+ *                               origin is POLICY_FACT / EDB / IDB; for IDB,
+ *                               parent_step is the local remapped step that
+ *                               derived it, otherwise EXPLANATION_NO_STEP.
+ * kind == NEGATED_ABSENCE    -> as.fact is the instantiated ground atom whose
+ *                               absence was verified; origin is the store the
+ *                               absence was checked in; parent_step is
+ *                               EXPLANATION_NO_STEP.
+ * kind == COMPARISON_TRUE    -> as.comparison holds the two evaluated ground
+ *                               terms; op is the comparison operator; origin is
+ *                               NOT_APPLICABLE; parent_step is
+ *                               EXPLANATION_NO_STEP.
+ *
+ * A union is used so the atom and comparison layouts are not both paid for. */
+typedef struct {
+    uint8_t kind;         /* maelys_datalog_explanation_premise_kind_t */
+    uint8_t origin;       /* maelys_datalog_explanation_origin_t */
+    uint16_t body_index;  /* lexical position in the rule body */
+    uint16_t parent_step; /* local step, or MAELYS_DATALOG_EXPLANATION_NO_STEP */
+    uint8_t op;           /* maelys_datalog_cmp_op_t for COMPARISON_TRUE, else 0 */
+    uint8_t _pad0;
+    union {
+        maelys_datalog_fact_t fact;
+        struct {
+            maelys_datalog_term_t lhs;
+            maelys_datalog_term_t rhs;
+        } comparison;
+    } as;
+} maelys_datalog_explanation_premise_t;
+
+_Static_assert(sizeof(maelys_datalog_explanation_premise_t) <= 96u,
+               "explanation premise exceeds 96-byte bound");
+
+/* One derivation step: a rule application that produced derived_fact, whose
+ * premises are premises[premise_begin .. premise_begin + premise_count). */
+typedef struct {
+    size_t rule_id;
+    maelys_datalog_fact_t derived_fact;
+    uint16_t premise_begin;
+    uint16_t premise_count;
+    uint8_t _pad[4];
+} maelys_datalog_explanation_step_t;
+
+_Static_assert(sizeof(maelys_datalog_explanation_step_t) <= 96u,
+               "explanation step exceeds 96-byte bound");
+
+_Static_assert(MAELYS_DATALOG_MAX_EXPLANATION_STEPS <= UINT16_MAX,
+               "explanation step capacity must fit uint16 step indices");
+_Static_assert(MAELYS_DATALOG_MAX_EXPLANATION_PREMISES <= UINT16_MAX,
+               "explanation premise capacity must fit uint16 premise indices");
+
+/* Caller-owned bounded explanation DAG. Passed by pointer; large (bounded to
+ * 65536 bytes) and therefore not to be materialized on the stack by callers. */
+typedef struct {
+    maelys_datalog_explanation_step_t steps[MAELYS_DATALOG_MAX_EXPLANATION_STEPS];
+    maelys_datalog_explanation_premise_t premises[MAELYS_DATALOG_MAX_EXPLANATION_PREMISES];
+    uint16_t step_count;
+    uint16_t premise_count;
+    uint8_t found;
+    uint8_t truncated;
+    uint8_t _pad[2];
+} maelys_datalog_explanation_t;
+
+_Static_assert(sizeof(maelys_datalog_explanation_t) <= 65536u,
+               "public explanation exceeds 64 KiB bound");
+
 #ifdef __cplusplus
 }
 #endif
