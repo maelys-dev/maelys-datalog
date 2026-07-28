@@ -6,6 +6,7 @@ ENGINE_SRCS = \
 	src/core/maelys_datalog_diagnostic.c \
 	src/core/maelys_datalog_domain_registry.c \
 	src/core/maelys_datalog_edb.c \
+	src/core/maelys_datalog_explanation_format.c \
 	src/core/maelys_datalog_introspection.c \
 	src/core/maelys_datalog_lexer.c \
 	src/core/maelys_datalog_parser.c \
@@ -71,6 +72,7 @@ ASAN_TEST_SRCS = \
 	tests/test_maelys_datalog_atom_vocabulary.c \
 	tests/test_maelys_datalog_boundary.c \
 	tests/test_maelys_datalog_determinism.c \
+	tests/test_maelys_datalog_explanation_format.c \
 	tests/test_maelys_datalog_corpus.c \
 	tests/test_maelys_datalog_audit.c
 

@@ -21,6 +21,7 @@ ENGINE_SRCS = \
 	src/core/maelys_datalog_diagnostic.c \
 	src/core/maelys_datalog_domain_registry.c \
 	src/core/maelys_datalog_edb.c \
+	src/core/maelys_datalog_explanation_format.c \
 	src/core/maelys_datalog_introspection.c \
 	src/core/maelys_datalog_lexer.c \
 	src/core/maelys_datalog_parser.c \
