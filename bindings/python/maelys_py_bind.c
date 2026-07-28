@@ -9,6 +9,7 @@
 #include "src/core/maelys_datalog_diagnostic.h"
 #include "src/core/maelys_datalog_domain_registry.h"
 #include "src/core/maelys_datalog_edb.h"
+#include "src/core/maelys_datalog_explanation_format.h"
 #include "src/core/maelys_datalog_predicate_registry.h"
 #include "src/core/maelys_datalog_ruleset.h"
 #include "src/core/maelys_datalog_solver.h"
@@ -490,6 +491,78 @@ int maelys_py_result_contains_fact(maelys_py_result_t *result,
     if (rc != MAELYS_OK) return (int)rc;
     *out_present = present ? 1 : 0;
     return (int)MAELYS_OK;
+}
+
+int maelys_py_result_explain_fact_text(maelys_py_result_t *result,
+                                       const char *predicate,
+                                       const maelys_py_term_t *terms,
+                                       size_t arity,
+                                       char *out_text,
+                                       size_t out_capacity,
+                                       size_t *out_required,
+                                       int *out_found) {
+    if (!out_required || !out_found) {
+        return (int)MAELYS_ERR_INVALID_ARGUMENT;
+    }
+    *out_required = 0u;
+    *out_found = 0;
+    if (!result || !result->ruleset || !result->ruleset->ruleset ||
+        !result->result || !predicate || (!terms && arity > 0u) ||
+        (!out_text && out_capacity > 0u)) {
+        return (int)MAELYS_ERR_INVALID_ARGUMENT;
+    }
+    if (arity > MAELYS_DATALOG_MAX_ARITY) {
+        return (int)MAELYS_ERR_INVALID_FIELD;
+    }
+
+    maelys_result_t rc = maelys_datalog_validate_solved_ground_query(
+        result->result, predicate, arity);
+    if (rc != MAELYS_OK) return (int)rc;
+
+    maelys_datalog_predicate_id_t predicate_id = 0u;
+    if (!maelys_datalog_predicate_registry_find(
+            &result->ruleset->ruleset->registry,
+            predicate,
+            arity,
+            &predicate_id)) {
+        /* The shared validator just accepted this exact pair. A disagreement
+         * means the finalized ruleset is internally inconsistent. */
+        return (int)MAELYS_ERR_INVALID_STATE;
+    }
+
+    maelys_datalog_fact_t queried_fact;
+    memset(&queried_fact, 0, sizeof(queried_fact));
+    queried_fact.predicate_id = predicate_id;
+    queried_fact.arity = (uint8_t)arity;
+    for (size_t i = 0u; i < arity; i++) {
+        rc = py_term_to_native(&terms[i], &queried_fact.terms[i]);
+        if (rc != MAELYS_OK) return (int)rc;
+    }
+
+    maelys_datalog_explanation_t *explanation =
+        (maelys_datalog_explanation_t *)calloc(1u, sizeof(*explanation));
+    if (!explanation) return (int)MAELYS_ERR_INTERNAL;
+
+    rc = maelys_datalog_explain_solved_fact(
+        result->result, &queried_fact, explanation);
+    if (rc != MAELYS_OK) {
+        free(explanation);
+        return (int)rc;
+    }
+    if (!explanation->found) {
+        free(explanation);
+        return (int)MAELYS_OK;
+    }
+
+    *out_found = 1;
+    rc = maelys_datalog_format_explanation_text(
+        result->ruleset->ruleset,
+        explanation,
+        out_text,
+        out_capacity,
+        out_required);
+    free(explanation);
+    return (int)rc;
 }
 
 int maelys_py_result_enumerate_predicate_facts(maelys_py_result_t *result,

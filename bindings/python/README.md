@@ -118,6 +118,38 @@ A query-capable policy or EDB fact can therefore make `contains_fact()` return
 `True` while enumeration returns no matching row. Neither API derives new
 facts.
 
+## Why-true text
+
+`SolveResult.explain_fact_text(predicate, terms)` exposes the canonical
+Why-true text for an already-derived IDB fact:
+
+```python
+explanation = result.explain_fact_text("path", ["a", "c"])
+if explanation is not None:
+    print(explanation, end="")
+```
+
+The return type is `str | None`. A complete witness returns the versioned
+`MAELYS-DATALOG-WHY-TRUE-TEXT-v1` text with `status=complete`. A fact that is
+present but whose bounded provenance is unavailable returns the same canonical
+format with `status=truncated`; truncation is never collapsed to `None`. `None`
+means only that no matching derived IDB fact is available.
+
+The method deliberately differs from `contains_fact()`: a query-capable
+POLICY_FACT or EDB fact can make `contains_fact()` return `True`, while
+`explain_fact_text()` returns `None` because Why-true provenance is defined for
+derived IDB facts. Neither method derives new facts.
+
+Predicate validation happens before term resolution. String terms use the same
+read-only lookup and per-`Ruleset` lock as `contains_fact()`; an unknown string
+returns `None` without interning it, while an invalid predicate or explicit
+symbol id raises the existing error. The wrapper returns the C formatter's
+UTF-8 bytes without stripping or reformatting them.
+
+Why-true text may contain exact policy and EDB values. It is produced only by
+an explicit method call and should be treated as potentially sensitive; the
+binding never logs it automatically.
+
 ## EDB finalization
 
 `Ruleset.solve(edb)` finalizes the EDB exactly once before calling the native

@@ -1,6 +1,7 @@
 #include "bindings/python/maelys_py_bind.h"
 
 #include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "common/maelys_errors.h"
@@ -152,6 +153,57 @@ static int exercise_success_once(void) {
         TEST_ASSERT_EQUAL((int)MAELYS_OK, call_rc, "%d");
         TEST_ASSERT_TRUE(present);
 
+        maelys_py_term_t path_ab[2] = {
+            {(int32_t)MAELYS_DATALOG_TERM_SYMBOL, (int64_t)a},
+            {(int32_t)MAELYS_DATALOG_TERM_SYMBOL, (int64_t)b},
+        };
+        static const char expected_explanation[] =
+            "MAELYS-DATALOG-WHY-TRUE-TEXT-v1\n"
+            "status=complete\n"
+            "steps=1 premises=1\n"
+            "step=0 rule=1 fact=\"path\"(\"a\",\"b\")\n"
+            "premise=0 body=0 kind=positive origin=edb "
+            "fact=\"edge\"(\"a\",\"b\") parent=-\n"
+            "result-step=0\n";
+        size_t required = 99u;
+        int found_explanation = 0;
+        call_rc = maelys_py_result_explain_fact_text(
+            result, "path", path_ab, 2u, NULL, 0u, &required,
+            &found_explanation);
+        TEST_ASSERT_EQUAL((int)MAELYS_OK, call_rc, "%d");
+        TEST_ASSERT_TRUE(found_explanation);
+        TEST_ASSERT_EQUAL(sizeof(expected_explanation) - 1u, required, "%zu");
+
+        char *explanation_text = (char *)malloc(required + 1u);
+        TEST_ASSERT_NOT_NULL(explanation_text);
+        if (explanation_text) {
+            size_t written_required = 0u;
+            int written_found = 0;
+            call_rc = maelys_py_result_explain_fact_text(
+                result, "path", path_ab, 2u, explanation_text, required + 1u,
+                &written_required, &written_found);
+            TEST_ASSERT_EQUAL((int)MAELYS_OK, call_rc, "%d");
+            TEST_ASSERT_TRUE(written_found);
+            TEST_ASSERT_EQUAL(required, written_required, "%zu");
+            TEST_ASSERT_EQUAL(
+                0,
+                memcmp(explanation_text, expected_explanation, required + 1u),
+                "%d");
+            free(explanation_text);
+        }
+
+        char insufficient[8];
+        memset(insufficient, 0x5a, sizeof(insufficient));
+        size_t insufficient_required = 0u;
+        found_explanation = 0;
+        call_rc = maelys_py_result_explain_fact_text(
+            result, "path", path_ab, 2u, insufficient, sizeof(insufficient),
+            &insufficient_required, &found_explanation);
+        TEST_ASSERT_EQUAL((int)MAELYS_ERR_PAYLOAD_TOO_LARGE, call_rc, "%d");
+        TEST_ASSERT_TRUE(found_explanation);
+        TEST_ASSERT_EQUAL(required, insufficient_required, "%zu");
+        TEST_ASSERT_EQUAL('\0', insufficient[0], "%d");
+
         maelys_py_term_t path_ca[2] = {
             {(int32_t)MAELYS_DATALOG_TERM_SYMBOL, (int64_t)c},
             {(int32_t)MAELYS_DATALOG_TERM_SYMBOL, (int64_t)a},
@@ -160,6 +212,15 @@ static int exercise_success_once(void) {
             result, "path", path_ca, 2u, &present);
         TEST_ASSERT_EQUAL((int)MAELYS_OK, call_rc, "%d");
         TEST_ASSERT_FALSE(present);
+
+        required = 99u;
+        found_explanation = 1;
+        call_rc = maelys_py_result_explain_fact_text(
+            result, "path", path_ca, 2u, NULL, 0u, &required,
+            &found_explanation);
+        TEST_ASSERT_EQUAL((int)MAELYS_OK, call_rc, "%d");
+        TEST_ASSERT_FALSE(found_explanation);
+        TEST_ASSERT_EQUAL((size_t)0u, required, "%zu");
 
         call_rc = maelys_py_result_contains_fact(
             result, "path", NULL, 2u, &present);
@@ -183,6 +244,24 @@ static int exercise_success_once(void) {
             NULL, "path", path_ac, 2u, &present);
         TEST_ASSERT_EQUAL((int)MAELYS_ERR_INVALID_ARGUMENT, call_rc, "%d");
         TEST_ASSERT_FALSE(present);
+
+        required = 99u;
+        found_explanation = 1;
+        call_rc = maelys_py_result_explain_fact_text(
+            NULL, "path", path_ac, 2u, NULL, 0u, &required,
+            &found_explanation);
+        TEST_ASSERT_EQUAL((int)MAELYS_ERR_INVALID_ARGUMENT, call_rc, "%d");
+        TEST_ASSERT_FALSE(found_explanation);
+        TEST_ASSERT_EQUAL((size_t)0u, required, "%zu");
+
+        required = 99u;
+        found_explanation = 1;
+        call_rc = maelys_py_result_explain_fact_text(
+            result, "edge", path_ab, 2u, NULL, 0u, &required,
+            &found_explanation);
+        TEST_ASSERT_EQUAL((int)MAELYS_ERR_INVALID_FIELD, call_rc, "%d");
+        TEST_ASSERT_FALSE(found_explanation);
+        TEST_ASSERT_EQUAL((size_t)0u, required, "%zu");
     }
 
     maelys_py_result_free(result);
