@@ -31,6 +31,10 @@ ASAN_IMAGE ?= maelys-datalog-asan-linux:ubuntu24.04
 ASAN_DOCKERFILE ?= docker/asan-linux/Dockerfile
 DOCKER_PLATFORM ?= linux/arm64
 DOCKER_PLATFORM_ARG = $(if $(DOCKER_PLATFORM),--platform $(DOCKER_PLATFORM),)
+PROJECTCTL_DOCKER_LABEL_ARGS = \
+	$(if $(strip $(PROJECTCTL_DOCKER_LABEL_MANAGED)),--label "$(PROJECTCTL_DOCKER_LABEL_MANAGED)") \
+	$(if $(strip $(PROJECTCTL_DOCKER_LABEL_CYCLE)),--label "$(PROJECTCTL_DOCKER_LABEL_CYCLE)") \
+	$(if $(strip $(PROJECTCTL_DOCKER_LABEL_RUN)),--label "$(PROJECTCTL_DOCKER_LABEL_RUN)")
 
 ASAN_FLAGS = -fsanitize=address,undefined \
 	-fno-omit-frame-pointer -g -O1
@@ -90,6 +94,7 @@ test-asan-linux: asan-linux-image
 	@echo "==> Standalone Linux ASAN/UBSAN/LSAN in Docker (detect_leaks=1)"
 	@docker run --rm \
 	  $(DOCKER_PLATFORM_ARG) \
+	  $(PROJECTCTL_DOCKER_LABEL_ARGS) \
 	  -v "$(CURDIR):/src:ro" \
 	  -w /work \
 	  $(ASAN_IMAGE) \
