@@ -303,6 +303,37 @@ def test_explain_fact_text_or_matches_manual_expansion():
         ) == result_manual.explain_fact_text("path", ["alice", "doc"])
 
 
+def test_explain_fact_text_distinguishes_truncated_from_absent():
+    predicates = [
+        md.Predicate("edge", 2, md.PRED_EDB),
+        md.Predicate("path", 2, md.PRED_IDB | md.PRED_QUERY),
+        md.Predicate("reach", 2, md.PRED_IDB | md.PRED_QUERY),
+    ]
+    with md.Engine() as engine:
+        engine.register_domain("py_test_explain_truncated", predicates)
+        ruleset = engine.load_inline_ruleset(
+            "py_test_explain_truncated",
+            "policy",
+            "path(X, Y) :- edge(X, Y).\n"
+            "path(X, Z) :- path(X, Y), edge(Y, Z).\n"
+            "reach(X, Y) :- path(X, Y).",
+        )
+        edb = ruleset.edb()
+        for i in range(8):
+            edb.add_fact("edge", [f"n{i}", f"n{i + 1}"])
+        result = ruleset.solve(edb)
+
+        assert result.contains_fact("path", ["n0", "n8"])
+        text = result.explain_fact_text("path", ["n0", "n8"])
+        assert text == (
+            "MAELYS-DATALOG-WHY-TRUE-TEXT-v1\n"
+            "status=truncated\n"
+            "steps=0 premises=0\n"
+        )
+        assert text is not None
+        assert result.explain_fact_text("path", ["n8", "n0"]) is None
+
+
 def test_existing_domain_with_different_predicates_fails_closed():
     with md.Engine() as engine:
         engine.register_domain("py_test_conflict", predicates())

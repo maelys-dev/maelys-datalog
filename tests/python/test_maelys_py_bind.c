@@ -11,10 +11,11 @@
 static const maelys_py_predicate_def_t k_predicates[] = {
     {"edge", 2u, MAELYS_DATALOG_PRED_KIND_EDB},
     {"path", 2u, MAELYS_DATALOG_PRED_KIND_IDB | MAELYS_DATALOG_PRED_KIND_QUERY},
+    {"reach", 2u, MAELYS_DATALOG_PRED_KIND_IDB | MAELYS_DATALOG_PRED_KIND_QUERY},
 };
 
 static int register_loop_domain(void) {
-    return maelys_py_register_domain("py_bind_c_loop", k_predicates, 2u);
+    return maelys_py_register_domain("py_bind_c_loop", k_predicates, 3u);
 }
 
 static maelys_result_t install_callback_domain(maelys_datalog_predicate_registry_t *registry) {
@@ -262,6 +263,52 @@ static int exercise_success_once(void) {
         TEST_ASSERT_EQUAL((int)MAELYS_ERR_INVALID_FIELD, call_rc, "%d");
         TEST_ASSERT_FALSE(found_explanation);
         TEST_ASSERT_EQUAL((size_t)0u, required, "%zu");
+
+        required = 99u;
+        found_explanation = 1;
+        call_rc = maelys_py_result_explain_fact_text(
+            result, "missing", path_ab, 2u, NULL, 0u, &required,
+            &found_explanation);
+        TEST_ASSERT_EQUAL((int)MAELYS_ERR_INVALID_FIELD, call_rc, "%d");
+        TEST_ASSERT_FALSE(found_explanation);
+        TEST_ASSERT_EQUAL((size_t)0u, required, "%zu");
+
+        required = 99u;
+        found_explanation = 1;
+        call_rc = maelys_py_result_explain_fact_text(
+            result, "path", path_ab, 1u, NULL, 0u, &required,
+            &found_explanation);
+        TEST_ASSERT_EQUAL((int)MAELYS_ERR_INVALID_FIELD, call_rc, "%d");
+        TEST_ASSERT_FALSE(found_explanation);
+        TEST_ASSERT_EQUAL((size_t)0u, required, "%zu");
+
+        maelys_py_term_t invalid_terms[2] = {
+            {(int32_t)MAELYS_DATALOG_TERM_VAR, 0},
+            {(int32_t)MAELYS_DATALOG_TERM_SYMBOL, (int64_t)b},
+        };
+        required = 99u;
+        found_explanation = 1;
+        call_rc = maelys_py_result_explain_fact_text(
+            result, "path", invalid_terms, 2u, NULL, 0u, &required,
+            &found_explanation);
+        TEST_ASSERT_EQUAL((int)MAELYS_ERR_INVALID_FIELD, call_rc, "%d");
+        TEST_ASSERT_FALSE(found_explanation);
+        TEST_ASSERT_EQUAL((size_t)0u, required, "%zu");
+
+        required = 99u;
+        found_explanation = 1;
+        call_rc = maelys_py_result_explain_fact_text(
+            result,
+            "path",
+            oversized_terms,
+            MAELYS_DATALOG_MAX_ARITY + 1u,
+            NULL,
+            0u,
+            &required,
+            &found_explanation);
+        TEST_ASSERT_EQUAL((int)MAELYS_ERR_INVALID_FIELD, call_rc, "%d");
+        TEST_ASSERT_FALSE(found_explanation);
+        TEST_ASSERT_EQUAL((size_t)0u, required, "%zu");
     }
 
     maelys_py_result_free(result);
@@ -282,6 +329,100 @@ static int test_maelys_py_bind_reuses_domain_slot_1000_times(void) {
 
 static int test_maelys_py_bind_success_solve_enumerate_and_free(void) {
     return exercise_success_once();
+}
+
+static int test_maelys_py_bind_truncated_explanation_is_not_absent(void) {
+    TEST_BEGIN();
+
+    int call_rc = register_loop_domain();
+    TEST_ASSERT_EQUAL((int)MAELYS_OK, call_rc, "%d");
+
+    maelys_py_engine_t *engine = maelys_py_engine_new();
+    TEST_ASSERT_NOT_NULL(engine);
+    maelys_py_ruleset_t *ruleset = NULL;
+    maelys_py_edb_t *edb = NULL;
+    maelys_py_result_t *result = NULL;
+
+    if (engine) {
+        const char *policy =
+            "path(X, Y) :- edge(X, Y).\n"
+            "path(X, Z) :- path(X, Y), edge(Y, Z).\n"
+            "reach(X, Y) :- path(X, Y).";
+        call_rc = maelys_py_load_inline_ruleset(engine,
+                                                "py_bind_c_loop",
+                                                "truncated-policy",
+                                                policy,
+                                                strlen(policy),
+                                                &ruleset);
+        TEST_ASSERT_EQUAL((int)MAELYS_OK, call_rc, "%d");
+        TEST_ASSERT_NOT_NULL(ruleset);
+    }
+    if (ruleset) {
+        edb = maelys_py_edb_new(ruleset);
+        TEST_ASSERT_NOT_NULL(edb);
+    }
+
+    uint32_t nodes[9] = {0u};
+    if (ruleset && edb) {
+        static const char *const names[9] = {
+            "n0", "n1", "n2", "n3", "n4", "n5", "n6", "n7", "n8",
+        };
+        for (size_t i = 0u; i < 9u; i++) {
+            call_rc = maelys_py_intern_symbol(ruleset, names[i], &nodes[i]);
+            TEST_ASSERT_EQUAL((int)MAELYS_OK, call_rc, "%d");
+            TEST_ASSERT_TRUE(nodes[i] != 0u);
+        }
+        for (size_t i = 0u; i < 8u; i++) {
+            maelys_py_term_t edge[2] = {
+                {(int32_t)MAELYS_DATALOG_TERM_SYMBOL, (int64_t)nodes[i]},
+                {(int32_t)MAELYS_DATALOG_TERM_SYMBOL, (int64_t)nodes[i + 1u]},
+            };
+            call_rc = maelys_py_edb_add_fact(edb, "edge", edge, 2u);
+            TEST_ASSERT_EQUAL((int)MAELYS_OK, call_rc, "%d");
+        }
+        call_rc = maelys_py_solve(ruleset, edb, &result);
+        TEST_ASSERT_EQUAL((int)MAELYS_OK, call_rc, "%d");
+        TEST_ASSERT_NOT_NULL(result);
+    }
+
+    if (result) {
+        maelys_py_term_t target[2] = {
+            {(int32_t)MAELYS_DATALOG_TERM_SYMBOL, (int64_t)nodes[0]},
+            {(int32_t)MAELYS_DATALOG_TERM_SYMBOL, (int64_t)nodes[8]},
+        };
+        static const char expected[] =
+            "MAELYS-DATALOG-WHY-TRUE-TEXT-v1\n"
+            "status=truncated\n"
+            "steps=0 premises=0\n";
+        size_t required = 0u;
+        int found = 0;
+        call_rc = maelys_py_result_explain_fact_text(
+            result, "path", target, 2u, NULL, 0u, &required, &found);
+        TEST_ASSERT_EQUAL((int)MAELYS_OK, call_rc, "%d");
+        TEST_ASSERT_TRUE(found);
+        TEST_ASSERT_EQUAL(sizeof(expected) - 1u, required, "%zu");
+
+        char *text = (char *)malloc(required + 1u);
+        TEST_ASSERT_NOT_NULL(text);
+        if (text) {
+            size_t written_required = 0u;
+            int written_found = 0;
+            call_rc = maelys_py_result_explain_fact_text(
+                result, "path", target, 2u, text, required + 1u,
+                &written_required, &written_found);
+            TEST_ASSERT_EQUAL((int)MAELYS_OK, call_rc, "%d");
+            TEST_ASSERT_TRUE(written_found);
+            TEST_ASSERT_EQUAL(required, written_required, "%zu");
+            TEST_ASSERT_EQUAL(0, memcmp(text, expected, sizeof(expected)), "%d");
+            free(text);
+        }
+    }
+
+    maelys_py_result_free(result);
+    maelys_py_edb_free(edb);
+    maelys_py_ruleset_free(ruleset);
+    maelys_py_engine_free(engine);
+    TEST_END();
 }
 
 static int test_maelys_py_bind_load_failure_diag_and_free(void) {
@@ -357,6 +498,9 @@ int main(int argc, char **argv) {
         {"maelys_py_bind/success_solve_enumerate_and_free",
          TEST_MODE_NON_BLOCKING,
          test_maelys_py_bind_success_solve_enumerate_and_free},
+        {"maelys_py_bind/truncated_explanation_is_not_absent",
+         TEST_MODE_NON_BLOCKING,
+         test_maelys_py_bind_truncated_explanation_is_not_absent},
         {"maelys_py_bind/load_failure_diag_and_free",
          TEST_MODE_NON_BLOCKING,
          test_maelys_py_bind_load_failure_diag_and_free},
