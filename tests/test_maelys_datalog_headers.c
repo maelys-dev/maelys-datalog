@@ -11,6 +11,7 @@
 #include "src/core/maelys_datalog_symbol_table.h"
 #include "src/core/maelys_datalog_types.h"
 #include "src/manifest/maelys_datalog_manifest.h"
+#include "include/maelys_datalog.h"
 #include "tests/helpers/test_framework.h"
 
 #include <stddef.h>
@@ -37,6 +38,11 @@ static int test_datalog_headers_owner_types_available(void) {
     TEST_ASSERT_TRUE(sizeof(maelys_datalog_edb_t) > 0u);
     TEST_ASSERT_TRUE(sizeof(maelys_datalog_solve_diagnostic_t) > 0u);
     TEST_ASSERT_TRUE(sizeof(maelys_datalog_policy_set_t) > 0u);
+    TEST_ASSERT_EQUAL(0, MAELYS_DATALOG_VERSION_MAJOR, "%d");
+    TEST_ASSERT_EQUAL(1, MAELYS_DATALOG_VERSION_MINOR, "%d");
+    TEST_ASSERT_EQUAL(0, MAELYS_DATALOG_VERSION_PATCH, "%d");
+    TEST_ASSERT_EQUAL_STRING("alpha.1", MAELYS_DATALOG_VERSION_PRERELEASE);
+    TEST_ASSERT_EQUAL_STRING("0.1.0-alpha.1", MAELYS_DATALOG_VERSION_STRING);
     TEST_ASSERT_EQUAL_STRING(MAELYS_DATALOG_DECISION_NAME_DENY_DEFAULT,
                              maelys_datalog_decision_name(MAELYS_DATALOG_DECISION_DENY_DEFAULT));
     TEST_END();

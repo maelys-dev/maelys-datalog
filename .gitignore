@@ -1,7 +1,12 @@
 *.o
 *.dSYM/
+.DS_Store
 __pycache__/
+.pytest_cache/
+.coverage
+.venv/
 build/
+bindings/python/build/
 libmaelys_datalog.a
 maelys_datalog.js
 maelys_datalog.wasm
@@ -12,3 +17,14 @@ bindings/python/maelys_datalog/_maelys_cffi*.so
 bindings/python/maelys_datalog/_maelys_cffi*.dylib
 bindings/python/maelys_datalog/libmaelys_*.so
 bindings/python/maelys_datalog/libmaelys_*.dylib
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+.dev.vars
+.dev.vars.*
+*.pem
+*.key
+*.p12
+*.pfx

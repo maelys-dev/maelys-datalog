@@ -1,5 +1,11 @@
 #pragma once
 
+#define MAELYS_DATALOG_VERSION_MAJOR 0
+#define MAELYS_DATALOG_VERSION_MINOR 1
+#define MAELYS_DATALOG_VERSION_PATCH 0
+#define MAELYS_DATALOG_VERSION_PRERELEASE "alpha.1"
+#define MAELYS_DATALOG_VERSION_STRING "0.1.0-alpha.1"
+
 #include "src/core/maelys_datalog_audit.h"
 #include "src/core/maelys_datalog_decision.h"
 #include "src/core/maelys_datalog_domain_registry.h"

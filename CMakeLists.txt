@@ -1,6 +1,11 @@
 cmake_minimum_required(VERSION 3.16)
 project(maelys_datalog VERSION 0.1.0 LANGUAGES C)
 
+file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/VERSION"
+     MAELYS_DATALOG_RELEASE_VERSION
+     LIMIT_COUNT 1)
+message(STATUS "Maelys Datalog release: ${MAELYS_DATALOG_RELEASE_VERSION}")
+
 set(CMAKE_C_STANDARD 11)
 
 set(ENGINE_SRCS
