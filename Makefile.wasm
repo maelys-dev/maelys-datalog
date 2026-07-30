@@ -93,6 +93,8 @@ WASM_DYNAMIC_EXPORTS = \
 	'_maelys_datalog_wasm_solve', \
 	'_maelys_datalog_wasm_query_symbol', \
 	'_maelys_datalog_wasm_query_symbol2', \
+	'_maelys_datalog_wasm_explain_symbol_fact_text', \
+	'_maelys_datalog_wasm_explain_symbol2_fact_text', \
 	'_maelys_datalog_wasm_enumerate_predicate_facts', \
 	'_maelys_datalog_wasm_symbol_text_by_id', \
 	'_maelys_datalog_wasm_derived_fact_count', \

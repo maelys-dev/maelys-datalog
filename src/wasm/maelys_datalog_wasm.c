@@ -3,6 +3,7 @@
 #include "src/core/maelys_datalog_domain_registry.h"
 #include "src/core/maelys_datalog_diagnostic.h"
 #include "src/core/maelys_datalog_edb.h"
+#include "src/core/maelys_datalog_explanation_format.h"
 #include "src/core/maelys_datalog_solver.h"
 #include "src/core/maelys_datalog_symbol_table.h"
 #include "src/core/maelys_datalog_types.h"
@@ -11,6 +12,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
 
 #define MAELYS_DATALOG_WASM_VALID_KIND_MASK \
@@ -503,6 +505,173 @@ int maelys_datalog_wasm_query_symbol2(const char *pred,
                                                                   &present);
     if (rc != MAELYS_OK) return -1;
     return present ? 1 : 0;
+}
+
+/* P4-C66 — shared arity 1/2 implementation of the Why-true text boundary.
+ *
+ * Strict composition of P4-C64 then P4-C65, in the normative order: output
+ * contract, solved state, bounded inputs, predicate/arity authority, read-only
+ * symbol resolution, ground fact, single extraction, single formatting. The
+ * bounded explanation is heap-allocated per invocation (never a Wasm stack
+ * object and never a static scratch, which would reserve its ~46 KiB in linear
+ * memory for the whole instance lifetime) and released by the single cleanup
+ * below on every path. */
+static maelys_result_t wasm_explain_symbol_fact_text(const char *predicate,
+                                                     const char *const *args,
+                                                     size_t arity,
+                                                     char *out_text,
+                                                     int32_t capacity,
+                                                     int32_t *out_required,
+                                                     int32_t *out_found) {
+    /* 1/2. Output pointers, capacity and buffer/capacity combination. The two
+     * scalars are zeroed as soon as their pointers are known writable, so every
+     * later failure — including the capacity/combination rejections below — is
+     * observed with zeroed outputs. */
+    if (!out_required || !out_found) return MAELYS_ERR_INVALID_ARGUMENT;
+    *out_required = 0;
+    *out_found = 0;
+    if (capacity < 0) return MAELYS_ERR_INVALID_ARGUMENT;
+    /* Count-only is exactly (out_text == NULL, capacity == 0); the two mixed
+     * combinations are inconsistent. */
+    if ((out_text == NULL) != (capacity == 0)) return MAELYS_ERR_INVALID_ARGUMENT;
+
+    /* 3. Solved state. */
+    if (s_edb_state != WASM_EDB_STATE_SOLVED || !s_solve_result) {
+        return MAELYS_ERR_INVALID_STATE;
+    }
+
+    /* 4. Input pointers and bounded lengths. */
+    if (!args || arity == 0u || arity > 2u) return MAELYS_ERR_INVALID_ARGUMENT;
+    char pred_buf[MAELYS_DATALOG_MAX_STRING_BYTES + 1u];
+    char arg_buf[2][MAELYS_DATALOG_MAX_STRING_BYTES + 1u];
+    maelys_result_t rc = copy_bounded(pred_buf, sizeof(pred_buf), predicate);
+    if (rc != MAELYS_OK) return rc;
+    for (size_t i = 0u; i < arity; i++) {
+        rc = copy_bounded(arg_buf[i], sizeof(arg_buf[i]), args[i]);
+        if (rc != MAELYS_OK) return rc;
+    }
+
+    /* 5. Predicate and arity authority, before any symbol resolution: a
+     * predicate error always wins over an unknown symbolic term. */
+    rc = maelys_datalog_validate_solved_ground_query(s_solve_result, pred_buf, arity);
+    if (rc != MAELYS_OK) return rc;
+
+    /* 6/7. Read-only resolution; an unknown term is an absence, never an
+     * interning. */
+    maelys_datalog_symbol_id_t ids[2];
+    for (size_t i = 0u; i < arity; i++) {
+        int found = lookup_symbol_readonly(arg_buf[i], &ids[i]);
+        if (found < 0) return MAELYS_ERR_INVALID_ARGUMENT;
+        if (found == 0) {
+            if (capacity > 0) out_text[0] = '\0';
+            return MAELYS_OK;
+        }
+    }
+
+    /* 8. Ground fact. The shared validator just accepted this exact pair, so a
+     * registry disagreement means the finalized ruleset is inconsistent. */
+    maelys_datalog_predicate_id_t predicate_id = 0u;
+    if (!maelys_datalog_predicate_registry_find(&s_policy_set.policies[0].registry,
+                                                 pred_buf,
+                                                 arity,
+                                                 &predicate_id)) {
+        return MAELYS_ERR_INVALID_STATE;
+    }
+    maelys_datalog_fact_t queried_fact;
+    memset(&queried_fact, 0, sizeof(queried_fact));
+    queried_fact.predicate_id = predicate_id;
+    queried_fact.arity = (uint8_t)arity;
+    for (size_t i = 0u; i < arity; i++) {
+        queried_fact.terms[i].kind = MAELYS_DATALOG_TERM_SYMBOL;
+        queried_fact.terms[i].as.symbol = ids[i];
+    }
+
+    maelys_datalog_explanation_t *explanation =
+        (maelys_datalog_explanation_t *)calloc(1u, sizeof(*explanation));
+    if (!explanation) return MAELYS_ERR_INTERNAL;
+
+    maelys_result_t rc_out = MAELYS_OK;
+    size_t required = 0u;
+
+    /* 9. Exactly one extraction per C invocation. */
+    rc = maelys_datalog_explain_solved_fact(s_solve_result, &queried_fact, explanation);
+    if (rc != MAELYS_OK) {
+        rc_out = rc;
+        goto cleanup_absent;
+    }
+    /* 10. No explainable derived fact. */
+    if (!explanation->found) {
+        rc_out = MAELYS_OK;
+        goto cleanup_absent;
+    }
+
+    /* 11. Count-only or write, delegated whole to P4-C65. */
+    rc = maelys_datalog_format_explanation_text(&s_policy_set.policies[0],
+                                                explanation,
+                                                out_text,
+                                                (size_t)capacity,
+                                                &required);
+    if (rc != MAELYS_OK && rc != MAELYS_ERR_PAYLOAD_TOO_LARGE) {
+        rc_out = rc;
+        goto cleanup_absent;
+    }
+    /* 12. Size conversion only after the int32 boundary check. A found witness
+     * always has a non-empty text; refusing both anomalies is safer than
+     * publishing a size the ABI cannot represent. */
+    if (required == 0u || required > (size_t)INT32_MAX) {
+        rc_out = (required == 0u) ? MAELYS_ERR_INTERNAL : MAELYS_ERR_PAYLOAD_TOO_LARGE;
+        goto cleanup_absent;
+    }
+    *out_found = 1;
+    *out_required = (int32_t)required;
+    if (rc == MAELYS_ERR_PAYLOAD_TOO_LARGE && capacity > 0) {
+        /* P4-C65 already emptied the buffer; restated here so the atomicity of
+         * this boundary does not depend on reading the formatter. */
+        out_text[0] = '\0';
+    }
+    rc_out = rc;
+    goto cleanup;
+
+cleanup_absent:
+    *out_found = 0;
+    *out_required = 0;
+    if (capacity > 0) out_text[0] = '\0';
+cleanup:
+    free(explanation);
+    return rc_out;
+}
+
+maelys_result_t maelys_datalog_wasm_explain_symbol_fact_text(const char *predicate,
+                                                             const char *arg0,
+                                                             char *out_text,
+                                                             int32_t capacity,
+                                                             int32_t *out_required,
+                                                             int32_t *out_found) {
+    const char *args[1] = {arg0};
+    return wasm_explain_symbol_fact_text(predicate,
+                                         args,
+                                         1u,
+                                         out_text,
+                                         capacity,
+                                         out_required,
+                                         out_found);
+}
+
+maelys_result_t maelys_datalog_wasm_explain_symbol2_fact_text(const char *predicate,
+                                                              const char *arg0,
+                                                              const char *arg1,
+                                                              char *out_text,
+                                                              int32_t capacity,
+                                                              int32_t *out_required,
+                                                              int32_t *out_found) {
+    const char *args[2] = {arg0, arg1};
+    return wasm_explain_symbol_fact_text(predicate,
+                                         args,
+                                         2u,
+                                         out_text,
+                                         capacity,
+                                         out_required,
+                                         out_found);
 }
 
 int32_t maelys_datalog_wasm_enumerate_predicate_facts(const char *predicate,

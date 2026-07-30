@@ -1,7 +1,19 @@
-import MaelysDatalogDynamic from '../../build/wasm/maelys_datalog_dynamic.js';
 import playgroundPkg from '../../js/maelys_playground.js';
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
+
+/* Same profile selection as test_build_limits.mjs, so MAELYS_WASM_PROFILE=large
+ * really exercises the LARGE dynamic module instead of silently re-testing the
+ * SMALL artifact. */
+const profile = (process.env.MAELYS_WASM_PROFILE || 'small').toLowerCase();
+if (profile !== 'small' && profile !== 'large') {
+  throw new Error(`Unsupported MAELYS_WASM_PROFILE="${profile}"`);
+}
+const buildDir = profile === 'large' ? '../../build/wasm-large' : '../../build/wasm';
+const dynamicModule = await import(
+  new URL(`${buildDir}/maelys_datalog_dynamic.js`, import.meta.url).href
+);
+const MaelysDatalogDynamic = dynamicModule.default;
 
 const {
   MaelysPlayground,
@@ -28,7 +40,7 @@ async function test(name, fn) {
 }
 
 async function createPlayground() {
-  const wasmUrl = new URL('../../build/wasm/maelys_datalog_dynamic.wasm', import.meta.url).href;
+  const wasmUrl = new URL(`${buildDir}/maelys_datalog_dynamic.wasm`, import.meta.url).href;
   return MaelysPlayground.create(MaelysDatalogDynamic, wasmUrl);
 }
 
@@ -1070,13 +1082,17 @@ await test('playground_string_batch_predicate_errors_propagated', async () => {
 
 await test('playground_string_batch_capacity_failure_is_atomic', async () => {
   const pg = await setupUnaryAccess('string_batch_capacity');
-  const values = Array.from({ length: 65 }, (_, i) => `user_${i}`);
+  /* One fact beyond the per-predicate capacity of the active profile. */
+  const overflow = pg.buildLimits().maxFactsPerPred + 1;
+  const values = Array.from({ length: overflow }, (_, i) => `user_${i}`);
   expectThrowRc(() => pg.addRuntimeSymbolFacts('safe', values),
                 MAELYS_ERR_PAYLOAD_TOO_LARGE,
                 'per-predicate capacity');
   pg.solve();
   if (pg.querySymbol('allow', 'user_0')) throw new Error('capacity failure inserted user_0');
-  if (pg.querySymbol('allow', 'user_64')) throw new Error('capacity failure inserted user_64');
+  if (pg.querySymbol('allow', `user_${overflow - 1}`)) {
+    throw new Error(`capacity failure inserted user_${overflow - 1}`);
+  }
   pg.freeResult();
 });
 
@@ -1149,6 +1165,473 @@ await test('playground_string_batch_state_guards', async () => {
                 MAELYS_ERR_INVALID_STATE,
                 'solved-state binary string batch');
   pg.freeResult();
+});
+
+/* ====================================================================
+ * P4-C66 — Why-true text through the real dynamic module.
+ * ==================================================================== */
+
+const WHY_TRUE_ALLOW_ALICE =
+  'MAELYS-DATALOG-WHY-TRUE-TEXT-v1\n' +
+  'status=complete\n' +
+  'steps=1 premises=1\n' +
+  'step=0 rule=1 fact="allow"("alice")\n' +
+  'premise=0 body=0 kind=positive origin=edb fact="safe"("alice") parent=-\n' +
+  'result-step=0\n';
+
+const WHY_TRUE_PATH_AB =
+  'MAELYS-DATALOG-WHY-TRUE-TEXT-v1\n' +
+  'status=complete\n' +
+  'steps=1 premises=1\n' +
+  'step=0 rule=1 fact="path"("a","b")\n' +
+  'premise=0 body=0 kind=positive origin=edb fact="edge"("a","b") parent=-\n' +
+  'result-step=0\n';
+
+const WHY_TRUE_PATH_AC =
+  'MAELYS-DATALOG-WHY-TRUE-TEXT-v1\n' +
+  'status=complete\n' +
+  'steps=2 premises=3\n' +
+  'step=0 rule=1 fact="path"("a","b")\n' +
+  'premise=0 body=0 kind=positive origin=edb fact="edge"("a","b") parent=-\n' +
+  'step=1 rule=2 fact="path"("a","c")\n' +
+  'premise=1 body=0 kind=positive origin=idb fact="path"("a","b") parent=0\n' +
+  'premise=2 body=1 kind=positive origin=edb fact="edge"("b","c") parent=-\n' +
+  'result-step=1\n';
+
+const WHY_TRUE_TRUNCATED =
+  'MAELYS-DATALOG-WHY-TRUE-TEXT-v1\n' +
+  'status=truncated\n' +
+  'steps=0 premises=0\n';
+
+function expectText(actual, expected, label) {
+  if (actual !== expected) {
+    throw new Error(`${label}: text mismatch\n--- expected ---\n${expected}--- got ---\n${actual}`);
+  }
+}
+
+/* safe(alice) plus an EDB-only queryable predicate. */
+async function setupWhyTrueUnary(domainName) {
+  const pg = await createPlayground();
+  pg.domainBegin(domainName);
+  pg.domainAddPredicate('safe', 1, PredKind.EDB);
+  pg.domainAddPredicate('observed', 1, PredKind.EDB | PredKind.QUERY);
+  pg.domainAddPredicate('allow', 1, PredKind.IDB | PredKind.QUERY);
+  pg.domainAddPredicate('internal', 1, PredKind.IDB);
+  pg.domainCommit();
+  pg.loadRuleset(
+    domainName,
+    `${domainName}.main`,
+    'allow(X) :- safe(X).\ninternal(X) :- safe(X).\n',
+  );
+  pg.edbBegin();
+  pg.addFact('safe', 'alice');
+  pg.addFact('observed', 'alice');
+  pg.solve();
+  return pg;
+}
+
+/* Transitive closure over edge(a,b), edge(b,c). */
+async function setupWhyTrueBinary(domainName) {
+  const pg = await createPlayground();
+  pg.domainBegin(domainName);
+  pg.domainAddPredicate('edge', 2, PredKind.EDB);
+  pg.domainAddPredicate('path', 2, PredKind.IDB | PredKind.QUERY);
+  pg.domainCommit();
+  pg.loadRuleset(
+    domainName,
+    `${domainName}.main`,
+    'path(X, Y) :- edge(X, Y).\npath(X, Z) :- path(X, Y), edge(Y, Z).\n',
+  );
+  pg.edbBegin();
+  pg.addFact2('edge', 'a', 'b');
+  pg.addFact2('edge', 'b', 'c');
+  pg.solve();
+  return pg;
+}
+
+/* Public truncation construction: 9 nodes give 36 path + 36 reach facts,
+ * beyond the 64 proof nodes the solver retains. No internal state is forged. */
+async function setupWhyTrueTruncated(domainName) {
+  const pg = await createPlayground();
+  pg.domainBegin(domainName);
+  pg.domainAddPredicate('edge', 2, PredKind.EDB);
+  pg.domainAddPredicate('path', 2, PredKind.IDB | PredKind.QUERY);
+  pg.domainAddPredicate('reach', 2, PredKind.IDB | PredKind.QUERY);
+  pg.domainCommit();
+  pg.loadRuleset(
+    domainName,
+    `${domainName}.main`,
+    'path(X, Y) :- edge(X, Y).\npath(X, Z) :- path(X, Y), edge(Y, Z).\nreach(X, Y) :- path(X, Y).\n',
+  );
+  pg.edbBegin();
+  for (let i = 0; i < 8; i++) pg.addFact2('edge', `n${i}`, `n${i + 1}`);
+  pg.solve();
+  return pg;
+}
+
+function instrumentAllocations(pg) {
+  const originalMalloc = pg._mod._malloc;
+  const originalFree = pg._mod._free;
+  const stats = {
+    allocated: 0,
+    freed: 0,
+    restore() {
+      pg._mod._malloc = originalMalloc;
+      pg._mod._free = originalFree;
+    },
+  };
+  pg._mod._malloc = (bytes) => {
+    const ptr = originalMalloc(bytes);
+    if (ptr) stats.allocated++;
+    return ptr;
+  };
+  pg._mod._free = (ptr) => {
+    if (ptr) stats.freed++;
+    return originalFree(ptr);
+  };
+  return stats;
+}
+
+function heapBytes(pg) {
+  return pg._mod.HEAP32.buffer.byteLength;
+}
+
+await test('playground_explain_fact_text_validates_types_without_wasm', async () => {
+  const pg = await setupWhyTrueUnary('why_true_types');
+  const originalCcall = pg._mod.ccall;
+  let calls = 0;
+  pg._mod.ccall = (...args) => {
+    calls++;
+    return originalCcall.apply(pg._mod, args);
+  };
+  try {
+    expectThrowType(() => pg.explainFactText(42, ['alice']), TypeError, 'predicate type');
+    expectThrowType(() => pg.explainFactText('allow', 'alice'), TypeError, 'terms not an array');
+    expectThrowType(() => pg.explainFactText('allow', []), TypeError, 'zero arity');
+    expectThrowType(() => pg.explainFactText('allow', ['a', 'b', 'c']), TypeError, 'arity three');
+    expectThrowType(() => pg.explainFactText('allow', [1]), TypeError, 'non-string term');
+    expectThrowType(() => pg.explainFactText('allow', [null]), TypeError, 'null term');
+    expectThrowType(() => pg.explainFactText('allow', ['a', 7]), TypeError, 'non-string second term');
+    if (calls !== 0) throw new Error(`local validation called the module ${calls} time(s)`);
+  } finally {
+    pg._mod.ccall = originalCcall;
+    pg.freeResult();
+  }
+});
+
+await test('playground_explain_fact_text_arity1_golden', async () => {
+  const pg = await setupWhyTrueUnary('why_true_arity1');
+  expectText(pg.explainFactText('allow', ['alice']), WHY_TRUE_ALLOW_ALICE, 'arity 1 golden');
+  pg.freeResult();
+});
+
+await test('playground_explain_fact_text_arity2_golden', async () => {
+  const pg = await setupWhyTrueBinary('why_true_arity2');
+  expectText(pg.explainFactText('path', ['a', 'b']), WHY_TRUE_PATH_AB, 'arity 2 golden');
+  expectText(pg.explainFactText('path', ['a', 'c']), WHY_TRUE_PATH_AC, 'arity 2 two-step golden');
+  pg.freeResult();
+});
+
+await test('playground_explain_fact_text_two_fresh_instances_agree', async () => {
+  const pgA = await setupWhyTrueBinary('why_true_instance_a');
+  const pgB = await setupWhyTrueBinary('why_true_instance_b');
+  const textA = pgA.explainFactText('path', ['a', 'c']);
+  const textB = pgB.explainFactText('path', ['a', 'c']);
+  expectText(textA, WHY_TRUE_PATH_AC, 'first instance');
+  expectText(textB, textA, 'second instance');
+  pgA.freeResult();
+  pgB.freeResult();
+});
+
+await test('playground_explain_fact_text_absent_fact_is_null', async () => {
+  const pg = await setupWhyTrueBinary('why_true_absent');
+  if (pg.querySymbol2('path', 'c', 'a')) throw new Error('path(c,a) unexpectedly present');
+  if (pg.explainFactText('path', ['c', 'a']) !== null) {
+    throw new Error('absent fact must be null');
+  }
+  pg.freeResult();
+});
+
+await test('playground_explain_fact_text_unknown_term_is_null_without_interning', async () => {
+  const pg = await setupWhyTrueUnary('why_true_unknown_term');
+  const symbolsBefore = [];
+  for (let id = 1; ; id++) {
+    const text = pg.symbolText(id);
+    if (text === null) break;
+    symbolsBefore.push(text);
+  }
+  if (pg.explainFactText('allow', ['ghost']) !== null) {
+    throw new Error('unknown term must be null');
+  }
+  const symbolsAfter = [];
+  for (let id = 1; ; id++) {
+    const text = pg.symbolText(id);
+    if (text === null) break;
+    symbolsAfter.push(text);
+  }
+  if (symbolsAfter.length !== symbolsBefore.length) {
+    throw new Error(`symbol table grew from ${symbolsBefore.length} to ${symbolsAfter.length}`);
+  }
+  if (symbolsAfter.includes('ghost')) throw new Error('ghost was interned');
+  pg.freeResult();
+});
+
+await test('playground_explain_fact_text_edb_only_fact_is_null', async () => {
+  const pg = await setupWhyTrueUnary('why_true_edb_only');
+  /* querySymbol answers true for an EDB atom, yet there is no derivation to
+   * explain. The POLICY_FACT counterpart needs a registered atom, which the
+   * WASM domain builder cannot declare; it is covered by the C boundary test. */
+  if (!pg.querySymbol('observed', 'alice')) throw new Error('observed(alice) missing');
+  if (pg.explainFactText('observed', ['alice']) !== null) {
+    throw new Error('EDB-only fact must be null');
+  }
+  pg.freeResult();
+});
+
+await test('playground_explain_fact_text_predicate_errors_throw', async () => {
+  const pg = await setupWhyTrueUnary('why_true_predicate_errors');
+  expectThrowRc(() => pg.explainFactText('missing', ['alice']),
+                MAELYS_ERR_INVALID_FIELD,
+                'absent predicate');
+  /* An unknown term never masks a predicate error. */
+  expectThrowRc(() => pg.explainFactText('missing', ['ghost']),
+                MAELYS_ERR_INVALID_FIELD,
+                'absent predicate with unknown term');
+  expectThrowRc(() => pg.explainFactText('internal', ['alice']),
+                MAELYS_ERR_INVALID_FIELD,
+                'non-QUERY predicate');
+  expectThrowRc(() => pg.explainFactText('allow', ['alice', 'bob']),
+                MAELYS_ERR_INVALID_FIELD,
+                'wrong arity');
+  pg.freeResult();
+});
+
+await test('playground_explain_fact_text_state_guards_throw', async () => {
+  const pg = await createPlayground();
+  expectThrowRc(() => pg.explainFactText('allow', ['alice']),
+                MAELYS_ERR_INVALID_STATE,
+                'before any domain');
+
+  const solved = await setupWhyTrueUnary('why_true_state_guards');
+  expectText(solved.explainFactText('allow', ['alice']), WHY_TRUE_ALLOW_ALICE, 'solved');
+  solved.freeResult();
+  expectThrowRc(() => solved.explainFactText('allow', ['alice']),
+                MAELYS_ERR_INVALID_STATE,
+                'after freeResult');
+});
+
+await test('playground_explain_fact_text_truncated_is_a_string', async () => {
+  const pg = await setupWhyTrueTruncated('why_true_truncated');
+  const derived = pg.derivedFactCount();
+  if (derived !== 72) throw new Error(`expected 72 derived facts, got ${derived}`);
+  if (!pg.querySymbol2('path', 'n0', 'n8')) throw new Error('path(n0,n8) missing');
+  const text = pg.explainFactText('path', ['n0', 'n8']);
+  if (text === null) throw new Error('a bounded provenance must not be null');
+  expectText(text, WHY_TRUE_TRUNCATED, 'truncated');
+  if (pg.explainFactText('path', ['n8', 'n0']) !== null) {
+    throw new Error('absent fact must stay null');
+  }
+  pg.freeResult();
+});
+
+await test('playground_explain_fact_text_or_matches_manual_expansion', async () => {
+  const buildDisjunction = async (domainName, src) => {
+    const pg = await createPlayground();
+    pg.domainBegin(domainName);
+    pg.domainAddPredicate('edge', 2, PredKind.EDB);
+    pg.domainAddPredicate('link', 2, PredKind.EDB);
+    pg.domainAddPredicate('path', 2, PredKind.IDB | PredKind.QUERY);
+    pg.domainCommit();
+    pg.loadRuleset(domainName, `${domainName}.main`, src);
+    pg.edbBegin();
+    pg.addFact2('link', 'alice', 'doc');
+    pg.solve();
+    return pg;
+  };
+  const pgOr = await buildDisjunction('why_true_or',
+                                      'path(X, Y) :- edge(X, Y) or link(X, Y).\n');
+  const pgManual = await buildDisjunction('why_true_manual',
+                                          'path(X, Y) :- edge(X, Y).\npath(X, Y) :- link(X, Y).\n');
+  const orText = pgOr.explainFactText('path', ['alice', 'doc']);
+  const manualText = pgManual.explainFactText('path', ['alice', 'doc']);
+  if (orText === null) throw new Error('disjunction produced no explanation');
+  expectText(orText, manualText, 'or vs manual expansion');
+  pgOr.freeResult();
+  pgManual.freeResult();
+});
+
+await test('playground_explain_fact_text_count_and_write_agree', async () => {
+  const pg = await setupWhyTrueUnary('why_true_count_write');
+  const scalars = pg._mod._malloc(8);
+  if (!scalars) throw new Error('scalar malloc returned 0');
+  const requiredPtr = scalars;
+  const foundPtr = scalars + 4;
+  const call = (ptr, capacity) => pg._call(
+    'maelys_datalog_wasm_explain_symbol_fact_text',
+    'number',
+    ['string', 'string', 'number', 'number', 'number', 'number'],
+    ['allow', 'alice', ptr, capacity, requiredPtr, foundPtr],
+  );
+  let textPtr = 0;
+  try {
+    expectRc(call(0, 0), 0, 'count-only rc');
+    const required = pg._mod.getValue(requiredPtr, 'i32');
+    const found = pg._mod.getValue(foundPtr, 'i32');
+    if (found !== 1) throw new Error(`expected found=1, got ${found}`);
+    if (required !== pg._mod.lengthBytesUTF8(WHY_TRUE_ALLOW_ALICE)) {
+      throw new Error(`count-only size ${required} does not match the golden text`);
+    }
+
+    /* Exactly required bytes leaves no room for the terminator. */
+    textPtr = pg._mod._malloc(required + 1);
+    if (!textPtr) throw new Error('text malloc returned 0');
+    pg._mod.HEAP32[requiredPtr >> 2] = 0;
+    pg._mod.HEAP32[foundPtr >> 2] = 0;
+    expectRc(call(textPtr, required), MAELYS_ERR_PAYLOAD_TOO_LARGE, 'capacity == required');
+    if (pg._mod.getValue(foundPtr, 'i32') !== 1) throw new Error('found lost on tight capacity');
+    if (pg._mod.getValue(requiredPtr, 'i32') !== required) {
+      throw new Error('size lost on tight capacity');
+    }
+    if (pg._mod.UTF8ToString(textPtr) !== '') throw new Error('tight capacity left a prefix');
+
+    pg._mod.HEAP32[requiredPtr >> 2] = 0;
+    pg._mod.HEAP32[foundPtr >> 2] = 0;
+    expectRc(call(textPtr, required + 1), 0, 'capacity == required + 1');
+    if (pg._mod.getValue(requiredPtr, 'i32') !== required) {
+      throw new Error('write size diverged from the counted size');
+    }
+    expectText(pg._mod.UTF8ToString(textPtr), WHY_TRUE_ALLOW_ALICE, 'raw write');
+  } finally {
+    if (textPtr) pg._mod._free(textPtr);
+    pg._mod._free(scalars);
+    pg.freeResult();
+  }
+});
+
+await test('playground_explain_fact_text_malloc_failure_is_clean', async () => {
+  const pg = await setupWhyTrueUnary('why_true_malloc_zero');
+  const originalMalloc = pg._mod._malloc;
+  const originalFree = pg._mod._free;
+
+  /* The scalar allocation fails: nothing is allocated, nothing is freed. */
+  let frees = 0;
+  pg._mod._malloc = () => 0;
+  pg._mod._free = (ptr) => { frees++; return originalFree(ptr); };
+  try {
+    expectThrowType(() => pg.explainFactText('allow', ['alice']), Error, 'scalar malloc zero');
+    if (frees !== 0) throw new Error(`unexpected free after a failed allocation (${frees})`);
+  } finally {
+    pg._mod._malloc = originalMalloc;
+    pg._mod._free = originalFree;
+  }
+
+  /* The text allocation fails: the scalar block is still released. */
+  let allocations = 0;
+  frees = 0;
+  pg._mod._malloc = (bytes) => {
+    allocations++;
+    return allocations === 1 ? originalMalloc(bytes) : 0;
+  };
+  pg._mod._free = (ptr) => { frees++; return originalFree(ptr); };
+  try {
+    expectThrowType(() => pg.explainFactText('allow', ['alice']), Error, 'text malloc zero');
+    if (allocations !== 2) throw new Error(`expected 2 allocation attempts, got ${allocations}`);
+    if (frees !== 1) throw new Error(`expected the scalar block to be freed once, got ${frees}`);
+  } finally {
+    pg._mod._malloc = originalMalloc;
+    pg._mod._free = originalFree;
+    pg.freeResult();
+  }
+});
+
+await test('playground_explain_fact_text_allocations_are_balanced', async () => {
+  const pg = await setupWhyTrueUnary('why_true_alloc_balance');
+  const stats = instrumentAllocations(pg);
+  try {
+    expectText(pg.explainFactText('allow', ['alice']), WHY_TRUE_ALLOW_ALICE, 'success path');
+    if (stats.allocated !== 2 || stats.freed !== 2) {
+      throw new Error(`success path: ${stats.allocated} allocated, ${stats.freed} freed`);
+    }
+
+    stats.allocated = 0;
+    stats.freed = 0;
+    if (pg.explainFactText('allow', ['ghost']) !== null) throw new Error('expected null');
+    if (stats.allocated !== 1 || stats.freed !== 1) {
+      throw new Error(`absence path: ${stats.allocated} allocated, ${stats.freed} freed`);
+    }
+
+    stats.allocated = 0;
+    stats.freed = 0;
+    expectThrowRc(() => pg.explainFactText('internal', ['alice']),
+                  MAELYS_ERR_INVALID_FIELD,
+                  'error path');
+    if (stats.allocated !== 1 || stats.freed !== 1) {
+      throw new Error(`error path: ${stats.allocated} allocated, ${stats.freed} freed`);
+    }
+  } finally {
+    stats.restore();
+    pg.freeResult();
+  }
+});
+
+await test('playground_explain_fact_text_is_never_called_implicitly', async () => {
+  const pg = await createPlayground();
+  const originalCcall = pg._mod.ccall;
+  const names = [];
+  pg._mod.ccall = (name, ...rest) => {
+    names.push(name);
+    return originalCcall.call(pg._mod, name, ...rest);
+  };
+  try {
+    pg.domainBegin('why_true_no_implicit');
+    pg.domainAddPredicate('safe', 1, PredKind.EDB);
+    pg.domainAddPredicate('allow', 1, PredKind.IDB | PredKind.QUERY);
+    pg.domainCommit();
+    pg.loadRuleset('why_true_no_implicit', 'why_true_no_implicit.main', 'allow(X) :- safe(X).\n');
+    pg.edbBegin();
+    pg.addFact('safe', 'alice');
+    pg.solve();
+    pg.querySymbol('allow', 'alice');
+    pg.derivedFactCount();
+    pg.enumeratePredicateFacts('allow', 1);
+    pg.freeResult();
+    const leaked = names.filter((name) => name.includes('explain'));
+    if (leaked.length !== 0) {
+      throw new Error(`implicit explanation calls: ${leaked.join(', ')}`);
+    }
+  } finally {
+    pg._mod.ccall = originalCcall;
+  }
+});
+
+await test('playground_explain_fact_text_memory_is_stable_across_repetitions', async () => {
+  const complete = await setupWhyTrueUnary('why_true_memory_complete');
+  const beforeFirst = heapBytes(complete);
+  expectText(complete.explainFactText('allow', ['alice']), WHY_TRUE_ALLOW_ALICE, 'warmup');
+  const afterFirst = heapBytes(complete);
+  for (let i = 0; i < 16; i++) complete.explainFactText('allow', ['alice']);
+  const afterRepeat = heapBytes(complete);
+  if (afterRepeat !== afterFirst) {
+    throw new Error(`complete: memory grew from ${afterFirst} to ${afterRepeat} on repetition`);
+  }
+  console.log(`      complete: ${beforeFirst} -> ${afterFirst} -> ${afterRepeat} bytes`);
+  complete.freeResult();
+
+  const truncated = await setupWhyTrueTruncated('why_true_memory_truncated');
+  const beforeTruncated = heapBytes(truncated);
+  truncated.explainFactText('path', ['n0', 'n8']);
+  const afterTruncated = heapBytes(truncated);
+  for (let i = 0; i < 16; i++) truncated.explainFactText('path', ['n0', 'n8']);
+  const afterTruncatedRepeat = heapBytes(truncated);
+  if (afterTruncatedRepeat !== afterTruncated) {
+    throw new Error(
+      `truncated: memory grew from ${afterTruncated} to ${afterTruncatedRepeat} on repetition`,
+    );
+  }
+  console.log(
+    `      truncated: ${beforeTruncated} -> ${afterTruncated} -> ${afterTruncatedRepeat} bytes`,
+  );
+  truncated.freeResult();
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);

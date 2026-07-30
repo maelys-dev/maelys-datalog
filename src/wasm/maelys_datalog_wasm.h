@@ -65,6 +65,52 @@ int32_t maelys_datalog_wasm_enumerate_predicate_facts(const char *predicate,
  * pointer may designate a valid zero-length symbol; callers must distinguish
  * the pointer value before decoding the UTF-8 text. */
 const char *maelys_datalog_wasm_symbol_text_by_id(int32_t symbol_id);
+/* P4-C66 — Canonical Why-true text (MAELYS-DATALOG-WHY-TRUE-TEXT-v1) for a
+ * ground IDB fact of the current solved WASM result.
+ *
+ * These two arity-explicit entry points mirror query_symbol/query_symbol2: the
+ * public WASM query surface accepts symbolic terms of arity 1 or 2 only. They
+ * are a thin composition of P4-C64 (structured witness) and P4-C65 (text), and
+ * never inspect, reorder or reformat anything. Unlike query_symbol they return
+ * the real maelys_result_t; errors are never collapsed into a -1 sentinel.
+ *
+ * out_required and out_found are mandatory and are zeroed before any fallible
+ * validation. out_required excludes the terminating NUL, so a successful write
+ * needs capacity >= out_required + 1.
+ *
+ *   - out_required/out_found NULL, capacity < 0, or an inconsistent
+ *     buffer/capacity pair -> MAELYS_ERR_INVALID_ARGUMENT. count-only mode is
+ *     exactly out_text == NULL with capacity == 0;
+ *   - no solved result -> MAELYS_ERR_INVALID_STATE;
+ *   - NULL/empty/overlong predicate or term -> the copy_bounded code;
+ *   - unknown/non-QUERY predicate or wrong arity -> the shared validator's
+ *     code, which always wins over an unknown symbolic term;
+ *   - unknown symbolic term -> MAELYS_OK, found = 0, required = 0, no
+ *     interning;
+ *   - no explainable derived fact -> MAELYS_OK, found = 0, required = 0;
+ *   - explainable fact -> MAELYS_OK, found = 1, required > 0, and the complete
+ *     NUL-terminated text when capacity >= required + 1;
+ *   - explainable fact with insufficient capacity ->
+ *     MAELYS_ERR_PAYLOAD_TOO_LARGE, found = 1, exact required, and out_text[0]
+ *     = '\0' as the only write (never a prefix presented as valid);
+ *   - any other error -> scalars zeroed, empty text when a buffer exists, and
+ *     the exact code propagated.
+ *
+ * The text is caller-owned: the boundary keeps no global text buffer, and the
+ * bounded explanation is heap-allocated and freed on every path. */
+maelys_result_t maelys_datalog_wasm_explain_symbol_fact_text(const char *predicate,
+                                                             const char *arg0,
+                                                             char *out_text,
+                                                             int32_t capacity,
+                                                             int32_t *out_required,
+                                                             int32_t *out_found);
+maelys_result_t maelys_datalog_wasm_explain_symbol2_fact_text(const char *predicate,
+                                                              const char *arg0,
+                                                              const char *arg1,
+                                                              char *out_text,
+                                                              int32_t capacity,
+                                                              int32_t *out_required,
+                                                              int32_t *out_found);
 /* Returns the derived fact count for the current solved WASM result.
  * Non-negative values are valid counts, including 0. -1 is the sentinel for
  * "no solved result available" or an underlying C accessor failure; it is not

@@ -513,6 +513,118 @@ class MaelysPlayground {
   }
 
   /**
+   * Canonical Why-true text of a derived IDB fact, exactly as produced by the
+   * C formatter and returned byte-for-byte.
+   *
+   * The public query surface is deliberately limited to symbolic terms of
+   * arity 1 or 2, like querySymbol/querySymbol2. This method is strictly
+   * opt-in: nothing else calls it, and the text is never logged, cached,
+   * reported in a diagnostic or otherwise persisted, because it can carry
+   * business predicates and symbols.
+   *
+   * Returns null only when there is no explainable derived fact: absent fact,
+   * unknown symbolic term, or a fact present only as a policy/EDB atom. A
+   * bounded incomplete provenance is NOT null: it is a regular string whose
+   * canonical state line says so. Every other situation throws: local type
+   * errors as TypeError (without calling the module), and invalid state,
+   * invalid or non-QUERY predicate, wrong arity, core error, impossible
+   * allocation or any count/write disagreement as an Error.
+   *
+   * @param {string} predicate
+   * @param {string[]} terms one or two symbolic terms
+   * @returns {string | null}
+   */
+  explainFactText(predicate, terms) {
+    if (typeof predicate !== 'string') {
+      throw new TypeError('explainFactText: predicate must be a string');
+    }
+    if (!Array.isArray(terms)) {
+      throw new TypeError('explainFactText: terms must be an array');
+    }
+    if (terms.length !== 1 && terms.length !== 2) {
+      throw new TypeError('explainFactText: terms must hold exactly 1 or 2 terms');
+    }
+    for (const term of terms) {
+      if (typeof term !== 'string') {
+        throw new TypeError('explainFactText: every term must be a string');
+      }
+    }
+
+    const fn = terms.length === 1
+      ? 'maelys_datalog_wasm_explain_symbol_fact_text'
+      : 'maelys_datalog_wasm_explain_symbol2_fact_text';
+    const argTypes = terms.length === 1
+      ? ['string', 'string', 'number', 'number', 'number', 'number']
+      : ['string', 'string', 'string', 'number', 'number', 'number', 'number'];
+
+    /* One block for the two int32 outputs: required then found. */
+    const scalars = this._mod._malloc(8);
+    if (!scalars) throw new Error('explainFactText failed: malloc returned 0');
+    const requiredPtr = scalars;
+    const foundPtr = scalars + 4;
+    let textPtr = 0;
+    try {
+      const zeroScalars = () => {
+        this._mod.HEAP32[requiredPtr >> 2] = 0;
+        this._mod.HEAP32[foundPtr >> 2] = 0;
+      };
+      const call = (ptr, capacity) => this._call(
+        fn,
+        'number',
+        argTypes,
+        [predicate, ...terms, ptr, capacity, requiredPtr, foundPtr],
+      );
+      const readRequired = () => this._mod.getValue(requiredPtr, 'i32');
+      const readFound = () => this._mod.getValue(foundPtr, 'i32');
+
+      zeroScalars();
+      const countRc = call(0, 0);
+      if (countRc !== MAELYS_OK) throw makeError('explainFactText', countRc, this._diag());
+      const found = readFound();
+      const required = readRequired();
+      if (found === 0) {
+        if (required !== 0) {
+          throw new Error(
+            `explainFactText: absent explanation reported ${required} bytes`,
+          );
+        }
+        return null;
+      }
+      if (found !== 1) {
+        throw new Error(`explainFactText: unexpected found flag ${found}`);
+      }
+      if (!Number.isSafeInteger(required) || required <= 0 || required >= INT32_MAX) {
+        throw new Error(`explainFactText: invalid text size ${required}`);
+      }
+
+      textPtr = this._mod._malloc(required + 1);
+      if (!textPtr) throw new Error('explainFactText failed: malloc returned 0');
+      zeroScalars();
+      const writeRc = call(textPtr, required + 1);
+      if (writeRc !== MAELYS_OK) throw makeError('explainFactText', writeRc, this._diag());
+      const writeFound = readFound();
+      const writeRequired = readRequired();
+      if (writeFound !== 1 || writeRequired !== required) {
+        throw new Error(
+          `explainFactText: count/write divergence (found ${writeFound}, ` +
+          `size ${writeRequired}, expected found 1 and size ${required})`,
+        );
+      }
+      const text = this._mod.UTF8ToString(textPtr);
+      if (this._mod.lengthBytesUTF8(text) !== required) {
+        throw new Error(
+          `explainFactText: decoded ${this._mod.lengthBytesUTF8(text)} bytes, ` +
+          `expected ${required}`,
+        );
+      }
+      return text;
+    } finally {
+      if (textPtr) this._mod._free(textPtr);
+      this._mod._free(scalars);
+    }
+  }
+
+  /**
    * Enumerate every already-derived IDB fact of a QUERY-authorized predicate
    * from the current solve result. This does not include EDB or POLICY_FACT
    * facts and does not perform pattern filtering or symbol resolution.
