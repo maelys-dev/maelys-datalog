@@ -239,11 +239,15 @@ static maelys_result_t maelys_datalog_policy_load_from_spec(
         return MAELYS_ERR_PAYLOAD_TOO_LARGE;
     }
 
-    maelys_datalog_ruleset_t tmp;
-    memset(&tmp, 0, sizeof(tmp));
+    maelys_datalog_ruleset_t *tmp =
+        (maelys_datalog_ruleset_t *)calloc(1u, sizeof(*tmp));
+    if (!tmp) return MAELYS_ERR_INTERNAL;
+
     maelys_result_t rc = maelys_datalog_ruleset_init(
-        &tmp, spec->policy_id, spec->domain, spec->sha256, spec->test_only);
-    if (rc == MAELYS_OK) rc = maelys_datalog_domain_registry_install(spec->domain, &tmp.registry);
+        tmp, spec->policy_id, spec->domain, spec->sha256, spec->test_only);
+    if (rc == MAELYS_OK) {
+        rc = maelys_datalog_domain_registry_install(spec->domain, &tmp->registry);
+    }
     if (rc != MAELYS_OK) {
         manifest_diag(diag,
                       MAELYS_DATALOG_DIAG_REGISTRY_CONFLICT,
@@ -254,10 +258,10 @@ static maelys_result_t maelys_datalog_policy_load_from_spec(
     if (rc == MAELYS_OK) {
         (void)spec->idb_predicates;
         (void)spec->idb_predicate_count;
-        tmp.enforces_query_whitelist = spec->enforces_query_whitelist ? 1 : 0;
-        if (tmp.enforces_query_whitelist) {
+        tmp->enforces_query_whitelist = spec->enforces_query_whitelist ? 1 : 0;
+        if (tmp->enforces_query_whitelist) {
             set->enforces_query_whitelist = 1;
-            rc = validate_and_copy_query_whitelist(&tmp,
+            rc = validate_and_copy_query_whitelist(tmp,
                                                    spec->queries,
                                                    spec->query_count,
                                                    set,
@@ -265,20 +269,26 @@ static maelys_result_t maelys_datalog_policy_load_from_spec(
                                                    label);
         }
     }
-    if (rc == MAELYS_OK) rc = maelys_datalog_predicate_registry_freeze(&tmp.registry);
     if (rc == MAELYS_OK) {
-        rc = maelys_datalog_parse_ruleset_ex(&tmp,
+        rc = maelys_datalog_predicate_registry_freeze(&tmp->registry);
+    }
+    if (rc == MAELYS_OK) {
+        rc = maelys_datalog_parse_ruleset_ex(tmp,
                                              spec->src,
                                              spec->src_len,
                                              label,
                                              diag);
     }
-    if (rc != MAELYS_OK) return rc;
-    if (maelys_datalog_ruleset_has_allow_all(&tmp) && !spec->test_only) {
-        return MAELYS_ERR_FORBIDDEN;
+    if (rc == MAELYS_OK &&
+        maelys_datalog_ruleset_has_allow_all(tmp) &&
+        !spec->test_only) {
+        rc = MAELYS_ERR_FORBIDDEN;
     }
-    set->policies[set->policy_count++] = tmp;
-    return MAELYS_OK;
+    if (rc == MAELYS_OK) {
+        set->policies[set->policy_count++] = *tmp;
+    }
+    free(tmp);
+    return rc;
 }
 
 static maelys_result_t load_policy_entry_from_bundle(
