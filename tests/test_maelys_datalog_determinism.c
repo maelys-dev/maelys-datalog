@@ -695,6 +695,9 @@ static int test_determinism_or_and_manual_explanation_byte_identical(void) {
     TEST_ASSERT_TRUE(det_make_fact2(&or_ruleset, "allow", "alice", "doc.pdf", &or_target));
     TEST_ASSERT_TRUE(det_make_fact2(&manual_ruleset, "allow", "alice", "doc.pdf", &manual_target));
 
+    /* Different prior bytes must not leak through padding or inactive unions. */
+    memset(&g_det_exp_a, 0xa5, sizeof(g_det_exp_a));
+    memset(&g_det_exp_b, 0x5a, sizeof(g_det_exp_b));
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       maelys_datalog_explain_solved_fact(or_result, &or_target, &g_det_exp_a), "%d");
     TEST_ASSERT_EQUAL(MAELYS_OK,
@@ -794,6 +797,7 @@ static int test_determinism_explanation_stable_across_repeated_solves(void) {
         maelys_datalog_fact_t target;
         TEST_ASSERT_TRUE(det_make_fact2(&ruleset, "allow", "alice", "doc.pdf", &target));
         maelys_datalog_explanation_t *slot = (iteration == 0) ? &g_det_exp_a : &g_det_exp_b;
+        memset(slot, (iteration == 0) ? 0xa5 : 0x5a, sizeof(*slot));
         TEST_ASSERT_EQUAL(MAELYS_OK,
                           maelys_datalog_explain_solved_fact(result, &target, slot), "%d");
         TEST_ASSERT_EQUAL((uint8_t)1u, slot->found, "%u");

@@ -821,6 +821,71 @@ static int solve_once_fact_in_base(const maelys_datalog_solve_result_t *result,
     return solve_once_fact_in_slice(result->edb_snapshot.facts, result->edb_snapshot.count, fact);
 }
 
+/* Public explanations promise byte-identical output. Copying these nested
+ * structures with assignment would also copy implementation-defined padding
+ * and inactive union bytes, so build their canonical byte representation from
+ * semantic fields instead. */
+static void explanation_copy_term(maelys_datalog_term_t *dst,
+                                  const maelys_datalog_term_t *src) {
+    if (!dst || !src) return;
+    memset(dst, 0, sizeof(*dst));
+    dst->kind = src->kind;
+    switch (src->kind) {
+        case MAELYS_DATALOG_TERM_SYMBOL:
+            dst->as.symbol = src->as.symbol;
+            break;
+        case MAELYS_DATALOG_TERM_INT:
+            dst->as.integer = src->as.integer;
+            break;
+        case MAELYS_DATALOG_TERM_BOOL:
+            dst->as.boolean = src->as.boolean;
+            break;
+        case MAELYS_DATALOG_TERM_VAR:
+            dst->as.variable = src->as.variable;
+            break;
+        default:
+            break;
+    }
+}
+
+static void explanation_copy_fact(maelys_datalog_fact_t *dst,
+                                  const maelys_datalog_fact_t *src) {
+    if (!dst || !src) return;
+    memset(dst, 0, sizeof(*dst));
+    dst->predicate_id = src->predicate_id;
+    dst->arity = src->arity;
+    const size_t term_count = (src->arity <= MAELYS_DATALOG_MAX_TERMS)
+        ? (size_t)src->arity
+        : (size_t)MAELYS_DATALOG_MAX_TERMS;
+    for (size_t i = 0; i < term_count; i++) {
+        explanation_copy_term(&dst->terms[i], &src->terms[i]);
+    }
+}
+
+static void explanation_copy_premise(
+    maelys_datalog_explanation_premise_t *dst,
+    const maelys_datalog_explanation_premise_t *src) {
+    if (!dst || !src) return;
+    memset(dst, 0, sizeof(*dst));
+    dst->kind = src->kind;
+    dst->origin = src->origin;
+    dst->body_index = src->body_index;
+    dst->parent_step = src->parent_step;
+    dst->op = src->op;
+    switch (src->kind) {
+        case MAELYS_DATALOG_EXPLANATION_PREMISE_POSITIVE_FACT:
+        case MAELYS_DATALOG_EXPLANATION_PREMISE_NEGATED_ABSENCE:
+            explanation_copy_fact(&dst->as.fact, &src->as.fact);
+            break;
+        case MAELYS_DATALOG_EXPLANATION_PREMISE_COMPARISON_TRUE:
+            explanation_copy_term(&dst->as.comparison.lhs, &src->as.comparison.lhs);
+            explanation_copy_term(&dst->as.comparison.rhs, &src->as.comparison.rhs);
+            break;
+        default:
+            break;
+    }
+}
+
 /* P4-C64 witness builder — write one lexical body slot. Positive candidates
  * write their slot before recursion; negation/comparison write theirs only
  * after success. Every write is by lexical body_index, so a terminal path holds
@@ -840,7 +905,7 @@ static void witness_record_positive(maelys_datalog_solve_result_t *result,
     slot->parent_step = (origin == MAELYS_DATALOG_EXPLANATION_ORIGIN_IDB)
         ? candidate_proof_index
         : (uint16_t)MAELYS_DATALOG_EXPLANATION_NO_STEP;
-    slot->as.fact = *candidate;
+    explanation_copy_fact(&slot->as.fact, candidate);
     result->witness_filled_mask |= (uint32_t)1u << body_index;
 }
 
@@ -856,7 +921,7 @@ static void witness_record_negation(maelys_datalog_solve_result_t *result,
     slot->body_index = (uint16_t)body_index;
     slot->op = 0u;
     slot->parent_step = (uint16_t)MAELYS_DATALOG_EXPLANATION_NO_STEP;
-    slot->as.fact = *ground;
+    explanation_copy_fact(&slot->as.fact, ground);
     result->witness_filled_mask |= (uint32_t)1u << body_index;
 }
 
@@ -873,8 +938,8 @@ static void witness_record_comparison(maelys_datalog_solve_result_t *result,
     slot->body_index = (uint16_t)body_index;
     slot->op = (uint8_t)op;
     slot->parent_step = (uint16_t)MAELYS_DATALOG_EXPLANATION_NO_STEP;
-    slot->as.comparison.lhs = *lhs;
-    slot->as.comparison.rhs = *rhs;
+    explanation_copy_term(&slot->as.comparison.lhs, lhs);
+    explanation_copy_term(&slot->as.comparison.rhs, rhs);
     result->witness_filled_mask |= (uint32_t)1u << body_index;
 }
 
@@ -905,7 +970,8 @@ static void witness_commit_range(maelys_datalog_solve_result_t *result,
     }
     const uint16_t begin = result->premise_pool_count;
     for (size_t i = 0; i < body_count; i++) {
-        result->premise_pool[begin + i] = result->witness_slots[i];
+        explanation_copy_premise(&result->premise_pool[begin + i],
+                                 &result->witness_slots[i]);
     }
     result->node_premise_begin[proof_node_idx] = begin;
     result->node_premise_count[proof_node_idx] = (uint16_t)body_count;
@@ -2627,7 +2693,8 @@ static int explain_visit_node(const maelys_datalog_solve_result_t *result,
 
     const uint16_t premise_begin = out->premise_count;
     for (uint16_t i = 0; i < count; i++) {
-        maelys_datalog_explanation_premise_t copy = result->premise_pool[begin + i];
+        maelys_datalog_explanation_premise_t copy;
+        explanation_copy_premise(&copy, &result->premise_pool[begin + i]);
         if (copy.kind == (uint8_t)MAELYS_DATALOG_EXPLANATION_PREMISE_POSITIVE_FACT &&
             copy.origin == (uint8_t)MAELYS_DATALOG_EXPLANATION_ORIGIN_IDB) {
             const uint16_t raw = copy.parent_step;
@@ -2641,13 +2708,15 @@ static int explain_visit_node(const maelys_datalog_solve_result_t *result,
         } else {
             copy.parent_step = (uint16_t)MAELYS_DATALOG_EXPLANATION_NO_STEP;
         }
-        out->premises[out->premise_count++] = copy;
+        explanation_copy_premise(&out->premises[out->premise_count], &copy);
+        out->premise_count++;
     }
 
     maelys_datalog_explanation_step_t *step = &out->steps[out->step_count];
     memset(step, 0, sizeof(*step));
     step->rule_id = result->proof.nodes[node_idx].rule_id;
-    step->derived_fact = result->proof.nodes[node_idx].derived_fact;
+    explanation_copy_fact(&step->derived_fact,
+                          &result->proof.nodes[node_idx].derived_fact);
     step->premise_begin = premise_begin;
     step->premise_count = count;
     local_step[node_idx] = out->step_count;
