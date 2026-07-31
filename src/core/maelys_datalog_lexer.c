@@ -170,7 +170,7 @@ maelys_result_t maelys_datalog_lexer_next(maelys_datalog_lexer_t *l,
                                  l->src + start,
                                  len,
                                  "unsupported Datalog construct",
-                                 "construct is not supported by MAELYS-DATALOG-TEXT-v1");
+                                 "construct is not supported by MAELYS-DATALOG-v2");
         }
         rc = emit_text(out, MAELYS_DATALOG_TOKEN_PREDICATE, l->src + start, len);
         if (rc == MAELYS_OK && strcmp(out->text, "true") == 0) { out->kind = MAELYS_DATALOG_TOKEN_BOOLEAN; out->boolean = 1; }
@@ -190,7 +190,7 @@ maelys_result_t maelys_datalog_lexer_next(maelys_datalog_lexer_t *l,
                                  l->src + start,
                                  len,
                                  "unsupported Datalog construct",
-                                 "construct is not supported by MAELYS-DATALOG-TEXT-v1");
+                                 "construct is not supported by MAELYS-DATALOG-v2");
         }
         return emit_text(out, MAELYS_DATALOG_TOKEN_VARIABLE, l->src + start, len);
     }
@@ -208,7 +208,7 @@ maelys_result_t maelys_datalog_lexer_next(maelys_datalog_lexer_t *l,
                                  l->src + start,
                                  l->pos - start + 2u,
                                  "unsupported numeric literal",
-                                 "floats are not supported by MAELYS-DATALOG-TEXT-v1");
+                                 "floats are not supported by MAELYS-DATALOG-v2");
         }
         maelys_result_t er = emit_text(out, MAELYS_DATALOG_TOKEN_INTEGER, l->src + start, l->pos - start);
         out->integer = val;
@@ -226,7 +226,7 @@ maelys_result_t maelys_datalog_lexer_next(maelys_datalog_lexer_t *l,
                                      "\\",
                                      1,
                                      "unsupported string escape",
-                                     "string escapes are not supported by MAELYS-DATALOG-TEXT-v1");
+                                     "string escapes are not supported by MAELYS-DATALOG-v2");
             }
             take(l);
             bytes++;
@@ -283,7 +283,7 @@ maelys_result_t maelys_datalog_lexer_next(maelys_datalog_lexer_t *l,
                                      ".",
                                      1,
                                      "unsupported directive",
-                                     "construct is not supported by MAELYS-DATALOG-TEXT-v1");
+                                     "construct is not supported by MAELYS-DATALOG-v2");
             }
             out->kind = MAELYS_DATALOG_TOKEN_DOT; return MAELYS_OK;
         case ':' :
@@ -304,7 +304,7 @@ maelys_result_t maelys_datalog_lexer_next(maelys_datalog_lexer_t *l,
                                  "!",
                                  1,
                                  "unsupported Datalog construct",
-                                 "construct is not supported by MAELYS-DATALOG-TEXT-v1");
+                                 "construct is not supported by MAELYS-DATALOG-v2");
         case '<' :
             if (peek(l, 0) == '=') { take(l); out->kind = MAELYS_DATALOG_TOKEN_LTE; return MAELYS_OK; }
             if (peek(l, 0) == '-') {
@@ -331,7 +331,7 @@ maelys_result_t maelys_datalog_lexer_next(maelys_datalog_lexer_t *l,
                                  l->src + l->pos - 1u,
                                  1,
                                  "unsupported Datalog construct",
-                                 "construct is not supported by MAELYS-DATALOG-TEXT-v1");
+                                 "construct is not supported by MAELYS-DATALOG-v2");
         default:
             return lexer_invalid(l,
                                  MAELYS_DATALOG_DIAG_LEXER_INVALID_TOKEN,
@@ -339,7 +339,7 @@ maelys_result_t maelys_datalog_lexer_next(maelys_datalog_lexer_t *l,
                                  l->src + l->pos - 1u,
                                  1,
                                  "invalid token",
-                                 "use MAELYS-DATALOG-TEXT-v1 syntax");
+                                 "use MAELYS-DATALOG-v2 syntax");
     }
 }
 

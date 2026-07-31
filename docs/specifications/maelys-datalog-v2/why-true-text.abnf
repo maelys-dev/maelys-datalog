@@ -1,0 +1,37 @@
+; MAELYS-DATALOG-v2 canonical Why-true document
+why-true-document = version-line document-line (not-derived / truncated / complete)
+version-line = %s"MAELYS-DATALOG-v2" lf
+document-line = %s"document=why-true" lf
+not-derived = %s"status=not-derived" lf zero-counts
+truncated = %s"status=truncated" lf zero-counts
+zero-counts = %s"steps=0 premises=0" lf
+complete = %s"status=complete" lf counts-line 1*step-block result-line
+counts-line = %s"steps=" decimal %s" premises=" decimal lf
+step-block = step-line *premise-line
+step-line = %s"step=" decimal %s" rule=" decimal %s" fact=" fact lf
+premise-line = %s"premise=" decimal %s" body=" decimal %s" kind=" premise-kind %s" origin=" premise-origin premise-value %s" parent=" parent lf
+premise-kind = %s"positive" / %s"negative-absence" / %s"comparison-true"
+premise-origin = %s"edb" / %s"policy-fact" / %s"idb" / %s"none"
+premise-value = (%s" fact=" fact) / (%s" lhs=" term %s" op=" comparator %s" rhs=" term)
+parent = %s"-" / decimal
+result-line = %s"result-step=" decimal lf
+fact = quoted-name %s"(" [term *(%s"," term)] %s")"
+quoted-name = dquote 1*quoted-byte dquote
+term = quoted-string / signed-integer / boolean
+quoted-string = dquote *quoted-byte dquote
+quoted-byte = printable-safe / named-escape / hex-escape / utf8-2 / utf8-3 / utf8-4
+printable-safe = %x20-21 / %x23-5B / %x5D-7E
+named-escape = %x5C.22 / %x5C.5C / %x5C.6E / %x5C.72 / %x5C.74
+hex-escape = %s"\\x" upper-hex upper-hex
+comparator = %s"=" / %s"!=" / %s"<" / %s"<=" / %s">" / %s">="
+signed-integer = [%s"-"] decimal
+decimal = 1*digit
+boolean = %s"true" / %s"false"
+upper-hex = digit / %x41-46
+digit = %x30-39
+dquote = %x22
+lf = %x0A
+utf8-2 = %xC2-DF utf8-tail
+utf8-3 = %xE0 %xA0-BF utf8-tail / %xE1-EC 2utf8-tail / %xED %x80-9F utf8-tail / %xEE-EF 2utf8-tail
+utf8-4 = %xF0 %x90-BF 2utf8-tail / %xF1-F3 3utf8-tail / %xF4 %x80-8F 2utf8-tail
+utf8-tail = %x80-BF

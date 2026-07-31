@@ -1,4 +1,5 @@
 #include "src/manifest/maelys_datalog_manifest.h"
+#include "src/manifest/maelys_datalog_manifest_buffer_internal.h"
 
 #include "common/maelys_sha256.h"
 #include "common/maelys_utf8.h"
@@ -445,15 +446,18 @@ static maelys_result_t load_policy_entry_from_bundle(
     return maelys_datalog_policy_load_from_spec(&spec, set, diag);
 }
 
-maelys_result_t maelys_datalog_manifest_load_from_text(
+maelys_result_t maelys_datalog_manifest_load_from_text_expected_profile(
     const char *manifest_json,
     size_t manifest_json_len,
     const maelys_datalog_policy_bundle_entry_t *bundle,
     size_t bundle_count,
     unsigned flags,
+    const char *expected_profile,
     maelys_datalog_policy_set_t *out_set,
     maelys_datalog_diagnostic_t *out_diag) {
-    if ((!manifest_json && manifest_json_len > 0u) || !out_set) return MAELYS_ERR_INVALID_ARGUMENT;
+    if ((!manifest_json && manifest_json_len > 0u) || !expected_profile || !out_set) {
+        return MAELYS_ERR_INVALID_ARGUMENT;
+    }
     if (bundle_count > 0u && !bundle) return MAELYS_ERR_INVALID_ARGUMENT;
     if (out_diag) maelys_datalog_diagnostic_clear(out_diag);
     memset(out_set, 0, sizeof(*out_set));
@@ -499,6 +503,23 @@ maelys_result_t maelys_datalog_manifest_load_from_text(
         if (out_diag && unknown) snprintf(out_diag->field, sizeof(out_diag->field), "%s", unknown);
     }
     if (rc == MAELYS_OK) {
+        const char *profile = yyjson_get_str(yyjson_obj_get(root, "default_profile"));
+        if (!profile || strcmp(profile, expected_profile) != 0) {
+            rc = MAELYS_ERR_INVALID_FIELD;
+            manifest_diag(out_diag,
+                          MAELYS_DATALOG_DIAG_MANIFEST_INVALID_FIELD,
+                          "<manifest-buffer>",
+                          "unsupported default_profile",
+                          strcmp(expected_profile, MAELYS_DATALOG_PROFILE_NAME) == 0
+                              ? "set default_profile to MAELYS-DATALOG-v2"
+                              : "set default_profile to enforce");
+            if (out_diag) {
+                snprintf(out_diag->field, sizeof(out_diag->field), "%s", "default_profile");
+                if (profile) snprintf(out_diag->token, sizeof(out_diag->token), "%s", profile);
+            }
+        }
+    }
+    if (rc == MAELYS_OK) {
         yyjson_val *policies = yyjson_obj_get(root, "policies");
         yyjson_arr_iter iter = yyjson_arr_iter_with(policies);
         yyjson_val *entry;
@@ -516,6 +537,25 @@ maelys_result_t maelys_datalog_manifest_load_from_text(
     yyjson_doc_free(doc);
     if (rc != MAELYS_OK) maelys_datalog_policy_set_clear(out_set);
     return rc;
+}
+
+maelys_result_t maelys_datalog_manifest_load_from_text(
+    const char *manifest_json,
+    size_t manifest_json_len,
+    const maelys_datalog_policy_bundle_entry_t *bundle,
+    size_t bundle_count,
+    unsigned flags,
+    maelys_datalog_policy_set_t *out_set,
+    maelys_datalog_diagnostic_t *out_diag) {
+    return maelys_datalog_manifest_load_from_text_expected_profile(
+        manifest_json,
+        manifest_json_len,
+        bundle,
+        bundle_count,
+        flags,
+        MAELYS_DATALOG_PROFILE_NAME,
+        out_set,
+        out_diag);
 }
 
 static size_t bounded_cstr_len(const char *value, size_t max_plus_one) {

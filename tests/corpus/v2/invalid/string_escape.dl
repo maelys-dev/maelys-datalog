@@ -1,0 +1,2 @@
+% EXPECT: LEXER_UNSUPPORTED_CONSTRUCT
+safe("line\nbreak").

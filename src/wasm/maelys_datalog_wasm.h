@@ -65,7 +65,7 @@ int32_t maelys_datalog_wasm_enumerate_predicate_facts(const char *predicate,
  * pointer may designate a valid zero-length symbol; callers must distinguish
  * the pointer value before decoding the UTF-8 text. */
 const char *maelys_datalog_wasm_symbol_text_by_id(int32_t symbol_id);
-/* P4-C66 — Canonical Why-true text (MAELYS-DATALOG-WHY-TRUE-TEXT-v1) for a
+/* P4-C66/P4-C67 — Canonical MAELYS-DATALOG-v2 Why-true text for a
  * ground IDB fact of the current solved WASM result.
  *
  * These two arity-explicit entry points mirror query_symbol/query_symbol2: the

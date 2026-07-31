@@ -1,0 +1,3 @@
+% EXPECT: FAIL
+/* outer /* nested */ outer */
+safe("alice").

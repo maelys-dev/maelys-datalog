@@ -1,7 +1,7 @@
 /* P4-C65 — Bounded, deterministic Why-true text formatter.
  *
  * Presentation layer only: renders a P4-C64 explanation as
- * MAELYS-DATALOG-WHY-TRUE-TEXT-v1. Structural validation is integral and
+ * MAELYS-DATALOG-v2 Why-true document. Structural validation is integral and
  * precedes any visible write; count-only mode and write mode share the same
  * emission primitives (one writer, two modes). No heap allocation, no
  * recursion, no global mutable state, no locale dependency. */
@@ -272,7 +272,7 @@ static void wr_cmp_op(fmt_writer_t *w, uint8_t op) {
 static void emit_explanation_text(const maelys_datalog_ruleset_t *ruleset,
                                   const maelys_datalog_explanation_t *explanation,
                                   fmt_writer_t *w) {
-    WR_LIT(w, "MAELYS-DATALOG-WHY-TRUE-TEXT-v1\n");
+    WR_LIT(w, "MAELYS-DATALOG-v2\ndocument=why-true\n");
     if (explanation->found == 0u) {
         WR_LIT(w, "status=not-derived\nsteps=0 premises=0\n");
         return;

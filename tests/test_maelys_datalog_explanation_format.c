@@ -337,7 +337,7 @@ static void build_parent_chain(maelys_datalog_explanation_t *e) {
 }
 
 static const char k_normative_expected[] =
-    "MAELYS-DATALOG-WHY-TRUE-TEXT-v1\n"
+    "MAELYS-DATALOG-v2\ndocument=why-true\n"
     "status=complete\n"
     "steps=1 premises=2\n"
     "step=0 rule=7 fact=\"allow\"(\"alice\",\"doc.pdf\")\n"
@@ -383,7 +383,7 @@ static int format_golden_check(const maelys_datalog_ruleset_t *rs,
 /* §6.1(15)(16): one trailing LF before the NUL; no CR, no TAB, no empty
  * line, no trailing space, versioned header first. */
 static int text_wellformed(const char *text, size_t len) {
-    static const char header[] = "MAELYS-DATALOG-WHY-TRUE-TEXT-v1\n";
+    static const char header[] = "MAELYS-DATALOG-v2\ndocument=why-true\n";
     if (len < sizeof(header) - 1u) return 0;
     if (memcmp(text, header, sizeof(header) - 1u) != 0) return 0;
     if (text[len - 1u] != '\n') return 0;
@@ -435,7 +435,7 @@ static int test_fmt_golden_not_derived(void) {
     TEST_ASSERT_TRUE(ensure_fx());
     memset(&g_exp, 0, sizeof(g_exp));
     static const char expected[] =
-        "MAELYS-DATALOG-WHY-TRUE-TEXT-v1\n"
+        "MAELYS-DATALOG-v2\ndocument=why-true\n"
         "status=not-derived\n"
         "steps=0 premises=0\n";
     TEST_ASSERT_TRUE(format_golden_check(&g_fx, &g_exp, expected));
@@ -450,7 +450,7 @@ static int test_fmt_golden_truncated(void) {
     g_exp.found = 1u;
     g_exp.truncated = 1u;
     static const char expected[] =
-        "MAELYS-DATALOG-WHY-TRUE-TEXT-v1\n"
+        "MAELYS-DATALOG-v2\ndocument=why-true\n"
         "status=truncated\n"
         "steps=0 premises=0\n";
     TEST_ASSERT_TRUE(format_golden_check(&g_fx, &g_exp, expected));
@@ -476,7 +476,7 @@ static int test_fmt_golden_policy_fact_origin(void) {
     set_pos(&g_exp, 0u, 0u, ORIGIN_POLICY, f1(g_pid_pol, t_sym(g_sym_alice)), NO_STEP);
     finish(&g_exp, 1u, 1u);
     static const char expected[] =
-        "MAELYS-DATALOG-WHY-TRUE-TEXT-v1\n"
+        "MAELYS-DATALOG-v2\ndocument=why-true\n"
         "status=complete\n"
         "steps=1 premises=1\n"
         "step=0 rule=1 fact=\"allow\"(\"alice\",\"doc.pdf\")\n"
@@ -491,7 +491,7 @@ static int test_fmt_golden_two_distinct_idb_parents(void) {
     TEST_ASSERT_TRUE(ensure_fx());
     build_parent_chain(&g_exp);
     static const char expected[] =
-        "MAELYS-DATALOG-WHY-TRUE-TEXT-v1\n"
+        "MAELYS-DATALOG-v2\ndocument=why-true\n"
         "status=complete\n"
         "steps=3 premises=4\n"
         "step=0 rule=1 fact=\"num\"(1)\n"
@@ -521,7 +521,7 @@ static int test_fmt_golden_shared_idb_parent(void) {
     finish(&g_exp, 3u, 4u);
     /* The shared parent step 0 is rendered once and referenced twice. */
     static const char expected[] =
-        "MAELYS-DATALOG-WHY-TRUE-TEXT-v1\n"
+        "MAELYS-DATALOG-v2\ndocument=why-true\n"
         "status=complete\n"
         "steps=3 premises=4\n"
         "step=0 rule=1 fact=\"num\"(1)\n"
@@ -549,7 +549,7 @@ static int test_fmt_golden_comparison_six_ops(void) {
     set_cmp(&g_exp, 5u, 5u, (uint8_t)MAELYS_DATALOG_CMP_GTE, t_int(2), t_int(1));
     finish(&g_exp, 1u, 6u);
     static const char expected[] =
-        "MAELYS-DATALOG-WHY-TRUE-TEXT-v1\n"
+        "MAELYS-DATALOG-v2\ndocument=why-true\n"
         "status=complete\n"
         "steps=1 premises=6\n"
         "step=0 rule=1 fact=\"num\"(0)\n"
@@ -575,7 +575,7 @@ static int build_single_int_explanation(long long v) {
 static int check_int_golden(long long v, const char *decimal) {
     build_single_int_explanation(v);
     int n = snprintf(g_expected, sizeof(g_expected),
-                     "MAELYS-DATALOG-WHY-TRUE-TEXT-v1\n"
+                     "MAELYS-DATALOG-v2\ndocument=why-true\n"
                      "status=complete\n"
                      "steps=1 premises=1\n"
                      "step=0 rule=1 fact=\"num\"(%s)\n"
@@ -605,7 +605,7 @@ static int test_fmt_golden_bool(void) {
     set_cmp(&g_exp, 0u, 0u, (uint8_t)MAELYS_DATALOG_CMP_NEQ, t_bool(1), t_bool(0));
     finish(&g_exp, 1u, 1u);
     static const char expected_true[] =
-        "MAELYS-DATALOG-WHY-TRUE-TEXT-v1\n"
+        "MAELYS-DATALOG-v2\ndocument=why-true\n"
         "status=complete\n"
         "steps=1 premises=1\n"
         "step=0 rule=1 fact=\"flag\"(true)\n"
@@ -618,7 +618,7 @@ static int test_fmt_golden_bool(void) {
     set_pos(&g_exp, 0u, 0u, ORIGIN_EDB, f1(g_pid_flag, t_bool(0)), NO_STEP);
     finish(&g_exp, 1u, 1u);
     static const char expected_false[] =
-        "MAELYS-DATALOG-WHY-TRUE-TEXT-v1\n"
+        "MAELYS-DATALOG-v2\ndocument=why-true\n"
         "status=complete\n"
         "steps=1 premises=1\n"
         "step=0 rule=1 fact=\"flag\"(false)\n"
@@ -636,7 +636,7 @@ static int test_fmt_golden_zero_arity(void) {
     set_pos(&g_exp, 0u, 0u, ORIGIN_EDB, f0(g_pid_zero), NO_STEP);
     finish(&g_exp, 1u, 1u);
     static const char expected[] =
-        "MAELYS-DATALOG-WHY-TRUE-TEXT-v1\n"
+        "MAELYS-DATALOG-v2\ndocument=why-true\n"
         "status=complete\n"
         "steps=1 premises=1\n"
         "step=0 rule=1 fact=\"zero\"()\n"
@@ -652,7 +652,7 @@ static int check_str_golden(maelys_datalog_symbol_id_t sym, const char *rendered
     set_cmp(&g_exp, 0u, 0u, (uint8_t)MAELYS_DATALOG_CMP_EQ, t_int(1), t_int(1));
     finish(&g_exp, 1u, 1u);
     int n = snprintf(g_expected, sizeof(g_expected),
-                     "MAELYS-DATALOG-WHY-TRUE-TEXT-v1\n"
+                     "MAELYS-DATALOG-v2\ndocument=why-true\n"
                      "status=complete\n"
                      "steps=1 premises=1\n"
                      "step=0 rule=1 fact=\"str\"(%s)\n"
@@ -712,7 +712,7 @@ static int test_fmt_golden_max_lengths(void) {
      * MAX_STRING_BYTES symbol, both quoted verbatim. */
     size_t off = 0u;
     static const char head[] =
-        "MAELYS-DATALOG-WHY-TRUE-TEXT-v1\n"
+        "MAELYS-DATALOG-v2\ndocument=why-true\n"
         "status=complete\n"
         "steps=1 premises=1\n"
         "step=0 rule=1 fact=\"";

@@ -16,7 +16,8 @@ extern "C" {
  *
  * Presentation-only. Renders an already-extracted P4-C64
  * maelys_datalog_explanation_t as the versioned text
- * MAELYS-DATALOG-WHY-TRUE-TEXT-v1, using the ruleset exclusively as a
+ * MAELYS-DATALOG-v2 Why-true document, discriminated by its mandatory
+ * document=why-true line, using the ruleset exclusively as a
  * read-only vocabulary (predicate names, interned symbols). The formatter
  * never re-solves, never reads an opaque solve result, never selects another
  * witness and never reorders steps or premises. It performs no heap

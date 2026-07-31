@@ -44,7 +44,7 @@ static void build_manifest_one(char *out,
              "\"policies\":[{\"policy_id\":\"%s\",\"domain\":\"decision\","
              "\"file\":\"ignored.dl\",\"sha256\":\"%s\",\"mode\":\"%s\","
              "\"enabled\":true,\"description\":\"x\"}],"
-             "\"capabilities\":[],\"default_profile\":\"MAELYS-DATALOG-TEXT-v1\","
+             "\"capabilities\":[],\"default_profile\":\"MAELYS-DATALOG-v2\","
              "\"strict_loading\":true,\"fail_closed\":true,\"created_for\":\"test\"}",
              policy_id,
              sha,
@@ -65,7 +65,7 @@ static void build_manifest_two(char *out,
              "{\"policy_id\":\"p2\",\"domain\":\"decision\","
              "\"file\":\"second.dl\",\"sha256\":\"%s\",\"mode\":\"shadow\","
              "\"enabled\":true,\"description\":\"x\"}],"
-             "\"capabilities\":[],\"default_profile\":\"MAELYS-DATALOG-TEXT-v1\","
+             "\"capabilities\":[],\"default_profile\":\"MAELYS-DATALOG-v2\","
              "\"strict_loading\":true,\"fail_closed\":true,\"created_for\":\"test\"}",
              sha1,
              sha2);
@@ -115,7 +115,7 @@ static void build_whitelist_manifest(char *out,
              "\"policies\":[{\"policy_id\":\"%s\",\"domain\":\"%s\","
              "\"file\":\"ignored.dl\",\"sha256\":\"%s\",\"mode\":\"shadow\","
              "\"enabled\":true,\"description\":\"whitelist\"%s%s}],"
-             "\"capabilities\":[],\"default_profile\":\"MAELYS-DATALOG-TEXT-v1\","
+             "\"capabilities\":[],\"default_profile\":\"MAELYS-DATALOG-v2\","
              "\"strict_loading\":true,\"fail_closed\":true,\"created_for\":\"test\"}",
              k_whitelist_policy_id,
              k_whitelist_domain,
@@ -264,6 +264,95 @@ static int test_datalog_wasm_manifest_load_from_text_invalid_json(void) {
                                                              &diag),
                       "%d");
     TEST_ASSERT_EQUAL(MAELYS_DATALOG_DIAG_MANIFEST_INVALID_JSON, diag.code, "%d");
+    TEST_END();
+}
+
+static int test_datalog_wasm_manifest_rejects_historical_profile(void) {
+    TEST_BEGIN();
+    char sha[65], manifest[2048];
+    sha_bytes(k_policy_src, strlen(k_policy_src), sha);
+    build_manifest_one(manifest, sizeof(manifest), "p", sha, "shadow");
+    char *profile = strstr(manifest, "MAELYS-DATALOG-v2");
+    TEST_ASSERT_TRUE(profile != NULL);
+    memcpy(profile, "MAELYS-DATALOG-TEXT-v1", strlen("MAELYS-DATALOG-TEXT-v1"));
+    profile[strlen("MAELYS-DATALOG-TEXT-v1")] = '\0';
+    strncat(profile,
+            "\",\"strict_loading\":true,\"fail_closed\":true,\"created_for\":\"test\"}",
+            sizeof(manifest) - (size_t)(profile - manifest) - strlen(profile) - 1u);
+    maelys_datalog_policy_bundle_entry_t bundle =
+        bundle_entry("p", k_policy_src, strlen(k_policy_src));
+    maelys_datalog_policy_set_t set;
+    maelys_datalog_diagnostic_t diag;
+    TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_FIELD,
+                      maelys_datalog_manifest_load_from_text(manifest,
+                                                             strlen(manifest),
+                                                             &bundle,
+                                                             1u,
+                                                             0,
+                                                             &set,
+                                                             &diag),
+                      "%d");
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_DIAG_MANIFEST_INVALID_FIELD, diag.code, "%d");
+    TEST_ASSERT_EQUAL_STRING("default_profile", diag.field);
+    TEST_ASSERT_TRUE(strstr(diag.hint, "MAELYS-DATALOG-v2") != NULL);
+    TEST_END();
+}
+
+static int test_datalog_wasm_manifest_rejects_unknown_profile(void) {
+    TEST_BEGIN();
+    char sha[65], manifest[2048];
+    sha_bytes(k_policy_src, strlen(k_policy_src), sha);
+    build_manifest_one(manifest, sizeof(manifest), "p", sha, "shadow");
+    char *profile = strstr(manifest, "MAELYS-DATALOG-v2");
+    TEST_ASSERT_TRUE(profile != NULL);
+    memcpy(profile, "UNKNOWN-PROFILE-v2", strlen("UNKNOWN-PROFILE-v2"));
+    profile[strlen("UNKNOWN-PROFILE-v2")] = '\0';
+    strncat(profile,
+            "\",\"strict_loading\":true,\"fail_closed\":true,\"created_for\":\"test\"}",
+            sizeof(manifest) - (size_t)(profile - manifest) - strlen(profile) - 1u);
+    maelys_datalog_policy_bundle_entry_t bundle =
+        bundle_entry("p", k_policy_src, strlen(k_policy_src));
+    maelys_datalog_policy_set_t set;
+    maelys_datalog_diagnostic_t diag;
+    TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_FIELD,
+                      maelys_datalog_manifest_load_from_text(manifest,
+                                                             strlen(manifest),
+                                                             &bundle,
+                                                             1u,
+                                                             0,
+                                                             &set,
+                                                             &diag),
+                      "%d");
+    TEST_ASSERT_EQUAL_STRING("default_profile", diag.field);
+    TEST_END();
+}
+
+static int test_datalog_wasm_manifest_rejects_file_profile(void) {
+    TEST_BEGIN();
+    char sha[65], manifest[2048];
+    sha_bytes(k_policy_src, strlen(k_policy_src), sha);
+    build_manifest_one(manifest, sizeof(manifest), "p", sha, "shadow");
+    char *profile = strstr(manifest, "MAELYS-DATALOG-v2");
+    TEST_ASSERT_TRUE(profile != NULL);
+    memcpy(profile, "enforce", strlen("enforce"));
+    profile[strlen("enforce")] = '\0';
+    strncat(profile,
+            "\",\"strict_loading\":true,\"fail_closed\":true,\"created_for\":\"test\"}",
+            sizeof(manifest) - (size_t)(profile - manifest) - strlen(profile) - 1u);
+    maelys_datalog_policy_bundle_entry_t bundle =
+        bundle_entry("p", k_policy_src, strlen(k_policy_src));
+    maelys_datalog_policy_set_t set;
+    maelys_datalog_diagnostic_t diag;
+    TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_FIELD,
+                      maelys_datalog_manifest_load_from_text(manifest,
+                                                             strlen(manifest),
+                                                             &bundle,
+                                                             1u,
+                                                             0,
+                                                             &set,
+                                                             &diag),
+                      "%d");
+    TEST_ASSERT_EQUAL_STRING("default_profile", diag.field);
     TEST_END();
 }
 
@@ -618,6 +707,9 @@ int main(int argc, char **argv) {
         {"maelys_datalog_manifest_buffer/sha_mismatch", TEST_MODE_NON_BLOCKING, test_datalog_wasm_manifest_load_from_text_sha_mismatch},
         {"maelys_datalog_manifest_buffer/missing_bundle", TEST_MODE_NON_BLOCKING, test_datalog_wasm_manifest_load_from_text_missing_bundle},
         {"maelys_datalog_manifest_buffer/invalid_json", TEST_MODE_NON_BLOCKING, test_datalog_wasm_manifest_load_from_text_invalid_json},
+        {"maelys_datalog_manifest_buffer/rejects_historical_profile", TEST_MODE_NON_BLOCKING, test_datalog_wasm_manifest_rejects_historical_profile},
+        {"maelys_datalog_manifest_buffer/rejects_unknown_profile", TEST_MODE_NON_BLOCKING, test_datalog_wasm_manifest_rejects_unknown_profile},
+        {"maelys_datalog_manifest_buffer/rejects_file_profile", TEST_MODE_NON_BLOCKING, test_datalog_wasm_manifest_rejects_file_profile},
         {"maelys_datalog_manifest_buffer/utf8_invalid", TEST_MODE_NON_BLOCKING, test_datalog_wasm_manifest_load_from_text_utf8_invalid},
         {"maelys_datalog_manifest_buffer/multiple_policies", TEST_MODE_NON_BLOCKING, test_datalog_wasm_manifest_load_from_text_multiple_policies},
         {"maelys_datalog_manifest_buffer/test_only_rejected", TEST_MODE_NON_BLOCKING, test_datalog_wasm_manifest_load_from_text_test_only_rejected},

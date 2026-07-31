@@ -369,21 +369,21 @@ static const char k_explain_truncated_src[] =
     "reach(X, Y) :- path(X, Y).\n";
 
 static const char k_explain_allow_alice[] =
-    "MAELYS-DATALOG-WHY-TRUE-TEXT-v1\n"
+    "MAELYS-DATALOG-v2\ndocument=why-true\n"
     "status=complete\n"
     "steps=1 premises=1\n"
     "step=0 rule=1 fact=\"allow\"(\"alice\")\n"
     "premise=0 body=0 kind=positive origin=edb fact=\"safe\"(\"alice\") parent=-\n"
     "result-step=0\n";
 static const char k_explain_path_ab[] =
-    "MAELYS-DATALOG-WHY-TRUE-TEXT-v1\n"
+    "MAELYS-DATALOG-v2\ndocument=why-true\n"
     "status=complete\n"
     "steps=1 premises=1\n"
     "step=0 rule=3 fact=\"path\"(\"a\",\"b\")\n"
     "premise=0 body=0 kind=positive origin=edb fact=\"edge\"(\"a\",\"b\") parent=-\n"
     "result-step=0\n";
 static const char k_explain_truncated_text[] =
-    "MAELYS-DATALOG-WHY-TRUE-TEXT-v1\n"
+    "MAELYS-DATALOG-v2\ndocument=why-true\n"
     "status=truncated\n"
     "steps=0 premises=0\n";
 

@@ -130,7 +130,8 @@ if explanation is not None:
 ```
 
 The return type is `str | None`. A complete witness returns the versioned
-`MAELYS-DATALOG-WHY-TRUE-TEXT-v1` text with `status=complete`. A fact that is
+`MAELYS-DATALOG-v2` text with the `document=why-true` discriminator and
+`status=complete`. A fact that is
 present but whose bounded provenance is unavailable returns the same canonical
 format with `status=truncated`; truncation is never collapsed to `None`. `None`
 means only that no matching derived IDB fact is available.

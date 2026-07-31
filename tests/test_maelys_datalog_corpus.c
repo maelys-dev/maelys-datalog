@@ -91,6 +91,7 @@ static int init_corpus_ruleset(maelys_datalog_ruleset_t *ruleset)
          MAELYS_DATALOG_PRED_KIND_IDB | MAELYS_DATALOG_PRED_KIND_QUERY},
         {"score", 2, MAELYS_DATALOG_PRED_KIND_EDB},
         {"owns", 2, MAELYS_DATALOG_PRED_KIND_EDB},
+        {"or", 2, MAELYS_DATALOG_PRED_KIND_EDB},
         {"valid_commit_msg", 1, MAELYS_DATALOG_PRED_KIND_EDB},
     };
 
@@ -443,7 +444,7 @@ static int test_registry_conflict_api_fixture(void)
              "\"file\":\"ignored.dl\",\"sha256\":\"%s\",\"mode\":\"shadow\","
              "\"enabled\":true,\"description\":\"registry\","
              "\"queries\":[{\"name\":\"unknown\",\"arity\":1}]}],"
-             "\"capabilities\":[],\"default_profile\":\"MAELYS-DATALOG-TEXT-v1\","
+             "\"capabilities\":[],\"default_profile\":\"MAELYS-DATALOG-v2\","
              "\"strict_loading\":true,\"fail_closed\":true,\"created_for\":\"test\"}",
              k_conflict_policy_id,
              k_conflict_domain,

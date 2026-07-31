@@ -639,7 +639,7 @@ static int test_determinism_c44_canonical_sha_fixture(void) {
         "allow(U, D) :- owns(U, D), not(blocked(U)).\n";
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_parse_ruleset(&ruleset, src, strlen(src)), "%d");
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_ruleset_finalize_sha256(&ruleset), "%d");
-    TEST_ASSERT_EQUAL_STRING("e745887b8f197efa9b91c29b15dcdccd436aa44f481e9ab17f9926c521be5834",
+    TEST_ASSERT_EQUAL_STRING("a6ba4af6cdb6607e4fcc3e00c2475fcef8e28525bd52d1aaf01e994c86e9aa9b",
                              ruleset.sha256);
     maelys_datalog_ruleset_clear(&ruleset);
     TEST_END();
@@ -714,7 +714,7 @@ static int test_determinism_or_and_manual_explanation_byte_identical(void) {
 }
 
 /* P4-C65 §6.4: an OR source and its manual expansion yield byte-identical
- * MAELYS-DATALOG-WHY-TRUE-TEXT-v1 renderings (off-stack text buffers). */
+ * MAELYS-DATALOG-v2 Why-true renderings (off-stack text buffers). */
 static char g_det_text_a[8192];
 static char g_det_text_b[8192];
 

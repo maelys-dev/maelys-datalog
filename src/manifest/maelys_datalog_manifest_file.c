@@ -1,4 +1,5 @@
 #include "src/manifest/maelys_datalog_manifest.h"
+#include "src/manifest/maelys_datalog_manifest_buffer_internal.h"
 
 #include "vendor/yyjson/yyjson.h"
 
@@ -251,13 +252,15 @@ maelys_result_t maelys_datalog_manifest_load_ex(const char *manifest_path,
                                     &bundle_count,
                                     out_diag);
     if (rc == MAELYS_OK) {
-        rc = maelys_datalog_manifest_load_from_text(manifest_buf,
-                                                    manifest_len,
-                                                    bundle,
-                                                    bundle_count,
-                                                    flags,
-                                                    out_set,
-                                                    out_diag);
+        rc = maelys_datalog_manifest_load_from_text_expected_profile(
+            manifest_buf,
+            manifest_len,
+            bundle,
+            bundle_count,
+            flags,
+            "enforce",
+            out_set,
+            out_diag);
     }
 
     free_bundle(bundle, src_buffers, bundle_count);

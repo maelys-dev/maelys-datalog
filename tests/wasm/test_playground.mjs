@@ -1172,7 +1172,7 @@ await test('playground_string_batch_state_guards', async () => {
  * ==================================================================== */
 
 const WHY_TRUE_ALLOW_ALICE =
-  'MAELYS-DATALOG-WHY-TRUE-TEXT-v1\n' +
+  'MAELYS-DATALOG-v2\ndocument=why-true\n' +
   'status=complete\n' +
   'steps=1 premises=1\n' +
   'step=0 rule=1 fact="allow"("alice")\n' +
@@ -1180,7 +1180,7 @@ const WHY_TRUE_ALLOW_ALICE =
   'result-step=0\n';
 
 const WHY_TRUE_PATH_AB =
-  'MAELYS-DATALOG-WHY-TRUE-TEXT-v1\n' +
+  'MAELYS-DATALOG-v2\ndocument=why-true\n' +
   'status=complete\n' +
   'steps=1 premises=1\n' +
   'step=0 rule=1 fact="path"("a","b")\n' +
@@ -1188,7 +1188,7 @@ const WHY_TRUE_PATH_AB =
   'result-step=0\n';
 
 const WHY_TRUE_PATH_AC =
-  'MAELYS-DATALOG-WHY-TRUE-TEXT-v1\n' +
+  'MAELYS-DATALOG-v2\ndocument=why-true\n' +
   'status=complete\n' +
   'steps=2 premises=3\n' +
   'step=0 rule=1 fact="path"("a","b")\n' +
@@ -1199,7 +1199,7 @@ const WHY_TRUE_PATH_AC =
   'result-step=1\n';
 
 const WHY_TRUE_TRUNCATED =
-  'MAELYS-DATALOG-WHY-TRUE-TEXT-v1\n' +
+  'MAELYS-DATALOG-v2\ndocument=why-true\n' +
   'status=truncated\n' +
   'steps=0 premises=0\n';
 

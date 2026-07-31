@@ -46,6 +46,11 @@ The default `SMALL` profile supports 1,024 EDB facts. Configure
 `-DMAELYS_DATALOG_PROFILE_LARGE=ON` for the `LARGE` profile with 2,048 EDB
 facts.
 
+The active source and Why-true text contract is the unified
+[`MAELYS-DATALOG-v2` specification](docs/specifications/maelys-datalog-v2/specification.md).
+The profile token versions both surfaces together; the README does not
+duplicate their grammar.
+
 ## Public API
 
 Include the umbrella header:
@@ -71,6 +76,7 @@ Complete integration guides and API documentation are available at
 | `bindings/python/` | Native Python binding |
 | `js/` | JavaScript playground wrapper |
 | `tests/` | Native, Python, WASM, corpus, and fuzz tests |
+| `docs/specifications/` | Normative, executable language and output-format specifications |
 | `bench/` | Reproducible benchmarks and reports |
 
 ## Versioning

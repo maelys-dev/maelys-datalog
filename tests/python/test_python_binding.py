@@ -68,7 +68,7 @@ def test_register_load_solve_enumerate_and_symbol_resolution():
         }
         assert result.enumerate_predicate_facts("isolated", 1) == []
         expected = (
-            "MAELYS-DATALOG-WHY-TRUE-TEXT-v1\n"
+            "MAELYS-DATALOG-v2\ndocument=why-true\n"
             "status=complete\n"
             "steps=1 premises=1\n"
             'step=0 rule=1 fact="path"("a","b")\n'
@@ -123,7 +123,7 @@ def test_contains_fact_covers_policy_edb_and_idb_without_interning(monkeypatch):
         assert result.explain_fact_text("observed", ["alice"]) is None
         derived_text = result.explain_fact_text("derived", ["alice"])
         assert derived_text is not None
-        assert derived_text.startswith("MAELYS-DATALOG-WHY-TRUE-TEXT-v1\n")
+        assert derived_text.startswith("MAELYS-DATALOG-v2\ndocument=why-true\n")
         assert "status=complete\n" in derived_text
         escaped_text = result.explain_fact_text("allow", ['café\n"', "δ"])
         assert escaped_text is not None
@@ -326,7 +326,7 @@ def test_explain_fact_text_distinguishes_truncated_from_absent():
         assert result.contains_fact("path", ["n0", "n8"])
         text = result.explain_fact_text("path", ["n0", "n8"])
         assert text == (
-            "MAELYS-DATALOG-WHY-TRUE-TEXT-v1\n"
+            "MAELYS-DATALOG-v2\ndocument=why-true\n"
             "status=truncated\n"
             "steps=0 premises=0\n"
         )

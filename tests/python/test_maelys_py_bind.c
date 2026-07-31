@@ -159,7 +159,7 @@ static int exercise_success_once(void) {
             {(int32_t)MAELYS_DATALOG_TERM_SYMBOL, (int64_t)b},
         };
         static const char expected_explanation[] =
-            "MAELYS-DATALOG-WHY-TRUE-TEXT-v1\n"
+            "MAELYS-DATALOG-v2\ndocument=why-true\n"
             "status=complete\n"
             "steps=1 premises=1\n"
             "step=0 rule=1 fact=\"path\"(\"a\",\"b\")\n"
@@ -391,7 +391,7 @@ static int test_maelys_py_bind_truncated_explanation_is_not_absent(void) {
             {(int32_t)MAELYS_DATALOG_TERM_SYMBOL, (int64_t)nodes[8]},
         };
         static const char expected[] =
-            "MAELYS-DATALOG-WHY-TRUE-TEXT-v1\n"
+            "MAELYS-DATALOG-v2\ndocument=why-true\n"
             "status=truncated\n"
             "steps=0 premises=0\n";
         size_t required = 0u;

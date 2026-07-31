@@ -1,0 +1,6 @@
+% EXPECT: OK
+safe("alice").
+allow(X) :- user(X), not(blocked(X)).
+path(X, Y) :- edge(X, Y) or owns(X, Y).
+path(X, Y) :- edge(X, Y), edge(X, _).
+allow(X) :- score(X, S), S * 2 + 1 >= 7.

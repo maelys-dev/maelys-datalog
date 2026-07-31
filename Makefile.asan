@@ -77,6 +77,7 @@ ASAN_TEST_SRCS = \
 	tests/test_maelys_datalog_boundary.c \
 	tests/test_maelys_datalog_determinism.c \
 	tests/test_maelys_datalog_explanation_format.c \
+	tests/test_maelys_datalog_language_spec.c \
 	tests/test_maelys_datalog_corpus.c \
 	tests/test_maelys_datalog_audit.c
 
