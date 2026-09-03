@@ -1,0 +1,2 @@
+% EXPECT: OK
+path(X, Y) :- edge(X, Y) or or(X, Y).

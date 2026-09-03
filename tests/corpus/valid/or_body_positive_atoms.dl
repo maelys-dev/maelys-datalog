@@ -1,0 +1,3 @@
+/* EXPECT: OK */
+allow(X) :- user(X) or blocked(X).
+deny(X, Y) :- owns(X, Y) or user(X), user(Y).

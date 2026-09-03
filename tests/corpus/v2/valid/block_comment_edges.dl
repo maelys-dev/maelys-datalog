@@ -1,0 +1,3 @@
+% EXPECT: OK
+/* slash /, repeated //, and star runs *** are valid and non-nested. */
+safe("alice").

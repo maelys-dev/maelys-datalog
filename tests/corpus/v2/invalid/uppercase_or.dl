@@ -1,0 +1,2 @@
+% EXPECT: FAIL
+path(X, Y) :- edge(X, Y) OR owns(X, Y).

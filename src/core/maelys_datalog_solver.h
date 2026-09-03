@@ -1,0 +1,158 @@
+#pragma once
+#ifndef MAELYS_DATALOG_SOLVER_H
+#define MAELYS_DATALOG_SOLVER_H
+
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
+
+#include "common/maelys_errors.h"
+#include "src/core/maelys_datalog_edb.h"
+#include "src/core/maelys_datalog_ruleset.h"
+#include "src/core/maelys_datalog_types.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+typedef struct maelys_datalog_solve_result maelys_datalog_solve_result_t;
+
+typedef enum {
+    MAELYS_DATALOG_SOLVE_DIAG_NONE = 0,
+    MAELYS_DATALOG_SOLVE_DIAG_MAX_DEPTH,
+    MAELYS_DATALOG_SOLVE_DIAG_IDB_OVERFLOW,
+    MAELYS_DATALOG_SOLVE_DIAG_COMPARISON_TYPE_ERROR,
+    MAELYS_DATALOG_SOLVE_DIAG_FILTER_ERROR,
+    MAELYS_DATALOG_SOLVE_DIAG_MALFORMED_FACT,
+    MAELYS_DATALOG_SOLVE_DIAG_MALFORMED_EDB,
+    MAELYS_DATALOG_SOLVE_DIAG_INVALID_STATE,
+    MAELYS_DATALOG_SOLVE_DIAG_INVALID_ARGUMENT,
+    MAELYS_DATALOG_SOLVE_DIAG_INTERNAL_ERROR
+} maelys_datalog_solve_diag_category_t;
+
+typedef struct {
+    maelys_result_t failure_error;
+    maelys_datalog_deny_reason_t failure_reason;
+    maelys_datalog_solve_diag_category_t category;
+    uint16_t predicate_id;
+    uint16_t rule_id;
+    uint16_t depth;
+    uint16_t depth_limit;
+    uint16_t capacity;
+    uint16_t count_observed;
+    uint8_t lhs_kind;
+    uint8_t rhs_kind;
+    uint8_t comparison_op;
+    uint8_t term_index;
+    uint8_t arity_expected;
+    uint8_t arity_observed;
+    uint8_t _pad[2];
+} maelys_datalog_solve_diagnostic_t;
+
+const char *maelys_datalog_solve_diagnostic_category_name(
+    maelys_datalog_solve_diag_category_t category);
+maelys_result_t maelys_datalog_solve_once(const maelys_datalog_ruleset_t *ruleset,
+                                          const maelys_datalog_edb_t *edb,
+                                          maelys_datalog_solve_result_t **out_result);
+maelys_result_t maelys_datalog_solve_once_ex(
+    const maelys_datalog_ruleset_t *ruleset,
+    const maelys_datalog_edb_t *edb,
+    maelys_datalog_solve_result_t **out_result,
+    maelys_datalog_solve_diagnostic_t *out_diag);
+void maelys_datalog_solve_result_free(maelys_datalog_solve_result_t *result);
+/* Resolve a symbol id in the exact vocabulary retained by result. The text is
+ * borrowed, NUL-terminated, and remains valid only while result (and, for a
+ * fresh solve, its borrowed ruleset) remains alive. This accessor never
+ * interns, allocates, or mutates solve state. */
+maelys_result_t maelys_datalog_solve_result_symbol_text(
+    const maelys_datalog_solve_result_t *result,
+    maelys_datalog_symbol_id_t id,
+    const char **out_text,
+    size_t *out_length);
+maelys_result_t maelys_datalog_validate_solved_ground_query(
+    const maelys_datalog_solve_result_t *result,
+    const char *predicate,
+    size_t arity);
+maelys_result_t maelys_datalog_query_solved_ground_fact(
+    const maelys_datalog_solve_result_t *result,
+    const char *predicate,
+    const maelys_datalog_term_t *terms,
+    size_t arity,
+    bool *out_present);
+const maelys_datalog_proof_tree_t *maelys_datalog_solve_result_proof(
+    const maelys_datalog_solve_result_t *result);
+maelys_result_t maelys_datalog_extract_proof_for_fact(
+    const maelys_datalog_solve_result_t *result,
+    const maelys_datalog_fact_t *queried_fact,
+    maelys_datalog_proof_tree_t *out_proof);
+/* P4-C64 — Extract the bounded Why-true premise provenance of a canonical
+ * derivation of queried_fact. The witness is captured during the single solve
+ * traversal; this accessor never re-solves and never reconstructs premises.
+ *
+ * out_explanation is caller-owned and large (bounded, see the type). It must
+ * not be materialized on the stack.
+ *
+ * Contract:
+ *   - any NULL argument            -> MAELYS_ERR_INVALID_ARGUMENT, out untouched
+ *   - not finalized / failed /
+ *     ruleset not loaded           -> MAELYS_ERR_INVALID_STATE, out untouched
+ *   - structurally invalid fact    -> MAELYS_ERR_INVALID_FIELD, out untouched
+ *   - fact absent from finalized
+ *     IDB                          -> MAELYS_OK, found=0, truncated=0, empty
+ *   - fact present, complete
+ *     witness                      -> MAELYS_OK, found=1, truncated=0, full DAG
+ *   - fact present, witness or a
+ *     required premise unavailable -> MAELYS_OK, found=1, truncated=1,
+ *                                     step_count=0, premise_count=0 (atomic)
+ *
+ * Premises are always returned in the rule body's lexical order, independent of
+ * the solver's join order. The steps form a local, ancestors-first, deduplicated
+ * DAG whose parent_step links are remapped to local step indices; the queried
+ * fact's step is last. This does not change the historic proof tree. */
+maelys_result_t maelys_datalog_explain_solved_fact(
+    const maelys_datalog_solve_result_t *result,
+    const maelys_datalog_fact_t *queried_fact,
+    maelys_datalog_explanation_t *out_explanation);
+/* Experimental bounded Why-false extraction.
+ *
+ * This is a read-only post-solve diagnostic. It never derives a fact and never
+ * changes the retained Why-true witness. All four limits are mandatory,
+ * non-zero and bounded by the public compile-time capacities. On argument,
+ * state or field errors, out_explanation is untouched.
+ *
+ * A present query returns STATUS_NOT_APPLICABLE and its first authoritative
+ * origin (policy fact, EDB, then IDB). An absent query returns STATUS_COMPLETE
+ * unless at least one configured bound is reached, in which case it returns
+ * STATUS_TRUNCATED with the corresponding limit_hits bit(s). */
+maelys_result_t maelys_datalog_explain_absent_solved_fact(
+    const maelys_datalog_solve_result_t *result,
+    const maelys_datalog_fact_t *queried_fact,
+    const maelys_datalog_why_false_limits_t *limits,
+    maelys_datalog_why_false_explanation_t *out_explanation);
+maelys_result_t maelys_datalog_solve_result_derived_fact_count(
+    const maelys_datalog_solve_result_t *result,
+    size_t *out_count);
+maelys_result_t maelys_datalog_solve_result_filter_statistics(
+    const maelys_datalog_solve_result_t *result,
+    maelys_datalog_filter_statistics_t *out_statistics);
+/* Enumerates already-materialized IDB facts for a query-capable predicate.
+ * This accessor never derives new facts, never resolves symbols to text, and
+ * never allocates. The caller owns out_facts and chooses out_capacity.
+ *
+ * out_capacity == 0 is a valid count-only mode; out_facts may be NULL only in
+ * that mode. On success, *out_count is the total number of matching facts found,
+ * not just the number copied. Truncation is therefore observable by the caller
+ * as *out_count > out_capacity. No ordering guarantee is made for copied facts. */
+maelys_result_t maelys_datalog_solve_result_enumerate_predicate_facts(
+    const maelys_datalog_solve_result_t *result,
+    const char *predicate,
+    size_t arity,
+    maelys_datalog_fact_t *out_facts,
+    size_t out_capacity,
+    size_t *out_count);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif

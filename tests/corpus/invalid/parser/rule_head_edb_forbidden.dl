@@ -1,0 +1,2 @@
+/* EXPECT: PARSER_RULE_HEAD_EDB_FORBIDDEN */
+user(X) :- blocked(X).

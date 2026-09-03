@@ -1,0 +1,2 @@
+/* EXPECT: LEXER_INVALID_TOKEN */
+allow(U) :- score(U, S), S / 2 <= 10.

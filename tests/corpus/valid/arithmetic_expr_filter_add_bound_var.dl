@@ -1,0 +1,2 @@
+/* EXPECT: OK */
+allow(U) :- score(U, S), edge(U, L), S + 1 <= L.

@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  native-tests:
+    name: Native tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Run native test suite
+        run: make test
+
+      - name: Verify CMake build
+        run: |
+          cmake -S . -B build/cmake
+          cmake --build build/cmake
