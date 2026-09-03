@@ -7,6 +7,14 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.1.0-alpha.3] - 2026-09-03
+
+### Fixed
+
+- The WebAssembly build links `maelys_datalog_filter.c`, which the native
+  builds already compiled; the release workflow of `v0.1.0-alpha.2` failed
+  on its undefined filter symbols, so that tag has no release.
+
 ## [0.1.0-alpha.2] - 2026-09-03
 
 ### Changed
@@ -26,6 +34,7 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 - Policy identity, diagnostics, proof records, and decision receipts.
 - Public documentation, contribution guide, security policy, and CI workflow.
 
-[Unreleased]: https://github.com/maelys-dev/maelys-datalog/compare/v0.1.0-alpha.2...HEAD
+[Unreleased]: https://github.com/maelys-dev/maelys-datalog/compare/v0.1.0-alpha.3...HEAD
+[0.1.0-alpha.3]: https://github.com/maelys-dev/maelys-datalog/releases/tag/v0.1.0-alpha.3
 [0.1.0-alpha.2]: https://github.com/maelys-dev/maelys-datalog/releases/tag/v0.1.0-alpha.2
 [0.1.0-alpha.1]: https://github.com/maelys-dev/maelys-datalog/releases/tag/v0.1.0-alpha.1

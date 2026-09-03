@@ -1,7 +1,7 @@
 # Maelys Datalog
 
 [![CI](https://github.com/maelys-dev/maelys-datalog/actions/workflows/ci.yml/badge.svg)](https://github.com/maelys-dev/maelys-datalog/actions/workflows/ci.yml)
-[![Version](https://img.shields.io/badge/version-v0.1.0--alpha.2-775DFF)](https://github.com/maelys-dev/maelys-datalog/releases/tag/v0.1.0-alpha.2)
+[![Version](https://img.shields.io/badge/version-v0.1.0--alpha.3-775DFF)](https://github.com/maelys-dev/maelys-datalog/releases/tag/v0.1.0-alpha.3)
 [![License: MPL-2.0](https://img.shields.io/badge/license-MPL--2.0-00BFC0.svg)](LICENSE)
 
 Maelys Datalog is a bounded, deterministic Datalog engine for embedded
