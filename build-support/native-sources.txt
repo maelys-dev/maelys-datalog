@@ -1,0 +1,3 @@
+src/manifest/maelys_datalog_manifest_file.c
+src/manifest/maelys_datalog_policy_set.c
+src/public/maelys_datalog_api.c

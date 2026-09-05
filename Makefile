@@ -4,32 +4,9 @@ LIBS =
 BUILD_DIR ?= build
 OBJ_DIR = $(BUILD_DIR)/obj
 
-ENGINE_SRCS = \
-	src/core/maelys_datalog_audit.c \
-	src/core/maelys_datalog_diagnostic.c \
-	src/core/maelys_datalog_domain_registry.c \
-	src/core/maelys_datalog_edb.c \
-	src/core/maelys_datalog_explanation_format.c \
-	src/core/maelys_datalog_filter.c \
-	src/core/maelys_datalog_introspection.c \
-	src/core/maelys_datalog_lexer.c \
-	src/core/maelys_datalog_parser.c \
-	src/core/maelys_datalog_prepared_session.c \
-	src/core/maelys_datalog_predicate_registry.c \
-	src/core/maelys_datalog_ruleset.c \
-	src/core/maelys_datalog_ruleset_canonical.c \
-	src/core/maelys_datalog_solver.c \
-	src/core/maelys_datalog_symbol_table.c \
-	src/core/maelys_datalog_decision.c \
-	src/manifest/maelys_datalog_manifest_buffer.c \
-	src/manifest/maelys_datalog_manifest_file.c \
-	src/manifest/maelys_datalog_policy_set.c \
-	src/public/maelys_datalog_api.c
+ENGINE_SRCS = $(shell sed -n '/^[^\#]/p' build-support/core-sources.txt build-support/standard-sources.txt build-support/native-sources.txt)
 
-COMMON_SRCS = \
-	common/maelys_sha256.c \
-	common/maelys_utf8.c \
-	vendor/yyjson/yyjson.c
+COMMON_SRCS =
 
 SRCS = $(ENGINE_SRCS) $(COMMON_SRCS)
 OBJS = $(patsubst %.c,$(OBJ_DIR)/%.o,$(SRCS))
@@ -49,6 +26,7 @@ WASM_TEST_SRCS = \
 TEST_SRCS = $(wildcard tests/test_*.c)
 TEST_BINS = $(TEST_SRCS:tests/%.c=build/tests/%)
 TEST_CFLAGS = $(CFLAGS) -DMAELYS_TESTING
+ENGINE_HEADERS = $(wildcard include/maelys/*.h src/core/*.h src/modules/*.h modules/standard/*.h)
 
 $(OBJ_DIR)/%.o: %.c
 	@mkdir -p $(dir $@)
@@ -61,8 +39,12 @@ examples: libmaelys_datalog.a $(EXAMPLES_OBJS) $(EXAMPLES_CHECK)
 	$(CC) $(CFLAGS) $(EXAMPLES_OBJS) $(EXAMPLES_CHECK) -L. -lmaelys_datalog $(LIBS) -o $(EXAMPLES_BIN)
 	./$(EXAMPLES_BIN)
 
-build/tests/%: tests/%.c $(SRCS) $(EXAMPLES_SRCS) $(TEST_HELPER_SRCS) $(WASM_TEST_SRCS) | build/tests
-	$(CC) $(TEST_CFLAGS) -I. -Iinclude $(SRCS) $(EXAMPLES_SRCS) $(TEST_HELPER_SRCS) $(WASM_TEST_SRCS) $< -o $@
+build/tests/test_maelys_datalog_modules: TEST_EXTRA_SRCS = examples/modules/exact_match.c
+build/tests/test_maelys_datalog_modules: TEST_CFLAGS += -pthread
+build/tests/test_maelys_datalog_modules: examples/modules/exact_match.c
+
+build/tests/%: tests/%.c $(SRCS) $(EXAMPLES_SRCS) $(TEST_HELPER_SRCS) $(WASM_TEST_SRCS) $(ENGINE_HEADERS) | build/tests
+	$(CC) $(TEST_CFLAGS) -I. -Iinclude $(SRCS) $(EXAMPLES_SRCS) $(TEST_HELPER_SRCS) $(WASM_TEST_SRCS) $(TEST_EXTRA_SRCS) $< -o $@
 
 build/tests:
 	mkdir -p $@

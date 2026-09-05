@@ -606,6 +606,14 @@ static maelys_result_t parse_filter_literal(
     rc = next(p);
     if (rc != MAELYS_OK) return rc;
 
+    rc = maelys_datalog_filter_validate(definition->kind, pattern, pattern_length);
+    if (rc != MAELYS_OK) {
+        parser_diag(p, MAELYS_DATALOG_DIAG_PARSER_INVALID_FILTER,
+                    "filter module rejected the pattern",
+                    "use a pattern supported by the registered filter module");
+        return rc;
+    }
+
     if (value_requires_intern) {
         maelys_datalog_symbol_id_t sid;
         rc = maelys_datalog_symbol_intern(

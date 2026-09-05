@@ -1,5 +1,5 @@
 CC ?= clang
-CFLAGS_COMMON = -Wall -Wextra -g -I.
+CFLAGS_COMMON = -Wall -Wextra -g -I. -Iinclude
 BUILD_ROOT ?= bench/build
 RESULT_DIR ?= bench/results
 REPORT_DIR ?= bench/reports
@@ -9,27 +9,11 @@ ASAN_IMAGE ?= maelys-datalog-asan-linux:ubuntu24.04
 DOCKER_PLATFORM ?= linux/arm64
 DOCKER_PLATFORM_ARG = $(if $(DOCKER_PLATFORM),--platform $(DOCKER_PLATFORM),)
 
-ENGINE_SRCS = \
-	src/core/maelys_datalog_audit.c \
-	src/core/maelys_datalog_diagnostic.c \
-	src/core/maelys_datalog_domain_registry.c \
-	src/core/maelys_datalog_edb.c \
-	src/core/maelys_datalog_lexer.c \
-	src/core/maelys_datalog_parser.c \
-	src/core/maelys_datalog_predicate_registry.c \
-	src/core/maelys_datalog_ruleset.c \
-	src/core/maelys_datalog_ruleset_canonical.c \
-	src/core/maelys_datalog_solver.c \
-	src/core/maelys_datalog_symbol_table.c \
-	src/core/maelys_datalog_decision.c \
-	src/manifest/maelys_datalog_manifest_buffer.c \
-	src/manifest/maelys_datalog_manifest_file.c
+ENGINE_SRCS = $(shell sed -n '/^[^\#]/p' build-support/core-sources.txt build-support/standard-sources.txt build-support/native-sources.txt)
 
-COMMON_SRCS = \
-	common/maelys_sha256.c \
-	common/maelys_utf8.c
+COMMON_SRCS =
 
-VENDOR_SRCS = vendor/yyjson/yyjson.c
+VENDOR_SRCS =
 BENCH_SRC = bench/bench_datalog.c
 BENCH_SRCS = $(ENGINE_SRCS) $(COMMON_SRCS) $(VENDOR_SRCS) $(BENCH_SRC)
 
@@ -92,16 +76,16 @@ check-selftest:
 	bash bench/check_selftest.sh
 
 $(BENCH_SMALL_O0): $(BENCH_SRCS) | $(SMALL_O0_DIR)
-	$(CC) $(CFLAGS_COMMON) -O0 $(BENCH_DEFS) $(SMALL_DEFS) -DBENCH_OPT_LEVEL=\"-O0\" -DBENCH_CFLAGS=\"-Wall_-Wextra_-g_-I._-O0\" $(BENCH_SRCS) -o $@
+	$(CC) $(CFLAGS_COMMON) -O0 $(BENCH_DEFS) $(SMALL_DEFS) -DBENCH_OPT_LEVEL=\"-O0\" -DBENCH_CFLAGS=\"-Wall_-Wextra_-g_-I._-Iinclude_-O0\" $(BENCH_SRCS) -o $@
 
 $(BENCH_SMALL_O2): $(BENCH_SRCS) | $(SMALL_O2_DIR)
-	$(CC) $(CFLAGS_COMMON) -O2 $(BENCH_DEFS) $(SMALL_DEFS) -DBENCH_OPT_LEVEL=\"-O2\" -DBENCH_CFLAGS=\"-Wall_-Wextra_-g_-I._-O2\" $(BENCH_SRCS) -o $@
+	$(CC) $(CFLAGS_COMMON) -O2 $(BENCH_DEFS) $(SMALL_DEFS) -DBENCH_OPT_LEVEL=\"-O2\" -DBENCH_CFLAGS=\"-Wall_-Wextra_-g_-I._-Iinclude_-O2\" $(BENCH_SRCS) -o $@
 
 $(BENCH_LARGE_O0): $(BENCH_SRCS) | $(LARGE_O0_DIR)
-	$(CC) $(CFLAGS_COMMON) -O0 $(LARGE_DEFS) $(BENCH_DEFS) -DBENCH_OPT_LEVEL=\"-O0\" -DBENCH_CFLAGS=\"-Wall_-Wextra_-g_-I._-DMAELYS_DATALOG_PROFILE_LARGE_-O0\" $(BENCH_SRCS) -o $@
+	$(CC) $(CFLAGS_COMMON) -O0 $(LARGE_DEFS) $(BENCH_DEFS) -DBENCH_OPT_LEVEL=\"-O0\" -DBENCH_CFLAGS=\"-Wall_-Wextra_-g_-I._-Iinclude_-DMAELYS_DATALOG_PROFILE_LARGE_-O0\" $(BENCH_SRCS) -o $@
 
 $(BENCH_LARGE_O2): $(BENCH_SRCS) | $(LARGE_O2_DIR)
-	$(CC) $(CFLAGS_COMMON) -O2 $(LARGE_DEFS) $(BENCH_DEFS) -DBENCH_OPT_LEVEL=\"-O2\" -DBENCH_CFLAGS=\"-Wall_-Wextra_-g_-I._-DMAELYS_DATALOG_PROFILE_LARGE_-O2\" $(BENCH_SRCS) -o $@
+	$(CC) $(CFLAGS_COMMON) -O2 $(LARGE_DEFS) $(BENCH_DEFS) -DBENCH_OPT_LEVEL=\"-O2\" -DBENCH_CFLAGS=\"-Wall_-Wextra_-g_-I._-Iinclude_-DMAELYS_DATALOG_PROFILE_LARGE_-O2\" $(BENCH_SRCS) -o $@
 
 $(SMALL_O0_DIR) $(SMALL_O2_DIR) $(LARGE_O0_DIR) $(LARGE_O2_DIR):
 	mkdir -p $@

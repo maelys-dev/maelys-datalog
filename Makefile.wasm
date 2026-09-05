@@ -12,33 +12,13 @@ endif
 
 WASM_CFLAGS = \
 	-O2 \
-	-I. \
+	-I. -Iinclude \
 	-DMAELYS_WASM=1 \
 	$(WASM_PROFILE_CFLAGS)
 
-ENGINE_SRCS = \
-	src/core/maelys_datalog_audit.c \
-	src/core/maelys_datalog_diagnostic.c \
-	src/core/maelys_datalog_domain_registry.c \
-	src/core/maelys_datalog_edb.c \
-	src/core/maelys_datalog_explanation_format.c \
-	src/core/maelys_datalog_filter.c \
-	src/core/maelys_datalog_introspection.c \
-	src/core/maelys_datalog_lexer.c \
-	src/core/maelys_datalog_parser.c \
-	src/core/maelys_datalog_prepared_session.c \
-	src/core/maelys_datalog_predicate_registry.c \
-	src/core/maelys_datalog_ruleset.c \
-	src/core/maelys_datalog_ruleset_canonical.c \
-	src/core/maelys_datalog_solver.c \
-	src/core/maelys_datalog_symbol_table.c \
-	src/core/maelys_datalog_decision.c \
-	src/manifest/maelys_datalog_manifest_buffer.c
+ENGINE_SRCS = $(shell sed -n '/^[^\#]/p' build-support/core-sources.txt build-support/standard-sources.txt)
 
-COMMON_SRCS = \
-	common/maelys_sha256.c \
-	common/maelys_utf8.c \
-	vendor/yyjson/yyjson.c
+COMMON_SRCS =
 
 WASM_SRCS = $(ENGINE_SRCS) $(COMMON_SRCS)
 EXAMPLES_SRCS = examples/domains/maelys_datalog_example_domains.c

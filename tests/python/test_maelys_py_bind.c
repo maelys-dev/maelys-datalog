@@ -459,11 +459,9 @@ static int test_maelys_py_bind_noninspectable_domain_fails_closed(void) {
     TEST_BEGIN();
 
     const maelys_datalog_domain_def_t callback_domain = {
-        "py_bind_callback_domain",
-        NULL,
-        0u,
-        "callback-backed domain for Python binding tests",
-        install_callback_domain,
+        .domain_name = "py_bind_callback_domain",
+        .description = "callback-backed domain for Python binding tests",
+        .install_predicates = install_callback_domain,
     };
     int call_rc = (int)maelys_datalog_domain_registry_register(&callback_domain);
     TEST_ASSERT_EQUAL((int)MAELYS_OK, call_rc, "%d");

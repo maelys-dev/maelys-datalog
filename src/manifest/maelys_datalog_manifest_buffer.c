@@ -290,6 +290,7 @@ static maelys_result_t maelys_datalog_policy_load_from_spec(
         !spec->test_only) {
         rc = MAELYS_ERR_FORBIDDEN;
     }
+    if (rc == MAELYS_OK) rc = maelys_datalog_ruleset_finalize_sha256(tmp);
     if (rc == MAELYS_OK) {
         set->policies[set->policy_count++] = *tmp;
     }

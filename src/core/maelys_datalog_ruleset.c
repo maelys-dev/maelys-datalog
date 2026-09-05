@@ -1,4 +1,5 @@
 #include "src/core/maelys_datalog_ruleset.h"
+#include "src/modules/maelys_datalog_modules_internal.h"
 
 #include "src/core/maelys_datalog_predicate_registry.h"
 #include "src/core/maelys_datalog_symbol_table.h"
@@ -19,6 +20,7 @@ maelys_result_t maelys_datalog_ruleset_init(maelys_datalog_ruleset_t *ruleset,
                                             int test_only) {
     if (!ruleset || !policy_id || !domain || !sha256) return MAELYS_ERR_INVALID_ARGUMENT;
     if (ruleset->loaded) return MAELYS_ERR_INVALID_STATE;
+    maelys_datalog_modules_seal();
     memset(ruleset, 0, sizeof(*ruleset));
     maelys_result_t rc = copy_ruleset_identity(ruleset->policy_id, sizeof(ruleset->policy_id), policy_id);
     if (rc != MAELYS_OK) return rc;

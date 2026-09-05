@@ -22,33 +22,17 @@ AFLPP_DOCKERFILE ?= docker/aflpp-linux/Dockerfile
 DOCKER_PLATFORM ?= linux/arm64
 DOCKER_PLATFORM_ARG = $(if $(DOCKER_PLATFORM),--platform $(DOCKER_PLATFORM),)
 
-ENGINE_SRCS = \
-	src/core/maelys_datalog_audit.c \
-	src/core/maelys_datalog_diagnostic.c \
-	src/core/maelys_datalog_domain_registry.c \
-	src/core/maelys_datalog_edb.c \
-	src/core/maelys_datalog_lexer.c \
-	src/core/maelys_datalog_parser.c \
-	src/core/maelys_datalog_predicate_registry.c \
-	src/core/maelys_datalog_ruleset.c \
-	src/core/maelys_datalog_ruleset_canonical.c \
-	src/core/maelys_datalog_solver.c \
-	src/core/maelys_datalog_symbol_table.c \
-	src/core/maelys_datalog_decision.c \
-	src/manifest/maelys_datalog_manifest_buffer.c \
-	src/manifest/maelys_datalog_manifest_file.c
+ENGINE_SRCS = $(shell sed -n '/^[^\#]/p' build-support/core-sources.txt build-support/standard-sources.txt build-support/native-sources.txt)
 
-COMMON_SRCS = \
-	common/maelys_sha256.c \
-	common/maelys_utf8.c
+COMMON_SRCS =
 
-VENDOR_SRCS = vendor/yyjson/yyjson.c
+VENDOR_SRCS =
 
 AFL_SRCS  = tests/fuzz/fuzz_parse_ruleset_afl.c
 AFL_BIN   = $(BUILD)/fuzz_parse_ruleset_afl
 
 AFL_CFLAGS = \
-	-Wall -Wextra -g -O1 -I. \
+	-Wall -Wextra -g -O1 -I. -Iinclude \
 	-fsanitize=address,undefined \
 	-fno-omit-frame-pointer
 

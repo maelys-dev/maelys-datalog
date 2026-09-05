@@ -66,6 +66,8 @@ if [ -f "$pkg/small/maelys_playground.d.ts" ]; then
 fi
 
 cp LICENSE "$pkg/LICENSE"
+mkdir -p "$pkg/licenses/yyjson"
+cp vendor/yyjson/LICENSE "$pkg/licenses/yyjson/"
 
 cat > "$pkg/README.md" <<EOF
 # @maelys/datalog-wasm
@@ -108,7 +110,7 @@ cat > "$pkg/package.json" <<EOF
     "./small/maelys_datalog_dynamic.wasm": "./small/maelys_datalog_dynamic.wasm",
     "./large/maelys_datalog_dynamic.wasm": "./large/maelys_datalog_dynamic.wasm"
   },
-  "files": ["small/", "large/", "maelys_playground.js", "maelys_playground.d.ts", "README.md", "LICENSE"]
+  "files": ["small/", "large/", "maelys_playground.js", "maelys_playground.d.ts", "README.md", "LICENSE", "licenses/"]
 }
 EOF
 # maelys_playground.d.ts absent aujourd'hui : npm ignore silencieusement les
