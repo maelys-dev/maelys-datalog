@@ -2,6 +2,7 @@
 
 #include "common/maelys_sha256.h"
 #include "src/core/maelys_datalog_filter.h"
+#include "src/modules/maelys_datalog_modules_internal.h"
 #include "src/core/maelys_datalog_symbol_table.h"
 
 #include <stdarg.h>
@@ -188,6 +189,11 @@ static maelys_result_t ruleset_stream_canonical(maelys_sha256_ctx_t *ctx,
     if (!ctx || !ruleset || !ruleset->loaded) return MAELYS_ERR_INVALID_ARGUMENT;
     maelys_result_t rc = canonical_printf(ctx, "policy_id=%s\n", ruleset->policy_id);
     if (rc != MAELYS_OK) return rc;
+    const maelys_datalog_planner_module_t *planner = maelys_datalog_active_planner();
+    if (planner) {
+        rc = canonical_printf(ctx, "planner=%s/%s\n", planner->name, planner->semantic_id);
+        if (rc != MAELYS_OK) return rc;
+    }
     rc = canonical_printf(ctx, "domain=%s\n", ruleset->domain);
     if (rc != MAELYS_OK) return rc;
     rc = canonical_printf(ctx, "profile=%s\n", MAELYS_DATALOG_PROFILE_NAME);
@@ -226,7 +232,16 @@ static maelys_result_t ruleset_stream_canonical(maelys_sha256_ctx_t *ctx,
 
 maelys_result_t maelys_datalog_ruleset_finalize_sha256(maelys_datalog_ruleset_t *ruleset) {
     if (!ruleset) return MAELYS_ERR_INVALID_ARGUMENT;
-    if (maelys_sha256_hex_is_lowercase(ruleset->sha256)) return MAELYS_OK;
+    if (ruleset->filter_program_count > MAELYS_DATALOG_MAX_FILTER_PROGRAMS) {
+        return MAELYS_ERR_INVALID_STATE;
+    }
+    int extended = maelys_datalog_active_planner() != NULL;
+    for (size_t i = 0u; i < ruleset->filter_program_count; ++i) {
+        if (ruleset->filter_programs[i].kind > MAELYS_DATALOG_FILTER_CONTAINS) extended = 1;
+    }
+    /* Preserve historic source hashes for standard policies. Extended policies
+     * need an executable identity even when a manifest supplied a source hash. */
+    if (!extended && maelys_sha256_hex_is_lowercase(ruleset->sha256)) return MAELYS_OK;
 
     maelys_sha256_ctx_t ctx;
     maelys_sha256_init(&ctx);

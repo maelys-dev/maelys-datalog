@@ -7,7 +7,9 @@ or-group = atom 1*(ignored %s"or" ignored atom)
 negated-atom = %s"not" ignored lparen atom rparen
 comparison = comparison-operand ignored comparator ignored comparison-operand
 filter = filter-name lparen filter-value comma filter-pattern rparen
-filter-name = %s"starts_with" / %s"ends_with" / %s"contains"
+; A filter name must resolve in the sealed module registry. A declared domain
+; predicate takes precedence, as detailed in semantics.md.
+filter-name = predicate
 filter-value = string / variable
 filter-pattern = string
 comparison-operand = arithmetic-expression / string / boolean

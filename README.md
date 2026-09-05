@@ -8,7 +8,7 @@ Maelys Datalog is a bounded, deterministic Datalog engine for embedded
 policy decisions. The engine is implemented in C11 and can be embedded as a
 native library or compiled to WebAssembly.
 
-> **Alpha software:** `v0.1.0-alpha.1` is suitable for evaluation and
+> **Alpha software:** `v0.1.0-alpha.3` is suitable for evaluation and
 > integration experiments. Public APIs may still change before `v1.0.0`.
 
 ## Why Maelys
@@ -54,14 +54,14 @@ duplicate their grammar.
 
 ## Public API
 
-Include the umbrella header:
+New integrations use the opaque, installed C API:
 
 ```c
-#include "include/maelys_datalog.h"
+#include <maelys/datalog.h>
 ```
 
-The header exposes the release identifier through
-`MAELYS_DATALOG_VERSION_STRING`.
+The legacy `include/maelys_datalog.h` umbrella remains available for alpha
+compatibility. New modules must not depend on its internal engine types.
 
 `maelys_datalog_policy_set_fingerprint()` returns a stable SHA-256 identity for
 the exact executable bundle: ordered canonical rulesets, their domains and the
@@ -71,12 +71,30 @@ plan to the policies that will be used when the plan is applied.
 Complete integration guides and API documentation are available at
 [datalog.maelys.dev](https://datalog.maelys.dev/).
 
+## Open core and external modules
+
+The MPL core remains usable on its own, with the reference solver and all three
+standard string filters. The versioned [module SDK](include/maelys/datalog_module.h)
+lets separately compiled modules provide new string filters and choose safe join
+candidates. They use public types only; parser validation, variable binding,
+budgets, error handling and result ownership remain in the core.
+
+Register modules before loading the first policy. Their identities are included
+in executable fingerprints; registration cannot change while policies are live.
+Modules are trusted native code, not a sandbox. See the
+[architecture and integration contract](docs/architecture/open-core.md) and the
+[standalone example](examples/modules/exact_match.c). This repository includes
+no proprietary regex implementation or replacement execution backend.
+
 ## Repository layout
 
 | Path | Purpose |
 |---|---|
-| `include/` | Public umbrella API and version macros |
+| `include/` | Opaque public API, module SDK, legacy umbrella and version macros |
 | `src/core/` | Parser, registries, EDB, solver, audit, and decisions |
+| `src/modules/` | Module registration, identity and lifetime enforcement |
+| `modules/standard/` | Open standard providers, built against the public SDK |
+| `build-support/` | Source manifests shared by native, WASM, fuzz and benchmark builds |
 | `src/manifest/` | File and in-memory manifest loading |
 | `src/wasm/` | WebAssembly-facing C API |
 | `bindings/python/` | Native Python binding |
@@ -106,5 +124,8 @@ report suspected vulnerabilities privately as described in
 Copyright © 2026 David Bromberg.
 
 Maelys Datalog is distributed under the [Mozilla Public License 2.0](LICENSE),
-the license of every Maelys repository. The vendored `yyjson` parser retains
-its own MIT license in `vendor/yyjson/LICENSE`.
+including the standard modules and example in this repository. Independently
+authored external modules can use their own licenses, subject to the licenses
+of any code they incorporate. The vendored `yyjson` parser retains its own MIT
+license in `vendor/yyjson/LICENSE`. See [repository history](docs/repository-history.md)
+for the MIT-era archive and the MPL transition.

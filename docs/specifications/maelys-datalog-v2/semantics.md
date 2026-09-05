@@ -55,12 +55,29 @@ and an empty pattern matches every symbol. The pattern belongs to policy code:
 it is stored in a fixed ruleset-owned POD pool and is neither interned as a
 symbol nor checked against the atom whitelist.
 
-The native filter table is closed. Its semantic identities are
+The reference filter table provides three standard filters. Its identities are
 `string.starts-with.utf8-bytes-v1`, `string.ends-with.utf8-bytes-v1`, and
 `string.contains.utf8-bytes-v1`. Filter name, semantic identity, symbolic value
 term, and exact source pattern bytes contribute to the canonical ruleset
 fingerprint. A filter program contains no pointer, callback, destructor, or
 runtime ownership.
+
+An embedding may register additional filters through the versioned module SDK,
+before initializing any ruleset. Registration seals at the first ruleset
+initialization; callbacks and semantic identities cannot be replaced afterwards.
+Names use the `predicate` grammar. Declared domain predicates retain precedence;
+an otherwise unknown name is rejected. A provider validates its constant pattern
+before a filter literal commits any program/pattern state. This is an opt-in
+extension of the reference language, not a guarantee of arbitrary regex support.
+The [module contract](../../architecture/open-core.md) defines callback,
+lifetime, identity, budget and distribution boundaries.
+
+The manifest `sha256` still verifies the original source bytes. After successful
+parsing, a policy using an external filter or planner receives a canonical
+executable identity incorporating used filter semantics and the selected planner
+name/semantic ID. Standard policies preserve their prior identities. Registration
+order and unused external filters do not change executable fingerprints. Numeric
+filter IDs are process-local implementation details, not portable serialized IDs.
 
 Each admitted evaluation is charged before matching. `starts_with` and
 `ends_with` cost the pattern byte length. `contains` costs

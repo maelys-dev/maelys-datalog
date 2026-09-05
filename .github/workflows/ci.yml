@@ -22,9 +22,19 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Run native test suite
-        run: make test
+        run: make -j2 test
+
+      - name: Check module boundaries
+        run: bash tools/check_module_boundaries.sh
 
       - name: Verify CMake build
         run: |
           cmake -S . -B build/cmake
-          cmake --build build/cmake
+          cmake --build build/cmake --parallel 2
+          ctest --test-dir build/cmake --output-on-failure
+
+      - name: Verify separately compiled installed SDK consumer
+        run: bash tools/check_module_sdk.sh "$PWD/build/cmake"
+
+      - name: Check module boundary with sanitizers
+        run: make -f Makefile.asan build/asan/test_maelys_datalog_modules build/asan/test_maelys_datalog_filters

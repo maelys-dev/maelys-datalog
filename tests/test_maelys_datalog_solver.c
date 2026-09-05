@@ -12,6 +12,7 @@
 #include <limits.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 maelys_result_t maelys_datalog_test_build_static_join_order(
@@ -915,19 +916,23 @@ static int file_block_contains_any(const char *path,
                                    const char *const *needles) {
     FILE *f = fopen(path, "rb");
     if (!f) return 1;
-    char buf[65536];
-    size_t n = fread(buf, 1, sizeof(buf) - 1u, f);
-    fclose(f);
-    buf[n] = '\0';
-    char *begin = strstr(buf, begin_marker);
-    if (!begin) return 1;
-    char *end = strstr(begin, end_marker);
-    if (!end) return 1;
-    *end = '\0';
-    for (size_t i = 0; needles[i]; i++) {
-        if (strstr(begin, needles[i])) return 1;
+    char *line = NULL;
+    size_t capacity = 0u;
+    int inside = 0, found_end = 0, forbidden = 0;
+    /* The solver can exceed 64 KiB before the inspected function. Scan the
+     * complete block rather than silently truncating the source file. */
+    while (getline(&line, &capacity, f) >= 0) {
+        if (!inside && strstr(line, begin_marker)) inside = 1;
+        if (!inside) continue;
+        if (strstr(line, end_marker)) { found_end = 1; break; }
+        for (size_t i = 0u; needles[i]; ++i) {
+            if (strstr(line, needles[i])) forbidden = 1;
+        }
     }
-    return 0;
+    int read_error = ferror(f);
+    free(line);
+    fclose(f);
+    return forbidden || !found_end || read_error;
 }
 
 static int test_maelys_datalog_query_no_domain_leak(void) {

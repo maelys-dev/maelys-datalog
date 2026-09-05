@@ -708,13 +708,13 @@ static int pod_ruleset_is_value_copyable(void) {
     TEST_END();
 }
 
-static int explanation_filter_true_and_false_are_typed(void) {
+static int check_filter_why_false(const char *source) {
     TEST_BEGIN();
     maelys_datalog_ruleset_t ruleset;
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       make_ruleset(
                           &ruleset,
-                          "start(R) :- ref(R), starts_with(R, \"refs/heads/\").",
+                          source,
                           0), "%d");
     maelys_datalog_solve_result_t *result = NULL;
     TEST_ASSERT_EQUAL(MAELYS_OK,
@@ -761,7 +761,44 @@ static int explanation_filter_true_and_false_are_typed(void) {
     TEST_END();
 }
 
+static int explanation_filter_true_and_false_are_typed(void) {
+    return check_filter_why_false("start(R) :- ref(R), starts_with(R, \"refs/heads/\").");
+}
+static int external_filter_why_false(void) {
+    return check_filter_why_false("start(R) :- ref(R), never_match(R, \"x\").");
+}
+static maelys_datalog_status_t module_validate(const unsigned char *p, size_t n) {
+    return n == 6u && memcmp(p, "reject", 6u) == 0
+        ? MAELYS_DATALOG_STATUS_INVALID_FIELD : MAELYS_DATALOG_STATUS_OK;
+}
+static maelys_datalog_status_t module_cost(size_t v, size_t p, size_t *out) {
+    (void)v; (void)p; *out = 1u; return MAELYS_DATALOG_STATUS_OK;
+}
+static maelys_datalog_status_t module_false(
+    const unsigned char *v, size_t vn, const unsigned char *p, size_t pn, int *out) {
+    (void)v; (void)vn; (void)p; (void)pn; *out = 0; return MAELYS_DATALOG_STATUS_OK;
+}
+static int module_rejection_is_atomic(void) {
+    TEST_BEGIN();
+    maelys_datalog_ruleset_t ruleset;
+    TEST_ASSERT_EQUAL(MAELYS_OK, make_ruleset(&ruleset, "start(R) :- ref(R).", 0), "%d");
+    size_t count = ruleset.rule_count, symbols = ruleset.symbols.count;
+    const char source[] = "start(R) :- ref(R), never_match(R, \"reject\").";
+    TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_FIELD,
+                      maelys_datalog_parse_ruleset(&ruleset, source, strlen(source)), "%d");
+    TEST_ASSERT_EQUAL(count, ruleset.rule_count, "%zu");
+    TEST_ASSERT_EQUAL(symbols, ruleset.symbols.count, "%zu");
+    TEST_ASSERT_EQUAL((size_t)0u, ruleset.filter_program_count, "%zu");
+    TEST_ASSERT_EQUAL((size_t)0u, ruleset.filter_pattern_pool_used, "%zu");
+    maelys_datalog_ruleset_clear(&ruleset);
+    TEST_END();
+}
+
 int main(int argc, char **argv) {
+    const maelys_datalog_filter_module_t module = {
+        1u, sizeof(maelys_datalog_filter_module_t), "never_match", "test.never-match.v1",
+        module_validate, module_cost, module_false};
+    if (maelys_datalog_register_filter_module(&module) != MAELYS_DATALOG_STATUS_OK) return 1;
     const test_case_t cases[] = {
         {"filters/parser_forms_and_pattern_pool", TEST_MODE_NON_BLOCKING, parser_forms_and_pattern_pool},
         {"filters/parser_ground_safety_and_types", TEST_MODE_NON_BLOCKING, parser_ground_safety_and_types},
@@ -778,6 +815,8 @@ int main(int argc, char **argv) {
         {"filters/fingerprint_pattern_and_kind_change_identity", TEST_MODE_NON_BLOCKING, fingerprint_pattern_and_kind_change_identity},
         {"filters/pod_ruleset_is_value_copyable", TEST_MODE_NON_BLOCKING, pod_ruleset_is_value_copyable},
         {"filters/explanation_filter_true_and_false_are_typed", TEST_MODE_NON_BLOCKING, explanation_filter_true_and_false_are_typed},
+        {"filters/external_filter_why_false", TEST_MODE_NON_BLOCKING, external_filter_why_false},
+        {"filters/module_rejection_is_atomic", TEST_MODE_NON_BLOCKING, module_rejection_is_atomic},
     };
     return test_main("maelys_datalog_filters",
                      cases,

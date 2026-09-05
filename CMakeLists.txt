@@ -10,36 +10,19 @@ message(STATUS "Maelys Datalog release: ${MAELYS_DATALOG_RELEASE_VERSION}")
 
 set(CMAKE_C_STANDARD 11)
 
-set(ENGINE_SRCS
-    src/core/maelys_datalog_audit.c
-    src/core/maelys_datalog_diagnostic.c
-    src/core/maelys_datalog_domain_registry.c
-    src/core/maelys_datalog_edb.c
-    src/core/maelys_datalog_explanation_format.c
-    src/core/maelys_datalog_filter.c
-    src/core/maelys_datalog_introspection.c
-    src/core/maelys_datalog_lexer.c
-    src/core/maelys_datalog_parser.c
-    src/core/maelys_datalog_prepared_session.c
-    src/core/maelys_datalog_predicate_registry.c
-    src/core/maelys_datalog_ruleset.c
-    src/core/maelys_datalog_ruleset_canonical.c
-    src/core/maelys_datalog_solver.c
-    src/core/maelys_datalog_symbol_table.c
-    src/core/maelys_datalog_decision.c
-    src/manifest/maelys_datalog_manifest_buffer.c
-    src/manifest/maelys_datalog_manifest_file.c
-    src/manifest/maelys_datalog_policy_set.c
-    src/public/maelys_datalog_api.c)
-
-set(COMMON_SRCS
-    common/maelys_sha256.c
-    common/maelys_utf8.c
-    vendor/yyjson/yyjson.c)
+# Shared with every Make build; private modules are linked by their consumer.
+file(STRINGS build-support/core-sources.txt ENGINE_SRCS)
+file(STRINGS build-support/native-sources.txt NATIVE_SRCS)
+file(STRINGS build-support/standard-sources.txt STANDARD_SRCS)
+add_library(maelys_datalog_standard_filters OBJECT ${STANDARD_SRCS})
+target_include_directories(maelys_datalog_standard_filters PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include)
+set_target_properties(maelys_datalog_standard_filters PROPERTIES POSITION_INDEPENDENT_CODE ON)
+set(COMMON_SRCS ${NATIVE_SRCS} $<TARGET_OBJECTS:maelys_datalog_standard_filters>)
 
 add_library(maelys_datalog STATIC ${ENGINE_SRCS} ${COMMON_SRCS})
-target_include_directories(maelys_datalog PUBLIC
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
+target_include_directories(maelys_datalog PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
+    PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
 target_compile_options(maelys_datalog PRIVATE -Wall -Wextra)
@@ -51,8 +34,8 @@ if(MAELYS_DATALOG_PROFILE_LARGE)
 endif()
 
 add_library(maelys_datalog_shared SHARED ${ENGINE_SRCS} ${COMMON_SRCS})
-target_include_directories(maelys_datalog_shared PUBLIC
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
+target_include_directories(maelys_datalog_shared PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
+    PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
 target_compile_options(maelys_datalog_shared PRIVATE -Wall -Wextra)
@@ -78,11 +61,14 @@ install(TARGETS maelys_datalog maelys_datalog_shared
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
-install(FILES include/maelys/datalog.h
+install(FILES include/maelys/datalog.h include/maelys/datalog_module.h
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/maelys)
+install(FILES LICENSE DESTINATION ${CMAKE_INSTALL_DATADIR}/maelys-datalog)
+install(FILES vendor/yyjson/LICENSE DESTINATION ${CMAKE_INSTALL_DATADIR}/maelys-datalog/yyjson)
 
 include(CTest)
 if(BUILD_TESTING)
+    find_package(Threads REQUIRED)
     add_executable(test_maelys_datalog_public_api
         tests/test_maelys_datalog_public_api.c
         tests/helpers/test_framework.c
@@ -91,6 +77,18 @@ if(BUILD_TESTING)
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>)
     target_link_libraries(test_maelys_datalog_public_api PRIVATE maelys_datalog)
     add_test(NAME maelys_datalog_public_api COMMAND test_maelys_datalog_public_api)
+    add_library(example_filter_module STATIC examples/modules/exact_match.c)
+    target_include_directories(example_filter_module PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    foreach(linkage IN ITEMS static shared)
+        add_executable(test_modules_${linkage} tests/test_maelys_datalog_modules.c)
+        target_link_libraries(test_modules_${linkage} PRIVATE Threads::Threads)
+        if(linkage STREQUAL "static")
+            target_link_libraries(test_modules_${linkage} PRIVATE example_filter_module maelys_datalog)
+        else()
+            target_link_libraries(test_modules_${linkage} PRIVATE example_filter_module maelys_datalog_shared)
+        endif()
+        add_test(NAME modules_${linkage} COMMAND test_modules_${linkage})
+    endforeach()
 endif()
 
 option(MAELYS_DATALOG_BUILD_EXAMPLES "Build example domains" OFF)

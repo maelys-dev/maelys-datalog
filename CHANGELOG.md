@@ -7,6 +7,26 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+
+- Versioned public C SDK for separately compiled string-filter and join-planner
+  modules, with bounded startup registration and immutable module identities.
+- Installed-SDK consumer tests, static/shared integration tests, callback-error
+  and budget checks, and cross-process semantic fingerprint tests.
+
+### Changed
+
+- Standard string filters now live in `modules/standard/` and use the same SDK
+  as external modules; the default behavior and standard fingerprints remain.
+- Extended policies bind filter/planner semantics into their executable identity
+  after source integrity verification. Module failures remain fail-closed.
+- All build variants use shared source manifests. Public CMake include paths no
+  longer expose private engine headers; native packages include the module SDK.
+
+### Fixed
+
+- Native and npm packages preserve the vendored yyjson license notice.
+
 ## [0.1.0-alpha.3] - 2026-09-03
 
 ### Fixed

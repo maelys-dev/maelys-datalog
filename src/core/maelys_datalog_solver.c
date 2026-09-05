@@ -1,5 +1,6 @@
 #include "src/core/maelys_datalog_solver.h"
 #include "src/core/maelys_datalog_solver_internal.h"
+#include "src/modules/maelys_datalog_modules_internal.h"
 
 #include "src/core/maelys_datalog_audit.h"
 #include "src/core/maelys_datalog_diagnostic.h"
@@ -18,6 +19,16 @@
 
 _Static_assert(MAELYS_DATALOG_MAX_BODY_LITERALS <= 64u,
                "planned_mask width insufficient for MAX_BODY_LITERALS");
+_Static_assert((int)MAELYS_DATALOG_JOIN_ATOM == (int)MAELYS_DATALOG_LITERAL_ATOM &&
+               (int)MAELYS_DATALOG_JOIN_COMPARISON == (int)MAELYS_DATALOG_LITERAL_COMPARISON &&
+               (int)MAELYS_DATALOG_JOIN_NEGATED_ATOM == (int)MAELYS_DATALOG_LITERAL_NEGATED_ATOM &&
+               (int)MAELYS_DATALOG_JOIN_FILTER == (int)MAELYS_DATALOG_LITERAL_FILTER,
+               "SDK join kinds must match the core");
+_Static_assert((int)MAELYS_DATALOG_PREDICATE_EDB == (int)MAELYS_DATALOG_PRED_KIND_EDB &&
+               (int)MAELYS_DATALOG_PREDICATE_IDB == (int)MAELYS_DATALOG_PRED_KIND_IDB &&
+               (int)MAELYS_DATALOG_PREDICATE_QUERY == (int)MAELYS_DATALOG_PRED_KIND_QUERY &&
+               (int)MAELYS_DATALOG_PREDICATE_POLICY_FACT == (int)MAELYS_DATALOG_PRED_KIND_POLICY_FACT,
+               "SDK predicate flags must match the core");
 _Static_assert(MAELYS_DATALOG_MAX_RULE_VARIABLES <= 64u,
                "bound_var_mask width insufficient for MAX_RULE_VARIABLES");
 _Static_assert(MAELYS_DATALOG_MAX_RULE_VARIABLES <= 32u,
@@ -1343,6 +1354,58 @@ static int64_t literal_static_score(const maelys_datalog_ruleset_t *ruleset,
     return score;
 }
 
+static maelys_result_t module_choose_literal(
+    const maelys_datalog_planner_module_t *planner,
+    const maelys_datalog_ruleset_t *ruleset,
+    const maelys_datalog_rule_t *rule,
+    uint64_t planned_mask, uint64_t bound_var_mask, int *out_best) {
+    maelys_datalog_join_candidate_t candidates[MAELYS_DATALOG_MAX_BODY_LITERALS];
+    uint8_t body_indices[MAELYS_DATALOG_MAX_BODY_LITERALS];
+    size_t count = 0u;
+    for (uint8_t i = 0u; i < rule->body_count; ++i) {
+        if ((planned_mask & ((uint64_t)1u << i)) ||
+            !literal_safe_with_bound_vars(rule, i, bound_var_mask)) continue;
+        const maelys_datalog_literal_t *literal = &rule->body[i];
+        maelys_datalog_join_candidate_t *c = &candidates[count];
+        memset(c, 0, sizeof(*c));
+        body_indices[count++] = i;
+        c->body_index = i;
+        c->kind = (maelys_datalog_join_kind_t)literal->kind;
+        c->bound_variable_mask = bound_var_mask;
+        c->default_score = literal_static_score(ruleset, rule, i, bound_var_mask);
+        c->variable_mask = literal_var_mask(literal);
+        if (literal->kind == MAELYS_DATALOG_LITERAL_ATOM ||
+            literal->kind == MAELYS_DATALOG_LITERAL_NEGATED_ATOM) {
+            const maelys_datalog_predicate_def_t *def = maelys_datalog_predicate_registry_get(
+                &ruleset->registry, literal->atom.predicate_id);
+            if (!def) return MAELYS_ERR_INVALID_STATE;
+            c->predicate_name = def->name;
+            c->predicate_flags = def->kind_flags;
+            c->arity = literal->atom.arity;
+            for (uint8_t t = 0u; t < literal->atom.arity; ++t) {
+                const maelys_datalog_term_t *term = &literal->atom.terms[t];
+                if (term->kind != MAELYS_DATALOG_TERM_VAR) ++c->constant_terms;
+                else if (term->as.variable < 64u) {
+                    const uint64_t bit = (uint64_t)1u << term->as.variable;
+                    c->variable_mask |= bit;
+                    if (bound_var_mask & bit) ++c->bound_terms;
+                }
+            }
+        }
+    }
+    if (!count) return MAELYS_ERR_INVALID_FIELD;
+    size_t chosen = SIZE_MAX;
+    const maelys_datalog_status_t status = planner->choose(candidates, count, &chosen);
+    if (status != MAELYS_DATALOG_STATUS_OK) {
+        return status < MAELYS_DATALOG_STATUS_OK && status >= MAELYS_DATALOG_STATUS_INVALID_STATE
+            ? (maelys_result_t)status : MAELYS_ERR_INTERNAL;
+    }
+    if (chosen >= count) return MAELYS_ERR_INVALID_STATE;
+    /* Resolve through the core-owned index map, never through provider output. */
+    *out_best = body_indices[chosen];
+    return MAELYS_OK;
+}
+
 static maelys_result_t build_static_join_order(
     const maelys_datalog_ruleset_t *ruleset,
     const maelys_datalog_rule_t *rule,
@@ -1378,14 +1441,21 @@ static maelys_result_t build_static_join_order(
     while (pos < rule->body_count) {
         int best = -1;
         int64_t best_score = 0;
-        for (uint8_t i = 0; i < rule->body_count; i++) {
-            if (planned_mask & ((uint64_t)1u << i)) continue;
-            if (!literal_safe_with_bound_vars(rule, i, bound_var_mask)) continue;
-            const int64_t score = literal_static_score(ruleset, rule, i, bound_var_mask);
-            if (best < 0 || score > best_score ||
-                (score == best_score && i < (uint8_t)best)) {
-                best = (int)i;
-                best_score = score;
+        const maelys_datalog_planner_module_t *planner = maelys_datalog_active_planner();
+        if (planner) {
+            maelys_result_t rc = module_choose_literal(
+                planner, ruleset, rule, planned_mask, bound_var_mask, &best);
+            if (rc != MAELYS_OK) return rc;
+        } else {
+            for (uint8_t i = 0; i < rule->body_count; i++) {
+                if (planned_mask & ((uint64_t)1u << i)) continue;
+                if (!literal_safe_with_bound_vars(rule, i, bound_var_mask)) continue;
+                const int64_t score = literal_static_score(ruleset, rule, i, bound_var_mask);
+                if (best < 0 || score > best_score ||
+                    (score == best_score && i < (uint8_t)best)) {
+                    best = (int)i;
+                    best_score = score;
+                }
             }
         }
         if (best < 0) return MAELYS_ERR_INVALID_FIELD;
@@ -3541,8 +3611,27 @@ static int why_false_diagnostic_cmp(
     if (left->obstacle.kind > right->obstacle.kind) return 1;
     if (left->obstacle.kind ==
         MAELYS_DATALOG_WHY_FALSE_OBSTACLE_FILTER_FALSE) {
-        if (left->obstacle.filter_kind < right->obstacle.filter_kind) return -1;
-        if (left->obstacle.filter_kind > right->obstacle.filter_kind) return 1;
+        const unsigned left_kind = left->obstacle.filter_kind;
+        const unsigned right_kind = right->obstacle.filter_kind;
+        if (left_kind <= MAELYS_DATALOG_FILTER_CONTAINS ||
+            right_kind <= MAELYS_DATALOG_FILTER_CONTAINS) {
+            /* Preserve the reference ordering of standard filters. */
+            if (left_kind < right_kind) return -1;
+            if (left_kind > right_kind) return 1;
+        } else {
+            const maelys_datalog_filter_definition_t *left_def = maelys_datalog_filter_by_kind(
+                (maelys_datalog_filter_kind_t)left_kind);
+            const maelys_datalog_filter_definition_t *right_def = maelys_datalog_filter_by_kind(
+                (maelys_datalog_filter_kind_t)right_kind);
+            if (!left_def || !right_def) {
+                context->fatal_error = MAELYS_ERR_INVALID_STATE;
+                return 0;
+            }
+            /* Process-local registration slots are not semantic identities. */
+            int cmp = strcmp(left_def->name, right_def->name);
+            if (!cmp) cmp = strcmp(left_def->semantic_id, right_def->semantic_id);
+            if (cmp) return cmp;
+        }
         const int value_cmp = why_false_term_cmp(
             context,
             &left->obstacle.filter_value,
