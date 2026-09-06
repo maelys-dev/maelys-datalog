@@ -1,7 +1,6 @@
 /* SPDX-License-Identifier: MPL-2.0 */
 #include "src/compiler/maelys_datalog_program_internal.h"
 #include "src/core/maelys_datalog_filter.h"
-#include "src/core/maelys_datalog_pipeline_testing.h"
 #include "src/core/maelys_datalog_domain_registry.h"
 #include "common/maelys_sha256.h"
 #include "common/maelys_utf8.h"
@@ -218,7 +217,6 @@ maelys_datalog_status_t maelys_datalog_program_fingerprint(const maelys_datalog_
 
 maelys_result_t maelys_datalog_compute_program_fingerprint(const maelys_datalog_ruleset_t *r,
                                                            char out[65]) {
-    MAELYS_DATALOG_COUNT_PIPELINE(fingerprints);
     maelys_sha256_ctx_t h;
     maelys_sha256_init(&h);
     hash_text(&h, "maelys-program-v1");

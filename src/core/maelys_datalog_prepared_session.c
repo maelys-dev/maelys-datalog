@@ -3,14 +3,10 @@
 #include "common/maelys_sha256.h"
 #include "src/core/maelys_datalog_prepared_session_internal.h"
 #include "src/core/maelys_datalog_solver_internal.h"
-#include "src/core/maelys_datalog_pipeline_testing.h"
 
 #include <stdlib.h>
 #include <string.h>
 
-#ifdef MAELYS_TESTING
-_Thread_local maelys_datalog_pipeline_counts_t maelys_datalog_pipeline_counts;
-#endif
 
 static int symbol_pointer_cmp(const void *lhs, const void *rhs) {
     const char *const left = *(const char *const *)lhs;
@@ -171,7 +167,6 @@ maelys_result_t maelys_datalog_prepared_session_create(
         return rc;
     }
     *out_session = session;
-    MAELYS_DATALOG_COUNT_PIPELINE(preparations);
     return MAELYS_OK;
 }
 
@@ -205,7 +200,6 @@ maelys_result_t maelys_datalog_prepared_session_materialize_inputs(
         return MAELYS_ERR_PAYLOAD_TOO_LARGE;
     }
 
-    MAELYS_DATALOG_COUNT_PIPELINE(materializations);
     /* Reset only mutable transaction state. The parsed rules, registry,
      * strata and prepared identity are reused without another ruleset copy. */
     maelys_result_t rc = reset_transaction_state(session);

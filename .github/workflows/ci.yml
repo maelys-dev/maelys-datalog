@@ -24,17 +24,78 @@ jobs:
       - name: Run native test suite
         run: make -j2 test
 
+      - name: Run every native test in LARGE
+        run: make -j2 test BUILD_DIR=build/native-large CFLAGS='-Wall -Wextra -g -I. -Iinclude -DMAELYS_DATALOG_PROFILE_LARGE'
+
       - name: Check module boundaries
         run: bash tools/check_module_boundaries.sh
 
       - name: Verify CMake build
         run: |
-          cmake -S . -B build/cmake
+          cmake -S . -B build/cmake -DMAELYS_DATALOG_BUILD_PYTHON_BINDING=ON
           cmake --build build/cmake --parallel 2
           ctest --test-dir build/cmake --output-on-failure
 
       - name: Verify separately compiled installed SDK consumer
         run: bash tools/check_module_sdk.sh "$PWD/build/cmake"
 
-      - name: Check module boundary with sanitizers
-        run: make -f Makefile.asan build/asan/test_maelys_datalog_modules build/asan/test_maelys_datalog_filters build/asan/test_maelys_datalog_compiler build/asan/test_maelys_datalog_pipeline
+      - name: Verify result authority test sensitivity
+        run: bash tools/check_public_authority.sh "$PWD/build/cmake"
+
+      - name: Check all native tests including facade with sanitizers
+        run: |
+          make -j2 -f Makefile.asan asan
+          make -j2 -f Makefile.asan asan BUILD_DIR=build/asan-large CFLAGS='-Wall -Wextra -g -I. -Iinclude -DMAELYS_DATALOG_PROFILE_LARGE'
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Test actual Python wrapper
+        run: |
+          python -m pip install cffi setuptools pytest
+          bash tools/check_python_binding.sh "$PWD/build/cmake" python small
+
+      - name: Verify LARGE installed SDK and Python wrapper
+        run: |
+          cmake -S . -B build/cmake-large -DMAELYS_DATALOG_PROFILE_LARGE=ON -DMAELYS_DATALOG_BUILD_PYTHON_BINDING=ON
+          cmake --build build/cmake-large --parallel 2
+          ctest --test-dir build/cmake-large --output-on-failure
+          bash tools/check_module_sdk.sh "$PWD/build/cmake-large"
+          bash tools/check_public_authority.sh "$PWD/build/cmake-large"
+          bash tools/check_python_binding.sh "$PWD/build/cmake-large" python large
+
+      - name: Check single-pass benchmark
+        run: make bench-pipeline
+
+  wasm-tests:
+    name: WASM tests (SMALL and LARGE)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: '4.0.14'
+      - name: Build and run all Node tests sequentially in both profiles
+        run: |
+          for profile in small large; do
+            make -f Makefile.wasm maelys_datalog_dynamic.js WASM_PROFILE="$profile" EM_CACHE="$PWD/build/emscripten-cache"
+            for test in tests/wasm/*.mjs; do
+              MAELYS_WASM_PROFILE="$profile" node "$test"
+            done
+          done
+
+  fuzz-smoke:
+    name: Bounded parser fuzz smokes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: make -f Makefile.fuzz fuzz-smoke CC=clang
+      - name: Install AFL++ harness tooling
+        run: sudo apt-get update && sudo apt-get install -y afl++
+      - name: Run existing AFL++ bounded smoke
+        run: make -f Makefile.afl afl-smoke

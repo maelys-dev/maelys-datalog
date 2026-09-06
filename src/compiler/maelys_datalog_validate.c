@@ -1,7 +1,6 @@
 /* SPDX-License-Identifier: MPL-2.0 */
 #include "src/compiler/maelys_datalog_program_internal.h"
 #include "src/core/maelys_datalog_filter.h"
-#include "src/core/maelys_datalog_pipeline_testing.h"
 #include <string.h>
 typedef struct {
     maelys_datalog_ruleset_t *ruleset;
@@ -322,7 +321,6 @@ maelys_result_t maelys_datalog_validate_program(maelys_datalog_ruleset_t *r, con
                                                 maelys_datalog_diagnostic_t *diag) {
     if (!r || !r->loaded || !r->registry.frozen)
         return MAELYS_ERR_INVALID_STATE;
-    MAELYS_DATALOG_COUNT_PIPELINE(validations);
     size_t line = 0, column = 0;
     r->program_validated = 0;
     r->compiled_fingerprint[0] = 0;

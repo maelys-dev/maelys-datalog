@@ -2,7 +2,10 @@
 #include <maelys/datalog_backend.h>
 #include <maelys/datalog_module.h>
 #include "common/maelys_sha256.h"
-#include "src/core/maelys_datalog_pipeline_testing.h"
+#include "tests/helpers/pipeline_counts.h"
+#ifdef MAELYS_TESTING
+_Thread_local maelys_datalog_pipeline_counts_t maelys_datalog_pipeline_counts;
+#endif
 #ifdef NDEBUG
 #undef NDEBUG
 #endif

@@ -22,6 +22,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <stdlib.h>
 
 #ifdef __AFL_HAVE_MANUAL_CONTROL
 #include <unistd.h>
@@ -84,7 +85,7 @@ int main(int argc, char **argv) {
 
         if (size == 0u || size > 4096u) continue;
 
-        maelys_datalog_ruleset_t ruleset;
+        maelys_datalog_ruleset_t ruleset = {0};
         maelys_datalog_diagnostic_t diag = {0};
 
         if (maelys_datalog_ruleset_init(&ruleset,
@@ -92,7 +93,7 @@ int main(int argc, char **argv) {
                                         "afl_domain",
                                         MAELYS_DATALOG_SHA256_UNSET,
                                         0) != MAELYS_OK) {
-            continue;
+            abort(); /* Harness setup failure must not skip every input. */
         }
 
         int setup_ok = 1;
@@ -114,12 +115,12 @@ int main(int argc, char **argv) {
 
         if (!setup_ok) {
             maelys_datalog_ruleset_clear(&ruleset);
-            continue;
+            abort();
         }
 
         if (maelys_datalog_predicate_registry_freeze(&ruleset.registry) != MAELYS_OK) {
             maelys_datalog_ruleset_clear(&ruleset);
-            continue;
+            abort();
         }
 
         (void)maelys_datalog_parse_ruleset_ex(&ruleset,

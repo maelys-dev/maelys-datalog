@@ -45,6 +45,12 @@ def test_import_build_limits_and_abi_constants():
     with md.Engine() as engine:
         assert engine.limits.max_symbols == 512
         assert engine.limits.max_facts_per_pred in (64, 256)
+        expected_profile = os.environ.get("MAELYS_DATALOG_EXPECT_PROFILE")
+        if expected_profile is not None:
+            assert expected_profile in ("small", "large")
+            assert engine.limits.max_facts_per_pred == {
+                "small": 64, "large": 256
+            }[expected_profile]
     assert md.TERM_SYMBOL != md.TERM_INT
     assert md.PRED_QUERY != 0
     assert md.InputTerm is not None

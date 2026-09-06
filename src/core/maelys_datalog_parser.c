@@ -1,6 +1,5 @@
 #include "src/core/maelys_datalog_parser.h"
 #include "src/compiler/maelys_datalog_program_internal.h"
-#include "src/core/maelys_datalog_pipeline_testing.h"
 
 #include "src/core/maelys_datalog_lexer.h"
 #include "src/core/maelys_datalog_filter.h"
@@ -1066,7 +1065,6 @@ maelys_result_t maelys_datalog_parse_only(
     maelys_datalog_ruleset_t *ruleset, const char *src, size_t len, const char *file_path,
     unsigned flags, maelys_datalog_parse_origin_t *origin, maelys_datalog_diagnostic_t *out_diag) {
     if (!ruleset || !ruleset->loaded) return MAELYS_ERR_INVALID_STATE;
-    MAELYS_DATALOG_COUNT_PIPELINE(parses);
     if (flags & ~MAELYS_DATALOG_PARSE_ALLOW_UNDECLARED_POLICY_ATOMS) {
         return MAELYS_ERR_INVALID_ARGUMENT;
     }
