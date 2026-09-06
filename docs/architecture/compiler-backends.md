@@ -1,0 +1,199 @@
+# Compiler and solver extension contracts
+
+The MPL core includes a complete standard Datalog frontend and reference solver.
+The alpha C SDK has two independent extension points: source-language frontends
+and execution backends. Neither needs private engine headers. The filter/planner
+SDK remains available for narrower extensions; see [open core](open-core.md).
+
+## Boundaries
+
+| Stage | Open host responsibility | Extension responsibility |
+| --- | --- | --- |
+| Source → IR | Host selects domain and frontend; builder copies typed facts/rules | Parse a specific language and attach source locations |
+| IR → validated program | Predicate/arity/constant checks, safe bindings, expression DAG, stratification and capacities | Cannot bypass validation or change the domain |
+| Program → session | Snapshot, capability checks, identities and lifetimes | Prepare an algorithm-specific execution plan |
+| EDB → result | Canonical input, bounded/deduplicated IDB, query permissions, atomic errors | Compute the complete fixed point and emit all derived facts |
+| Explanation | Capability gate and result lease | Retain proof state and explain without re-solving |
+
+The built-in parser retains its implementation and standard grammar. Its safety
+and stratification logic now lives in `src/compiler/maelys_datalog_validate.c` and
+also validates every alternative frontend. The reference adapter alone may use
+private solver interfaces. Its algorithm still lives in `src/core/`; this change
+does not rewrite it or claim a performance improvement. The compatibility adapter
+currently retains additional bounded snapshots and input normalization work.
+
+## Frontend contract
+
+Include `maelys/datalog_program.h`. Implement a descriptor with ABI version,
+exact struct size, name, semantic ID and `lower`. Select it explicitly with
+`maelys_datalog_policy_load_frontend`; NULL selects standard Datalog. Existing
+inline and manifest loading remain standard Datalog.
+
+The callback receives source bytes and a callback-scoped opaque builder. Call
+`maelys_datalog_program_add_fact` / `maelys_datalog_program_add_rule`; strings and
+pattern bytes are copied synchronously. Zero-initialize IR structs, then fill
+the fields applicable to each tagged variant. No source/builder pointer may be
+retained. A failed builder operation is sticky: swallowing its status cannot
+produce a successful partial load. Callback failure returns no policy.
+
+The host-selected domain defines available predicates, roles, arities and atom
+constants. A frontend cannot register symbols or predicates into that domain.
+IR supports ground policy facts, positive/negative body atoms, comparisons,
+integer expression DAGs and registered filters. Rule heads must be IDB; policy
+facts must use POLICY_FACT predicates. The same binding safety, static type
+checks, stratified negation and resource bounds apply to every frontend.
+
+Limits include four terms per atom, eight body literals, 32 variables and
+32 arithmetic nodes per rule. Variable IDs are local to a rule. Binary expression
+operands must reference earlier nodes; cycles and invalid roots are rejected.
+Each root's expanded tree must also fit 32 nodes so shared DAG edges cannot
+trigger exponential recursive evaluation in the reference engine.
+Integer source constants use the existing nonnegative 31-bit language range.
+Runtime EDB integer values retain their existing int64 contract. Filters name a
+registered provider and constant raw pattern; an optional supplied semantic ID
+must match. Standard source escaping rules do not change.
+
+Locations are 1-based line/column, or both zero if unavailable. Standard OR
+expansion gives each resulting rule its source clause location. Public rule
+access is zero-based; existing proof rule IDs are index + 1. This allows clients
+to map proofs to source via `session_program` and `program_rule`. There is no
+macro-expansion stack, end range, or new proof-text format in this ABI.
+
+The example `examples/modules/arrow_frontend.c` implements only unary
+`allow <- seed` implications and line comments. It is not a regex or Gitolite
+parser. A richer domain frontend can lower its constructs into this IR, but a
+new semantic feature outside the IR requires an explicit core/SDK evolution.
+Avoid callbacks that change precedence or inject arbitrary grammar productions.
+
+## Backend contract
+
+Include `maelys/datalog_backend.h`. Populate a descriptor with `prepare`, `solve`,
+`destroy_result`, `destroy`, and optionally `explain_true`. Names are at most
+63 bytes; semantic IDs at most 127. Names use lowercase letters/digits/underscore
+and start with a letter. Semantic IDs also allow uppercase, dots and hyphens.
+Use matching headers, ABI version, struct size and target architecture.
+
+```c
+maelys_datalog_session_options_t options = {
+    .abi_version = MAELYS_DATALOG_BACKEND_ABI_VERSION,
+    .struct_size = sizeof(maelys_datalog_session_options_t),
+    .backend = my_backend(),
+    .required_capabilities = MAELYS_DATALOG_CAP_EXPLAIN_TRUE,
+};
+maelys_datalog_session_t *session = NULL;
+maelys_datalog_status_t status =
+    maelys_datalog_session_create_ex(policy, 0, &options, &session);
+/* Check status: unsupported capabilities never select another backend. */
+```
+
+The core computes required language capabilities from the validated program;
+frontends do not declare them. The reference supports the full language and
+Why-true. The independent `examples/modules/naive_backend.c` implements positive
+Datalog using full-scan fixed-point evaluation, with a cooperative work limit.
+It rejects negation, comparisons, arithmetic, filters and explanations. It is a
+conformance example, not an optimized product or a wrapper around the reference.
+
+`prepare` receives an immutable program view. Accessors expose predicates, ground
+policy facts and normalized rules using public types, plus profile-dependent
+input/output capacities. Borrowed strings/patterns remain valid through
+`destroy`. Sessions own snapshots: the caller may free the loaded policy first.
+Descriptors and identity strings are copied per session; callback code must stay
+loaded. Different backends can coexist without global registration.
+
+`solve` receives canonical, deduplicated EDB inputs borrowed only for the callback.
+Retain copies or algorithm-owned proof state when needed after return. Emit the
+complete derived IDB, including non-query helpers, through `backend_emit`.
+The host copies and deduplicates output, validates predicate roles/types/symbol
+membership, enforces total and per-predicate capacities and sorts the result.
+Derived symbols must already exist in the program/input vocabulary.
+Ground policy facts and EDB belong to the host and must not be emitted as IDB.
+
+A success status asserts complete materialization. The host cannot prove that
+a native backend derived all and only logically justified facts. Differential
+conformance is required before relying on a new algorithm, especially for
+authorization decisions. A query-directed solver cannot return a partial answer
+as success under this contract; incremental updates/streaming require another API.
+
+Failures discard all output and destroy any returned result state, even if the
+callback ignored a host error. Unknown callback statuses become INTERNAL.
+`destroy` also runs on failed preparation; both destructors must accept NULL and
+partially initialized state. One live result leases its session: free it before
+another solve or session destruction. Sessions are confined to one caller at a
+time; callbacks must not reenter the engine except program accessors/output APIs.
+
+Queries honor QUERY flags and manifest whitelists. Query sees policy facts, EDB
+and IDB; enumeration retains the existing derived-IDB-only behavior. Why-true
+requires an advertised callback and must inspect retained state, not solve again.
+Its buffer/required-size contract matches `maelys_datalog_result_explain_true_text`
+in `datalog.h`. Backend capabilities are promises, not sandbox-enforced proofs.
+
+## Budgets and shared filters
+
+`backend_charge` is cooperative. Charge before bounded units of work; work units
+are algorithm-specific, not comparable benchmarks or a wall-clock deadline.
+Zero `work_limit` resolves to 1,048,576 host work units; a nonzero caller limit
+requires WORK_LIMIT capability. The reference does not advertise that capability:
+its existing depth, fact and filter bounds remain in force. The naive example
+charges rule scans, join candidates and duplicate comparisons. Host emission
+caps always apply, regardless of advertised WORK_LIMIT.
+
+Backends supporting filters can call `backend_filter` using the program's
+provider name, semantic ID and exact declared pattern. The host shares registered
+provider semantics and charges its filter evaluation/cost budget before dispatch.
+Unknown versions, undeclared patterns, invalid outputs and budget failures are
+fatal, not false matches. The test fixture exercises this service independently
+of the reference backend. A full backend remains responsible for using it at the
+logically correct places in evaluation.
+
+All callbacks are trusted deterministic native code. Unlike allocation-free
+filter/planner callbacks, frontends/backends may allocate bounded owned state.
+No arbitrary native loop, memory write, I/O or dishonestly declared work bound can
+be contained by this C ABI. Untrusted modules need process/WASM isolation.
+
+## Identity and compatibility
+
+Existing policy/session fingerprints retain their authority meaning and standard
+source-hash compatibility. Alternative frontends add name, semantic ID and source
+hash to their policy identity. Do not use a legacy source hash alone as a compiled
+program or multi-backend cache key.
+
+`program_fingerprint` separately hashes typed, length-framed program data,
+including policy/domain, predicate schema, declared atoms, normalized rules,
+source locations, filter semantics and query restrictions. It is an identity of
+this compiled contract, not a canonical equivalence test between source programs.
+`session_execution_fingerprint` additionally binds backend name/semantic ID,
+required capabilities, resolved work limit and SMALL/LARGE profile. Neither
+fingerprint includes the runtime EDB; result caches must bind input identity too.
+Neither attests machine code. Bump semantic IDs when behavior or work accounting
+changes, and use artifact provenance separately.
+
+The new dispatch API is native C. Existing low-level, Python and stock WASM/JS
+entrypoints continue using the reference solver; no new language-binding backend
+selector is claimed. Compiler validation still builds and runs in those targets.
+The opaque C API is source-compatible, but legacy consumers using private/POD
+layouts must rebuild because source-location/frontend metadata changed the
+internal ruleset layout. IR structs are views, not a wire or serialization format.
+
+## Verification and product split
+
+CMake tests link both examples against static and shared libraries. The installed
+SDK check compiles them and the integration consumer with only installed public
+headers. Tests cover both frontends × both backends, invalid IR, capabilities,
+lifetimes, failures, work limits, shared filters, identities, IR round trips and
+20 generated recursive graphs compared against independent transitive closure.
+
+```sh
+make test
+cmake -S . -B build/cmake
+cmake --build build/cmake --parallel 2
+ctest --test-dir build/cmake --output-on-failure
+bash tools/check_module_sdk.sh "$PWD/build/cmake"
+```
+
+Everything delivered here, including both examples, stays MPL-2.0. Future
+independently authored proprietary frontends, optimized solvers or regex providers
+can be developed as separate private artifacts against these public interfaces.
+This repository contains no private implementation or paywall in the reference
+engine. Copying/modifying MPL implementation files is not equivalent to an
+independent SDK implementation; the [licensing boundary](open-core.md#licensing-and-product-separation)
+and applicable contribution rights still govern that distinction.

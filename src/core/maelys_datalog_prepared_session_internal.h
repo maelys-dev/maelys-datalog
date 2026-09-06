@@ -21,4 +21,9 @@ void maelys_datalog_prepared_session_result_released(
     void *owner,
     maelys_datalog_solve_result_t *result);
 
+/* Shared canonical input boundary. Does not execute a solver or retain input
+ * pointers. The owning public session supplies its separate result lease. */
+maelys_result_t maelys_datalog_prepared_session_materialize_inputs(
+    maelys_datalog_prepared_session_t *, const maelys_datalog_input_fact_t *, size_t);
+
 #endif

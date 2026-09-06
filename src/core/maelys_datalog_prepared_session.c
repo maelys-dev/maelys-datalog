@@ -187,14 +187,11 @@ maelys_result_t maelys_datalog_prepared_session_solve(
         session, facts, fact_count, out_result, NULL);
 }
 
-maelys_result_t maelys_datalog_prepared_session_solve_ex(
+maelys_result_t maelys_datalog_prepared_session_materialize_inputs(
     maelys_datalog_prepared_session_t *session,
     const maelys_datalog_input_fact_t *facts,
-    size_t fact_count,
-    maelys_datalog_solve_result_t **out_result,
-    maelys_datalog_solve_diagnostic_t *out_diag) {
-    if (out_result) *out_result = NULL;
-    if (!session || (!facts && fact_count > 0u) || !out_result) {
+    size_t fact_count) {
+    if (!session || (!facts && fact_count > 0u)) {
         return MAELYS_ERR_INVALID_ARGUMENT;
     }
     if (session->active_result) return MAELYS_ERR_INVALID_STATE;
@@ -219,6 +216,17 @@ maelys_result_t maelys_datalog_prepared_session_solve_ex(
     }
     rc = maelys_datalog_edb_finalize(&session->edb);
     if (rc != MAELYS_OK) return reject_transaction(session, rc);
+    return MAELYS_OK;
+}
+
+maelys_result_t maelys_datalog_prepared_session_solve_ex(
+    maelys_datalog_prepared_session_t *session,
+    const maelys_datalog_input_fact_t *facts, size_t fact_count,
+    maelys_datalog_solve_result_t **out_result, maelys_datalog_solve_diagnostic_t *out_diag) {
+    if (out_result) *out_result = NULL;
+    if (!out_result) return MAELYS_ERR_INVALID_ARGUMENT;
+    maelys_result_t rc = maelys_datalog_prepared_session_materialize_inputs(session, facts, fact_count);
+    if (rc != MAELYS_OK) return rc;
     rc = maelys_datalog_solve_once_ex(
         &session->working, &session->edb, out_result, out_diag);
     if (rc != MAELYS_OK) return reject_transaction(session, rc);

@@ -14,15 +14,20 @@ without including or modifying private engine headers.
 | String provider | Validate a constant pattern, bound cost, evaluate bytes | `maelys_datalog_filter_module_t` |
 | Planner provider | Choose the next candidate from a core-validated safe set | `maelys_datalog_planner_module_t` |
 | Standard providers | Existing `starts_with`, `ends_with`, `contains` semantics | Same module SDK |
+| Frontend | Lower a selected source language into validated facts/rules | `maelys/datalog_program.h` |
+| Backend | Prepare and fully materialize a validated program | `maelys/datalog_backend.h` |
 
-The current planner interface permits different heuristics. It is not a
-replacement solver ABI: incrementality, vectorized execution and a full alternate
-backend are separate future design work. No regex/refex provider is included.
+The planner interface permits different reference-engine heuristics. Independent
+algorithms use the separate backend ABI, selected per session. See
+[compiler and backend contracts](compiler-backends.md) for capabilities,
+lifetimes, validated IR and the independent naive example. Query-local and
+incremental-update APIs are not provided by this first full-materialization ABI.
+No regex/refex provider is included.
 The string boundary permits such a provider to be developed outside this repo.
 The source language still has no string escape syntax; a provider must document
 its supported pattern dialect instead of implying full Gitolite compatibility.
 
-## Integration and lifetime
+## Filter/planner integration and lifetime
 
 1. Build the provider using only installed `maelys/datalog_module.h` and its
    public dependency `datalog.h`. Do not include the legacy umbrella or `src/`.
@@ -44,7 +49,7 @@ Standard-only initialization is synchronized, so concurrent first policy loads
 do not require a new explicit initialization call. Registration itself is still
 single-threaded startup work and must not race any policy loading or evaluation.
 
-Callbacks are trusted native functions. They must be deterministic, bounded,
+Filter/planner callbacks are trusted native functions. They must be deterministic, bounded,
 allocation-free, reentrant and free of I/O, locale/time dependencies, mutable
 external state and engine reentry. The C boundary cannot sandbox a malicious
 callback, enforce its execution time, or stop arbitrary memory writes. Register
@@ -121,7 +126,7 @@ bash tools/check_module_sdk.sh "$PWD/build/cmake"
 ```
 
 The last check installs the library to an isolated prefix and compiles the
-example provider and consumer with only that prefix's headers. The consumer
+example providers, frontend, backend and consumers with only that prefix's headers. The consumer
 tests error propagation, startup sealing, prepared-session lifetime, explanation
 output, recursive planning and fingerprints in independent processes. CTest also
 links provider/consumer against both the static and shared engine.

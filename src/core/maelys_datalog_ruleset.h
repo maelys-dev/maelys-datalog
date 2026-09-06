@@ -6,6 +6,7 @@
 #include "src/core/maelys_datalog_predicate_registry.h"
 #include "src/core/maelys_datalog_symbol_table.h"
 #include "src/core/maelys_datalog_types.h"
+#include "maelys/datalog_program.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -37,7 +38,11 @@ typedef struct {
     maelys_datalog_fact_t facts[MAELYS_DATALOG_MAX_RULE_FACTS];
     size_t fact_count;
     maelys_datalog_rule_t rules[MAELYS_DATALOG_MAX_RULES];
+    maelys_datalog_source_location_t rule_sources[MAELYS_DATALOG_MAX_RULES];
     size_t rule_count;
+    char frontend_name[64];
+    char frontend_semantic_id[128];
+    char source_sha256[65];
     maelys_datalog_filter_program_t filter_programs[MAELYS_DATALOG_MAX_FILTER_PROGRAMS];
     size_t filter_program_count;
     unsigned char filter_pattern_pool[MAELYS_DATALOG_FILTER_PATTERN_POOL_BYTES];

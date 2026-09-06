@@ -210,7 +210,8 @@ if [ "$wasm_only" != 1 ]; then
   cp libmaelys_datalog.a "$stage/lib/"
   cp include/maelys_datalog.h "$stage/include/"
   cp include/maelys_datalog_version.h "$stage/include/"
-  cp include/maelys/datalog.h include/maelys/datalog_module.h "$stage/include/maelys/"
+  cp include/maelys/datalog.h include/maelys/datalog_module.h \
+     include/maelys/datalog_program.h include/maelys/datalog_backend.h "$stage/include/maelys/"
   # Le header public inclut les headers moteur par chemins relatifs au dépôt
   # ("src/core/...", "common/..."). Sans cette fermeture, le tarball serait
   # incompilable pour un consommateur — même arborescence que la formule brew.
