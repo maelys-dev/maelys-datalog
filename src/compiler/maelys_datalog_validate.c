@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: MPL-2.0 */
 #include "src/compiler/maelys_datalog_program_internal.h"
 #include "src/core/maelys_datalog_filter.h"
+#include "src/core/maelys_datalog_pipeline_testing.h"
 #include <string.h>
 typedef struct {
     maelys_datalog_ruleset_t *ruleset;
@@ -51,15 +52,6 @@ static maelys_result_t validate_rule_impl(validation_context_t *p,
     maelys_datalog_ruleset_t *r = p->ruleset;
     const maelys_datalog_predicate_def_t *head_def =
         maelys_datalog_predicate_registry_get(&r->registry, rule->head.predicate_id);
-    if (!head_def || (head_def->kind_flags &
-                      (MAELYS_DATALOG_PRED_KIND_EDB | MAELYS_DATALOG_PRED_KIND_POLICY_FACT))) {
-        validation_diag(p, MAELYS_DATALOG_DIAG_PARSER_RULE_HEAD_EDB_FORBIDDEN,
-                        "base predicate used in rule head",
-                        "EDB/runtime and policy fact predicates cannot appear in rule heads");
-        if (head_def)
-            maelys_datalog_diagnostic_set_predicate(p->diag, head_def->name, head_def->arity);
-        return MAELYS_ERR_INVALID_FIELD;
-    }
     uint32_t head_vars = 0;
     uint32_t body_vars = 0;
     vars_in_atom(&rule->head, &head_vars);
@@ -206,20 +198,6 @@ static maelys_result_t assign_strata_impl(validation_context_t *p) {
     return MAELYS_OK;
 }
 
-maelys_result_t maelys_datalog_validate_rule(maelys_datalog_ruleset_t *ruleset,
-                                             const maelys_datalog_rule_t *rule, const char *file,
-                                             size_t line, size_t column,
-                                             maelys_datalog_diagnostic_t *diag) {
-    validation_context_t p = {ruleset, file, line, column, diag};
-    return validate_rule_impl(&p, rule);
-}
-maelys_result_t maelys_datalog_assign_strata(maelys_datalog_ruleset_t *ruleset, const char *file,
-                                             size_t line, size_t column,
-                                             maelys_datalog_diagnostic_t *diag) {
-    validation_context_t p = {ruleset, file, line, column, diag};
-    return assign_strata_impl(&p);
-}
-
 static int valid_term(const maelys_datalog_ruleset_t *r, const maelys_datalog_term_t *t,
                       int variables) {
     switch (t->kind) {
@@ -305,11 +283,49 @@ static int valid_literal(const maelys_datalog_ruleset_t *r, const maelys_datalog
     return 0;
 }
 
+/* Preserve the low-level parser's clause atomicity even though validation is
+ * now a single pass after lowering. Third-party IR has no parser checkpoint. */
+static void reject_parsed_clause(maelys_datalog_ruleset_t *r,
+                                 const maelys_datalog_parse_origin_t *origin, size_t index,
+                                 maelys_datalog_diagnostic_t *diag) {
+    if (!origin || !origin->rules[index].end.line) return;
+    const maelys_datalog_clause_origin_t *c = &origin->rules[index];
+    if (diag) {
+        diag->line = c->end.line;
+        diag->column = c->end.column;
+        memcpy(diag->token, ".", 2);
+    }
+    memset(r->rules + c->first_rule, 0,
+           (r->rule_count - c->first_rule) * sizeof(r->rules[0]));
+    memset(r->rule_sources + c->first_rule, 0,
+           (r->rule_count - c->first_rule) * sizeof(r->rule_sources[0]));
+    memset(r->facts + c->first_fact, 0,
+           (r->fact_count - c->first_fact) * sizeof(r->facts[0]));
+    memset(r->filter_programs + c->first_filter, 0,
+           (r->filter_program_count - c->first_filter) * sizeof(r->filter_programs[0]));
+    memset(r->filter_pattern_pool + c->first_pattern_byte, 0,
+           r->filter_pattern_pool_used - c->first_pattern_byte);
+    r->rule_count = c->first_rule;
+    r->fact_count = c->first_fact;
+    r->filter_program_count = c->first_filter;
+    r->filter_pattern_pool_used = c->first_pattern_byte;
+    r->has_positive_recursion = 0;
+    for (size_t i = 0; i < r->rule_count; ++i)
+        for (size_t j = 0; j < r->rules[i].body_count; ++j)
+            if (r->rules[i].body[j].kind == MAELYS_DATALOG_LITERAL_ATOM &&
+                r->rules[i].body[j].atom.predicate_id == r->rules[i].head.predicate_id)
+                r->has_positive_recursion = 1;
+}
+
 maelys_result_t maelys_datalog_validate_program(maelys_datalog_ruleset_t *r, const char *file,
+                                                const maelys_datalog_parse_origin_t *origin,
                                                 maelys_datalog_diagnostic_t *diag) {
     if (!r || !r->loaded || !r->registry.frozen)
         return MAELYS_ERR_INVALID_STATE;
+    MAELYS_DATALOG_COUNT_PIPELINE(validations);
     size_t line = 0, column = 0;
+    r->program_validated = 0;
+    r->compiled_fingerprint[0] = 0;
     if (r->registry.count > MAELYS_DATALOG_MAX_PREDICATES ||
         r->rule_count > MAELYS_DATALOG_MAX_RULES || r->fact_count > MAELYS_DATALOG_MAX_RULE_FACTS ||
         r->filter_program_count > MAELYS_DATALOG_MAX_FILTER_PROGRAMS ||
@@ -328,6 +344,20 @@ maelys_result_t maelys_datalog_validate_program(maelys_datalog_ruleset_t *r, con
             maelys_datalog_diagnostic_set(diag, MAELYS_DATALOG_DIAG_PARSER_INVALID_FILTER,
                                           "validate", file, 0, 0, "invalid filter program",
                                           "check the provider and pattern");
+            for (size_t k = 0; origin && k < r->rule_count; ++k) {
+                for (size_t j = 0; j < r->rules[k].body_count &&
+                                   j < MAELYS_DATALOG_MAX_BODY_LITERALS; ++j) {
+                    const maelys_datalog_literal_t *l = &r->rules[k].body[j];
+                    if (l->kind == MAELYS_DATALOG_LITERAL_FILTER && l->filter_program_index == i) {
+                        if (origin->rules[k].end.line)
+                            maelys_datalog_diagnostic_set(diag, MAELYS_DATALOG_DIAG_PARSER_INVALID_FILTER,
+                                "parser", file, 0, 0, "filter module rejected the pattern",
+                                "use a pattern supported by the registered filter module");
+                        reject_parsed_clause(r, origin, k, diag);
+                        return rc;
+                    }
+                }
+            }
             return rc;
         }
     }
@@ -350,19 +380,36 @@ maelys_result_t maelys_datalog_validate_program(maelys_datalog_ruleset_t *r, con
         const maelys_datalog_predicate_def_t *head =
             maelys_datalog_predicate_registry_get(&r->registry, rule->head.predicate_id);
         if (!(head->kind_flags & MAELYS_DATALOG_PRED_KIND_IDB) ||
-            (head->kind_flags & (MAELYS_DATALOG_PRED_KIND_EDB | MAELYS_DATALOG_PRED_KIND_POLICY_FACT)))
+            (head->kind_flags & (MAELYS_DATALOG_PRED_KIND_EDB | MAELYS_DATALOG_PRED_KIND_POLICY_FACT))) {
+            if (origin && origin->rules[i].end.line) {
+                validation_context_t p = {r, file, line, column, diag};
+                validation_diag(&p, MAELYS_DATALOG_DIAG_PARSER_RULE_HEAD_EDB_FORBIDDEN,
+                    "base predicate used in rule head",
+                    "EDB/runtime and policy fact predicates cannot appear in rule heads");
+                maelys_datalog_diagnostic_set_predicate(diag, head->name, head->arity);
+                reject_parsed_clause(r, origin, i, diag);
+                return MAELYS_ERR_INVALID_FIELD;
+            }
             goto malformed;
+        }
         for (size_t j = 0; j < rule->body_count; ++j) {
             if (!valid_literal(r, rule, &rule->body[j]))
                 goto malformed;
             if (rule->body[j].kind == MAELYS_DATALOG_LITERAL_NEGATED_ATOM)
                 r->negation_supported = 1;
         }
-        maelys_result_t rc = maelys_datalog_validate_rule(r, rule, file, line, column, diag);
-        if (rc != MAELYS_OK)
+        validation_context_t p = {r, file, line, column, diag};
+        maelys_result_t rc = validate_rule_impl(&p, rule);
+        if (rc != MAELYS_OK) {
+            reject_parsed_clause(r, origin, i, diag);
             return rc;
+        }
     }
-    return maelys_datalog_assign_strata(r, file, line, column, diag);
+    validation_context_t p = {r, file, origin && origin->eof.line ? origin->eof.line : line,
+                             origin && origin->eof.line ? origin->eof.column : column, diag};
+    maelys_result_t rc = assign_strata_impl(&p);
+    if (rc == MAELYS_OK) r->program_validated = 1;
+    return rc;
 malformed:
     maelys_datalog_diagnostic_set(
         diag, MAELYS_DATALOG_DIAG_MALFORMED_PROGRAM, "validate", file, line, column,

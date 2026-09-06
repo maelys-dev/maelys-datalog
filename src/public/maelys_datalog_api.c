@@ -156,33 +156,14 @@ maelys_datalog_status_t maelys_datalog_policy_load_inline(
     size_t source_length,
     maelys_datalog_policy_t **out_policy,
     maelys_datalog_public_diagnostic_t *out_diagnostic) {
-    maelys_datalog_public_diagnostic_clear(out_diagnostic);
-    maelys_datalog_policy_t *policy = NULL;
-    maelys_datalog_status_t allocation = allocate_policy(out_policy, &policy);
-    if (allocation != MAELYS_DATALOG_STATUS_OK) return allocation;
-    maelys_datalog_diagnostic_t diagnostic;
-    maelys_datalog_diagnostic_clear(&diagnostic);
-    maelys_result_t status = maelys_datalog_load_policy_inline(
-        domain, policy_id, source, source_length, 0u, &policy->set, &diagnostic);
-    if (status != MAELYS_OK) {
-        maelys_datalog_copy_load_diagnostic(out_diagnostic, &diagnostic);
-        memset(policy, 0, sizeof(*policy));
-        free(policy);
-        return public_status(status);
-    }
-    *out_policy = policy;
-    return MAELYS_DATALOG_STATUS_OK;
+    return maelys_datalog_policy_load_frontend(domain, policy_id, source, source_length,
+        NULL, out_policy, out_diagnostic);
 }
 
 maelys_datalog_status_t maelys_datalog_policy_load_frontend(
     const char *domain, const char *policy_id, const char *source, size_t source_length,
     const maelys_datalog_frontend_t *frontend, maelys_datalog_policy_t **out_policy,
     maelys_datalog_public_diagnostic_t *out_diagnostic) {
-    /* Preserve the standard loader's diagnostics, flags and source identities.
-     * Its parser runs the same common program validator as other frontends. */
-    if (!frontend || frontend == maelys_datalog_frontend_datalog())
-        return maelys_datalog_policy_load_inline(domain, policy_id, source, source_length,
-            out_policy, out_diagnostic);
     maelys_datalog_public_diagnostic_clear(out_diagnostic);
     maelys_datalog_policy_t *policy = NULL;
     maelys_datalog_status_t rc = allocate_policy(out_policy, &policy);

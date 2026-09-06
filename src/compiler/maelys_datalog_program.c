@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: MPL-2.0 */
 #include "src/compiler/maelys_datalog_program_internal.h"
 #include "src/core/maelys_datalog_filter.h"
-#include "src/core/maelys_datalog_parser.h"
+#include "src/core/maelys_datalog_pipeline_testing.h"
 #include "src/core/maelys_datalog_domain_registry.h"
 #include "common/maelys_sha256.h"
 #include "common/maelys_utf8.h"
@@ -210,7 +210,15 @@ maelys_datalog_status_t maelys_datalog_program_fingerprint(const maelys_datalog_
                                                            char out[65]) {
     if (!p || !p->ruleset || !out)
         return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
-    const maelys_datalog_ruleset_t *r = p->ruleset;
+    if (!p->ruleset->compiled_fingerprint[0])
+        return MAELYS_DATALOG_STATUS_INVALID_STATE;
+    memcpy(out, p->ruleset->compiled_fingerprint, 65);
+    return MAELYS_DATALOG_STATUS_OK;
+}
+
+maelys_result_t maelys_datalog_compute_program_fingerprint(const maelys_datalog_ruleset_t *r,
+                                                           char out[65]) {
+    MAELYS_DATALOG_COUNT_PIPELINE(fingerprints);
     maelys_sha256_ctx_t h;
     maelys_sha256_init(&h);
     hash_text(&h, "maelys-program-v1");
@@ -281,7 +289,7 @@ maelys_datalog_status_t maelys_datalog_program_fingerprint(const maelys_datalog_
                 const maelys_datalog_filter_definition_t *d =
                     maelys_datalog_filter_by_kind((maelys_datalog_filter_kind_t)l->filter_kind);
                 if (!d || l->filter_program_index >= r->filter_program_count)
-                    return MAELYS_DATALOG_STATUS_INVALID_STATE;
+                    return MAELYS_ERR_INVALID_STATE;
                 const maelys_datalog_filter_program_t *f =
                     &r->filter_programs[l->filter_program_index];
                 hash_text(&h, d->name);
@@ -299,7 +307,7 @@ maelys_datalog_status_t maelys_datalog_program_fingerprint(const maelys_datalog_
         out[2 * i + 1] = hex[digest[i] & 15u];
     }
     out[64] = 0;
-    return MAELYS_DATALOG_STATUS_OK;
+    return MAELYS_OK;
 }
 maelys_datalog_status_t maelys_datalog_program_predicate(const maelys_datalog_program_t *p,
                                                          size_t index,
@@ -460,6 +468,8 @@ maelys_datalog_status_t maelys_datalog_program_add_fact(maelys_datalog_program_b
     if (rc != MAELYS_OK)
         return fail(b, rc);
     r->facts[r->fact_count++] = fact;
+    r->program_validated = 0;
+    r->compiled_fingerprint[0] = 0;
     return MAELYS_DATALOG_STATUS_OK;
 }
 maelys_datalog_status_t maelys_datalog_program_add_rule(maelys_datalog_program_builder_t *b,
@@ -556,6 +566,8 @@ maelys_datalog_status_t maelys_datalog_program_add_rule(maelys_datalog_program_b
     }
     r->rule_sources[r->rule_count] = in->source;
     r->rules[r->rule_count++] = rule;
+    r->program_validated = 0;
+    r->compiled_fingerprint[0] = 0;
     return MAELYS_DATALOG_STATUS_OK;
 }
 
@@ -563,8 +575,15 @@ static maelys_datalog_status_t datalog_lower(const char *source, size_t length,
                                              maelys_datalog_program_builder_t *builder,
                                              maelys_datalog_public_diagnostic_t *out) {
     maelys_datalog_diagnostic_t diag = {0};
-    maelys_result_t rc = maelys_datalog_parse_ruleset_ex(builder->ruleset, source, length,
-                                                         builder->ruleset->policy_id, &diag);
+    maelys_datalog_ruleset_t *r = builder->ruleset;
+    /* The standard language retains its historic source authority. A frontend
+     * with a distinct semantic identity retains the generic identity fields. */
+    if (!strcmp(r->frontend_name, "datalog") &&
+        !strcmp(r->frontend_semantic_id, "maelys.datalog.v2")) {
+        r->frontend_name[0] = r->frontend_semantic_id[0] = r->source_sha256[0] = 0;
+    }
+    maelys_result_t rc = maelys_datalog_parse_only(r, source, length, "inline", 0,
+                                                   builder->parse_origin, &diag);
     if (rc != MAELYS_OK)
         maelys_datalog_copy_load_diagnostic(out, &diag);
     return (maelys_datalog_status_t)rc;
@@ -588,8 +607,23 @@ maelys_result_t maelys_datalog_compile_frontend(const char *domain, const char *
         !maelys_datalog_identity_valid(frontend->name, 64u, 1) ||
         !maelys_datalog_identity_valid(frontend->semantic_id, 128u, 0))
         return MAELYS_ERR_INVALID_ARGUMENT;
-    if (!maelys_utf8_validate((const unsigned char *)source, length))
+    if (strlen(domain) >= sizeof(r->domain) || strlen(policy_id) >= sizeof(r->policy_id))
+        return MAELYS_ERR_PAYLOAD_TOO_LARGE;
+    maelys_datalog_diagnostic_t diag = {0};
+    if (!maelys_datalog_domain_registry_find(domain)) {
+        maelys_datalog_diagnostic_set(&diag, MAELYS_DATALOG_DIAG_MANIFEST_UNKNOWN_DOMAIN,
+            "manifest", "inline", 0, 0, "unknown policy domain",
+            "install a domain registry or disable the policy");
+        maelys_datalog_copy_load_diagnostic(out, &diag);
+        return MAELYS_ERR_UNSUPPORTED;
+    }
+    if (!maelys_utf8_validate((const unsigned char *)source, length)) {
+        maelys_datalog_diagnostic_set(&diag, MAELYS_DATALOG_DIAG_LEXER_INVALID_UTF8,
+            "manifest", "inline", 0, 0, "invalid UTF-8 in policy text",
+            "ensure the policy text is valid UTF-8");
+        maelys_datalog_copy_load_diagnostic(out, &diag);
         return MAELYS_ERR_INVALID_FIELD;
+    }
     maelys_result_t rc =
         maelys_datalog_ruleset_init(r, policy_id, domain, MAELYS_DATALOG_SHA256_UNSET, 0);
     if (rc != MAELYS_OK)
@@ -599,26 +633,23 @@ maelys_result_t maelys_datalog_compile_frontend(const char *domain, const char *
         rc = maelys_datalog_predicate_registry_freeze(&r->registry);
     if (rc != MAELYS_OK)
         return rc;
-    maelys_datalog_program_builder_t builder = {r, MAELYS_DATALOG_STATUS_OK};
+    if (maelys_sha256_hex((const unsigned char *)source, length, r->source_sha256))
+        return MAELYS_ERR_INTERNAL;
+    memcpy(r->sha256, r->source_sha256, sizeof(r->sha256));
+    memcpy(r->frontend_name, frontend->name, strlen(frontend->name) + 1u);
+    memcpy(r->frontend_semantic_id, frontend->semantic_id, strlen(frontend->semantic_id) + 1u);
+    maelys_datalog_parse_origin_t origin = {0};
+    maelys_datalog_program_builder_t builder = {r, MAELYS_DATALOG_STATUS_OK, &origin};
     maelys_datalog_status_t status =
         maelys_datalog_callback_status(frontend->lower(source, length, &builder, out));
     if (builder.error)
         status = builder.error;
     if (status != MAELYS_DATALOG_STATUS_OK)
         return (maelys_result_t)status;
-    maelys_datalog_diagnostic_t diag = {0};
-    rc = maelys_datalog_validate_program(r, policy_id, &diag);
+    rc = maelys_datalog_validate_program(r, "inline", &origin, &diag);
     if (rc != MAELYS_OK) {
         maelys_datalog_copy_load_diagnostic(out, &diag);
         return rc;
-    }
-    if (maelys_sha256_hex((const unsigned char *)source, length, r->source_sha256))
-        return MAELYS_ERR_INTERNAL;
-    if (frontend == maelys_datalog_frontend_datalog()) {
-        memcpy(r->sha256, r->source_sha256, sizeof(r->sha256));
-    } else {
-        memcpy(r->frontend_name, frontend->name, strlen(frontend->name) + 1u);
-        memcpy(r->frontend_semantic_id, frontend->semantic_id, strlen(frontend->semantic_id) + 1u);
     }
     return maelys_datalog_ruleset_finalize_sha256(r);
 }

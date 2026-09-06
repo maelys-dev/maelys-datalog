@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: MPL-2.0 */
-/* Compatibility adapter around the open reference implementation. Only this
- * adapter knows its legacy session/result layout; external backends don't. */
+/* The reference backend borrows the runtime's prepared inputs. External
+ * backends consume the same program and canonical facts through the public ABI. */
 #include "src/compiler/maelys_datalog_program_internal.h"
 #include "src/core/maelys_datalog_prepared_session_internal.h"
 #include "src/core/maelys_datalog_solver_internal.h"
@@ -10,36 +10,20 @@
 #include <string.h>
 
 static maelys_datalog_status_t prepare(const maelys_datalog_program_t *program, void **out) {
-    maelys_datalog_prepared_session_t *session = NULL;
-    maelys_result_t rc = maelys_datalog_prepared_session_create(program->ruleset, &session);
-    *out = session;
-    return (maelys_datalog_status_t)rc;
+    *out = program->prepared_inputs;
+    return *out ? MAELYS_DATALOG_STATUS_OK : MAELYS_DATALOG_STATUS_INVALID_STATE;
 }
 static maelys_datalog_status_t solve(void *state, const maelys_datalog_public_fact_t *facts,
                                      size_t count, maelys_datalog_backend_output_t *output,
                                      void **out_result,
                                      maelys_datalog_public_diagnostic_t *diagnostic) {
     maelys_datalog_prepared_session_t *session = state;
-    maelys_datalog_input_fact_t *inputs = count ? calloc(count, sizeof(*inputs)) : NULL;
-    if (count && !inputs)
-        return MAELYS_DATALOG_STATUS_INTERNAL;
-    for (size_t i = 0; i < count; ++i) {
-        inputs[i].predicate = facts[i].predicate;
-        inputs[i].arity = facts[i].arity;
-        for (size_t j = 0; j < facts[i].arity; ++j) {
-            maelys_datalog_status_t rc =
-                maelys_datalog_import_public_value(&facts[i].terms[j], 0, &inputs[i].terms[j]);
-            if (rc) {
-                free(inputs);
-                return rc;
-            }
-        }
-    }
+    (void)facts;
+    (void)count;
     maelys_datalog_solve_result_t *result = NULL;
     maelys_datalog_solve_diagnostic_t diag = {0};
     maelys_result_t rc =
-        maelys_datalog_prepared_session_solve_ex(session, inputs, count, &result, &diag);
-    free(inputs);
+        maelys_datalog_prepared_session_solve_materialized_ex(session, &result, &diag);
     if (rc != MAELYS_OK) {
         maelys_datalog_copy_solve_diagnostic(diagnostic, &diag);
         return (maelys_datalog_status_t)rc;
@@ -118,8 +102,7 @@ static void destroy_result(void *state, void *result) {
     maelys_datalog_solve_result_free(result);
 }
 static void destroy(void *state) {
-    if (state)
-        (void)maelys_datalog_prepared_session_destroy(state);
+    (void)state; /* The runtime owns and releases the prepared session. */
 }
 const maelys_datalog_backend_t *maelys_datalog_backend_reference(void) {
     static const maelys_datalog_backend_t backend = {MAELYS_DATALOG_BACKEND_ABI_VERSION,

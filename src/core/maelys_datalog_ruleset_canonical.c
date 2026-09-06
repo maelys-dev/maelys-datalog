@@ -1,4 +1,5 @@
 #include "src/core/maelys_datalog_ruleset.h"
+#include "src/compiler/maelys_datalog_program_internal.h"
 
 #include "common/maelys_sha256.h"
 #include "src/core/maelys_datalog_filter.h"
@@ -237,7 +238,7 @@ static maelys_result_t ruleset_stream_canonical(maelys_sha256_ctx_t *ctx,
     return MAELYS_OK;
 }
 
-maelys_result_t maelys_datalog_ruleset_finalize_sha256(maelys_datalog_ruleset_t *ruleset) {
+static maelys_result_t finalize_authority(maelys_datalog_ruleset_t *ruleset) {
     if (!ruleset) return MAELYS_ERR_INVALID_ARGUMENT;
     if (ruleset->filter_program_count > MAELYS_DATALOG_MAX_FILTER_PROGRAMS) {
         return MAELYS_ERR_INVALID_STATE;
@@ -264,4 +265,12 @@ maelys_result_t maelys_datalog_ruleset_finalize_sha256(maelys_datalog_ruleset_t 
     }
     ruleset->sha256[MAELYS_SHA256_HEX_BYTES] = '\0';
     return MAELYS_OK;
+}
+
+maelys_result_t maelys_datalog_ruleset_finalize_sha256(maelys_datalog_ruleset_t *ruleset) {
+    if (!ruleset) return MAELYS_ERR_INVALID_ARGUMENT;
+    ruleset->compiled_fingerprint[0] = 0;
+    maelys_result_t rc = finalize_authority(ruleset);
+    if (rc != MAELYS_OK || !ruleset->program_validated) return rc;
+    return maelys_datalog_compute_program_fingerprint(ruleset, ruleset->compiled_fingerprint);
 }

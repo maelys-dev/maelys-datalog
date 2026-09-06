@@ -26,6 +26,11 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ### Changed
 
+- Standard inline compilation now uses the generic frontend pipeline, with one
+  common validation pass and a compiled-program fingerprint cached at finalization.
+  The reference backend reuses the runtime's prepared session and materialized
+  inputs. Legacy identity/proof transcripts have SMALL/LARGE regression goldens;
+  grammar, solver algorithm and language bindings are unchanged.
 - The opaque native C session API dispatches through the reference adapter by
   default. Existing source authority fingerprints, results and proof formatting
   are preserved; legacy/Python/WASM entrypoints remain on the reference engine.
