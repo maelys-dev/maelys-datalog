@@ -5,6 +5,7 @@
 #include "src/core/maelys_datalog_prepared_session_internal.h"
 #include "src/core/maelys_datalog_solver_internal.h"
 #include "src/core/maelys_datalog_explanation_format.h"
+#include "src/public/maelys_datalog_values_internal.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -26,20 +27,11 @@ static maelys_datalog_status_t solve(void *state, const maelys_datalog_public_fa
         inputs[i].predicate = facts[i].predicate;
         inputs[i].arity = facts[i].arity;
         for (size_t j = 0; j < facts[i].arity; ++j) {
-            inputs[i].terms[j].kind = (maelys_datalog_term_kind_t)facts[i].terms[j].kind;
-            switch (facts[i].terms[j].kind) {
-            case MAELYS_DATALOG_VALUE_SYMBOL:
-                inputs[i].terms[j].as.symbol = facts[i].terms[j].as.symbol;
-                break;
-            case MAELYS_DATALOG_VALUE_INTEGER:
-                inputs[i].terms[j].as.integer = facts[i].terms[j].as.integer;
-                break;
-            case MAELYS_DATALOG_VALUE_BOOLEAN:
-                inputs[i].terms[j].as.boolean = facts[i].terms[j].as.boolean;
-                break;
-            default:
+            maelys_datalog_status_t rc =
+                maelys_datalog_import_public_value(&facts[i].terms[j], 0, &inputs[i].terms[j]);
+            if (rc) {
                 free(inputs);
-                return MAELYS_DATALOG_STATUS_INVALID_FIELD;
+                return rc;
             }
         }
     }
@@ -66,9 +58,11 @@ static maelys_datalog_status_t solve(void *state, const maelys_datalog_public_fa
     }
     return (maelys_datalog_status_t)rc;
 }
-static maelys_datalog_status_t explain(void *state, void *result_state, const char *predicate,
-                                       const maelys_datalog_public_value_t *terms, size_t arity,
-                                       char *text, size_t capacity, size_t *required) {
+static maelys_datalog_status_t explain_result(void *state, void *result_state,
+                                              const char *predicate,
+                                              const maelys_datalog_public_value_t *terms,
+                                              size_t arity, char *text, size_t capacity,
+                                              size_t *required, int absent) {
     maelys_datalog_prepared_session_t *session = state;
     maelys_datalog_solve_result_t *result = result_state;
     maelys_datalog_fact_t fact = {0};
@@ -76,28 +70,26 @@ static maelys_datalog_status_t explain(void *state, void *result_state, const ch
     if (!maelys_datalog_predicate_registry_find(&session->working.registry, predicate, arity,
                                                 &fact.predicate_id))
         return MAELYS_DATALOG_STATUS_INVALID_FIELD;
-    for (size_t i = 0; i < arity; ++i) {
-        fact.terms[i].kind = (maelys_datalog_term_kind_t)terms[i].kind;
-        switch (terms[i].kind) {
-        case MAELYS_DATALOG_VALUE_SYMBOL: {
-            int found;
-            maelys_result_t rc = maelys_datalog_prepared_session_lookup_symbol(
-                session, terms[i].as.symbol, &fact.terms[i].as.symbol, &found);
-            if (rc != MAELYS_OK)
-                return (maelys_datalog_status_t)rc;
-            if (!found)
-                return MAELYS_DATALOG_STATUS_NOT_FOUND;
-            break;
-        }
-        case MAELYS_DATALOG_VALUE_INTEGER:
-            fact.terms[i].as.integer = terms[i].as.integer;
-            break;
-        case MAELYS_DATALOG_VALUE_BOOLEAN:
-            fact.terms[i].as.boolean = terms[i].as.boolean ? 1 : 0;
-            break;
-        default:
-            return MAELYS_DATALOG_STATUS_INVALID_FIELD;
-        }
+    int found = 0;
+    maelys_datalog_status_t status = maelys_datalog_resolve_public_terms(
+        &session->working.symbols, terms, arity, fact.terms, &found, 0);
+    if (status)
+        return status;
+    if (!found)
+        return MAELYS_DATALOG_STATUS_NOT_FOUND;
+    if (absent) {
+        const maelys_datalog_why_false_limits_t limits = {
+            MAELYS_DATALOG_MAX_RULES, MAELYS_DATALOG_MAX_WHY_FALSE_SUBSTITUTIONS_PER_RULE,
+            MAELYS_DATALOG_MAX_PROOF_DEPTH, MAELYS_DATALOG_MAX_WHY_FALSE_DIAGNOSTICS};
+        maelys_datalog_why_false_explanation_t *why = calloc(1, sizeof(*why));
+        if (!why)
+            return MAELYS_DATALOG_STATUS_INTERNAL;
+        maelys_result_t rc = maelys_datalog_explain_absent_solved_fact(result, &fact, &limits, why);
+        if (!rc)
+            rc = maelys_datalog_format_why_false_text(&session->working, why, text, capacity,
+                                                      required);
+        free(why);
+        return (maelys_datalog_status_t)rc;
     }
     maelys_datalog_explanation_t *explanation = calloc(1u, sizeof(*explanation));
     if (!explanation)
@@ -108,6 +100,18 @@ static maelys_datalog_status_t explain(void *state, void *result_state, const ch
                                                     required);
     free(explanation);
     return (maelys_datalog_status_t)rc;
+}
+static maelys_datalog_status_t explain_true(void *state, void *result, const char *predicate,
+                                            const maelys_datalog_public_value_t *terms,
+                                            size_t arity, char *text, size_t capacity,
+                                            size_t *required) {
+    return explain_result(state, result, predicate, terms, arity, text, capacity, required, 0);
+}
+static maelys_datalog_status_t explain_false(void *state, void *result, const char *predicate,
+                                             const maelys_datalog_public_value_t *terms,
+                                             size_t arity, char *text, size_t capacity,
+                                             size_t *required) {
+    return explain_result(state, result, predicate, terms, arity, text, capacity, required, 1);
 }
 static void destroy_result(void *state, void *result) {
     (void)state;
@@ -123,10 +127,12 @@ const maelys_datalog_backend_t *maelys_datalog_backend_reference(void) {
                                                      "reference",
                                                      "maelys.reference.v1",
                                                      MAELYS_DATALOG_CAP_LANGUAGE |
-                                                         MAELYS_DATALOG_CAP_EXPLAIN_TRUE,
+                                                         MAELYS_DATALOG_CAP_EXPLAIN_TRUE |
+                                                         MAELYS_DATALOG_CAP_EXPLAIN_FALSE,
                                                      prepare,
                                                      solve,
-                                                     explain,
+                                                     explain_true,
+                                                     explain_false,
                                                      destroy_result,
                                                      destroy};
     return &backend;

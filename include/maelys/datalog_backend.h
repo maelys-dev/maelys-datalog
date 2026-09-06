@@ -6,7 +6,7 @@
 extern "C" {
 #endif
 
-#define MAELYS_DATALOG_BACKEND_ABI_VERSION 1u
+#define MAELYS_DATALOG_BACKEND_ABI_VERSION 2u
 typedef struct maelys_datalog_backend_output maelys_datalog_backend_output_t;
 
 /* Emit the complete derived IDB, including non-query helpers. The core copies,
@@ -39,6 +39,10 @@ typedef struct {
     maelys_datalog_status_t (*explain_true)(void *state, void *result_state, const char *,
                                             const maelys_datalog_public_value_t *, size_t, char *,
                                             size_t, size_t *);
+    /* Required when EXPLAIN_FALSE is advertised. Same read-only buffer contract. */
+    maelys_datalog_status_t (*explain_false)(void *state, void *result_state, const char *,
+                                             const maelys_datalog_public_value_t *, size_t, char *,
+                                             size_t, size_t *);
     void (*destroy_result)(void *state, void *result_state);
     void (*destroy)(void *state);
 } maelys_datalog_backend_t;

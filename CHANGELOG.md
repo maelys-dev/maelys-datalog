@@ -9,6 +9,10 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 
+- Backend ABI v2: optional EXPLAIN_FALSE capability and read-only Why-false text
+  API, backed by the existing bounded reference diagnostic extractor. The naive
+  backend returns UNSUPPORTED. ABI v1 backend descriptors must be rebuilt.
+- Dedicated public MALFORMED_PROGRAM diagnostic for structurally invalid IR.
 - Public validated program IR, explicit per-load frontends, source locations and
   per-session solver backends with capability negotiation and atomic failure.
 - Independent public-only arrow-language and naive positive-Datalog examples,

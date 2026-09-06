@@ -67,8 +67,10 @@ Avoid callbacks that change precedence or inject arbitrary grammar productions.
 
 ## Backend contract
 
-Include `maelys/datalog_backend.h`. Populate a descriptor with `prepare`, `solve`,
-`destroy_result`, `destroy`, and optionally `explain_true`. Names are at most
+Include `maelys/datalog_backend.h`. Backend ABI **v2** adds `explain_false`;
+v1 descriptors are rejected and must be rebuilt. Populate a descriptor with
+`prepare`, `solve`, `destroy_result`, `destroy`, and optional `explain_true` /
+`explain_false` callbacks with their corresponding capability bits. Names are at most
 63 bytes; semantic IDs at most 127. Names use lowercase letters/digits/underscore
 and start with a letter. Semantic IDs also allow uppercase, dots and hyphens.
 Use matching headers, ABI version, struct size and target architecture.
@@ -87,8 +89,8 @@ maelys_datalog_status_t status =
 ```
 
 The core computes required language capabilities from the validated program;
-frontends do not declare them. The reference supports the full language and
-Why-true. The independent `examples/modules/naive_backend.c` implements positive
+frontends do not declare them. The reference supports the full language,
+Why-true and bounded Why-false (EXPLAIN_FALSE is bit 7). The independent `examples/modules/naive_backend.c` implements positive
 Datalog using full-scan fixed-point evaluation, with a cooperative work limit.
 It rejects negation, comparisons, arithmetic, filters and explanations. It is a
 conformance example, not an optimized product or a wrapper around the reference.
@@ -126,6 +128,20 @@ and IDB; enumeration retains the existing derived-IDB-only behavior. Why-true
 requires an advertised callback and must inspect retained state, not solve again.
 Its buffer/required-size contract matches `maelys_datalog_result_explain_true_text`
 in `datalog.h`. Backend capabilities are promises, not sandbox-enforced proofs.
+
+`maelys_datalog_result_explain_false_text` has the same read-only contract. The
+reference delegates to existing `maelys_datalog_explain_absent_solved_fact` with
+128 candidate rules, 4,096 substitutions per rule, depth 10 and 16 diagnostics.
+Its separate `MAELYS-DATALOG-WHY-FALSE-v1` text includes query, status,
+limit-hit flags, counters, substitutions, supports and obstacles (including
+filter semantic identity). A present query reports `not-applicable`; an absent
+query reports `complete` or `truncated`. A bounded diagnostic is not an exhaustive
+proof of non-derivability. Unknown query symbols return NOT_FOUND without
+mutating vocabulary. No source grammar or existing Why-true text changes.
+
+Malformed frontend IR has a dedicated public load diagnostic code,
+`MAELYS_DATALOG_DIAG_MALFORMED_PROGRAM`. Existing diagnostic values are preserved;
+the code is appended. Parser syntax diagnostics keep their original codes.
 
 ## Budgets and shared filters
 

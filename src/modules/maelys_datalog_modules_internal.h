@@ -3,5 +3,6 @@
 #define MAELYS_DATALOG_MODULES_INTERNAL_H
 #include "maelys/datalog_module.h"
 void maelys_datalog_modules_seal(void);
+int maelys_datalog_identity_valid(const char *, size_t, int);
 const maelys_datalog_planner_module_t *maelys_datalog_active_planner(void);
 #endif

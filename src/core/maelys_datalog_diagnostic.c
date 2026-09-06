@@ -106,6 +106,7 @@ const char *maelys_datalog_diag_code_name(maelys_datalog_diag_code_t code) {
         case MAELYS_DATALOG_DIAG_RUNTIME_INVALID_FILTER: return "runtime_invalid_filter";
         case MAELYS_DATALOG_DIAG_REGISTRY_CONFLICT: return "registry_conflict";
         case MAELYS_DATALOG_DIAG_REGISTRY_MUTATION_AFTER_FREEZE: return "registry_mutation_after_freeze";
+        case MAELYS_DATALOG_DIAG_MALFORMED_PROGRAM: return "malformed_program";
         default: return "unknown";
     }
 }
