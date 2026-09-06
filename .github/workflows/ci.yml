@@ -98,4 +98,10 @@ jobs:
       - name: Install AFL++ harness tooling
         run: sudo apt-get update && sudo apt-get install -y afl++
       - name: Run existing AFL++ bounded smoke
-        run: make -f Makefile.afl afl-smoke
+        run: |
+          # This hosted runner is disposable. Let AFL observe crash exits
+          # directly, then restore the original core-dump handler on exit.
+          afl_previous_core_pattern="$(sysctl -n kernel.core_pattern)"
+          trap 'sudo sysctl -w "kernel.core_pattern=$afl_previous_core_pattern" >/dev/null' EXIT
+          sudo sysctl -w kernel.core_pattern=core
+          make -f Makefile.afl afl-smoke
