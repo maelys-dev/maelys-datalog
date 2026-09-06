@@ -15,6 +15,10 @@ int main(void) {
         {"observed", 1u, MAELYS_DATALOG_PREDICATE_EDB},
         {"allow", 1u, MAELYS_DATALOG_PREDICATE_IDB | MAELYS_DATALOG_PREDICATE_QUERY},
     };
+    /* No domain atoms and no policy constants: "alice" below exists only in
+     * the solved EDB, so the symbol lookup at exit 9 passes only when the
+     * result reads its working symbol table, not the prepared policy's. Keep
+     * it that way; this is what makes the result-scoped authority observable. */
     const maelys_datalog_public_domain_t domain = {
         "installed_consumer", predicates, 2u, NULL, 0u,
     };
