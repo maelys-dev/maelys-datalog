@@ -50,38 +50,40 @@ static void hash_text(maelys_sha256_ctx_t *hash, const char *text) {
 }
 /* SHA-256 of exact NUL-delimited authority/program/execution fingerprints and
  * why-true/why-false text, including a second solve with reversed inputs.
- * Captured BEFORE this refactor, at PR #4 commit 9825a6c (SMALL and LARGE).
+ * Captured on the pre-refactor tree (PR #4 merge b55f3d6) with only the
+ * final WHY-FALSE-v1 formatter applied, so they still hold the single-pass
+ * pipeline to the legacy identities and proof texts (SMALL and LARGE).
  * `expected` covers the implicit, inline and explicit built-in descriptor;
  * `expected_wrapped` covers a copied descriptor that wraps the standard
  * lowering, which carries the extended identity like any other frontend. */
 #ifdef MAELYS_DATALOG_PROFILE_LARGE
 static const char *const expected[] = {
-    "6a7c1762ee4c5e77d5452797a69cc530bc8de4f161d4789ec1eaff1d3b904e17",
-    "1128e5845605ccab0a18ccf2797b91cd9eb2e7efcee2efd20c87187cb2ca1eba",
-    "dbbf955986af544f73825008e75c96ed42171e016ecb754fe3dec35c22d1d339",
-    "50f0fa6452ae14d3eb4b682e4cf54b3547f97529cb51fae30baf1daba0e546e2",
-    "9fc4bfa7ae0cbba0de9e45fe14d50f0478cac5026c40aee02d0926822357bea7",
-    "61c96f83be2aac2e0f436d67a065e2473fb5759705ab741fad41d8c60a7a94f9"};
+    "fd2055959520286d8cce0d481d9c064c13c5f3b09949a6f37f482e6d3f3d0755",
+    "55f5612ad3d37b5d333ba2870b37fd7ea7b56a6bcf48e3549b8c34326c491ba6",
+    "9f060c2cc05990697df10d006ddbd2c08ac38a583058b7e46e394faacc7fc7c6",
+    "ea445cabc17d8edd680f69bbf0159da06aa7fc8afdb207e3136bbdce7856917f",
+    "09c164e9f75280961273b9cdcd84a381e4043d7800f2c84a7016d02ef0a34105",
+    "d339de290deb5f702eccca4924336838d0784a0b0744f4d09b9e9b1a9de8fd8a"};
 static const char *const expected_wrapped[] = {
-    "a446081f1591721a02061e6ae6218b5b1006564a532f9849b797fecdf3d5a638",
-    "f8466ec7449dbe9bc71bf7f8c53939ff2b92e8ca68377badff06c461f8f9a3ef",
-    "e2a780d562e35729f46706c31d5809203bf6899408535dffffb8a5e0ca576ca9",
-    "74c420f8b2b3010464ed5c9c188adb917c8a64bc11b165ec2b4a81e3f22ff492",
-    "96ea64f154020ca4b0a22199cf2784cd95c8a57b1c45de93a6a57639806f8d35"};
+    "372ad882766190bf0d902e13b30f26acb2cedc63d5984e0f782eee9567e67ee5",
+    "12f6ae02b2f3d1044dbfbc9cd5fcd0c2447f6d9d2d2ed999e3d132e23c67c5de",
+    "9414d4e5e4aac5d7b65d97671187d39ee78822b6b89e1c315379a0f54ab7d911",
+    "aa3fcdb969b4f1c722d5348feb7145e32a7059554f635ec6745e4350d07cb004",
+    "975bef30684c1451e685b563b843ffb5157b2164433fb607a4e91f2fc8570bb1"};
 #else
 static const char *const expected[] = {
-    "b8151d2ddddf62acb67b733bc7eece7c878d231ec0b46dc5380b0d6e51a19b51",
-    "c6352250363127e20cd6efeedfa4c11acd13612a06c202866c1b108b179182bc",
-    "49ad1babba77a0fd1951819eeebecc366bcc1a2553c2b60e3dd678b031dff26f",
-    "fd9778ac6ed1a839a07144393fb94c933ef9fed4380b03828b7182c06d4367a7",
-    "f850d8096754c7822e645e20b1b7ecb5d70ca06eda4c084a80889282a20764fe",
-    "1b7baae272222dfaadd110485c8ead46b734c3dfd82fb6edaf5e8047ffe2ea3d"};
+    "e4ad61f97773f694dfc29c4884e641ff00fa2b7da0c703062d57aa7b48251710",
+    "acf55233edfd870f61e7c06ade32681373ec23423dcc89bcdeffd5066f4d4d4c",
+    "080de07a8450264b086e3164d6841e032b9637e09e463dd919e10fbbe5abf626",
+    "6f0614551ea91d4ae480420abb1400b1e647a5e5b042c2349b0be11377de2a99",
+    "4803cc3e2e209755c2a0291ddd38a1ca08cfaa0168809b89dd2e55321d6b567c",
+    "5cdaefda4995878fc11cc8d47dcce9adfe2b966f9187878ed9d71eeb440631c5"};
 static const char *const expected_wrapped[] = {
-    "64acc21593b30fd5ef59092a03367e199662c500fb566fdca1f038f76fad99ba",
-    "9344f1cf27ff04a74e302b4cccdb350703543d7e49e46e790054019102256dff",
-    "0932f4bee4ecc5770ad218ba001abea118eb71205b7eba410833f2d890e9cc3f",
-    "9d75ce7eb906d0f6a4bdadf58fac99d7b7a7023320591621f6ac45bf31d89e4e",
-    "60df7f7582ea10401fa632c1bcfc8756378d18287ba0a6501f309f7af7ce25ee"};
+    "d973ae3428576b0a33b2431d8da9b760c40263f884fc9ac4be74b9e3e442e6fe",
+    "7f8fcbe346f0b0ae393e4e70ad86d93ae680e1dc919a44345fea65d4f13957b0",
+    "c57ac50c6f6f8e683f1aca7ad76dd7333c9e6405eeee031503f8b40501db3e81",
+    "0311a25cf121acea6318f69383c0c283c4614f8dfca0692b76ceb1ae796b459e",
+    "5e14a2e5c5c0b1be483a848cad67a2f80221059b65b2e5178592a9e423d0b56e"};
 #endif
 static void probe_case(size_t index, const char *source, int loader) {
 #ifdef MAELYS_TESTING
