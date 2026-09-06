@@ -37,4 +37,4 @@ jobs:
         run: bash tools/check_module_sdk.sh "$PWD/build/cmake"
 
       - name: Check module boundary with sanitizers
-        run: make -f Makefile.asan build/asan/test_maelys_datalog_modules build/asan/test_maelys_datalog_filters
+        run: make -f Makefile.asan build/asan/test_maelys_datalog_modules build/asan/test_maelys_datalog_filters build/asan/test_maelys_datalog_compiler

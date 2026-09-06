@@ -9,6 +9,12 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 
+- Public validated program IR, explicit per-load frontends, source locations and
+  per-session solver backends with capability negotiation and atomic failure.
+- Independent public-only arrow-language and naive positive-Datalog examples,
+  including recursive differential tests and typed IR round-trip validation.
+- Separate compiled-program and execution fingerprints covering domain/schema,
+  query restrictions, frontend/backend semantic identities and execution options.
 - Versioned public C SDK for separately compiled string-filter and join-planner
   modules, with bounded startup registration and immutable module identities.
 - Installed-SDK consumer tests, static/shared integration tests, callback-error
@@ -16,6 +22,11 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ### Changed
 
+- The opaque native C session API dispatches through the reference adapter by
+  default. Existing source authority fingerprints, results and proof formatting
+  are preserved; legacy/Python/WASM entrypoints remain on the reference engine.
+- Binding safety, structural checks and stratification are shared by all
+  frontends. No parser hooks or mutable grammar registry are introduced.
 - Standard string filters now live in `modules/standard/` and use the same SDK
   as external modules; the default behavior and standard fingerprints remain.
 - Extended policies bind filter/planner semantics into their executable identity

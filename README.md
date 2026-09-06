@@ -76,15 +76,23 @@ Complete integration guides and API documentation are available at
 The MPL core remains usable on its own, with the reference solver and all three
 standard string filters. The versioned [module SDK](include/maelys/datalog_module.h)
 lets separately compiled modules provide new string filters and choose safe join
-candidates. They use public types only; parser validation, variable binding,
-budgets, error handling and result ownership remain in the core.
+candidates. The [program SDK](include/maelys/datalog_program.h) adds explicit
+language frontends lowering into a core-validated representation, and the
+[backend SDK](include/maelys/datalog_backend.h) selects an independent solver per
+session. All use public types; validation, input normalization, output limits,
+query permissions and result ownership remain in the core.
 
 Register modules before loading the first policy. Their identities are included
 in executable fingerprints; registration cannot change while policies are live.
+Frontend/backend selection is explicit and does not change that startup registry
+or the standard grammar. Missing capabilities fail without a fallback.
 Modules are trusted native code, not a sandbox. See the
 [architecture and integration contract](docs/architecture/open-core.md) and the
-[standalone example](examples/modules/exact_match.c). This repository includes
-no proprietary regex implementation or replacement execution backend.
+[standalone filter example](examples/modules/exact_match.c), plus the
+[compiler/backend integration guide](docs/architecture/compiler-backends.md).
+Public-only examples implement a small arrow DSL and an independent naive
+positive-Datalog solver. No proprietary code or Gitolite-compatible regex engine
+is included. Python/JS bindings continue to use the reference backend.
 
 ## Repository layout
 
@@ -92,6 +100,9 @@ no proprietary regex implementation or replacement execution backend.
 |---|---|
 | `include/` | Opaque public API, module SDK, legacy umbrella and version macros |
 | `src/core/` | Parser, registries, EDB, solver, audit, and decisions |
+| `src/compiler/` | Shared validation, frontend builder and public program views |
+| `src/runtime/` | Backend dispatch, result ownership and host-enforced output bounds |
+| `src/backends/` | Built-in reference solver adapter |
 | `src/modules/` | Module registration, identity and lifetime enforcement |
 | `modules/standard/` | Open standard providers, built against the public SDK |
 | `build-support/` | Source manifests shared by native, WASM, fuzz and benchmark builds |

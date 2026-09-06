@@ -1,4 +1,5 @@
 #include "src/core/maelys_datalog_parser.h"
+#include "src/compiler/maelys_datalog_program_internal.h"
 
 #include "src/core/maelys_datalog_lexer.h"
 #include "src/core/maelys_datalog_filter.h"
@@ -771,129 +772,12 @@ static maelys_result_t parse_literal(parser_t *p,
     return MAELYS_ERR_INVALID_FIELD;
 }
 
-static void vars_in_atom(const maelys_datalog_fact_t *a, uint32_t *mask) {
-    for (size_t i = 0; i < a->arity; i++) {
-        if (a->terms[i].kind == MAELYS_DATALOG_TERM_VAR &&
-            a->terms[i].as.variable < MAELYS_DATALOG_MAX_RULE_VARIABLES) {
-            *mask |= (1u << a->terms[i].as.variable);
-        }
-    }
-}
-
-static void vars_in_arith_expr(const maelys_datalog_rule_t *rule,
-                               uint8_t root,
-                               uint32_t *mask) {
-    if (!rule || !mask || root >= rule->expr_node_count ||
-        root == MAELYS_DATALOG_ARITH_EXPR_NO_NODE) {
-        return;
-    }
-    const maelys_datalog_arith_expr_node_t *node = &rule->expr_nodes[root];
-    switch (node->kind) {
-        case MAELYS_DATALOG_ARITH_EXPR_VAR:
-            if (node->term.as.variable < MAELYS_DATALOG_MAX_RULE_VARIABLES) {
-                *mask |= (1u << node->term.as.variable);
-            }
-            return;
-        case MAELYS_DATALOG_ARITH_EXPR_ADD:
-        case MAELYS_DATALOG_ARITH_EXPR_SUB:
-        case MAELYS_DATALOG_ARITH_EXPR_MUL:
-            vars_in_arith_expr(rule, node->left, mask);
-            vars_in_arith_expr(rule, node->right, mask);
-            return;
-        case MAELYS_DATALOG_ARITH_EXPR_INT_LITERAL:
-        default:
-            return;
-    }
-}
-
 static maelys_result_t validate_rule(parser_t *p, const maelys_datalog_rule_t *rule) {
-    maelys_datalog_ruleset_t *r = p->ruleset;
-    const maelys_datalog_predicate_def_t *head_def =
-        maelys_datalog_predicate_registry_get(&r->registry, rule->head.predicate_id);
-    if (!head_def ||
-        (head_def->kind_flags & (MAELYS_DATALOG_PRED_KIND_EDB |
-                                 MAELYS_DATALOG_PRED_KIND_POLICY_FACT))) {
-        parser_diag(p,
-                    MAELYS_DATALOG_DIAG_PARSER_RULE_HEAD_EDB_FORBIDDEN,
-                    "base predicate used in rule head",
-                    "EDB/runtime and policy fact predicates cannot appear in rule heads");
-        if (head_def) maelys_datalog_diagnostic_set_predicate(p->diag, head_def->name, head_def->arity);
-        return MAELYS_ERR_INVALID_FIELD;
-    }
-    uint32_t head_vars = 0;
-    uint32_t body_vars = 0;
-    vars_in_atom(&rule->head, &head_vars);
-    for (size_t i = 0; i < rule->body_count; i++) {
-        if (rule->body[i].kind == MAELYS_DATALOG_LITERAL_ATOM) {
-            vars_in_atom(&rule->body[i].atom, &body_vars);
-            if (rule->body[i].atom.predicate_id == rule->head.predicate_id) r->has_positive_recursion = 1;
-        }
-    }
-    for (size_t i = 0; i < rule->body_count; i++) {
-        if (rule->body[i].kind == MAELYS_DATALOG_LITERAL_FILTER) {
-            const maelys_datalog_term_t *value = &rule->body[i].filter_value;
-            if (value->kind == MAELYS_DATALOG_TERM_VAR &&
-                value->as.variable < MAELYS_DATALOG_MAX_RULE_VARIABLES &&
-                ((1u << value->as.variable) & ~body_vars)) {
-                parser_diag(p,
-                            MAELYS_DATALOG_DIAG_PARSER_UNSAFE_VARIABLE,
-                            "filter variable not bound by positive body atom",
-                            "bind the filter value in a positive body atom first");
-                maelys_datalog_diagnostic_set_predicate(
-                    p->diag, head_def->name, head_def->arity);
-                return MAELYS_ERR_INVALID_FIELD;
-            }
-        }
-    }
-    for (size_t i = 0; i < rule->body_count; i++) {
-        if (rule->body[i].kind == MAELYS_DATALOG_LITERAL_COMPARISON) {
-            uint32_t cmp_vars = 0;
-            if (rule->body[i].has_arith_expr) {
-                vars_in_arith_expr(rule, rule->body[i].lhs_expr_root, &cmp_vars);
-                vars_in_arith_expr(rule, rule->body[i].rhs_expr_root, &cmp_vars);
-            } else {
-                if (rule->body[i].lhs.kind == MAELYS_DATALOG_TERM_VAR &&
-                    rule->body[i].lhs.as.variable < MAELYS_DATALOG_MAX_RULE_VARIABLES) {
-                    cmp_vars |= (1u << rule->body[i].lhs.as.variable);
-                }
-                if (rule->body[i].rhs.kind == MAELYS_DATALOG_TERM_VAR &&
-                    rule->body[i].rhs.as.variable < MAELYS_DATALOG_MAX_RULE_VARIABLES) {
-                    cmp_vars |= (1u << rule->body[i].rhs.as.variable);
-                }
-            }
-            if (cmp_vars & ~body_vars) {
-                parser_diag(p,
-                            MAELYS_DATALOG_DIAG_PARSER_UNSAFE_VARIABLE,
-                            "comparison variable not bound by positive body atom",
-                            "bind all comparison variables in positive body atoms first");
-                maelys_datalog_diagnostic_set_predicate(p->diag, head_def->name, head_def->arity);
-                return MAELYS_ERR_INVALID_FIELD;
-            }
-        }
-    }
-    for (size_t i = 0; i < rule->body_count; i++) {
-        if (rule->body[i].kind == MAELYS_DATALOG_LITERAL_NEGATED_ATOM) {
-            uint32_t neg_vars = 0;
-            vars_in_atom(&rule->body[i].atom, &neg_vars);
-            if (neg_vars & ~body_vars) {
-                parser_diag(p,
-                            MAELYS_DATALOG_DIAG_PARSER_UNSAFE_VARIABLE,
-                            "negated atom variable not bound by positive body atom",
-                            "bind all not() variables in positive body atoms first");
-                maelys_datalog_diagnostic_set_predicate(p->diag, head_def->name, head_def->arity);
-                return MAELYS_ERR_INVALID_FIELD;
-            }
-        }
-    }
-    if (head_vars & ~body_vars) {
-        parser_diag(p,
-                    MAELYS_DATALOG_DIAG_PARSER_UNSAFE_VARIABLE,
-                    "head variable not bound by positive body atom",
-                    "bind every head variable in a positive body atom");
-        maelys_datalog_diagnostic_set_predicate(p->diag, head_def->name, head_def->arity);
-        return MAELYS_ERR_INVALID_FIELD;
-    }
-    return MAELYS_OK;
+    maelys_result_t rc = maelys_datalog_validate_rule(p->ruleset, rule, p->file_path,
+        p->tok.line, p->tok.column, p->diag);
+    if (rc != MAELYS_OK && p->diag && p->tok.text[0])
+        snprintf(p->diag->token, sizeof(p->diag->token), "%.*s", (int)p->tok.len, p->tok.text);
+    return rc;
 }
 
 static void clear_staged_rules(maelys_datalog_ruleset_t *ruleset,
@@ -948,77 +832,15 @@ static void parser_rule_expansion_overflow(parser_t *p, size_t requested) {
 }
 
 static maelys_result_t assign_strata(parser_t *p) {
-    if (!p || !p->ruleset) return MAELYS_ERR_INVALID_ARGUMENT;
-    maelys_datalog_ruleset_t *ruleset = p->ruleset;
-    if (!ruleset->negation_supported) return MAELYS_OK;
-
-    memset(ruleset->strata, 0, sizeof(ruleset->strata));
-    ruleset->max_stratum = 0;
-    ruleset->strata_assigned = 0;
-
-    int changed = 1;
-    size_t iters = 0;
-    while (changed && iters <= MAELYS_DATALOG_MAX_PREDICATES) {
-        changed = 0;
-        for (size_t r = 0; r < ruleset->rule_count; r++) {
-            const maelys_datalog_rule_t *rule = &ruleset->rules[r];
-            maelys_datalog_predicate_id_t hpid = rule->head.predicate_id;
-            if (hpid >= MAELYS_DATALOG_MAX_PREDICATES) return MAELYS_ERR_INVALID_FIELD;
-            uint32_t s = ruleset->strata[hpid];
-            for (size_t i = 0; i < rule->body_count; i++) {
-                const maelys_datalog_literal_t *literal = &rule->body[i];
-                if (literal->kind != MAELYS_DATALOG_LITERAL_ATOM &&
-                    literal->kind != MAELYS_DATALOG_LITERAL_NEGATED_ATOM) {
-                    continue;
-                }
-                maelys_datalog_predicate_id_t bpid = literal->atom.predicate_id;
-                if (bpid >= MAELYS_DATALOG_MAX_PREDICATES) return MAELYS_ERR_INVALID_FIELD;
-                uint32_t ns = ruleset->strata[bpid];
-                if (literal->kind == MAELYS_DATALOG_LITERAL_NEGATED_ATOM) {
-                    if (ns >= MAELYS_DATALOG_MAX_STRATA) {
-                        parser_diag(p,
-                                    MAELYS_DATALOG_DIAG_POLICY_NOT_STRATIFIABLE,
-                                    "negation stratum limit exceeded",
-                                    "remove recursion through negation or reduce negation depth");
-                        return MAELYS_ERR_INVALID_FIELD;
-                    }
-                    ns += 1u;
-                }
-                if (ns > s) s = ns;
-            }
-            if (s >= MAELYS_DATALOG_MAX_STRATA) {
-                parser_diag(p,
-                            MAELYS_DATALOG_DIAG_POLICY_NOT_STRATIFIABLE,
-                            "negation stratum limit exceeded",
-                            "reduce stratification depth below MAELYS_DATALOG_MAX_STRATA");
-                return MAELYS_ERR_INVALID_FIELD;
-            }
-            if (s > ruleset->strata[hpid]) {
-                ruleset->strata[hpid] = s;
-                changed = 1;
-            }
-        }
-        iters++;
-    }
-
-    if (changed) {
-        parser_diag(p,
-                    MAELYS_DATALOG_DIAG_POLICY_NOT_STRATIFIABLE,
-                    "policy is not stratifiable",
-                    "remove recursion through negation");
-        return MAELYS_ERR_INVALID_FIELD;
-    }
-
-    uint32_t max = 0;
-    for (size_t i = 0; i < MAELYS_DATALOG_MAX_PREDICATES; i++) {
-        if (ruleset->strata[i] > max) max = ruleset->strata[i];
-    }
-    ruleset->max_stratum = max;
-    ruleset->strata_assigned = 1;
-    return MAELYS_OK;
+    maelys_result_t rc = maelys_datalog_assign_strata(p->ruleset, p->file_path,
+        p->tok.line, p->tok.column, p->diag);
+    if (rc != MAELYS_OK && p->diag && p->tok.text[0])
+        snprintf(p->diag->token, sizeof(p->diag->token), "%.*s", (int)p->tok.len, p->tok.text);
+    return rc;
 }
 
 static maelys_result_t parse_clause(parser_t *p) {
+    const maelys_datalog_source_location_t source = {p->tok.line, p->tok.column};
     maelys_datalog_fact_t head;
     int head_has_anonymous = 0;
     p->anonymous_var_count = 0;
@@ -1210,6 +1032,8 @@ static maelys_result_t parse_clause(parser_t *p) {
             goto fail_staged_clause;
         }
     }
+    for (size_t i = 0u; i < staged_count; ++i)
+        p->ruleset->rule_sources[staged_base + i] = source;
     p->ruleset->rule_count = staged_base + staged_count;
     return next(p);
 
@@ -1287,5 +1111,5 @@ maelys_result_t maelys_datalog_parse_ruleset_ex_with_flags(
         rc = assign_strata(&p);
         if (rc != MAELYS_OK) return rc;
     }
-    return MAELYS_OK;
+    return maelys_datalog_validate_program(ruleset, file_path, out_diag);
 }
