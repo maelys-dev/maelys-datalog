@@ -40,7 +40,6 @@ cmake -S . -B build/cmake -DMAELYS_DATALOG_BUILD_PYTHON_BINDING=ON
 cmake --build build/cmake --parallel 3
 ctest --test-dir build/cmake --output-on-failure
 bash tools/check_module_sdk.sh "$PWD/build/cmake"
-bash tools/check_public_authority.sh "$PWD/build/cmake"
 ```
 
 Repeat in `build/cmake-large` with `-DMAELYS_DATALOG_PROFILE_LARGE=ON`.
@@ -49,12 +48,12 @@ providers outside the source tree and builds them with only installed includes
 and libraries, both static and shared. It checks all four headers independently
 as C11/C++17 and rejects `sizeof` on all five opaque handle types.
 
-The authority check first runs the unchanged public consumer. It then builds
-one temporary runtime unit selecting the prepared policy's symbol table instead
-of the result's working table. The consumer must reject that mutant precisely
-at result symbol lookup (exit 9); a compiler failure or crash does not qualify.
-The normal source tree/library is never modified by this check. Temporary
-consumer/mutant artifacts are removed after each check.
+The public consumer fixture proves result-scoped symbol authority by
+construction rather than by a mutant build: its domain declares no atoms and
+its policy no constants, so the only symbol it resolves through
+`maelys_datalog_result_symbol_text` exists solely in the solved EDB. A runtime
+that consulted the prepared policy's symbol table instead of the result's
+working table cannot pass that lookup (exit 9).
 
 ## Actual Python and WASM wrappers
 

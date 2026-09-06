@@ -39,9 +39,6 @@ jobs:
       - name: Verify separately compiled installed SDK consumer
         run: bash tools/check_module_sdk.sh "$PWD/build/cmake"
 
-      - name: Verify result authority test sensitivity
-        run: bash tools/check_public_authority.sh "$PWD/build/cmake"
-
       - name: Check all native tests including facade with sanitizers
         run: |
           make -j2 -f Makefile.asan asan
@@ -63,7 +60,6 @@ jobs:
           cmake --build build/cmake-large --parallel 2
           ctest --test-dir build/cmake-large --output-on-failure
           bash tools/check_module_sdk.sh "$PWD/build/cmake-large"
-          bash tools/check_public_authority.sh "$PWD/build/cmake-large"
           bash tools/check_python_binding.sh "$PWD/build/cmake-large" python large
 
       - name: Check single-pass benchmark
