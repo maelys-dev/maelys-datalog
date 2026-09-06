@@ -3,9 +3,14 @@
 #include "common/maelys_sha256.h"
 #include "src/core/maelys_datalog_prepared_session_internal.h"
 #include "src/core/maelys_datalog_solver_internal.h"
+#include "src/core/maelys_datalog_pipeline_testing.h"
 
 #include <stdlib.h>
 #include <string.h>
+
+#ifdef MAELYS_TESTING
+_Thread_local maelys_datalog_pipeline_counts_t maelys_datalog_pipeline_counts;
+#endif
 
 static int symbol_pointer_cmp(const void *lhs, const void *rhs) {
     const char *const left = *(const char *const *)lhs;
@@ -166,6 +171,7 @@ maelys_result_t maelys_datalog_prepared_session_create(
         return rc;
     }
     *out_session = session;
+    MAELYS_DATALOG_COUNT_PIPELINE(preparations);
     return MAELYS_OK;
 }
 
@@ -199,6 +205,7 @@ maelys_result_t maelys_datalog_prepared_session_materialize_inputs(
         return MAELYS_ERR_PAYLOAD_TOO_LARGE;
     }
 
+    MAELYS_DATALOG_COUNT_PIPELINE(materializations);
     /* Reset only mutable transaction state. The parsed rules, registry,
      * strata and prepared identity are reused without another ruleset copy. */
     maelys_result_t rc = reset_transaction_state(session);
@@ -227,7 +234,16 @@ maelys_result_t maelys_datalog_prepared_session_solve_ex(
     if (!out_result) return MAELYS_ERR_INVALID_ARGUMENT;
     maelys_result_t rc = maelys_datalog_prepared_session_materialize_inputs(session, facts, fact_count);
     if (rc != MAELYS_OK) return rc;
-    rc = maelys_datalog_solve_once_ex(
+    return maelys_datalog_prepared_session_solve_materialized_ex(session, out_result, out_diag);
+}
+
+maelys_result_t maelys_datalog_prepared_session_solve_materialized_ex(
+    maelys_datalog_prepared_session_t *session,
+    maelys_datalog_solve_result_t **out_result, maelys_datalog_solve_diagnostic_t *out_diag) {
+    if (out_result) *out_result = NULL;
+    if (!session || !out_result) return MAELYS_ERR_INVALID_ARGUMENT;
+    if (session->active_result || !session->edb.immutable) return MAELYS_ERR_INVALID_STATE;
+    maelys_result_t rc = maelys_datalog_solve_once_ex(
         &session->working, &session->edb, out_result, out_diag);
     if (rc != MAELYS_OK) return reject_transaction(session, rc);
     maelys_datalog_solve_result_set_release(

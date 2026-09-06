@@ -65,6 +65,7 @@ ASAN_TEST_SRCS = \
 	tests/test_maelys_datalog_filters.c \
 	tests/test_maelys_datalog_modules.c \
 	tests/test_maelys_datalog_compiler.c \
+	tests/test_maelys_datalog_pipeline.c \
 	tests/test_maelys_datalog_language_spec.c \
 	tests/test_maelys_datalog_corpus.c \
 	tests/test_maelys_datalog_audit.c
@@ -74,6 +75,8 @@ $(BUILD_DIR)/test_maelys_datalog_modules: ASAN_CFLAGS += -pthread
 $(BUILD_DIR)/test_maelys_datalog_modules: examples/modules/exact_match.c
 $(BUILD_DIR)/test_maelys_datalog_compiler: ASAN_EXTRA_SRCS = examples/modules/arrow_frontend.c examples/modules/naive_backend.c
 $(BUILD_DIR)/test_maelys_datalog_compiler: examples/modules/arrow_frontend.c examples/modules/naive_backend.c
+$(BUILD_DIR)/test_maelys_datalog_pipeline: ASAN_EXTRA_SRCS = examples/modules/arrow_frontend.c
+$(BUILD_DIR)/test_maelys_datalog_pipeline: examples/modules/arrow_frontend.c
 
 $(BUILD_DIR)/%: tests/%.c $(ASAN_SRCS) | $(BUILD_DIR)
 	$(CC) $(ASAN_CFLAGS) -I. $(ASAN_SRCS) $(ASAN_EXTRA_SRCS) $< -o $@

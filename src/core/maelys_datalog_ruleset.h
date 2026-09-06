@@ -43,6 +43,9 @@ typedef struct {
     char frontend_name[64];
     char frontend_semantic_id[128];
     char source_sha256[65];
+    /* Populated at finalization after common validation; not authority inputs. */
+    int program_validated;
+    char compiled_fingerprint[65];
     maelys_datalog_filter_program_t filter_programs[MAELYS_DATALOG_MAX_FILTER_PROGRAMS];
     size_t filter_program_count;
     unsigned char filter_pattern_pool[MAELYS_DATALOG_FILTER_PATTERN_POOL_BYTES];

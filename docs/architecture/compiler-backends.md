@@ -15,12 +15,19 @@ SDK remains available for narrower extensions; see [open core](open-core.md).
 | EDB → result | Canonical input, bounded/deduplicated IDB, query permissions, atomic errors | Compute the complete fixed point and emit all derived facts |
 | Explanation | Capability gate and result lease | Retain proof state and explain without re-solving |
 
-The built-in parser retains its implementation and standard grammar. Its safety
-and stratification logic now lives in `src/compiler/maelys_datalog_validate.c` and
-also validates every alternative frontend. The reference adapter alone may use
-private solver interfaces. Its algorithm still lives in `src/core/`; this change
-does not rewrite it or claim a performance improvement. The compatibility adapter
-currently retains additional bounded snapshots and input normalization work.
+The built-in parser retains the standard grammar and lowers through a private
+parse-only entrypoint. Standard inline loads use the same frontend pipeline as
+alternative languages. One common validation pass in
+`src/compiler/maelys_datalog_validate.c` checks the whole IR, validates filter
+programs once and assigns strata. The legacy parser wrappers use this same pass;
+transient clause checkpoints preserve rejection of an entire OR expansion.
+
+The reference backend borrows the runtime's prepared session and already
+materialized EDB through a private handle. There is one prepared session and one
+input materialization per solve; external backends still consume canonical facts
+through the public ABI. The runtime owns that session and releases it after the
+backend state; retained results keep the existing lease. The reference algorithm
+and its bounded proof snapshots remain unchanged in `src/core/`.
 
 ## Frontend contract
 
@@ -184,6 +191,9 @@ program or multi-backend cache key.
 including policy/domain, predicate schema, declared atoms, normalized rules,
 source locations, filter semantics and query restrictions. It is an identity of
 this compiled contract, not a canonical equivalence test between source programs.
+It is computed once at ruleset finalization after validation, then read from the
+immutable program cache. Parsing/builder mutations invalidate that cache; these
+private metadata fields are not fingerprint inputs.
 `session_execution_fingerprint` additionally binds backend name/semantic ID,
 required capabilities, resolved work limit and SMALL/LARGE profile. Neither
 fingerprint includes the runtime EDB; result caches must bind input identity too.
@@ -204,6 +214,15 @@ SDK check compiles them and the integration consumer with only installed public
 headers. Tests cover both frontends × both backends, invalid IR, capabilities,
 lifetimes, failures, work limits, shared filters, identities, IR round trips and
 20 generated recursive graphs compared against independent transitive closure.
+Pipeline regressions compare exact-byte transcript SHA-256 goldens captured at
+PR #4, before the single-pass refactor, for both SMALL and LARGE. They include
+authority/program/execution fingerprints and why-true/why-false text, policy
+facts, OR, negation, arithmetic, filters, recursion, a third-party frontend and
+reversed EDB inputs. Native test-only thread-local counters assert one validation,
+one fingerprint computation, one preparation and one materialization per solve.
+`make bench-pipeline` measures 2,000 solves and asserts the materialization count;
+its timing is informational, not a speed guarantee. No counters enter production
+builds or the public ABI.
 
 ```sh
 make test

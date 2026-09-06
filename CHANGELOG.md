@@ -26,11 +26,11 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ### Changed
 
-- The `MAELYS-DATALOG-WHY-FALSE-v1` text is part of the public explain-false
-  contract: limit hits are named (`none`, `candidate-rules`, `substitutions`,
-  `depth`, `diagnostics`, `filter-cost`) instead of a raw bitmask, and `?N` /
-  `binding=N` are documented as rule-local IR variable ids. The reference's
-  bounds are fixed in backend ABI v2.
+- Standard inline compilation now uses the generic frontend pipeline, with one
+  common validation pass and a compiled-program fingerprint cached at finalization.
+  The reference backend reuses the runtime's prepared session and materialized
+  inputs. Legacy identity/proof transcripts have SMALL/LARGE regression goldens;
+  grammar, solver algorithm and language bindings are unchanged.
 - The opaque native C session API dispatches through the reference adapter by
   default. Existing source authority fingerprints, results and proof formatting
   are preserved; legacy/Python/WASM entrypoints remain on the reference engine.
@@ -42,6 +42,12 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
   after source integrity verification. Module failures remain fail-closed.
 - All build variants use shared source manifests. Public CMake include paths no
   longer expose private engine headers; native packages include the module SDK.
+
+- The `MAELYS-DATALOG-WHY-FALSE-v1` text is part of the public explain-false
+  contract: limit hits are named (`none`, `candidate-rules`, `substitutions`,
+  `depth`, `diagnostics`, `filter-cost`) instead of a raw bitmask, and `?N` /
+  `binding=N` are documented as rule-local IR variable ids. The reference's
+  bounds are fixed in backend ABI v2.
 
 ### Fixed
 

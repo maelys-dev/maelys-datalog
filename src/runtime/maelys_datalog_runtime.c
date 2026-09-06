@@ -152,7 +152,7 @@ maelys_datalog_session_create_ex(const maelys_datalog_policy_t *policy, size_t i
         ((b->capabilities & MAELYS_DATALOG_CAP_EXPLAIN_TRUE) && !b->explain_true) ||
         ((b->capabilities & MAELYS_DATALOG_CAP_EXPLAIN_FALSE) && !b->explain_false))
         return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
-    maelys_datalog_program_t view = {&policy->set.policies[index]};
+    maelys_datalog_program_t view = {.ruleset = &policy->set.policies[index]};
     maelys_datalog_program_info_t info;
     maelys_datalog_program_info(&view, &info);
     uint64_t required = info.required_capabilities | (options ? options->required_capabilities : 0);
@@ -169,6 +169,7 @@ maelys_datalog_session_create_ex(const maelys_datalog_policy_t *policy, size_t i
         return (maelys_datalog_status_t)rc;
     }
     s->program.ruleset = &s->inputs->prepared;
+    s->program.prepared_inputs = s->inputs;
     s->backend = *b;
     memcpy(s->name, b->name, strlen(b->name) + 1u);
     memcpy(s->semantic_id, b->semantic_id, strlen(b->semantic_id) + 1u);

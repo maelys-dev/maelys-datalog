@@ -1,5 +1,6 @@
 #include "src/core/maelys_datalog_parser.h"
 #include "src/compiler/maelys_datalog_program_internal.h"
+#include "src/core/maelys_datalog_pipeline_testing.h"
 
 #include "src/core/maelys_datalog_lexer.h"
 #include "src/core/maelys_datalog_filter.h"
@@ -17,6 +18,7 @@ typedef struct {
     maelys_datalog_diagnostic_t *diag;
     unsigned anonymous_var_count;
     unsigned flags;
+    maelys_datalog_parse_origin_t *origin;
 } parser_t;
 
 typedef enum {
@@ -607,14 +609,6 @@ static maelys_result_t parse_filter_literal(
     rc = next(p);
     if (rc != MAELYS_OK) return rc;
 
-    rc = maelys_datalog_filter_validate(definition->kind, pattern, pattern_length);
-    if (rc != MAELYS_OK) {
-        parser_diag(p, MAELYS_DATALOG_DIAG_PARSER_INVALID_FILTER,
-                    "filter module rejected the pattern",
-                    "use a pattern supported by the registered filter module");
-        return rc;
-    }
-
     if (value_requires_intern) {
         maelys_datalog_symbol_id_t sid;
         rc = maelys_datalog_symbol_intern(
@@ -772,14 +766,6 @@ static maelys_result_t parse_literal(parser_t *p,
     return MAELYS_ERR_INVALID_FIELD;
 }
 
-static maelys_result_t validate_rule(parser_t *p, const maelys_datalog_rule_t *rule) {
-    maelys_result_t rc = maelys_datalog_validate_rule(p->ruleset, rule, p->file_path,
-        p->tok.line, p->tok.column, p->diag);
-    if (rc != MAELYS_OK && p->diag && p->tok.text[0])
-        snprintf(p->diag->token, sizeof(p->diag->token), "%.*s", (int)p->tok.len, p->tok.text);
-    return rc;
-}
-
 static void clear_staged_rules(maelys_datalog_ruleset_t *ruleset,
                                size_t base,
                                size_t count) {
@@ -831,14 +817,6 @@ static void parser_rule_expansion_overflow(parser_t *p, size_t requested) {
                                         MAELYS_DATALOG_MAX_RULES);
 }
 
-static maelys_result_t assign_strata(parser_t *p) {
-    maelys_result_t rc = maelys_datalog_assign_strata(p->ruleset, p->file_path,
-        p->tok.line, p->tok.column, p->diag);
-    if (rc != MAELYS_OK && p->diag && p->tok.text[0])
-        snprintf(p->diag->token, sizeof(p->diag->token), "%.*s", (int)p->tok.len, p->tok.text);
-    return rc;
-}
-
 static maelys_result_t parse_clause(parser_t *p) {
     const maelys_datalog_source_location_t source = {p->tok.line, p->tok.column};
     maelys_datalog_fact_t head;
@@ -880,6 +858,8 @@ static maelys_result_t parse_clause(parser_t *p) {
             }
         }
         p->ruleset->facts[p->ruleset->fact_count++] = head;
+        p->ruleset->program_validated = 0;
+        p->ruleset->compiled_fingerprint[0] = 0;
         return next(p);
     }
     if (p->tok.kind != MAELYS_DATALOG_TOKEN_NECK) {
@@ -1017,24 +997,22 @@ static maelys_result_t parse_clause(parser_t *p) {
         goto fail_staged_clause;
     }
 
-    const int had_positive_recursion = p->ruleset->has_positive_recursion;
     for (size_t i = 0; i < staged_count; i++) {
         maelys_datalog_rule_t *candidate = &p->ruleset->rules[staged_base + i];
         candidate->rule_id = staged_base + i + 1u;
         rc = normalize_anonymous_variables(p, candidate);
-        if (rc != MAELYS_OK) {
-            p->ruleset->has_positive_recursion = had_positive_recursion;
-            goto fail_staged_clause;
-        }
-        rc = validate_rule(p, candidate);
-        if (rc != MAELYS_OK) {
-            p->ruleset->has_positive_recursion = had_positive_recursion;
-            goto fail_staged_clause;
-        }
+        if (rc != MAELYS_OK) goto fail_staged_clause;
     }
-    for (size_t i = 0u; i < staged_count; ++i)
+    for (size_t i = 0u; i < staged_count; ++i) {
         p->ruleset->rule_sources[staged_base + i] = source;
+        if (p->origin)
+            p->origin->rules[staged_base + i] = (maelys_datalog_clause_origin_t){
+                staged_base, filter_program_base, filter_pool_base, p->ruleset->fact_count,
+                {p->tok.line, p->tok.column}};
+    }
     p->ruleset->rule_count = staged_base + staged_count;
+    p->ruleset->program_validated = 0;
+    p->ruleset->compiled_fingerprint[0] = 0;
     return next(p);
 
 fail_staged_clause:
@@ -1077,7 +1055,18 @@ maelys_result_t maelys_datalog_parse_ruleset_ex_with_flags(
     const char *file_path,
     unsigned flags,
     maelys_datalog_diagnostic_t *out_diag) {
+    maelys_datalog_parse_origin_t origin = {0};
+    maelys_result_t rc = maelys_datalog_parse_only(
+        ruleset, src, len, file_path, flags, &origin, out_diag);
+    if (rc != MAELYS_OK) return rc;
+    return maelys_datalog_validate_program(ruleset, file_path, &origin, out_diag);
+}
+
+maelys_result_t maelys_datalog_parse_only(
+    maelys_datalog_ruleset_t *ruleset, const char *src, size_t len, const char *file_path,
+    unsigned flags, maelys_datalog_parse_origin_t *origin, maelys_datalog_diagnostic_t *out_diag) {
     if (!ruleset || !ruleset->loaded) return MAELYS_ERR_INVALID_STATE;
+    MAELYS_DATALOG_COUNT_PIPELINE(parses);
     if (flags & ~MAELYS_DATALOG_PARSE_ALLOW_UNDECLARED_POLICY_ATOMS) {
         return MAELYS_ERR_INVALID_ARGUMENT;
     }
@@ -1099,6 +1088,7 @@ maelys_result_t maelys_datalog_parse_ruleset_ex_with_flags(
     p.file_path = file_path;
     p.diag = out_diag;
     p.flags = flags;
+    p.origin = origin;
     maelys_result_t rc = maelys_datalog_lexer_init_ex(&p.lexer, src, len, file_path, out_diag);
     if (rc != MAELYS_OK) return rc;
     rc = next(&p);
@@ -1107,9 +1097,6 @@ maelys_result_t maelys_datalog_parse_ruleset_ex_with_flags(
         rc = parse_clause(&p);
         if (rc != MAELYS_OK) return rc;
     }
-    if (ruleset->negation_supported) {
-        rc = assign_strata(&p);
-        if (rc != MAELYS_OK) return rc;
-    }
-    return maelys_datalog_validate_program(ruleset, file_path, out_diag);
+    if (origin) origin->eof = (maelys_datalog_source_location_t){p.tok.line, p.tok.column};
+    return MAELYS_OK;
 }

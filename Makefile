@@ -44,6 +44,12 @@ build/tests/test_maelys_datalog_modules: TEST_CFLAGS += -pthread
 build/tests/test_maelys_datalog_modules: examples/modules/exact_match.c
 build/tests/test_maelys_datalog_compiler: TEST_EXTRA_SRCS = examples/modules/arrow_frontend.c examples/modules/naive_backend.c
 build/tests/test_maelys_datalog_compiler: examples/modules/arrow_frontend.c examples/modules/naive_backend.c
+build/tests/test_maelys_datalog_pipeline: TEST_EXTRA_SRCS = examples/modules/arrow_frontend.c
+build/tests/test_maelys_datalog_pipeline: examples/modules/arrow_frontend.c
+
+.PHONY: bench-pipeline
+bench-pipeline: build/tests/test_maelys_datalog_pipeline
+	./build/tests/test_maelys_datalog_pipeline --bench
 
 build/tests/%: tests/%.c $(SRCS) $(EXAMPLES_SRCS) $(TEST_HELPER_SRCS) $(WASM_TEST_SRCS) $(ENGINE_HEADERS) | build/tests
 	$(CC) $(TEST_CFLAGS) -I. -Iinclude $(SRCS) $(EXAMPLES_SRCS) $(TEST_HELPER_SRCS) $(WASM_TEST_SRCS) $(TEST_EXTRA_SRCS) $< -o $@
