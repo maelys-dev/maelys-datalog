@@ -26,6 +26,11 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ### Changed
 
+- The `MAELYS-DATALOG-WHY-FALSE-v1` text is part of the public explain-false
+  contract: limit hits are named (`none`, `candidate-rules`, `substitutions`,
+  `depth`, `diagnostics`, `filter-cost`) instead of a raw bitmask, and `?N` /
+  `binding=N` are documented as rule-local IR variable ids. The reference's
+  bounds are fixed in backend ABI v2.
 - The opaque native C session API dispatches through the reference adapter by
   default. Existing source authority fingerprints, results and proof formatting
   are preserved; legacy/Python/WASM entrypoints remain on the reference engine.

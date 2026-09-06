@@ -132,12 +132,19 @@ in `datalog.h`. Backend capabilities are promises, not sandbox-enforced proofs.
 `maelys_datalog_result_explain_false_text` has the same read-only contract. The
 reference delegates to existing `maelys_datalog_explain_absent_solved_fact` with
 128 candidate rules, 4,096 substitutions per rule, depth 10 and 16 diagnostics.
-Its separate `MAELYS-DATALOG-WHY-FALSE-v1` text includes query, status,
-limit-hit flags, counters, substitutions, supports and obstacles (including
-filter semantic identity). A present query reports `not-applicable`; an absent
-query reports `complete` or `truncated`. A bounded diagnostic is not an exhaustive
-proof of non-derivability. Unknown query symbols return NOT_FOUND without
-mutating vocabulary. No source grammar or existing Why-true text changes.
+Its separate `MAELYS-DATALOG-WHY-FALSE-v1` text is part of the public contract.
+It includes query, status, named limit hits (`none` or a comma-separated subset
+of `candidate-rules`, `substitutions`, `depth`, `diagnostics`, `filter-cost`),
+counters, substitutions, supports and obstacles (including filter semantic
+identity). Variables print as `?N` and `binding=N`, where `N` is the rule-local
+IR variable id that `maelys_datalog_program_rule` reports; the standard grammar
+maps `A`–`Z` to 0–25 and anonymous variables to 26 and above, so the text never
+depends on a frontend's surface names. A present query reports `not-applicable`;
+an absent query reports `complete` or `truncated`. A bounded diagnostic is not an
+exhaustive proof of non-derivability. The bounds are fixed by the reference in
+backend ABI v2; letting the caller tune them means passing session options to
+`prepare`, which is a later ABI revision. Unknown query symbols return NOT_FOUND
+without mutating vocabulary. No source grammar or existing Why-true text changes.
 
 Malformed frontend IR has a dedicated public load diagnostic code,
 `MAELYS_DATALOG_DIAG_MALFORMED_PROGRAM`. Existing diagnostic values are preserved;

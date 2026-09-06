@@ -365,7 +365,7 @@ _Static_assert(sizeof(maelys_datalog_explanation_t) <= 65536u,
                "public explanation exceeds 64 KiB bound");
 
 /* ---------------------------------------------------------------------------
- * Experimental bounded Why-false diagnostics.
+ * Bounded Why-false diagnostics.
  *
  * Unlike Why-true, these records are reconstructed after a successful solve
  * against its immutable final EDB / policy-fact / IDB state. They are
