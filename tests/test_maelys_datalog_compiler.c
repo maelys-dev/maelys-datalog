@@ -808,6 +808,7 @@ static int why_false_obstacles_and_truncation(void) {
                              "allow(X) :- allow(X).",
                              "aux(X) :- seed(X).",
                              "allow(X) :- seed(X), edge(X,Y)."};
+    /* "?24" is Y: the rule-local IR variable id, A-Z = 0-25 in the standard grammar. */
     const char *expected[] = {
         "comparison-false",          "negative-contradicted",     "filter-false",
         "recursive-no-base-support", "summary=no-candidate-rule", "?24"};
@@ -839,6 +840,12 @@ static int why_false_obstacles_and_truncation(void) {
         if (!strstr(text, i == 6 ? "status=truncated" : expected[i]))
             fprintf(stderr, "why-false case %zu: %s\n", i, text);
         CHECK(strstr(text, i == 6 ? "status=truncated" : expected[i]));
+        /* Limit hits are named, never a raw bitmask: 17 rules exceed the 16
+         * diagnostics bound, the single-rule case hits nothing. */
+        if (i == 6)
+            CHECK(strstr(text, "limit-hits=diagnostics "));
+        else if (i == 4)
+            CHECK(strstr(text, "limit-hits=none "));
         free(text);
         OK(maelys_datalog_result_free(result));
         OK(maelys_datalog_session_free(session));

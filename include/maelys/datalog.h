@@ -2,6 +2,9 @@
 #ifndef MAELYS_DATALOG_PUBLIC_H
 #define MAELYS_DATALOG_PUBLIC_H
 
+#include <stddef.h>
+#include <stdint.h>
+
 /* Stable load diagnostic codes, shared with the legacy API. Append only. */
 typedef enum {
     MAELYS_DATALOG_DIAG_NONE = 0,
@@ -39,9 +42,6 @@ typedef enum {
     MAELYS_DATALOG_DIAG_REGISTRY_MUTATION_AFTER_FREEZE,
     MAELYS_DATALOG_DIAG_MALFORMED_PROGRAM
 } maelys_datalog_diag_code_t;
-
-#include <stddef.h>
-#include <stdint.h>
 
 #if defined(_WIN32) && defined(MAELYS_DATALOG_SHARED)
 #  if defined(MAELYS_DATALOG_BUILDING_LIBRARY)
@@ -237,9 +237,17 @@ MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_result_explain_true_te
     char *out_text,
     size_t out_capacity,
     size_t *out_required);
-/* Why-false uses the same buffer contract. Reference diagnostics are bounded:
- * their text distinguishes complete, truncated and not-applicable (fact present).
- * Truncated diagnostic text is not a proof of exhaustive non-derivability. */
+/* Why-false uses the same buffer contract. The MAELYS-DATALOG-WHY-FALSE-v1
+ * text is part of this contract: a status line (complete, truncated, or
+ * not-applicable when the fact is present), named limit hits (`none` or a
+ * comma-separated subset of candidate-rules, substitutions, depth, diagnostics,
+ * filter-cost), counters, then per-diagnostic bindings, supports and one
+ * obstacle. Variables print as ?N and binding=N where N is the rule-local IR
+ * variable id reported by maelys_datalog_program_rule; the standard grammar
+ * maps A-Z to 0-25 and anonymous variables to 26 and above. The reference
+ * explores at most 128 candidate rules, 4,096 substitutions per rule, depth 10
+ * and 16 diagnostics; backend ABI v2 fixes these bounds, they are not
+ * caller-tunable. Truncated text is not a proof of non-derivability. */
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_result_explain_false_text(
     const maelys_datalog_result_t *result,
     const char *predicate,

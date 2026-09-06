@@ -667,6 +667,24 @@ static maelys_result_t validate_why_false(const maelys_datalog_ruleset_t *r,
     }
     return MAELYS_OK;
 }
+/* Named in bit order of maelys_datalog_why_false_limit_t; `none` when clear. */
+static void wr_why_false_limits(fmt_writer_t *w, unsigned hits) {
+    static const char *const names[] = {"candidate-rules", "substitutions", "depth",
+                                        "diagnostics", "filter-cost"};
+    if (!hits) {
+        WR_LIT(w, "none");
+        return;
+    }
+    int first = 1;
+    for (size_t bit = 0; bit < sizeof(names) / sizeof(names[0]); ++bit) {
+        if (!(hits & (1u << bit)))
+            continue;
+        if (!first)
+            wr_byte(w, ',');
+        wr_bytes(w, (const unsigned char *)names[bit], strlen(names[bit]));
+        first = 0;
+    }
+}
 static void emit_why_false_text(const maelys_datalog_ruleset_t *r,
                                 const maelys_datalog_why_false_explanation_t *e, fmt_writer_t *w) {
     WR_LIT(w, "MAELYS-DATALOG-WHY-FALSE-v1\nstatus=");
@@ -687,7 +705,7 @@ static void emit_why_false_text(const maelys_datalog_ruleset_t *r,
     else
         WR_LIT(w, "none");
     WR_LIT(w, "\nlimit-hits=");
-    wr_u64(w, e->limit_hits);
+    wr_why_false_limits(w, e->limit_hits);
     WR_LIT(w, " candidate-rules=");
     wr_u64(w, e->candidate_rule_count);
     WR_LIT(w, " substitutions=");

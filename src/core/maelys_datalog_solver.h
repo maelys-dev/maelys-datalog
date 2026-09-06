@@ -113,7 +113,7 @@ maelys_result_t maelys_datalog_explain_solved_fact(
     const maelys_datalog_solve_result_t *result,
     const maelys_datalog_fact_t *queried_fact,
     maelys_datalog_explanation_t *out_explanation);
-/* Experimental bounded Why-false extraction.
+/* Bounded Why-false extraction.
  *
  * This is a read-only post-solve diagnostic. It never derives a fact and never
  * changes the retained Why-true witness. All four limits are mandatory,
