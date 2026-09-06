@@ -1,14 +1,14 @@
 # Maelys Datalog
 
 [![CI](https://github.com/maelys-dev/maelys-datalog/actions/workflows/ci.yml/badge.svg)](https://github.com/maelys-dev/maelys-datalog/actions/workflows/ci.yml)
-[![Version](https://img.shields.io/badge/version-v0.1.0--alpha.3-775DFF)](https://github.com/maelys-dev/maelys-datalog/releases/tag/v0.1.0-alpha.3)
+[![Version](https://img.shields.io/badge/version-v0.1.0--alpha.4-775DFF)](https://github.com/maelys-dev/maelys-datalog/releases/tag/v0.1.0-alpha.4)
 [![License: MPL-2.0](https://img.shields.io/badge/license-MPL--2.0-00BFC0.svg)](LICENSE)
 
 Maelys Datalog is a bounded, deterministic Datalog engine for embedded
 policy decisions. The engine is implemented in C11 and can be embedded as a
 native library or compiled to WebAssembly.
 
-> **Alpha software:** `v0.1.0-alpha.3` is suitable for evaluation and
+> **Alpha software:** `v0.1.0-alpha.4` is suitable for evaluation and
 > integration experiments. Public APIs may still change before `v1.0.0`.
 
 ## Why Maelys

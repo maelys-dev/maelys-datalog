@@ -7,6 +7,8 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.1.0-alpha.4] - 2026-09-06
+
 ### Added
 
 - Backend ABI v2: optional EXPLAIN_FALSE capability and read-only Why-false text
@@ -23,6 +25,10 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
   modules, with bounded startup registration and immutable module identities.
 - Installed-SDK consumer tests, static/shared integration tests, callback-error
   and budget checks, and cross-process semantic fingerprint tests.
+- Validation matrix (`docs/validation.md`): every native test in both size
+  profiles under ASan/UBSan, out-of-tree installed-SDK consumers with C11/C++17
+  headers and opaque-handle rejection, the real Python and Node/WASM wrappers in
+  both profiles, and bounded fuzz smokes, all wired into CI.
 
 ### Changed
 
@@ -89,7 +95,8 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 - Policy identity, diagnostics, proof records, and decision receipts.
 - Public documentation, contribution guide, security policy, and CI workflow.
 
-[Unreleased]: https://github.com/maelys-dev/maelys-datalog/compare/v0.1.0-alpha.3...HEAD
+[Unreleased]: https://github.com/maelys-dev/maelys-datalog/compare/v0.1.0-alpha.4...HEAD
+[0.1.0-alpha.4]: https://github.com/maelys-dev/maelys-datalog/releases/tag/v0.1.0-alpha.4
 [0.1.0-alpha.3]: https://github.com/maelys-dev/maelys-datalog/releases/tag/v0.1.0-alpha.3
 [0.1.0-alpha.2]: https://github.com/maelys-dev/maelys-datalog/releases/tag/v0.1.0-alpha.2
 [0.1.0-alpha.1]: https://github.com/maelys-dev/maelys-datalog/releases/tag/v0.1.0-alpha.1
