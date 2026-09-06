@@ -31,6 +31,9 @@ struct maelys_datalog_program_builder {
 maelys_result_t maelys_datalog_validate_program(maelys_datalog_ruleset_t *, const char *,
                                                 const maelys_datalog_parse_origin_t *,
                                                 maelys_datalog_diagnostic_t *);
+maelys_result_t maelys_datalog_validate_parsed_prefix(maelys_datalog_ruleset_t *, const char *,
+                                                      const maelys_datalog_parse_origin_t *,
+                                                      maelys_datalog_diagnostic_t *);
 maelys_result_t maelys_datalog_parse_only(maelys_datalog_ruleset_t *, const char *, size_t,
                                          const char *, unsigned, maelys_datalog_parse_origin_t *,
                                          maelys_datalog_diagnostic_t *);

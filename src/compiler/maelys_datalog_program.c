@@ -575,14 +575,7 @@ static maelys_datalog_status_t datalog_lower(const char *source, size_t length,
                                              maelys_datalog_program_builder_t *builder,
                                              maelys_datalog_public_diagnostic_t *out) {
     maelys_datalog_diagnostic_t diag = {0};
-    maelys_datalog_ruleset_t *r = builder->ruleset;
-    /* The standard language retains its historic source authority. A frontend
-     * with a distinct semantic identity retains the generic identity fields. */
-    if (!strcmp(r->frontend_name, "datalog") &&
-        !strcmp(r->frontend_semantic_id, "maelys.datalog.v2")) {
-        r->frontend_name[0] = r->frontend_semantic_id[0] = r->source_sha256[0] = 0;
-    }
-    maelys_result_t rc = maelys_datalog_parse_only(r, source, length, "inline", 0,
+    maelys_result_t rc = maelys_datalog_parse_only(builder->ruleset, source, length, "inline", 0,
                                                    builder->parse_origin, &diag);
     if (rc != MAELYS_OK)
         maelys_datalog_copy_load_diagnostic(out, &diag);
@@ -633,11 +626,9 @@ maelys_result_t maelys_datalog_compile_frontend(const char *domain, const char *
         rc = maelys_datalog_predicate_registry_freeze(&r->registry);
     if (rc != MAELYS_OK)
         return rc;
-    if (maelys_sha256_hex((const unsigned char *)source, length, r->source_sha256))
+    char source_hash[65];
+    if (maelys_sha256_hex((const unsigned char *)source, length, source_hash))
         return MAELYS_ERR_INTERNAL;
-    memcpy(r->sha256, r->source_sha256, sizeof(r->sha256));
-    memcpy(r->frontend_name, frontend->name, strlen(frontend->name) + 1u);
-    memcpy(r->frontend_semantic_id, frontend->semantic_id, strlen(frontend->semantic_id) + 1u);
     maelys_datalog_parse_origin_t origin = {0};
     maelys_datalog_program_builder_t builder = {r, MAELYS_DATALOG_STATUS_OK, &origin};
     maelys_datalog_status_t status =
@@ -650,6 +641,18 @@ maelys_result_t maelys_datalog_compile_frontend(const char *domain, const char *
     if (rc != MAELYS_OK) {
         maelys_datalog_copy_load_diagnostic(out, &diag);
         return rc;
+    }
+    /* Identity follows the descriptor the host selected, never a name the
+     * callback claims: the built-in descriptor keeps the historic source-hash
+     * authority; any other descriptor, including one that wraps the standard
+     * lowering, binds its name, semantic ID and source hash into the extended
+     * identity computed at finalization. */
+    if (frontend == maelys_datalog_frontend_datalog()) {
+        memcpy(r->sha256, source_hash, sizeof(r->sha256));
+    } else {
+        memcpy(r->source_sha256, source_hash, sizeof(r->source_sha256));
+        memcpy(r->frontend_name, frontend->name, strlen(frontend->name) + 1u);
+        memcpy(r->frontend_semantic_id, frontend->semantic_id, strlen(frontend->semantic_id) + 1u);
     }
     return maelys_datalog_ruleset_finalize_sha256(r);
 }

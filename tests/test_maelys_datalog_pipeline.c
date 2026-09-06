@@ -50,7 +50,10 @@ static void hash_text(maelys_sha256_ctx_t *hash, const char *text) {
 }
 /* SHA-256 of exact NUL-delimited authority/program/execution fingerprints and
  * why-true/why-false text, including a second solve with reversed inputs.
- * Captured BEFORE this refactor, at PR #4 commit 9825a6c (SMALL and LARGE). */
+ * Captured BEFORE this refactor, at PR #4 commit 9825a6c (SMALL and LARGE).
+ * `expected` covers the implicit, inline and explicit built-in descriptor;
+ * `expected_wrapped` covers a copied descriptor that wraps the standard
+ * lowering, which carries the extended identity like any other frontend. */
 #ifdef MAELYS_DATALOG_PROFILE_LARGE
 static const char *const expected[] = {
     "6a7c1762ee4c5e77d5452797a69cc530bc8de4f161d4789ec1eaff1d3b904e17",
@@ -59,6 +62,12 @@ static const char *const expected[] = {
     "50f0fa6452ae14d3eb4b682e4cf54b3547f97529cb51fae30baf1daba0e546e2",
     "9fc4bfa7ae0cbba0de9e45fe14d50f0478cac5026c40aee02d0926822357bea7",
     "61c96f83be2aac2e0f436d67a065e2473fb5759705ab741fad41d8c60a7a94f9"};
+static const char *const expected_wrapped[] = {
+    "a446081f1591721a02061e6ae6218b5b1006564a532f9849b797fecdf3d5a638",
+    "f8466ec7449dbe9bc71bf7f8c53939ff2b92e8ca68377badff06c461f8f9a3ef",
+    "e2a780d562e35729f46706c31d5809203bf6899408535dffffb8a5e0ca576ca9",
+    "74c420f8b2b3010464ed5c9c188adb917c8a64bc11b165ec2b4a81e3f22ff492",
+    "96ea64f154020ca4b0a22199cf2784cd95c8a57b1c45de93a6a57639806f8d35"};
 #else
 static const char *const expected[] = {
     "b8151d2ddddf62acb67b733bc7eece7c878d231ec0b46dc5380b0d6e51a19b51",
@@ -67,6 +76,12 @@ static const char *const expected[] = {
     "fd9778ac6ed1a839a07144393fb94c933ef9fed4380b03828b7182c06d4367a7",
     "f850d8096754c7822e645e20b1b7ecb5d70ca06eda4c084a80889282a20764fe",
     "1b7baae272222dfaadd110485c8ead46b734c3dfd82fb6edaf5e8047ffe2ea3d"};
+static const char *const expected_wrapped[] = {
+    "64acc21593b30fd5ef59092a03367e199662c500fb566fdca1f038f76fad99ba",
+    "9344f1cf27ff04a74e302b4cccdb350703543d7e49e46e790054019102256dff",
+    "0932f4bee4ecc5770ad218ba001abea118eb71205b7eba410833f2d890e9cc3f",
+    "9d75ce7eb906d0f6a4bdadf58fac99d7b7a7023320591621f6ac45bf31d89e4e",
+    "60df7f7582ea10401fa632c1bcfc8756378d18287ba0a6501f309f7af7ce25ee"};
 #endif
 static void probe_case(size_t index, const char *source, int loader) {
 #ifdef MAELYS_TESTING
@@ -161,9 +176,10 @@ static void probe_case(size_t index, const char *source, int loader) {
     char actual[65];
     for (size_t i = 0; i < 32; ++i)
         snprintf(actual + 2 * i, 3, "%02x", digest[i]);
-    if (strcmp(actual, expected[index])) {
+    const char *want = loader == 3 ? expected_wrapped[index] : expected[index];
+    if (strcmp(actual, want)) {
         fprintf(stderr, "pipeline case %zu loader %d: expected %s, got %s\n", index, loader,
-                expected[index], actual);
+                want, actual);
         abort();
     }
 #ifdef MAELYS_TESTING
@@ -187,11 +203,57 @@ static void filter_validation_once(void) {
         if (i) {
             assert(rc == MAELYS_DATALOG_STATUS_INVALID_FIELD && !policy);
             assert(diag.code == MAELYS_DATALOG_DIAG_PARSER_INVALID_FILTER);
+            /* Reported at the end of the rejected clause, not after the pattern. */
+            assert(diag.line == 1 && diag.column == 42);
         } else {
             assert(!rc);
             assert(!maelys_datalog_policy_free(policy));
         }
     }
+}
+static maelys_datalog_public_diagnostic_t load_failure(const char *source) {
+    maelys_datalog_policy_t *policy = NULL;
+    maelys_datalog_public_diagnostic_t diag;
+    assert(maelys_datalog_policy_load_inline("pipeline", "order", source, strlen(source), &policy,
+                                             &diag) != MAELYS_DATALOG_STATUS_OK);
+    assert(!policy && diag.code);
+    return diag;
+}
+static int same_diagnostic(const maelys_datalog_public_diagnostic_t *a,
+                           const maelys_datalog_public_diagnostic_t *b) {
+    return a->code == b->code && a->line == b->line && a->column == b->column &&
+           !strcmp(a->message, b->message);
+}
+/* Validation is a single pass after parsing, yet the reported diagnostic must
+ * be the one the former per-clause parser produced: a clause-local error in an
+ * earlier clause wins over a later parse error, while stratification stays a
+ * whole-program check that follows any parse error. */
+static void diagnostic_order(void) {
+    const char *unsafe = "allow(X) :- seed(Y).";
+    const char *edb_head = "seed(X) :- allow(X).";
+    const char *unstratified =
+        "allow(X) :- seed(X), not(reach(X, X)).\nreach(X, Y) :- edge(X, Y), not(allow(X)).";
+    const char *broken = "allow(X) :- seed(X";
+    const maelys_datalog_public_diagnostic_t unsafe_diag = load_failure(unsafe);
+    const maelys_datalog_public_diagnostic_t edb_head_diag = load_failure(edb_head);
+    const maelys_datalog_public_diagnostic_t strata_diag = load_failure(unstratified);
+    assert(unsafe_diag.code == MAELYS_DATALOG_DIAG_PARSER_UNSAFE_VARIABLE);
+    assert(edb_head_diag.code == MAELYS_DATALOG_DIAG_PARSER_RULE_HEAD_EDB_FORBIDDEN);
+    assert(strata_diag.code == MAELYS_DATALOG_DIAG_POLICY_NOT_STRATIFIABLE);
+    char source[256];
+    maelys_datalog_public_diagnostic_t diag;
+    snprintf(source, sizeof(source), "%s\n%s", unsafe, broken);
+    diag = load_failure(source);
+    assert(same_diagnostic(&diag, &unsafe_diag));
+    snprintf(source, sizeof(source), "%s\n%s", edb_head, broken);
+    diag = load_failure(source);
+    assert(same_diagnostic(&diag, &edb_head_diag));
+    snprintf(source, sizeof(source), "%s\n%s", unstratified, broken);
+    diag = load_failure(source);
+    assert(diag.code != MAELYS_DATALOG_DIAG_POLICY_NOT_STRATIFIABLE && diag.line == 3);
+    snprintf(source, sizeof(source), "%s\n%s", unsafe, unstratified);
+    diag = load_failure(source);
+    assert(same_diagnostic(&diag, &unsafe_diag));
 }
 static void bench(void) {
 #ifdef MAELYS_TESTING
@@ -264,6 +326,8 @@ int main(int argc, char **argv) {
     puts("pipeline: 21 legacy transcript/cache/single-pass checks passed");
     filter_validation_once();
     puts("pipeline: 2 single filter-validation checks passed");
+    diagnostic_order();
+    puts("pipeline: 4 diagnostic-order checks passed");
     if (argc == 2 && !strcmp(argv[1], "--bench"))
         bench();
     return 0;

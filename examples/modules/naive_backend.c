@@ -16,7 +16,6 @@ typedef struct {
     uint32_t bound;
 } bindings_t;
 typedef struct {
-    naive_t *prepared;
     maelys_datalog_backend_output_t *output;
     maelys_datalog_public_fact_t *facts;
     size_t count, capacity, available;
@@ -144,7 +143,6 @@ static maelys_datalog_status_t solve(void *state, const maelys_datalog_public_fa
     *out_result = NULL;
     naive_t *s = state;
     work_t w = {0};
-    w.prepared = s;
     w.output = output;
     w.capacity = input_count + s->info.fact_count + s->info.max_derived_facts;
     w.facts = calloc(w.capacity ? w.capacity : 1u, sizeof(*w.facts));

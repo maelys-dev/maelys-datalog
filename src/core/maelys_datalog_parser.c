@@ -1062,6 +1062,23 @@ maelys_result_t maelys_datalog_parse_ruleset_ex_with_flags(
     return maelys_datalog_validate_program(ruleset, file_path, &origin, out_diag);
 }
 
+/* Validation runs once after the whole source is parsed, but a clause-local
+ * error in an earlier clause must still win over a later parse error, as it
+ * did when every clause was validated as soon as it was parsed. */
+static maelys_result_t earliest_clause_error(maelys_datalog_ruleset_t *ruleset,
+                                             const char *file_path,
+                                             const maelys_datalog_parse_origin_t *origin,
+                                             maelys_datalog_diagnostic_t *out_diag,
+                                             maelys_result_t parse_rc) {
+    if (!origin || ruleset->rule_count == 0) return parse_rc;
+    maelys_datalog_diagnostic_t prefix;
+    maelys_datalog_diagnostic_clear(&prefix);
+    maelys_result_t rc = maelys_datalog_validate_parsed_prefix(ruleset, file_path, origin, &prefix);
+    if (rc == MAELYS_OK) return parse_rc;
+    if (out_diag) *out_diag = prefix;
+    return rc;
+}
+
 maelys_result_t maelys_datalog_parse_only(
     maelys_datalog_ruleset_t *ruleset, const char *src, size_t len, const char *file_path,
     unsigned flags, maelys_datalog_parse_origin_t *origin, maelys_datalog_diagnostic_t *out_diag) {
@@ -1095,7 +1112,8 @@ maelys_result_t maelys_datalog_parse_only(
     if (rc != MAELYS_OK) return rc;
     while (p.tok.kind != MAELYS_DATALOG_TOKEN_EOF) {
         rc = parse_clause(&p);
-        if (rc != MAELYS_OK) return rc;
+        if (rc != MAELYS_OK)
+            return earliest_clause_error(ruleset, file_path, origin, out_diag, rc);
     }
     if (origin) origin->eof = (maelys_datalog_source_location_t){p.tok.line, p.tok.column};
     return MAELYS_OK;

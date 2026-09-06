@@ -19,6 +19,7 @@ struct maelys_datalog_session {
     maelys_datalog_result_t *active;
     uint64_t work_limit;
     int busy;
+    int borrows_inputs; /* The reference solves the materialized EDB directly. */
 };
 struct maelys_datalog_result {
     maelys_datalog_session_t *owner;
@@ -171,6 +172,7 @@ maelys_datalog_session_create_ex(const maelys_datalog_policy_t *policy, size_t i
     s->program.ruleset = &s->inputs->prepared;
     s->program.prepared_inputs = s->inputs;
     s->backend = *b;
+    s->borrows_inputs = b->solve == maelys_datalog_backend_reference()->solve;
     memcpy(s->name, b->name, strlen(b->name) + 1u);
     memcpy(s->semantic_id, b->semantic_id, strlen(b->semantic_id) + 1u);
     s->backend.name = s->name;
@@ -287,7 +289,8 @@ maelys_datalog_status_t maelys_datalog_session_solve(maelys_datalog_session_t *s
         }
         return status;
     }
-    size_t canonical_count = s->inputs->edb.fact_set.count;
+    /* Canonical public facts exist for external backends only. */
+    size_t canonical_count = s->borrows_inputs ? 0 : s->inputs->edb.fact_set.count;
     maelys_datalog_public_fact_t *canonical =
         canonical_count ? calloc(canonical_count, sizeof(*canonical)) : NULL;
     if (canonical_count && !canonical)

@@ -29,8 +29,17 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 - Standard inline compilation now uses the generic frontend pipeline, with one
   common validation pass and a compiled-program fingerprint cached at finalization.
   The reference backend reuses the runtime's prepared session and materialized
-  inputs. Legacy identity/proof transcripts have SMALL/LARGE regression goldens;
-  grammar, solver algorithm and language bindings are unchanged.
+  inputs; canonical public facts are only produced for external backends. Legacy
+  identity/proof transcripts have SMALL/LARGE regression goldens; grammar, solver
+  algorithm and language bindings are unchanged.
+- Diagnostics keep their historic order: when a later clause fails to parse, an
+  earlier clause-local error (unsafe variable, base predicate in a rule head,
+  rejected filter pattern) is still the one reported, and stratification is
+  still checked after the last clause. A pattern rejected by a filter module is
+  now located at the end of its clause rather than after the pattern token.
+- Policy identity follows the frontend descriptor the host selected: only the
+  built-in descriptor keeps the source-hash authority; a copied descriptor that
+  wraps the standard lowering carries the extended identity, as before.
 - The opaque native C session API dispatches through the reference adapter by
   default. Existing source authority fingerprints, results and proof formatting
   are preserved; legacy/Python/WASM entrypoints remain on the reference engine.

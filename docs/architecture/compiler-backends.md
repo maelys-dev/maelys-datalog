@@ -20,7 +20,14 @@ parse-only entrypoint. Standard inline loads use the same frontend pipeline as
 alternative languages. One common validation pass in
 `src/compiler/maelys_datalog_validate.c` checks the whole IR, validates filter
 programs once and assigns strata. The legacy parser wrappers use this same pass;
-transient clause checkpoints preserve rejection of an entire OR expansion.
+transient clause checkpoints preserve rejection of an entire OR expansion. When
+a later clause fails to parse, the clauses parsed so far still receive their
+clause-local checks, so the earliest error in source order is reported as
+before; stratification remains a whole-program check after the last clause.
+Identity is decided by the descriptor the host selected, never by a name the
+callback claims: only `maelys_datalog_frontend_datalog()` itself keeps the
+source-hash authority, and a copied descriptor that wraps the standard lowering
+carries the extended identity like any other frontend.
 
 The reference backend borrows the runtime's prepared session and already
 materialized EDB through a private handle. There is one prepared session and one

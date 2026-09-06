@@ -317,12 +317,11 @@ static void reject_parsed_clause(maelys_datalog_ruleset_t *r,
                 r->has_positive_recursion = 1;
 }
 
-maelys_result_t maelys_datalog_validate_program(maelys_datalog_ruleset_t *r, const char *file,
-                                                const maelys_datalog_parse_origin_t *origin,
-                                                maelys_datalog_diagnostic_t *diag) {
+static maelys_result_t validate_program_impl(maelys_datalog_ruleset_t *r, const char *file,
+                                             const maelys_datalog_parse_origin_t *origin,
+                                             maelys_datalog_diagnostic_t *diag, int strata) {
     if (!r || !r->loaded || !r->registry.frozen)
         return MAELYS_ERR_INVALID_STATE;
-    MAELYS_DATALOG_COUNT_PIPELINE(validations);
     size_t line = 0, column = 0;
     r->program_validated = 0;
     r->compiled_fingerprint[0] = 0;
@@ -405,6 +404,8 @@ maelys_result_t maelys_datalog_validate_program(maelys_datalog_ruleset_t *r, con
             return rc;
         }
     }
+    if (!strata)
+        return MAELYS_OK;
     validation_context_t p = {r, file, origin && origin->eof.line ? origin->eof.line : line,
                              origin && origin->eof.line ? origin->eof.column : column, diag};
     maelys_result_t rc = assign_strata_impl(&p);
@@ -416,4 +417,23 @@ malformed:
         "malformed intermediate program",
         "check term kinds, predicate roles, expression indices and program bounds");
     return MAELYS_ERR_INVALID_FIELD;
+}
+
+maelys_result_t maelys_datalog_validate_program(maelys_datalog_ruleset_t *r, const char *file,
+                                                const maelys_datalog_parse_origin_t *origin,
+                                                maelys_datalog_diagnostic_t *diag) {
+    MAELYS_DATALOG_COUNT_PIPELINE(validations);
+    return validate_program_impl(r, file, origin, diag, 1);
+}
+
+/* After a parse failure, the clauses parsed so far still receive the same
+ * clause-local checks the former per-clause parser applied before reaching the
+ * failing clause, so the earliest error in source order is the one reported.
+ * Stratification is a whole-program property and always ran after the last
+ * clause; it is not part of this pass. */
+maelys_result_t maelys_datalog_validate_parsed_prefix(maelys_datalog_ruleset_t *r,
+                                                      const char *file,
+                                                      const maelys_datalog_parse_origin_t *origin,
+                                                      maelys_datalog_diagnostic_t *diag) {
+    return validate_program_impl(r, file, origin, diag, 0);
 }
