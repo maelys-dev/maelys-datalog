@@ -9,6 +9,7 @@ src/core/maelys_datalog_lexer.c
 src/core/maelys_datalog_parser.c
 src/core/maelys_datalog_prepared_session.c
 src/core/maelys_datalog_predicate_registry.c
+src/core/maelys_datalog_query.c
 src/core/maelys_datalog_ruleset.c
 src/core/maelys_datalog_ruleset_canonical.c
 src/core/maelys_datalog_solver.c

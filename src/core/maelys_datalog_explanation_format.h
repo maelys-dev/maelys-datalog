@@ -60,6 +60,12 @@ maelys_result_t maelys_datalog_format_explanation_text(
     size_t out_capacity,
     size_t *out_required);
 
+/* Experimental MAELYS-DATALOG-WHY-FALSE-v1 text. Same atomic buffer contract
+ * as above; presentation only, preserving bounded diagnostic status/limits. */
+maelys_result_t maelys_datalog_format_why_false_text(
+    const maelys_datalog_ruleset_t *, const maelys_datalog_why_false_explanation_t *,
+    char *, size_t, size_t *);
+
 #ifdef __cplusplus
 }
 #endif

@@ -23,7 +23,7 @@ static maelys_datalog_planner_module_t planner;
 static char planner_name[MAELYS_DATALOG_MODULE_NAME_BYTES];
 static char planner_semantic_id[MAELYS_DATALOG_MODULE_SEMANTIC_ID_BYTES];
 
-static int identifier_valid(const char *s, size_t capacity, int predicate) {
+int maelys_datalog_identity_valid(const char *s, size_t capacity, int predicate) {
     if (!s || !s[0] || (predicate && (s[0] < 'a' || s[0] > 'z')))
         return 0;
     for (size_t i = 0u; i < capacity; ++i) {
@@ -99,8 +99,8 @@ maelys_datalog_register_filter_module(const maelys_datalog_filter_module_t *modu
         return MAELYS_DATALOG_STATUS_INVALID_STATE;
     if (!module || module->abi_version != MAELYS_DATALOG_MODULE_ABI_VERSION ||
         module->struct_size != sizeof(*module) || !module->validate_pattern || !module->cost ||
-        !module->evaluate || !identifier_valid(module->name, MAELYS_DATALOG_MODULE_NAME_BYTES, 1) ||
-        !identifier_valid(module->semantic_id, MAELYS_DATALOG_MODULE_SEMANTIC_ID_BYTES, 0) ||
+        !module->evaluate || !maelys_datalog_identity_valid(module->name, MAELYS_DATALOG_MODULE_NAME_BYTES, 1) ||
+        !maelys_datalog_identity_valid(module->semantic_id, MAELYS_DATALOG_MODULE_SEMANTIC_ID_BYTES, 0) ||
         strcmp(module->name, "not") == 0 || strcmp(module->name, "true") == 0 ||
         strcmp(module->name, "false") == 0 || strcmp(module->name, "or") == 0) {
         return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
@@ -122,8 +122,8 @@ maelys_datalog_register_planner_module(const maelys_datalog_planner_module_t *mo
         return MAELYS_DATALOG_STATUS_INVALID_STATE;
     if (!module || module->abi_version != MAELYS_DATALOG_MODULE_ABI_VERSION ||
         module->struct_size != sizeof(*module) || !module->choose ||
-        !identifier_valid(module->name, MAELYS_DATALOG_MODULE_NAME_BYTES, 1) ||
-        !identifier_valid(module->semantic_id, MAELYS_DATALOG_MODULE_SEMANTIC_ID_BYTES, 0)) {
+        !maelys_datalog_identity_valid(module->name, MAELYS_DATALOG_MODULE_NAME_BYTES, 1) ||
+        !maelys_datalog_identity_valid(module->semantic_id, MAELYS_DATALOG_MODULE_SEMANTIC_ID_BYTES, 0)) {
         return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
     }
     if (planner.choose)

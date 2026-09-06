@@ -585,6 +585,227 @@ static maelys_result_t validate_explanation(const maelys_datalog_ruleset_t *rule
 
 /* ==================================================================== */
 
+static const char *why_false_obstacle_name(unsigned kind) {
+    switch (kind) {
+    case MAELYS_DATALOG_WHY_FALSE_OBSTACLE_POSITIVE_NO_MATCH:
+        return "positive-no-match";
+    case MAELYS_DATALOG_WHY_FALSE_OBSTACLE_NEGATIVE_CONTRADICTED:
+        return "negative-contradicted";
+    case MAELYS_DATALOG_WHY_FALSE_OBSTACLE_COMPARISON_FALSE:
+        return "comparison-false";
+    case MAELYS_DATALOG_WHY_FALSE_OBSTACLE_RECURSIVE_NO_BASE_SUPPORT:
+        return "recursive-no-base-support";
+    case MAELYS_DATALOG_WHY_FALSE_OBSTACLE_FILTER_FALSE:
+        return "filter-false";
+    default:
+        return NULL;
+    }
+}
+static maelys_result_t validate_why_false(const maelys_datalog_ruleset_t *r,
+                                          const maelys_datalog_why_false_explanation_t *e) {
+    if (validate_fact(r, &e->query) ||
+        e->diagnostic_count > MAELYS_DATALOG_MAX_WHY_FALSE_DIAGNOSTICS ||
+        e->status < MAELYS_DATALOG_WHY_FALSE_STATUS_NOT_APPLICABLE ||
+        e->status > MAELYS_DATALOG_WHY_FALSE_STATUS_TRUNCATED ||
+        e->summary > MAELYS_DATALOG_WHY_FALSE_SUMMARY_NO_CANDIDATE_RULE ||
+        (e->query_origin && e->query_origin != MAELYS_DATALOG_EXPLANATION_ORIGIN_NOT_APPLICABLE &&
+         !origin_is_store(e->query_origin)) ||
+        (e->limit_hits & ~31u))
+        return MAELYS_ERR_INVALID_FIELD;
+    for (size_t i = 0; i < e->diagnostic_count; ++i) {
+        const maelys_datalog_why_false_diagnostic_t *d = &e->diagnostics[i];
+        const maelys_datalog_why_false_obstacle_t *o = &d->obstacle;
+        if (!d->rule_id || d->rule_id > r->rule_count || validate_fact(r, &d->target_fact) ||
+            d->support_count > MAELYS_DATALOG_MAX_WHY_FALSE_SUPPORTS ||
+            d->depth > MAELYS_DATALOG_MAX_PROOF_DEPTH || !why_false_obstacle_name(o->kind) ||
+            o->body_index >= r->rules[d->rule_id - 1u].body_count ||
+            (o->origin && o->origin != MAELYS_DATALOG_EXPLANATION_ORIGIN_NOT_APPLICABLE &&
+             !origin_is_store(o->origin)))
+            return MAELYS_ERR_INVALID_FIELD;
+        for (size_t v = 0; v < MAELYS_DATALOG_MAX_RULE_VARIABLES; ++v)
+            if ((d->bound_variable_mask & (UINT32_C(1) << v)) &&
+                validate_term(r, &d->substitution[v]))
+                return MAELYS_ERR_INVALID_FIELD;
+        for (size_t s = 0; s < d->support_count; ++s)
+            if (!origin_is_store(d->supports[s].origin) || validate_fact(r, &d->supports[s].fact) ||
+                d->supports[s].body_index >= r->rules[d->rule_id - 1u].body_count)
+                return MAELYS_ERR_INVALID_FIELD;
+        if (o->kind == MAELYS_DATALOG_WHY_FALSE_OBSTACLE_COMPARISON_FALSE) {
+            if (o->op < MAELYS_DATALOG_CMP_EQ || o->op > MAELYS_DATALOG_CMP_GTE ||
+                validate_term(r, &o->lhs) || validate_term(r, &o->rhs))
+                return MAELYS_ERR_INVALID_FIELD;
+        } else if (o->kind == MAELYS_DATALOG_WHY_FALSE_OBSTACLE_FILTER_FALSE) {
+            if (r->filter_program_count > MAELYS_DATALOG_MAX_FILTER_PROGRAMS ||
+                o->filter_program_index >= r->filter_program_count ||
+                validate_term(r, &o->filter_value))
+                return MAELYS_ERR_INVALID_FIELD;
+            const maelys_datalog_filter_program_t *p = &r->filter_programs[o->filter_program_index];
+            if (p->kind != o->filter_kind ||
+                !maelys_datalog_filter_by_kind((maelys_datalog_filter_kind_t)p->kind) ||
+                r->filter_pattern_pool_used > MAELYS_DATALOG_FILTER_PATTERN_POOL_BYTES ||
+                p->pattern_offset > r->filter_pattern_pool_used ||
+                p->pattern_length > r->filter_pattern_pool_used - p->pattern_offset)
+                return MAELYS_ERR_INVALID_FIELD;
+        } else {
+            const maelys_datalog_why_false_pattern_t *p = &o->pattern;
+            const maelys_datalog_predicate_def_t *pred =
+                maelys_datalog_predicate_registry_get(&r->registry, p->predicate_id);
+            size_t length;
+            if (!pred || !predicate_name_span(pred, &length) ||
+                p->arity > MAELYS_DATALOG_MAX_TERMS || p->arity != pred->arity ||
+                (p->unbound_term_mask >> p->arity))
+                return MAELYS_ERR_INVALID_FIELD;
+            for (size_t t = 0; t < p->arity; ++t) {
+                if (p->unbound_term_mask & (1u << t)) {
+                    if (p->terms[t].kind != MAELYS_DATALOG_TERM_VAR ||
+                        p->terms[t].as.variable >= MAELYS_DATALOG_MAX_RULE_VARIABLES)
+                        return MAELYS_ERR_INVALID_FIELD;
+                } else if (validate_term(r, &p->terms[t]))
+                    return MAELYS_ERR_INVALID_FIELD;
+            }
+        }
+    }
+    return MAELYS_OK;
+}
+static void emit_why_false_text(const maelys_datalog_ruleset_t *r,
+                                const maelys_datalog_why_false_explanation_t *e, fmt_writer_t *w) {
+    WR_LIT(w, "MAELYS-DATALOG-WHY-FALSE-v1\nstatus=");
+    if (e->status == MAELYS_DATALOG_WHY_FALSE_STATUS_NOT_APPLICABLE)
+        WR_LIT(w, "not-applicable");
+    else if (e->status == MAELYS_DATALOG_WHY_FALSE_STATUS_TRUNCATED)
+        WR_LIT(w, "truncated");
+    else
+        WR_LIT(w, "complete");
+    WR_LIT(w, "\nquery=");
+    wr_fact(w, r, &e->query);
+    WR_LIT(w, " origin=");
+    wr_premise_origin(w, e->query_origin ? e->query_origin
+                                         : MAELYS_DATALOG_EXPLANATION_ORIGIN_NOT_APPLICABLE);
+    WR_LIT(w, "\nsummary=");
+    if (e->summary == MAELYS_DATALOG_WHY_FALSE_SUMMARY_NO_CANDIDATE_RULE)
+        WR_LIT(w, "no-candidate-rule");
+    else
+        WR_LIT(w, "none");
+    WR_LIT(w, "\nlimit-hits=");
+    wr_u64(w, e->limit_hits);
+    WR_LIT(w, " candidate-rules=");
+    wr_u64(w, e->candidate_rule_count);
+    WR_LIT(w, " substitutions=");
+    wr_u64(w, e->substitution_count);
+    WR_LIT(w, " diagnostics=");
+    wr_u64(w, e->diagnostic_count);
+    WR_LIT(w, " filter-cost=");
+    wr_u64(w, e->filter_cost_units);
+    wr_byte(w, '\n');
+    for (size_t i = 0; i < e->diagnostic_count; ++i) {
+        const maelys_datalog_why_false_diagnostic_t *d = &e->diagnostics[i];
+        const maelys_datalog_why_false_obstacle_t *o = &d->obstacle;
+        WR_LIT(w, "diagnostic=");
+        wr_u64(w, i);
+        WR_LIT(w, " rule=");
+        wr_u64(w, d->rule_id);
+        WR_LIT(w, " depth=");
+        wr_u64(w, d->depth);
+        WR_LIT(w, " target=");
+        wr_fact(w, r, &d->target_fact);
+        wr_byte(w, '\n');
+        for (size_t v = 0; v < MAELYS_DATALOG_MAX_RULE_VARIABLES; ++v) {
+            if (!(d->bound_variable_mask & (UINT32_C(1) << v)))
+                continue;
+            WR_LIT(w, "binding=");
+            wr_u64(w, v);
+            WR_LIT(w, " value=");
+            wr_term(w, r, &d->substitution[v]);
+            wr_byte(w, '\n');
+        }
+        for (size_t s = 0; s < d->support_count; ++s) {
+            WR_LIT(w, "support=");
+            wr_u64(w, s);
+            WR_LIT(w, " body=");
+            wr_u64(w, d->supports[s].body_index);
+            WR_LIT(w, " origin=");
+            wr_premise_origin(w, d->supports[s].origin);
+            WR_LIT(w, " fact=");
+            wr_fact(w, r, &d->supports[s].fact);
+            wr_byte(w, '\n');
+        }
+        const char *kind = why_false_obstacle_name(o->kind);
+        WR_LIT(w, "obstacle=");
+        wr_bytes(w, (const unsigned char *)kind, strlen(kind));
+        WR_LIT(w, " body=");
+        wr_u64(w, o->body_index);
+        WR_LIT(w, " origin=");
+        wr_premise_origin(w,
+                          o->origin ? o->origin : MAELYS_DATALOG_EXPLANATION_ORIGIN_NOT_APPLICABLE);
+        if (o->kind == MAELYS_DATALOG_WHY_FALSE_OBSTACLE_COMPARISON_FALSE) {
+            WR_LIT(w, " lhs=");
+            wr_term(w, r, &o->lhs);
+            WR_LIT(w, " op=");
+            wr_cmp_op(w, o->op);
+            WR_LIT(w, " rhs=");
+            wr_term(w, r, &o->rhs);
+        } else if (o->kind == MAELYS_DATALOG_WHY_FALSE_OBSTACLE_FILTER_FALSE) {
+            const maelys_datalog_filter_program_t *p = &r->filter_programs[o->filter_program_index];
+            const maelys_datalog_filter_definition_t *f =
+                maelys_datalog_filter_by_kind((maelys_datalog_filter_kind_t)p->kind);
+            WR_LIT(w, " filter=");
+            wr_quoted(w, (const unsigned char *)f->name, strlen(f->name));
+            WR_LIT(w, " semantic=");
+            wr_quoted(w, (const unsigned char *)f->semantic_id, strlen(f->semantic_id));
+            WR_LIT(w, " value=");
+            wr_term(w, r, &o->filter_value);
+            WR_LIT(w, " pattern=");
+            wr_quoted(w, r->filter_pattern_pool + p->pattern_offset, p->pattern_length);
+        } else {
+            const maelys_datalog_why_false_pattern_t *p = &o->pattern;
+            const maelys_datalog_predicate_def_t *pred =
+                maelys_datalog_predicate_registry_get(&r->registry, p->predicate_id);
+            WR_LIT(w, " pattern=");
+            wr_quoted(w, (const unsigned char *)pred->name, strlen(pred->name));
+            wr_byte(w, '(');
+            for (size_t t = 0; t < p->arity; ++t) {
+                if (t)
+                    wr_byte(w, ',');
+                if (p->unbound_term_mask & (1u << t)) {
+                    wr_byte(w, '?');
+                    wr_u64(w, p->terms[t].as.variable);
+                } else
+                    wr_term(w, r, &p->terms[t]);
+            }
+            wr_byte(w, ')');
+        }
+        wr_byte(w, '\n');
+    }
+}
+maelys_result_t
+maelys_datalog_format_why_false_text(const maelys_datalog_ruleset_t *r,
+                                     const maelys_datalog_why_false_explanation_t *e, char *text,
+                                     size_t capacity, size_t *required) {
+    if (!r || !e || !required || (!text && capacity))
+        return MAELYS_ERR_INVALID_ARGUMENT;
+    if (!r->loaded || !r->registry.frozen)
+        return MAELYS_ERR_INVALID_STATE;
+    maelys_result_t rc = validate_why_false(r, e);
+    if (rc)
+        return rc;
+    fmt_writer_t counter = {0};
+    emit_why_false_text(r, e, &counter);
+    if (counter.overflowed || counter.emitted == SIZE_MAX)
+        return MAELYS_ERR_PAYLOAD_TOO_LARGE;
+    *required = counter.emitted;
+    if (!text)
+        return MAELYS_OK;
+    if (capacity <= counter.emitted) {
+        if (capacity)
+            text[0] = 0;
+        return MAELYS_ERR_PAYLOAD_TOO_LARGE;
+    }
+    fmt_writer_t writer = {text, capacity, 0, 0};
+    emit_why_false_text(r, e, &writer);
+    text[writer.emitted] = 0;
+    return MAELYS_OK;
+}
+
 maelys_result_t maelys_datalog_format_explanation_text(
     const maelys_datalog_ruleset_t *ruleset,
     const maelys_datalog_explanation_t *explanation,

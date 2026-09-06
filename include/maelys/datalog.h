@@ -2,6 +2,44 @@
 #ifndef MAELYS_DATALOG_PUBLIC_H
 #define MAELYS_DATALOG_PUBLIC_H
 
+/* Stable load diagnostic codes, shared with the legacy API. Append only. */
+typedef enum {
+    MAELYS_DATALOG_DIAG_NONE = 0,
+    MAELYS_DATALOG_DIAG_MANIFEST_INVALID_JSON,
+    MAELYS_DATALOG_DIAG_MANIFEST_INVALID_FIELD,
+    MAELYS_DATALOG_DIAG_MANIFEST_UNKNOWN_FIELD,
+    MAELYS_DATALOG_DIAG_MANIFEST_UNKNOWN_DOMAIN,
+    MAELYS_DATALOG_DIAG_MANIFEST_SHA_MISMATCH,
+    MAELYS_DATALOG_DIAG_MANIFEST_POLICY_NOT_FOUND,
+    MAELYS_DATALOG_DIAG_MANIFEST_TEST_ONLY_REJECTED,
+    MAELYS_DATALOG_DIAG_LEXER_INVALID_TOKEN,
+    MAELYS_DATALOG_DIAG_LEXER_UNSUPPORTED_CONSTRUCT,
+    MAELYS_DATALOG_DIAG_LEXER_INVALID_UTF8,
+    MAELYS_DATALOG_DIAG_LEXER_STRING_TOO_LONG,
+    MAELYS_DATALOG_DIAG_PARSER_EXPECTED_PREDICATE,
+    MAELYS_DATALOG_DIAG_PARSER_UNKNOWN_PREDICATE,
+    MAELYS_DATALOG_DIAG_PARSER_ARITY_MISMATCH,
+    MAELYS_DATALOG_DIAG_PARSER_UNKNOWN_ATOM,
+    MAELYS_DATALOG_DIAG_PARSER_RULE_HEAD_EDB_FORBIDDEN,
+    MAELYS_DATALOG_DIAG_PARSER_RULE_BODY_LITERAL_OVERFLOW,
+    MAELYS_DATALOG_DIAG_PARSER_UNSAFE_VARIABLE,
+    MAELYS_DATALOG_DIAG_PARSER_INVALID_COMPARISON,
+    MAELYS_DATALOG_DIAG_PARSER_INVALID_FILTER,
+    MAELYS_DATALOG_DIAG_PARSER_EXPECTED_DOT,
+    MAELYS_DATALOG_DIAG_PARSER_EXPECTED_NECK,
+    MAELYS_DATALOG_DIAG_PARSER_FACT_USES_NON_BASE_PREDICATE,
+    MAELYS_DATALOG_DIAG_PARSER_ANONYMOUS_VARIABLE_IN_HEAD,
+    MAELYS_DATALOG_DIAG_PARSER_ANONYMOUS_VARIABLE_IN_COMPARISON,
+    MAELYS_DATALOG_DIAG_PARSER_ANONYMOUS_VARIABLE_IN_FACT,
+    MAELYS_DATALOG_DIAG_PARSER_TOO_MANY_VARIABLES,
+    MAELYS_DATALOG_DIAG_POLICY_NOT_STRATIFIABLE,
+    MAELYS_DATALOG_DIAG_RUNTIME_INVALID_COMPARISON,
+    MAELYS_DATALOG_DIAG_RUNTIME_INVALID_FILTER,
+    MAELYS_DATALOG_DIAG_REGISTRY_CONFLICT,
+    MAELYS_DATALOG_DIAG_REGISTRY_MUTATION_AFTER_FREEZE,
+    MAELYS_DATALOG_DIAG_MALFORMED_PROGRAM
+} maelys_datalog_diag_code_t;
+
 #include <stddef.h>
 #include <stdint.h>
 
@@ -185,7 +223,24 @@ MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_result_symbol_text(
     uint32_t symbol_id,
     const char **out_text,
     size_t *out_length);
+/* Read-only explanation of retained state, never a re-solve. Count-only:
+ * NULL text, zero capacity. Required size excludes NUL. A short buffer returns
+ * PAYLOAD_TOO_LARGE and exact required size; when capacity > 0 only text[0] is
+ * set to NUL. Missing backend capability returns UNSUPPORTED, outputs untouched.
+ * A query symbol absent from the session vocabulary returns NOT_FOUND without
+ * interning it. Text may include sensitive policy/input values. */
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_result_explain_true_text(
+    const maelys_datalog_result_t *result,
+    const char *predicate,
+    const maelys_datalog_public_value_t *terms,
+    size_t arity,
+    char *out_text,
+    size_t out_capacity,
+    size_t *out_required);
+/* Why-false uses the same buffer contract. Reference diagnostics are bounded:
+ * their text distinguishes complete, truncated and not-applicable (fact present).
+ * Truncated diagnostic text is not a proof of exhaustive non-derivability. */
+MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_result_explain_false_text(
     const maelys_datalog_result_t *result,
     const char *predicate,
     const maelys_datalog_public_value_t *terms,

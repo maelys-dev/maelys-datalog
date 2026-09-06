@@ -577,13 +577,14 @@ static maelys_datalog_status_t forged_symbol(void *state, const maelys_datalog_p
     return MAELYS_DATALOG_STATUS_OK;
 }
 static maelys_datalog_backend_t fake_backend(void) {
-    maelys_datalog_backend_t b = {1,
+    maelys_datalog_backend_t b = {MAELYS_DATALOG_BACKEND_ABI_VERSION,
                                   sizeof(b),
                                   "fake",
                                   "test.fake.v1",
                                   MAELYS_DATALOG_CAP_POSITIVE | MAELYS_DATALOG_CAP_WORK_LIMIT,
                                   fake_prepare,
                                   bad_emit,
+                                  NULL,
                                   NULL,
                                   fake_destroy_result,
                                   fake_destroy};
@@ -716,6 +717,134 @@ static int descriptor_validation(void) {
     OK(maelys_datalog_policy_free(p));
     return 0;
 }
+static size_t reference_solve_calls;
+static maelys_datalog_status_t
+counted_reference_solve(void *state, const maelys_datalog_public_fact_t *facts, size_t count,
+                        maelys_datalog_backend_output_t *output, void **result,
+                        maelys_datalog_public_diagnostic_t *diag) {
+    ++reference_solve_calls;
+    return maelys_datalog_backend_reference()->solve(state, facts, count, output, result, diag);
+}
+static int why_false_backend_contract(void) {
+    maelys_datalog_policy_t *policy;
+    OK(load("allow(X) :- seed(X), extra(X).", NULL, &policy, NULL));
+    maelys_datalog_backend_t backend = *maelys_datalog_backend_reference();
+    CHECK(backend.abi_version == 2 && (backend.capabilities & MAELYS_DATALOG_CAP_EXPLAIN_FALSE));
+    backend.solve = counted_reference_solve;
+    maelys_datalog_session_options_t o = options(&backend);
+    o.required_capabilities = MAELYS_DATALOG_CAP_EXPLAIN_FALSE;
+    maelys_datalog_session_t *session;
+    OK(maelys_datalog_session_create_ex(policy, 0, &o, &session));
+    maelys_datalog_public_fact_t inputs[] = {fact("seed", "alice"), fact("extra", "alice"),
+                                             fact("seed", "bob")};
+    maelys_datalog_result_t *result;
+    reference_solve_calls = 0;
+    OK(maelys_datalog_session_solve(session, inputs, 3, &result, NULL));
+    maelys_datalog_public_value_t alice = symbol("alice"), bob = symbol("bob");
+    char before[8192], after[8192], text[8192];
+    size_t required = 0, again;
+    OK(maelys_datalog_result_explain_true_text(result, "allow", &alice, 1, before, sizeof(before),
+                                               &required));
+    OK(maelys_datalog_result_explain_false_text(result, "allow", &bob, 1, NULL, 0, &required));
+    CHECK(required > 0 && required < sizeof(text));
+    memset(text, 'X', sizeof(text));
+    CHECK(maelys_datalog_result_explain_false_text(result, "allow", &bob, 1, text, required,
+                                                   &again) ==
+          MAELYS_DATALOG_STATUS_PAYLOAD_TOO_LARGE);
+    CHECK(required == again && text[0] == 0 && text[1] == 'X');
+    OK(maelys_datalog_result_explain_false_text(result, "allow", &bob, 1, text, required + 1,
+                                                &again));
+    CHECK(strlen(text) == required && again == required);
+    CHECK(strstr(text, "status=complete\n") && strstr(text, "obstacle=positive-no-match") &&
+          strstr(text, "\"extra\"(\"bob\")"));
+    OK(maelys_datalog_result_explain_false_text(result, "allow", &bob, 1, after, sizeof(after),
+                                                &again));
+    CHECK(!strcmp(text, after));
+    OK(maelys_datalog_result_explain_false_text(result, "allow", &alice, 1, text, sizeof(text),
+                                                &again));
+    CHECK(strstr(text, "status=not-applicable\n"));
+    OK(maelys_datalog_result_explain_true_text(result, "allow", &alice, 1, after, sizeof(after),
+                                               &again));
+    CHECK(!strcmp(before, after) && reference_solve_calls == 1);
+    maelys_datalog_public_value_t unknown = symbol("unknown");
+    again = 123;
+    text[0] = 'X';
+    CHECK(maelys_datalog_result_explain_false_text(result, "allow", &unknown, 1, text, sizeof(text),
+                                                   &again) == MAELYS_DATALOG_STATUS_NOT_FOUND);
+    CHECK(again == 123 && text[0] == 'X');
+    OK(maelys_datalog_result_free(result));
+    OK(maelys_datalog_session_free(session));
+    o = options(example_naive_backend());
+    OK(maelys_datalog_session_create_ex(policy, 0, &o, &session));
+    OK(maelys_datalog_session_solve(session, inputs, 3, &result, NULL));
+    CHECK(maelys_datalog_result_explain_false_text(result, "allow", &bob, 1, text, sizeof(text),
+                                                   &again) == MAELYS_DATALOG_STATUS_UNSUPPORTED);
+    CHECK(again == 123 && text[0] == 'X');
+    OK(maelys_datalog_result_free(result));
+    OK(maelys_datalog_session_free(session));
+    o.required_capabilities = MAELYS_DATALOG_CAP_EXPLAIN_FALSE;
+    CHECK(maelys_datalog_session_create_ex(policy, 0, &o, &session) ==
+          MAELYS_DATALOG_STATUS_UNSUPPORTED);
+    backend = *maelys_datalog_backend_reference();
+    backend.explain_false = NULL;
+    o = options(&backend);
+    CHECK(maelys_datalog_session_create_ex(policy, 0, &o, &session) ==
+          MAELYS_DATALOG_STATUS_INVALID_ARGUMENT);
+    backend = *maelys_datalog_backend_reference();
+    backend.abi_version = 1;
+    CHECK(maelys_datalog_session_create_ex(policy, 0, &o, &session) ==
+          MAELYS_DATALOG_STATUS_INVALID_ARGUMENT);
+    OK(maelys_datalog_policy_free(policy));
+    maelys_datalog_public_diagnostic_t diag;
+    CHECK(load("base_head", &fixture, &policy, &diag) == MAELYS_DATALOG_STATUS_INVALID_FIELD);
+    CHECK(!policy && diag.code == MAELYS_DATALOG_DIAG_MALFORMED_PROGRAM && diag.line == 3 &&
+          diag.column == 2);
+    return 0;
+}
+static int why_false_obstacles_and_truncation(void) {
+    const char *sources[] = {"allow(X) :- seed(X), X > 10.",
+                             "allow(X) :- seed(X), not(blocked(X)).",
+                             "allow(X) :- seed(X), starts_with(X, \"z\").",
+                             "allow(X) :- allow(X).",
+                             "aux(X) :- seed(X).",
+                             "allow(X) :- seed(X), edge(X,Y)."};
+    const char *expected[] = {
+        "comparison-false",          "negative-contradicted",     "filter-false",
+        "recursive-no-base-support", "summary=no-candidate-rule", "?24"};
+    for (size_t i = 0; i < 7; ++i) {
+        char many_rules[2048] = {0};
+        if (i == 6)
+            for (size_t n = 0; n < 17; ++n)
+                strcat(many_rules, "allow(X) :- seed(X), extra(X).\n");
+        maelys_datalog_policy_t *policy;
+        OK(load(i == 6 ? many_rules : sources[i], NULL, &policy, NULL));
+        maelys_datalog_session_options_t o = options(maelys_datalog_backend_reference());
+        maelys_datalog_session_t *session;
+        OK(maelys_datalog_session_create_ex(policy, 0, &o, &session));
+        OK(maelys_datalog_policy_free(policy));
+        maelys_datalog_public_fact_t inputs[] = {fact("seed", "alice"), fact("blocked", "alice")};
+        if (!i) {
+            inputs[0].terms[0].kind = MAELYS_DATALOG_VALUE_INTEGER;
+            inputs[0].terms[0].as.integer = 7;
+        }
+        maelys_datalog_result_t *result;
+        OK(maelys_datalog_session_solve(session, inputs, i == 1 ? 2 : 1, &result, NULL));
+        size_t required;
+        OK(maelys_datalog_result_explain_false_text(result, "allow", inputs[0].terms, 1, NULL, 0,
+                                                    &required));
+        char *text = malloc(required + 1);
+        CHECK(text);
+        OK(maelys_datalog_result_explain_false_text(result, "allow", inputs[0].terms, 1, text,
+                                                    required + 1, &required));
+        if (!strstr(text, i == 6 ? "status=truncated" : expected[i]))
+            fprintf(stderr, "why-false case %zu: %s\n", i, text);
+        CHECK(strstr(text, i == 6 ? "status=truncated" : expected[i]));
+        free(text);
+        OK(maelys_datalog_result_free(result));
+        OK(maelys_datalog_session_free(session));
+    }
+    return 0;
+}
 int main(void) {
     if (setup())
         return 1;
@@ -730,7 +859,9 @@ int main(void) {
                  {"ir_roundtrip_all_language_features", ir_roundtrip},
                  {"shared_filter_service_and_output_dedup", shared_filter_service},
                  {"atomic_backend_failures_and_cleanup", backend_failures_are_atomic},
-                 {"descriptor_validation", descriptor_validation}};
+                 {"descriptor_validation", descriptor_validation},
+                 {"why_false_backend_and_ir_diagnostics", why_false_backend_contract},
+                 {"why_false_obstacles_and_truncation", why_false_obstacles_and_truncation}};
     int failures = 0;
     for (size_t i = 0; i < sizeof(tests) / sizeof(tests[0]); ++i) {
         int rc = tests[i].test();

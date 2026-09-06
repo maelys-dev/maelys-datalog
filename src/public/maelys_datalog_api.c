@@ -71,22 +71,6 @@ void maelys_datalog_public_diagnostic_clear(
     if (diagnostic) memset(diagnostic, 0, sizeof(*diagnostic));
 }
 
-static void copy_load_diagnostic(
-    maelys_datalog_public_diagnostic_t *destination,
-    const maelys_datalog_diagnostic_t *source) {
-    if (!destination || !source) return;
-    maelys_datalog_public_diagnostic_t value;
-    memset(&value, 0, sizeof(value));
-    value.source = MAELYS_DATALOG_DIAGNOSTIC_LOAD;
-    value.code = (int)source->code;
-    value.line = source->line;
-    value.column = source->column;
-    memcpy(value.phase, source->phase, sizeof(value.phase));
-    memcpy(value.message, source->message, sizeof(value.message));
-    memcpy(value.hint, source->hint, sizeof(value.hint));
-    *destination = value;
-}
-
 static int public_predicates_match(
     const maelys_datalog_domain_def_t *existing,
     const maelys_datalog_public_domain_t *candidate) {
@@ -181,7 +165,7 @@ maelys_datalog_status_t maelys_datalog_policy_load_inline(
     maelys_result_t status = maelys_datalog_load_policy_inline(
         domain, policy_id, source, source_length, 0u, &policy->set, &diagnostic);
     if (status != MAELYS_OK) {
-        copy_load_diagnostic(out_diagnostic, &diagnostic);
+        maelys_datalog_copy_load_diagnostic(out_diagnostic, &diagnostic);
         memset(policy, 0, sizeof(*policy));
         free(policy);
         return public_status(status);
@@ -248,7 +232,7 @@ maelys_datalog_status_t maelys_datalog_policy_load_manifest(
     maelys_result_t status = maelys_datalog_manifest_load_ex(
         manifest_path, manifest_flags, &policy->set, &diagnostic);
     if (status != MAELYS_OK) {
-        copy_load_diagnostic(out_diagnostic, &diagnostic);
+        maelys_datalog_copy_load_diagnostic(out_diagnostic, &diagnostic);
         memset(policy, 0, sizeof(*policy));
         free(policy);
         return public_status(status);

@@ -1,8 +1,10 @@
 /* SPDX-License-Identifier: MPL-2.0 */
 #include "src/public/maelys_datalog_public_internal.h"
+#include "src/public/maelys_datalog_values_internal.h"
 #include "src/compiler/maelys_datalog_program_internal.h"
 #include "src/core/maelys_datalog_prepared_session_internal.h"
 #include "src/core/maelys_datalog_filter.h"
+#include "src/core/maelys_datalog_query_internal.h"
 #include "common/maelys_sha256.h"
 #include <stdlib.h>
 #include <stdio.h>
@@ -48,67 +50,6 @@ maelys_datalog_status_t maelys_datalog_backend_charge(maelys_datalog_backend_out
     out->work += units;
     return MAELYS_DATALOG_STATUS_OK;
 }
-static maelys_datalog_status_t input_value(const maelys_datalog_public_value_t *in,
-                                           maelys_datalog_input_term_t *out) {
-    memset(out, 0, sizeof(*out));
-    out->kind = (maelys_datalog_term_kind_t)in->kind;
-    switch (in->kind) {
-    case MAELYS_DATALOG_VALUE_SYMBOL:
-        if (!in->as.symbol)
-            return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
-        out->as.symbol = in->as.symbol;
-        break;
-    case MAELYS_DATALOG_VALUE_INTEGER:
-        out->as.integer = in->as.integer;
-        break;
-    case MAELYS_DATALOG_VALUE_BOOLEAN:
-        out->as.boolean = in->as.boolean ? 1 : 0;
-        break;
-    default:
-        return MAELYS_DATALOG_STATUS_INVALID_FIELD;
-    }
-    return MAELYS_DATALOG_STATUS_OK;
-}
-static maelys_datalog_status_t resolve_terms(const maelys_datalog_session_t *s,
-                                             const maelys_datalog_public_value_t *values, size_t n,
-                                             maelys_datalog_term_t *terms, int *found, int strict) {
-    if ((!values && n) || n > MAELYS_DATALOG_MAX_TERMS)
-        return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
-    *found = 1;
-    for (size_t i = 0; i < n; ++i) {
-        memset(&terms[i], 0, sizeof(terms[i]));
-        terms[i].kind = (maelys_datalog_term_kind_t)values[i].kind;
-        switch (values[i].kind) {
-        case MAELYS_DATALOG_VALUE_SYMBOL: {
-            if (!values[i].as.symbol)
-                return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
-            size_t len = strnlen(values[i].as.symbol, MAELYS_DATALOG_MAX_STRING_BYTES + 1u);
-            if (len > MAELYS_DATALOG_MAX_STRING_BYTES)
-                return MAELYS_DATALOG_STATUS_PAYLOAD_TOO_LARGE;
-            int exists = 0;
-            maelys_result_t rc = maelys_datalog_symbol_lookup_readonly(
-                &s->inputs->working.symbols, values[i].as.symbol, len, &terms[i].as.symbol,
-                &exists);
-            if (rc != MAELYS_OK)
-                return (maelys_datalog_status_t)rc;
-            if (!exists)
-                *found = 0;
-            break;
-        }
-        case MAELYS_DATALOG_VALUE_INTEGER:
-            terms[i].as.integer = values[i].as.integer;
-            break;
-        case MAELYS_DATALOG_VALUE_BOOLEAN:
-            if (strict && values[i].as.boolean != 0 && values[i].as.boolean != 1)
-                return MAELYS_DATALOG_STATUS_INVALID_FIELD;
-            terms[i].as.boolean = values[i].as.boolean ? 1 : 0;
-            break;
-        default:
-            return MAELYS_DATALOG_STATUS_INVALID_FIELD;
-        }
-    }
-    return MAELYS_DATALOG_STATUS_OK;
-}
 maelys_datalog_status_t maelys_datalog_backend_emit(maelys_datalog_backend_output_t *out,
                                                     const maelys_datalog_public_fact_t *in) {
     if (!out || !out->result || !in || !in->predicate || in->arity > MAELYS_DATALOG_MAX_TERMS)
@@ -129,7 +70,8 @@ maelys_datalog_status_t maelys_datalog_backend_emit(maelys_datalog_backend_outpu
         (d->kind_flags & (MAELYS_DATALOG_PRED_KIND_EDB | MAELYS_DATALOG_PRED_KIND_POLICY_FACT)))
         return output_fail(out, MAELYS_DATALOG_STATUS_INVALID_FIELD);
     int found = 0;
-    maelys_datalog_status_t rc = resolve_terms(s, in->terms, in->arity, fact.terms, &found, 1);
+    maelys_datalog_status_t rc = maelys_datalog_resolve_public_terms(
+        &s->inputs->working.symbols, in->terms, in->arity, fact.terms, &found, 1);
     if (rc != MAELYS_DATALOG_STATUS_OK)
         return output_fail(out, rc);
     if (!found)
@@ -207,7 +149,8 @@ maelys_datalog_session_create_ex(const maelys_datalog_policy_t *policy, size_t i
         !maelys_datalog_identity_valid(b->name, 64u, 1) ||
         !maelys_datalog_identity_valid(b->semantic_id, 128u, 0) ||
         (b->capabilities & ~MAELYS_DATALOG_CAP_ALL) ||
-        ((b->capabilities & MAELYS_DATALOG_CAP_EXPLAIN_TRUE) && !b->explain_true))
+        ((b->capabilities & MAELYS_DATALOG_CAP_EXPLAIN_TRUE) && !b->explain_true) ||
+        ((b->capabilities & MAELYS_DATALOG_CAP_EXPLAIN_FALSE) && !b->explain_false))
         return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
     maelys_datalog_program_t view = {&policy->set.policies[index]};
     maelys_datalog_program_info_t info;
@@ -325,7 +268,7 @@ maelys_datalog_status_t maelys_datalog_session_solve(maelys_datalog_session_t *s
         inputs[i].predicate = facts[i].predicate;
         inputs[i].arity = facts[i].arity;
         for (size_t j = 0; j < facts[i].arity; ++j) {
-            status = input_value(&facts[i].terms[j], &inputs[i].terms[j]);
+            status = maelys_datalog_import_public_value(&facts[i].terms[j], 0, &inputs[i].terms[j]);
             if (status != MAELYS_DATALOG_STATUS_OK)
                 break;
         }
@@ -400,21 +343,8 @@ static maelys_datalog_status_t query_predicate(const maelys_datalog_result_t *re
         return MAELYS_DATALOG_STATUS_INVALID_STATE;
     if (arity > MAELYS_DATALOG_MAX_TERMS)
         return MAELYS_DATALOG_STATUS_INVALID_FIELD;
-    const maelys_datalog_ruleset_t *r = result->owner->program.ruleset;
-    if (r->enforces_query_whitelist) {
-        int allowed = 0;
-        for (size_t i = 0; i < r->query_whitelist_count; ++i)
-            if (r->query_whitelist[i].arity == arity &&
-                !strcmp(r->query_whitelist[i].name, predicate))
-                allowed = 1;
-        if (!allowed)
-            return MAELYS_DATALOG_STATUS_FORBIDDEN;
-    }
-    if (!maelys_datalog_predicate_registry_find(&r->registry, predicate, arity, pid))
-        return MAELYS_DATALOG_STATUS_INVALID_FIELD;
-    if (!(r->registry.defs[*pid].kind_flags & MAELYS_DATALOG_PRED_KIND_QUERY))
-        return MAELYS_DATALOG_STATUS_INVALID_FIELD;
-    return MAELYS_DATALOG_STATUS_OK;
+    return (maelys_datalog_status_t)maelys_datalog_validate_query_predicate(
+        result->owner->program.ruleset, predicate, arity, pid);
 }
 maelys_datalog_status_t maelys_datalog_result_query(const maelys_datalog_result_t *result,
                                                     const char *predicate,
@@ -428,7 +358,8 @@ maelys_datalog_status_t maelys_datalog_result_query(const maelys_datalog_result_
         return rc;
     fact.arity = (uint8_t)arity;
     int found;
-    rc = resolve_terms(result->owner, terms, arity, fact.terms, &found, 0);
+    rc = maelys_datalog_resolve_public_terms(&result->owner->inputs->working.symbols, terms, arity,
+                                             fact.terms, &found, 0);
     if (rc != MAELYS_DATALOG_STATUS_OK)
         return rc;
     int answer = 0;
@@ -490,11 +421,11 @@ maelys_datalog_status_t maelys_datalog_result_symbol_text(const maelys_datalog_r
     *length = symbols->entries[id - 1u].len;
     return MAELYS_DATALOG_STATUS_OK;
 }
-maelys_datalog_status_t
-maelys_datalog_result_explain_true_text(const maelys_datalog_result_t *result,
-                                        const char *predicate,
-                                        const maelys_datalog_public_value_t *terms, size_t arity,
-                                        char *text, size_t capacity, size_t *required) {
+static maelys_datalog_status_t result_explain_text(const maelys_datalog_result_t *result,
+                                                   const char *predicate,
+                                                   const maelys_datalog_public_value_t *terms,
+                                                   size_t arity, char *text, size_t capacity,
+                                                   size_t *required, int why_false) {
     if (!result || !result->owner || !required || (!text && capacity))
         return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
     maelys_datalog_predicate_id_t pid;
@@ -502,25 +433,42 @@ maelys_datalog_result_explain_true_text(const maelys_datalog_result_t *result,
     if (rc != MAELYS_DATALOG_STATUS_OK)
         return rc;
     maelys_datalog_session_t *s = result->owner;
-    if (!(s->backend.capabilities & MAELYS_DATALOG_CAP_EXPLAIN_TRUE))
+    if (!(s->backend.capabilities &
+          (why_false ? MAELYS_DATALOG_CAP_EXPLAIN_FALSE : MAELYS_DATALOG_CAP_EXPLAIN_TRUE)))
         return MAELYS_DATALOG_STATUS_UNSUPPORTED;
     maelys_datalog_term_t checked[MAELYS_DATALOG_MAX_TERMS];
     int found;
-    rc = resolve_terms(s, terms, arity, checked, &found, 0);
+    rc = maelys_datalog_resolve_public_terms(&s->inputs->working.symbols, terms, arity, checked,
+                                             &found, 0);
     if (rc != MAELYS_DATALOG_STATUS_OK)
         return rc;
     if (!found)
         return MAELYS_DATALOG_STATUS_NOT_FOUND;
     size_t needed = SIZE_MAX;
     s->busy = 1;
-    rc = maelys_datalog_callback_status(s->backend.explain_true(
-        s->state, result->state, predicate, terms, arity, text, capacity, &needed));
+    rc = maelys_datalog_callback_status(
+        (why_false ? s->backend.explain_false : s->backend.explain_true)(
+            s->state, result->state, predicate, terms, arity, text, capacity, &needed));
     s->busy = 0;
     if (needed != SIZE_MAX)
         *required = needed;
     else if (rc == MAELYS_DATALOG_STATUS_OK)
         return MAELYS_DATALOG_STATUS_INVALID_STATE;
     return rc;
+}
+maelys_datalog_status_t
+maelys_datalog_result_explain_true_text(const maelys_datalog_result_t *result,
+                                        const char *predicate,
+                                        const maelys_datalog_public_value_t *terms, size_t arity,
+                                        char *text, size_t capacity, size_t *required) {
+    return result_explain_text(result, predicate, terms, arity, text, capacity, required, 0);
+}
+maelys_datalog_status_t
+maelys_datalog_result_explain_false_text(const maelys_datalog_result_t *result,
+                                         const char *predicate,
+                                         const maelys_datalog_public_value_t *terms, size_t arity,
+                                         char *text, size_t capacity, size_t *required) {
+    return result_explain_text(result, predicate, terms, arity, text, capacity, required, 1);
 }
 maelys_datalog_status_t maelys_datalog_result_free(maelys_datalog_result_t *result) {
     if (!result || !result->owner)

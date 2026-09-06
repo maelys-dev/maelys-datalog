@@ -1,5 +1,6 @@
 src/manifest/maelys_datalog_manifest_file.c
 src/manifest/maelys_datalog_policy_set.c
 src/public/maelys_datalog_api.c
+src/public/maelys_datalog_values.c
 src/runtime/maelys_datalog_runtime.c
 src/backends/maelys_datalog_reference.c

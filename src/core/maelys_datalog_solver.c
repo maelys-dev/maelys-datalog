@@ -1,5 +1,6 @@
 #include "src/core/maelys_datalog_solver.h"
 #include "src/core/maelys_datalog_solver_internal.h"
+#include "src/core/maelys_datalog_query_internal.h"
 #include "src/modules/maelys_datalog_modules_internal.h"
 
 #include "src/core/maelys_datalog_audit.h"
@@ -228,9 +229,6 @@ static void solve_once_edb_slice(const maelys_datalog_solve_result_t *result,
 static int datalog_term_kind_known(maelys_datalog_term_kind_t kind);
 static int datalog_fact_structurally_valid(const maelys_datalog_predicate_registry_t *registry,
                                            const maelys_datalog_fact_t *fact);
-static int query_whitelist_contains(const maelys_datalog_ruleset_t *ruleset,
-                                    const char *predicate,
-                                    size_t arity);
 
 const char *maelys_datalog_solve_diagnostic_category_name(
     maelys_datalog_solve_diag_category_t category) {
@@ -3228,7 +3226,7 @@ maelys_result_t maelys_datalog_solve_result_enumerate_predicate_facts(
         return MAELYS_ERR_INVALID_STATE;
     }
     if (result->ruleset->enforces_query_whitelist &&
-        !query_whitelist_contains(result->ruleset, predicate, arity)) {
+        !maelys_datalog_query_whitelist_contains(result->ruleset, predicate, arity)) {
         return MAELYS_ERR_FORBIDDEN;
     }
 
@@ -3270,41 +3268,12 @@ void maelys_datalog_solve_result_set_release(
     result->release = release;
 }
 
-static int query_whitelist_contains(const maelys_datalog_ruleset_t *ruleset,
-                                    const char *predicate,
-                                    size_t arity) {
-    if (!ruleset || !predicate) return 0;
-    for (size_t i = 0u; i < ruleset->query_whitelist_count; i++) {
-        if (ruleset->query_whitelist[i].arity == arity &&
-            strcmp(ruleset->query_whitelist[i].name, predicate) == 0) {
-            return 1;
-        }
-    }
-    return 0;
-}
-
 static maelys_result_t validate_solved_query_predicate(
     const maelys_datalog_solve_result_t *result,
     const char *predicate,
     size_t arity,
     maelys_datalog_predicate_id_t *out_pid) {
-    if (result->ruleset->enforces_query_whitelist &&
-        !query_whitelist_contains(result->ruleset, predicate, arity)) {
-        return MAELYS_ERR_FORBIDDEN;
-    }
-
-    maelys_datalog_predicate_id_t pid = 0;
-    if (!maelys_datalog_predicate_registry_find(
-            &result->ruleset->registry, predicate, arity, &pid)) {
-        return MAELYS_ERR_INVALID_FIELD;
-    }
-    const maelys_datalog_predicate_def_t *def =
-        maelys_datalog_predicate_registry_get(&result->ruleset->registry, pid);
-    if (!def || !(def->kind_flags & MAELYS_DATALOG_PRED_KIND_QUERY)) {
-        return MAELYS_ERR_INVALID_FIELD;
-    }
-    if (out_pid) *out_pid = pid;
-    return MAELYS_OK;
+    return maelys_datalog_validate_query_predicate(result->ruleset, predicate, arity, out_pid);
 }
 
 maelys_result_t maelys_datalog_validate_solved_ground_query(

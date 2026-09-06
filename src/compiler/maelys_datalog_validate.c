@@ -347,6 +347,11 @@ maelys_result_t maelys_datalog_validate_program(maelys_datalog_ruleset_t *r, con
             rule->body_count > MAELYS_DATALOG_MAX_BODY_LITERALS || !valid_atom(r, &rule->head, 1) ||
             !valid_expressions(r, rule))
             goto malformed;
+        const maelys_datalog_predicate_def_t *head =
+            maelys_datalog_predicate_registry_get(&r->registry, rule->head.predicate_id);
+        if (!(head->kind_flags & MAELYS_DATALOG_PRED_KIND_IDB) ||
+            (head->kind_flags & (MAELYS_DATALOG_PRED_KIND_EDB | MAELYS_DATALOG_PRED_KIND_POLICY_FACT)))
+            goto malformed;
         for (size_t j = 0; j < rule->body_count; ++j) {
             if (!valid_literal(r, rule, &rule->body[j]))
                 goto malformed;
@@ -360,7 +365,7 @@ maelys_result_t maelys_datalog_validate_program(maelys_datalog_ruleset_t *r, con
     return maelys_datalog_assign_strata(r, file, line, column, diag);
 malformed:
     maelys_datalog_diagnostic_set(
-        diag, MAELYS_DATALOG_DIAG_PARSER_INVALID_COMPARISON, "validate", file, line, column,
+        diag, MAELYS_DATALOG_DIAG_MALFORMED_PROGRAM, "validate", file, line, column,
         "malformed intermediate program",
         "check term kinds, predicate roles, expression indices and program bounds");
     return MAELYS_ERR_INVALID_FIELD;

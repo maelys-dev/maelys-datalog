@@ -50,21 +50,6 @@ maelys_datalog_status_t maelys_datalog_callback_status(maelys_datalog_status_t s
                ? s
                : MAELYS_DATALOG_STATUS_INTERNAL;
 }
-int maelys_datalog_identity_valid(const char *s, size_t cap, int predicate) {
-    if (!s || !s[0] || (predicate && (s[0] < 'a' || s[0] > 'z')))
-        return 0;
-    for (size_t i = 0; i < cap; ++i) {
-        unsigned char c = (unsigned char)s[i];
-        if (!c)
-            return 1;
-        if ((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_')
-            continue;
-        if (!predicate && ((c >= 'A' && c <= 'Z') || c == '.' || c == '-'))
-            continue;
-        return 0;
-    }
-    return 0;
-}
 void maelys_datalog_copy_load_diagnostic(maelys_datalog_public_diagnostic_t *out,
                                          const maelys_datalog_diagnostic_t *in) {
     if (!out || !in)
