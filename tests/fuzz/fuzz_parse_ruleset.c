@@ -21,6 +21,7 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include <stdlib.h>
 
 static const char *const FUZZ_ATOMS[] = {
     "a",
@@ -65,7 +66,7 @@ static const maelys_datalog_predicate_def_t FUZZ_PREDS[] = {
 int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
     if (size > 4096u) return 0;
 
-    maelys_datalog_ruleset_t ruleset;
+    maelys_datalog_ruleset_t ruleset = {0};
     maelys_datalog_diagnostic_t diag = {0};
 
     if (maelys_datalog_ruleset_init(&ruleset,
@@ -73,7 +74,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
                                     "fuzz_domain",
                                     MAELYS_DATALOG_SHA256_UNSET,
                                     0) != MAELYS_OK) {
-        return 0;
+        abort(); /* Harness setup failure must never masquerade as coverage. */
     }
 
     for (size_t i = 0; i < FUZZ_PRED_COUNT; i++) {
@@ -82,7 +83,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
                                                          FUZZ_PREDS[i].arity,
                                                          FUZZ_PREDS[i].kind_flags) != MAELYS_OK) {
             maelys_datalog_ruleset_clear(&ruleset);
-            return 0;
+            abort();
         }
     }
 
@@ -90,13 +91,13 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
         if (maelys_datalog_predicate_registry_add_atom(&ruleset.registry,
                                                        FUZZ_ATOMS[i]) != MAELYS_OK) {
             maelys_datalog_ruleset_clear(&ruleset);
-            return 0;
+            abort();
         }
     }
 
     if (maelys_datalog_predicate_registry_freeze(&ruleset.registry) != MAELYS_OK) {
         maelys_datalog_ruleset_clear(&ruleset);
-        return 0;
+        abort();
     }
 
     (void)maelys_datalog_parse_ruleset_ex(&ruleset,

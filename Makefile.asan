@@ -37,38 +37,9 @@ ASAN_SRCS = $(ENGINE_SRCS) $(COMMON_SRCS) $(VENDOR_SRCS) \
 	tests/helpers/test_framework.c
 
 ASAN_CFLAGS = $(CFLAGS) $(ASAN_FLAGS) -DMAELYS_TESTING
+ASAN_RUN_ON_BUILD ?= 1
 
-ASAN_TEST_SRCS = \
-	tests/test_maelys_sha256.c \
-	tests/test_maelys_utf8.c \
-	tests/test_maelys_datalog_lexer.c \
-	tests/test_maelys_datalog_parser.c \
-	tests/test_maelys_datalog_prepared_session.c \
-	tests/test_maelys_datalog_why_false.c \
-	tests/test_maelys_datalog_edb.c \
-	tests/test_maelys_datalog_symbol_table.c \
-	tests/test_maelys_datalog_predicate_registry.c \
-	tests/test_maelys_datalog_domain_registry.c \
-	tests/test_maelys_datalog_manifest_buffer.c \
-	tests/test_maelys_datalog_inline_load.c \
-	tests/test_maelys_datalog_public_api.c \
-	tests/test_maelys_datalog_introspection.c \
-	tests/test_maelys_datalog_manifest_file_wrapper.c \
-	tests/test_maelys_datalog_wasm_builder.c \
-	tests/test_maelys_datalog_headers.c \
-	tests/test_maelys_datalog_solver.c \
-	tests/test_maelys_datalog_solver_statistics.c \
-	tests/test_maelys_datalog_atom_vocabulary.c \
-	tests/test_maelys_datalog_boundary.c \
-	tests/test_maelys_datalog_determinism.c \
-	tests/test_maelys_datalog_explanation_format.c \
-	tests/test_maelys_datalog_filters.c \
-	tests/test_maelys_datalog_modules.c \
-	tests/test_maelys_datalog_compiler.c \
-	tests/test_maelys_datalog_pipeline.c \
-	tests/test_maelys_datalog_language_spec.c \
-	tests/test_maelys_datalog_corpus.c \
-	tests/test_maelys_datalog_audit.c
+ASAN_TEST_SRCS = $(wildcard tests/test_*.c)
 
 $(BUILD_DIR)/test_maelys_datalog_modules: ASAN_EXTRA_SRCS = examples/modules/exact_match.c
 $(BUILD_DIR)/test_maelys_datalog_modules: ASAN_CFLAGS += -pthread
@@ -78,9 +49,9 @@ $(BUILD_DIR)/test_maelys_datalog_compiler: examples/modules/arrow_frontend.c exa
 $(BUILD_DIR)/test_maelys_datalog_pipeline: ASAN_EXTRA_SRCS = examples/modules/arrow_frontend.c
 $(BUILD_DIR)/test_maelys_datalog_pipeline: examples/modules/arrow_frontend.c
 
-$(BUILD_DIR)/%: tests/%.c $(ASAN_SRCS) | $(BUILD_DIR)
+$(BUILD_DIR)/%: tests/%.c $(ASAN_SRCS) $(wildcard include/maelys/*.h src/core/*.h src/compiler/*.h src/public/*.h src/modules/*.h modules/standard/*.h) | $(BUILD_DIR)
 	$(CC) $(ASAN_CFLAGS) -I. $(ASAN_SRCS) $(ASAN_EXTRA_SRCS) $< -o $@
-	$(ASAN_ENV) ./$@
+	$(if $(filter 1,$(ASAN_RUN_ON_BUILD)),$(ASAN_ENV) ./$@,@:)
 
 $(BUILD_DIR):
 	mkdir -p $@
@@ -98,9 +69,16 @@ test-asan-linux: asan-linux-image
 	  $(ASAN_IMAGE) \
 	  bash -c 'set -euo pipefail; tar --exclude=.git --exclude=build --exclude=.cache -C /src -cf - . | tar -C /work -xf -; make -B -f Makefile.asan asan'
 
-.PHONY: asan clean asan-linux-image test-asan-linux
+.PHONY: asan asan-build clean asan-linux-image test-asan-linux
 
-asan: $(ASAN_TEST_SRCS:tests/%.c=$(BUILD_DIR)/%)
+asan-build: $(ASAN_TEST_SRCS:tests/%.c=$(BUILD_DIR)/%)
+
+# Keep historical single-binary targets compiling AND running. The full suite
+# builds through a submake without that side effect, then runs each binary once,
+# including already up-to-date binaries.
+asan:
+	$(MAKE) -f Makefile.asan ASAN_RUN_ON_BUILD=0 asan-build
+	@set -e; for b in $(ASAN_TEST_SRCS:tests/%.c=$(BUILD_DIR)/%); do echo "--- $$b ---"; $(ASAN_ENV) ./$$b; done
 
 clean:
 	rm -rf $(BUILD_DIR)
