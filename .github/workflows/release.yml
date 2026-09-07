@@ -170,7 +170,7 @@ jobs:
     environment: release
     permissions:
       contents: write   # LE seul endroit du workflow — crée la GitHub Release
-      id-token: write   # OIDC : exigé par `npm publish --provenance` (D5)
+      packages: write   # publie @maelys-dev/datalog-wasm sur GitHub Packages (D5)
     steps:
       # Checkout nécessaire ici bien qu'on ne compile rien : le job a besoin de
       # scripts/package-release.sh (--merge-receipts) et de
@@ -224,36 +224,31 @@ jobs:
             --verify-tag \
             "${assets[@]}"
 
-      # ─── Canal npm (D5) ───
-      # Choix : OIDC « trusted publishing » plutôt qu'un NPM_TOKEN en secret.
-      #   - NPM_TOKEN : secret longue durée, exfiltrable par toute étape du job,
-      #     à faire tourner à la main, et qui doit exister quelque part.
-      #   - OIDC : npm échange un jeton éphémère (durée de vie : cette exécution)
-      #     contre la confiance déclarée côté registry envers CE dépôt et CE
-      #     workflow. Aucun secret dans le dépôt ; la révocation se fait côté npm.
-      # Exigences côté runner : `id-token: write` (déclaré plus haut) et un npm
-      # >= 11.5.1, plus récent que celui livré avec Node 22 — d'où la mise à jour
-      # explicite du CLI ci-dessous.
+      # ─── Canal npm sur GitHub Packages (D5) ───
+      # Le registre est celui du dépôt : npm.pkg.github.com. Conséquences
+      # assumées, par rapport à npmjs.com :
+      #   - authentification par le GITHUB_TOKEN de l'exécution (portée
+      #     `packages: write`, durée de vie : ce job). Aucun secret longue
+      #     durée dans le dépôt, aucun trusted publisher à configurer ;
+      #   - le scope DOIT être celui du propriétaire du dépôt, d'où
+      #     @maelys-dev/datalog-wasm ;
+      #   - `npm publish --provenance` n'est pas disponible hors npmjs.com :
+      #     la provenance des octets reste portée par les attestations
+      #     `attest-build-provenance` des jobs de build, sur les tarballs.
       - name: Node (pour npm publish)
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '22'
-          registry-url: 'https://registry.npmjs.org'
-
-      - name: Met à jour le CLI npm (trusted publishing OIDC)
-        shell: bash
-        run: |
-          set -euo pipefail
-          npm install -g npm@^11.5.1
-          npm --version
+          registry-url: 'https://npm.pkg.github.com'
+          scope: '@maelys-dev'
 
       # D5 : dist-tag `next` tant que la version est une alpha, `latest` ensuite.
       # La règle est décidée ICI (elle dépend du tag, donc de la cérémonie) et
       # transmise au script via l'environnement.
-      - name: Assemble et publie @maelys/datalog-wasm
+      - name: Assemble et publie @maelys-dev/datalog-wasm
         shell: bash
         env:
-          NPM_CONFIG_PROVENANCE: "true"
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           case "${GITHUB_REF_NAME}" in
@@ -262,3 +257,21 @@ jobs:
           esac
           echo "dist-tag npm : ${dist_tag}"
           NPM_DIST_TAG="${dist_tag}" bash scripts/build-npm-package.sh dist/ --publish
+
+      # D3 : le reçu constate, il ne promet pas. Le canal n'y entre qu'ici,
+      # après une publication réussie — une étape en échec plus haut arrête le
+      # job et le reçu attaché à la Release reste sans canal npm, ce qui est
+      # alors la vérité. L'asset est remplacé en place ; les attestations ne
+      # portent que sur les tarballs, elles ne sont pas concernées.
+      - name: Consigne le canal npm dans le reçu
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(jq -r '.version' dist/release-receipt.json)"
+          bash scripts/package-release.sh --record-channel npm \
+            "@maelys-dev/datalog-wasm@${version}"
+          gh release upload "${GITHUB_REF_NAME}" dist/release-receipt.json \
+            --repo maelys-dev/maelys-datalog --clobber
+          cat dist/release-receipt.json

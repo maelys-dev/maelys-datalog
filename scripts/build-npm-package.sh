@@ -1,7 +1,12 @@
 #!/usr/bin/env bash
 #
-# Assemble (et éventuellement publie) le paquet npm @maelys/datalog-wasm
+# Assemble (et éventuellement publie) le paquet npm @maelys-dev/datalog-wasm
 # à partir des tarballs WASM DÉJÀ CONSTRUITS présents dans dist/.
+#
+# Registre : GitHub Packages (npm.pkg.github.com), fixé dans publishConfig.
+# Le scope @maelys-dev est imposé par ce registre — il doit être celui du
+# propriétaire du dépôt. Pas de `--provenance` : c'est propre à npmjs.com ;
+# ici la provenance est portée par les attestations des tarballs.
 #
 # Ce script ne compile RIEN : il extrait des octets attestés, écrit un
 # package.json, et laisse `npm pack` produire le tarball. C'est la limite
@@ -12,7 +17,7 @@
 # Usage:
 #   scripts/build-npm-package.sh dist/            # assemble + npm pack (local)
 #   scripts/build-npm-package.sh dist/ --publish  # assemble + npm publish
-#                                                 #   --provenance --access public
+#                                                 #   vers GitHub Packages
 #                                                 #   dist-tag: next si prérelease,
 #                                                 #   latest sinon
 #
@@ -70,7 +75,7 @@ mkdir -p "$pkg/licenses/yyjson"
 cp vendor/yyjson/LICENSE "$pkg/licenses/yyjson/"
 
 cat > "$pkg/README.md" <<EOF
-# @maelys/datalog-wasm
+# @maelys-dev/datalog-wasm
 
 Maelys Datalog ${version} — the bounded, stratified-negation Datalog engine,
 compiled to WebAssembly. Two build profiles are shipped:
@@ -86,12 +91,23 @@ These artifacts are built and attested by the tagged release workflow of
 https://github.com/maelys-dev/maelys-datalog — see the release receipt
 attached to the corresponding GitHub Release.
 
-License: MIT.
+This package is published to GitHub Packages, not to npmjs.com. Consumers
+point the scope at that registry and authenticate with a GitHub token that
+has \`read:packages\` — GitHub Packages requires authentication even for
+public packages:
+
+\`\`\`
+@maelys-dev:registry=https://npm.pkg.github.com
+//npm.pkg.github.com/:_authToken=\${GITHUB_TOKEN}
+\`\`\`
+
+License: MPL-2.0. The vendored yyjson parser keeps its own MIT license, in
+\`licenses/yyjson/LICENSE\`.
 EOF
 
 cat > "$pkg/package.json" <<EOF
 {
-  "name": "@maelys/datalog-wasm",
+  "name": "@maelys-dev/datalog-wasm",
   "version": "${version}",
   "description": "Maelys Datalog engine (bounded, stratified-negation Datalog in pure C) compiled to WebAssembly — small and large build profiles plus the playground wrapper.",
   "license": "MPL-2.0",
@@ -100,6 +116,7 @@ cat > "$pkg/package.json" <<EOF
     "url": "git+https://github.com/maelys-dev/maelys-datalog.git"
   },
   "homepage": "https://github.com/maelys-dev/maelys-datalog#readme",
+  "publishConfig": { "registry": "https://npm.pkg.github.com" },
   "keywords": ["datalog", "policy", "authorization", "wasm", "webassembly", "embedded"],
   "main": "small/maelys_datalog_dynamic.js",
   "exports": {
@@ -128,12 +145,17 @@ if [ "$publish" -eq 1 ]; then
       *) npm_tag="latest" ;;
     esac
   fi
-  echo "publication npm: @maelys/datalog-wasm@${version} (dist-tag: ${npm_tag})"
-  ( cd "$pkg" && npm publish --provenance --access public --tag "$npm_tag" )
+  echo "publication npm: @maelys-dev/datalog-wasm@${version} (dist-tag: ${npm_tag})"
+  # Registre : publishConfig du package.json ci-dessus. La visibilité du
+  # paquet suit celle du dépôt, il n'y a pas d'--access à forcer ici.
+  ( cd "$pkg" && npm publish --tag "$npm_tag" )
 else
   ( cd "$pkg" && npm pack --pack-destination "$dist" >/dev/null )
   # npm pack nomme le tarball d'après name+version scopés : retrouve-le.
-  produced="$(find "$dist" -maxdepth 1 -name 'maelys-datalog-wasm-*.tgz' | head -1)"
+  # npm dérive le nom du tarball du name scopé : @maelys-dev/datalog-wasm
+  # donne maelys-dev-datalog-wasm-<version>.tgz.
+  produced="$(find "$dist" -maxdepth 1 -name 'maelys-dev-datalog-wasm-*.tgz' | head -1)"
+  [ -n "$produced" ] || { echo "erreur: npm pack n'a produit aucun tarball dans $dist" >&2; exit 1; }
   echo "paquet assemblé: ${produced}"
   echo "contenu:"
   tar -tzf "${produced}" | sed 's/^/  /'
