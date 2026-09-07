@@ -30,6 +30,13 @@
 #                  required, union of artifacts/channels). Used by the
 #                  publish job, which never compiles anything itself. All
 #                  other flags are ignored/rejected in this mode.
+#   --record-channel NAME SPEC
+#                  record a channel in dist/release-receipt.json, AFTER that
+#                  channel has actually published. A build job never writes
+#                  one: a receipt states what happened, not what was planned
+#                  — v0.1.0-alpha.4 shipped a receipt claiming an npm package
+#                  whose publication had failed, and D3 feeds that receipt to
+#                  the public site. SPEC must carry the receipt's own version.
 #
 # Auto-detection note (default invocation, no --wasm/--wasm-only): the WASM
 # stage is attempted only when emcc is on PATH *and* already reports the
@@ -59,6 +66,7 @@ usage() {
   cat >&2 <<'USAGE'
 Usage: scripts/package-release.sh [target-label] [--wasm] [--wasm-only]
        scripts/package-release.sh --merge-receipts DIR
+       scripts/package-release.sh --record-channel NAME SPEC
 USAGE
 }
 
@@ -66,6 +74,8 @@ target=""
 wasm_requested=0
 wasm_only=0
 merge_dir=""
+channel_name=""
+channel_spec=""
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -85,6 +95,15 @@ while [ $# -gt 0 ]; do
       fi
       merge_dir="$2"
       shift 2
+      ;;
+    --record-channel)
+      if [ -z "${2:-}" ] || [ -z "${3:-}" ]; then
+        echo "error: --record-channel requires a channel name and a spec" >&2
+        exit 1
+      fi
+      channel_name="$2"
+      channel_spec="$3"
+      shift 3
       ;;
     -h|--help)
       usage
@@ -110,6 +129,39 @@ done
 version="$(cat VERSION)"
 dist="$root/dist"
 mkdir -p "$dist"
+
+# ---------------------------------------------------------------------------
+# --record-channel mode: no compilation either. Amends the merged receipt
+# once a channel has really published, so `channels` is an observation.
+# ---------------------------------------------------------------------------
+if [ -n "$channel_name" ]; then
+  if [ "$wasm_requested" = 1 ] || [ -n "$target" ] || [ -n "$merge_dir" ]; then
+    echo "error: --record-channel cannot be combined with other modes" >&2
+    exit 1
+  fi
+  if ! command -v jq >/dev/null 2>&1; then
+    echo "error: jq is required for --record-channel" >&2
+    exit 1
+  fi
+  receipt="$dist/release-receipt.json"
+  [ -f "$receipt" ] || { echo "error: receipt not found: $receipt" >&2; exit 1; }
+  receipt_version="$(jq -r '.version' "$receipt")"
+  # The spec must name the version this receipt is about: a channel recorded
+  # against another version would be a false statement, not a typo.
+  case "$channel_spec" in
+    *"@${receipt_version}") ;;
+    *)
+      echo "error: channel spec '${channel_spec}' does not carry the receipt version ${receipt_version}" >&2
+      exit 1
+      ;;
+  esac
+  tmp="$(mktemp)"
+  jq --arg name "$channel_name" --arg spec "$channel_spec" \
+    '.channels = ((.channels // {}) + {($name): $spec})' "$receipt" > "$tmp"
+  mv "$tmp" "$receipt"
+  echo "recorded channel ${channel_name}=${channel_spec} in $receipt"
+  exit 0
+fi
 
 # ---------------------------------------------------------------------------
 # --merge-receipts mode: no compilation, just fold partial receipts into one.
@@ -337,8 +389,6 @@ fi
 
 commit="$(git rev-parse HEAD)"
 date_utc="$(date -u +%Y-%m-%d)"
-npm_channel="@maelys-dev/datalog-wasm@${version}"
-
 artifacts_json="[]"
 for f in "${artifacts[@]}"; do
   hash="$(sha256 "$dist/$f" | awk '{print $1}')"
@@ -359,8 +409,7 @@ jq -n \
   --arg date "$date_utc" \
   --argjson emsdk "$emsdk_json" \
   --argjson artifacts "$artifacts_json" \
-  --arg npm "$npm_channel" \
-  '{name:$name, version:$version, tag:$tag, commit:$commit, date:$date, emsdk_version:$emsdk, artifacts:$artifacts, channels:{npm:$npm}}' \
+  '{name:$name, version:$version, tag:$tag, commit:$commit, date:$date, emsdk_version:$emsdk, artifacts:$artifacts, channels:{}}' \
   > "$dist/release-receipt.json"
 
 echo "wrote $dist/release-receipt.json"

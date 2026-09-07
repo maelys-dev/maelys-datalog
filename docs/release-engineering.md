@@ -85,6 +85,15 @@ cycle in `maelys-dl-site-engineering` takes the receipt as its input document,
 and the site's public version line (home page) is generated from it — the
 internal proof apparatus and the visible one share a single source.
 
+Because of that reach, `channels` records what **published**, never what was
+planned. The build jobs write `channels: {}`; the `publish` job adds an entry
+with `--record-channel` only after that channel's publication returned
+success, and re-uploads the receipt to the Release. An empty `channels` is a
+truthful statement that nothing shipped beyond the Release itself. This is a
+correction: `v0.1.0-alpha.4` shipped a receipt asserting an npm package whose
+publication had in fact failed with a 404, and that assertion would have been
+carried to the public site.
+
 ## D4 — Version and tag policy
 
 - Format: SemVer with optional pre-release, `X.Y.Z` or `X.Y.Z-alpha.N`
@@ -109,8 +118,9 @@ internal proof apparatus and the visible one share a single source.
 
 **Channel rule (binding):** a channel exists only if it hangs off the tag
 ceremony and is fully automated inside `cut-release.sh` → `release.yml`, and
-every channel appears in the receipt. A channel requiring a manual step per
-release is a channel that will drift.
+every channel that publishes appears in the receipt (D3) — recorded after the
+fact, so a failed channel leaves no trace claiming otherwise. A channel
+requiring a manual step per release is a channel that will drift.
 
 ## D6 — Deviations from the mcp-runtime model
 

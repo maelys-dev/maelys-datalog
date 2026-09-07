@@ -257,3 +257,21 @@ jobs:
           esac
           echo "dist-tag npm : ${dist_tag}"
           NPM_DIST_TAG="${dist_tag}" bash scripts/build-npm-package.sh dist/ --publish
+
+      # D3 : le reçu constate, il ne promet pas. Le canal n'y entre qu'ici,
+      # après une publication réussie — une étape en échec plus haut arrête le
+      # job et le reçu attaché à la Release reste sans canal npm, ce qui est
+      # alors la vérité. L'asset est remplacé en place ; les attestations ne
+      # portent que sur les tarballs, elles ne sont pas concernées.
+      - name: Consigne le canal npm dans le reçu
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(jq -r '.version' dist/release-receipt.json)"
+          bash scripts/package-release.sh --record-channel npm \
+            "@maelys-dev/datalog-wasm@${version}"
+          gh release upload "${GITHUB_REF_NAME}" dist/release-receipt.json \
+            --repo maelys-dev/maelys-datalog --clobber
+          cat dist/release-receipt.json
