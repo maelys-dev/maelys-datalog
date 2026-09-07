@@ -88,7 +88,7 @@ Frontend/backend selection is explicit and does not change that startup registry
 or the standard grammar. Missing capabilities fail without a fallback.
 Modules are trusted native code, not a sandbox. See the
 [architecture and integration contract](docs/architecture/open-core.md) and the
-[standalone filter example](examples/modules/exact_match.c), plus the
+[standalone filter example](examples/sdk/exact_match.c), plus the
 [compiler/backend integration guide](docs/architecture/compiler-backends.md).
 Public-only examples implement a small arrow DSL and an independent naive
 positive-Datalog solver. No proprietary code or Gitolite-compatible regex engine
@@ -103,14 +103,16 @@ is included. Python/JS bindings continue to use the reference backend.
 | `src/compiler/` | Shared validation, frontend builder and public program views |
 | `src/runtime/` | Backend dispatch, result ownership and host-enforced output bounds |
 | `src/backends/` | Built-in reference solver adapter |
-| `src/modules/` | Module registration, identity and lifetime enforcement |
-| `modules/standard/` | Open standard providers, built against the public SDK |
+| `src/registry/` | Module registration, identity and lifetime enforcement |
+| `modules/standard/` | Standard string filters the engine ships, built against the public SDK like any third-party module |
+| `examples/sdk/` | A frontend, a backend and a filter written against the public SDK alone; linked only by tests and by the installed-SDK check, never into the library |
 | `build-support/` | Source manifests shared by native, WASM, fuzz and benchmark builds |
 | `src/manifest/` | File and in-memory manifest loading |
 | `src/wasm/` | WebAssembly-facing C API |
 | `bindings/python/` | Native Python binding |
 | `js/` | JavaScript playground wrapper |
 | `tests/` | Native, Python, WASM, corpus, and fuzz tests |
+| `tests/fixtures/` | Shared test material: the example domains every native test installs, and the out-of-tree SDK consumers |
 | `docs/specifications/` | Normative, executable language and output-format specifications |
 | `bench/` | Reproducible benchmarks and reports |
 

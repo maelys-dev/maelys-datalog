@@ -4,7 +4,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 # Providers and the public SDK must not include private engine headers.
 if grep -Enr '#[[:space:]]*include[[:space:]]*[<"](src/|common/|include/|\.\./)' \
-    include/maelys modules/standard examples/modules; then
+    include/maelys modules/standard examples/sdk; then
   echo "error: module SDK boundary includes private headers" >&2
   exit 1
 fi

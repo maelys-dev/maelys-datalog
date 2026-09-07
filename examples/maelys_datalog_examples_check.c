@@ -1,4 +1,4 @@
-#include "examples/domains/maelys_datalog_example_domains.h"
+#include "tests/fixtures/domains/maelys_datalog_example_domains.h"
 #include "include/maelys_datalog.h"
 
 #include <assert.h>

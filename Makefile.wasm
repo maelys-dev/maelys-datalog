@@ -21,8 +21,8 @@ ENGINE_SRCS = $(shell sed -n '/^[^\#]/p' build-support/core-sources.txt build-su
 COMMON_SRCS =
 
 WASM_SRCS = $(ENGINE_SRCS) $(COMMON_SRCS)
-EXAMPLES_SRCS = examples/domains/maelys_datalog_example_domains.c
-WASM_EXAMPLES_SRCS = $(WASM_SRCS) $(EXAMPLES_SRCS)
+DOMAIN_FIXTURE_SRCS = tests/fixtures/domains/maelys_datalog_example_domains.c
+WASM_EXAMPLES_SRCS = $(WASM_SRCS) $(DOMAIN_FIXTURE_SRCS)
 WASM_BUILDER_SRC = src/wasm/maelys_datalog_wasm.c
 WASM_DYNAMIC_SRCS = $(WASM_SRCS) $(WASM_BUILDER_SRC)
 
@@ -123,4 +123,4 @@ maelys_datalog_dynamic_large.js:
 clean:
 	rm -rf $(EM_CACHE)
 	rm -rf $(WASM_BUILD_DIR)
-	rm -f *.o src/core/*.o src/manifest/*.o src/wasm/*.o common/*.o vendor/yyjson/*.o examples/domains/*.o
+	rm -f *.o src/core/*.o src/manifest/*.o src/wasm/*.o common/*.o vendor/yyjson/*.o tests/fixtures/domains/*.o

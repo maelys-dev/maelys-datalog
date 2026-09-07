@@ -1,7 +1,7 @@
 #include "src/core/maelys_datalog_solver.h"
 #include "src/core/maelys_datalog_solver_internal.h"
 #include "src/core/maelys_datalog_query_internal.h"
-#include "src/modules/maelys_datalog_modules_internal.h"
+#include "src/registry/maelys_datalog_modules_internal.h"
 
 #include "src/core/maelys_datalog_audit.h"
 #include "src/core/maelys_datalog_diagnostic.h"
