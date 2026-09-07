@@ -76,7 +76,7 @@ artifacts and attached to the GitHub Release:
   "artifacts": [
     { "file": "maelys-datalog-0.2.0-macos-arm64.tar.gz", "sha256": "…" }
   ],
-  "channels": { "npm": "@maelys/datalog-wasm@0.2.0" }
+  "channels": { "npm": "@maelys-dev/datalog-wasm@0.2.0" }
 }
 ```
 
@@ -103,7 +103,7 @@ internal proof apparatus and the visible one share a single source.
 | Channel | First tooled release | Rationale |
 |---|---|---|
 | GitHub Release tarballs + attestation | **yes** | the base layer |
-| npm `@maelys/datalog-wasm` (wasm + wrapper + types) | **yes**, dist-tag `next` while alpha | cheapest channel, platform-independent artifact, direct continuation of the playground; published from the `publish` job (after the human gate) with `npm publish --provenance` |
+| npm `@maelys-dev/datalog-wasm` on **GitHub Packages** | **yes**, dist-tag `next` while alpha | cheapest channel, platform-independent artifact, direct continuation of the playground; published from the `publish` job (after the human gate) against `npm.pkg.github.com`, authenticated by the run's `GITHUB_TOKEN` (`packages: write`). No long-lived registry secret and no trusted-publisher setup; in exchange the scope must be the repository owner's, consumers must authenticate even for a public package, and `npm publish --provenance` is unavailable — provenance stays on the tarball attestations |
 | Homebrew tap (lib + header formula) | yes **iff** the port of `update-tap-formula.sh` stays under half a day; otherwise next pass | infrastructure and technique exist (`maelys-dev/homebrew-tap`); audience is narrow until a CLI exists |
 | PyPI wheels | **no** | cibuildwheel matrix is a dedicated cycle; PyPI is irreversible and the cffi API is not frozen. Immediate actions only: reserve the name, add `pyproject.toml` for editable installs |
 

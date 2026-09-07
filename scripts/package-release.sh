@@ -337,7 +337,7 @@ fi
 
 commit="$(git rev-parse HEAD)"
 date_utc="$(date -u +%Y-%m-%d)"
-npm_channel="@maelys/datalog-wasm@${version}"
+npm_channel="@maelys-dev/datalog-wasm@${version}"
 
 artifacts_json="[]"
 for f in "${artifacts[@]}"; do
