@@ -5,6 +5,16 @@ parser, negation, arithmetic, prepared sessions, diagnostics, explanations and
 standard string filters. Separately compiled providers can add capabilities
 without including or modifying private engine headers.
 
+The tree states that separation rather than relying on the build files to
+imply it. `modules/standard/` holds what the engine ships through the SDK —
+the three string filters, registered at startup by `src/registry/` and
+compiled into every library and release artifact. `examples/sdk/` holds what
+a third party would write with the same headers: a frontend, a backend and a
+filter that no manifest in `build-support/` lists, so they reach no library;
+tests link them, and `tools/check_module_sdk.sh` rebuilds them outside the
+tree against the installed SDK alone. `src/registry/` is the registry itself,
+private to the engine. A directory's name says which of the three it is.
+
 ## Implemented boundaries
 
 | Component | Responsibility | Interface |

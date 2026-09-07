@@ -1,6 +1,6 @@
 #include "src/core/maelys_datalog_parser.h"
 #include "src/core/maelys_datalog_domain_registry.h"
-#include "examples/domains/maelys_datalog_example_domains.h"
+#include "tests/fixtures/domains/maelys_datalog_example_domains.h"
 #include "src/core/maelys_datalog_predicate_registry.h"
 #include "tests/helpers/test_framework.h"
 

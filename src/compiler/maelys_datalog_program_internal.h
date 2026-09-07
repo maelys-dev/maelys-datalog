@@ -6,7 +6,7 @@
 #include "src/core/maelys_datalog_diagnostic.h"
 #include "src/core/maelys_datalog_solver.h"
 #include "src/core/maelys_datalog_prepared_session.h"
-#include "src/modules/maelys_datalog_modules_internal.h"
+#include "src/registry/maelys_datalog_modules_internal.h"
 
 struct maelys_datalog_program {
     const maelys_datalog_ruleset_t *ruleset;

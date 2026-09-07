@@ -14,7 +14,7 @@ cp "$root/tests/fixtures/opaque_handle.c" "$scratch/"
 cp "$root/tests/test_maelys_datalog_modules.c" "$scratch/"
 cp "$root/tests/test_maelys_datalog_compiler.c" "$scratch/"
 for provider in exact_match arrow_frontend naive_backend; do
-  cp "$root/examples/modules/$provider.c" "$scratch/"
+  cp "$root/examples/sdk/$provider.c" "$scratch/"
 done
 cd "$scratch"
 # No accidental access to private headers through ambient search paths.

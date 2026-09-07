@@ -3,7 +3,7 @@
 
 #include "common/maelys_sha256.h"
 #include "src/core/maelys_datalog_filter.h"
-#include "src/modules/maelys_datalog_modules_internal.h"
+#include "src/registry/maelys_datalog_modules_internal.h"
 #include "src/core/maelys_datalog_symbol_table.h"
 
 #include <stdarg.h>

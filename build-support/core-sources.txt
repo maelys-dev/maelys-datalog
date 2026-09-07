@@ -17,7 +17,7 @@ src/core/maelys_datalog_symbol_table.c
 src/core/maelys_datalog_decision.c
 src/compiler/maelys_datalog_validate.c
 src/compiler/maelys_datalog_program.c
-src/modules/maelys_datalog_modules.c
+src/registry/maelys_datalog_modules.c
 src/manifest/maelys_datalog_manifest_buffer.c
 common/maelys_sha256.c
 common/maelys_utf8.c

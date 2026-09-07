@@ -2,7 +2,7 @@
 #include "src/core/maelys_datalog_audit.h"
 #include "src/core/maelys_datalog_decision.h"
 #include "src/core/maelys_datalog_domain_registry.h"
-#include "examples/domains/maelys_datalog_example_domains.h"
+#include "tests/fixtures/domains/maelys_datalog_example_domains.h"
 #include "src/core/maelys_datalog_parser.h"
 #include "src/core/maelys_datalog_ruleset.h"
 #include "src/core/maelys_datalog_solver.h"

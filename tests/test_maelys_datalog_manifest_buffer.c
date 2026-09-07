@@ -1,5 +1,5 @@
 #include "common/maelys_sha256.h"
-#include "examples/domains/maelys_datalog_example_domains.h"
+#include "tests/fixtures/domains/maelys_datalog_example_domains.h"
 #include "src/core/maelys_datalog_domain_registry.h"
 #include "src/core/maelys_datalog_edb.h"
 #include "src/core/maelys_datalog_solver.h"

@@ -31,7 +31,7 @@ ASAN_ENV = ASAN_OPTIONS=$(ASAN_OPTIONS_VALUE) \
 	UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1
 
 ASAN_SRCS = $(ENGINE_SRCS) $(COMMON_SRCS) $(VENDOR_SRCS) \
-	examples/domains/maelys_datalog_example_domains.c \
+	tests/fixtures/domains/maelys_datalog_example_domains.c \
 	src/wasm/maelys_datalog_wasm.c \
 	tests/helpers/test_log.c \
 	tests/helpers/test_framework.c
@@ -41,15 +41,15 @@ ASAN_RUN_ON_BUILD ?= 1
 
 ASAN_TEST_SRCS = $(wildcard tests/test_*.c)
 
-$(BUILD_DIR)/test_maelys_datalog_modules: ASAN_EXTRA_SRCS = examples/modules/exact_match.c
+$(BUILD_DIR)/test_maelys_datalog_modules: ASAN_EXTRA_SRCS = examples/sdk/exact_match.c
 $(BUILD_DIR)/test_maelys_datalog_modules: ASAN_CFLAGS += -pthread
-$(BUILD_DIR)/test_maelys_datalog_modules: examples/modules/exact_match.c
-$(BUILD_DIR)/test_maelys_datalog_compiler: ASAN_EXTRA_SRCS = examples/modules/arrow_frontend.c examples/modules/naive_backend.c
-$(BUILD_DIR)/test_maelys_datalog_compiler: examples/modules/arrow_frontend.c examples/modules/naive_backend.c
-$(BUILD_DIR)/test_maelys_datalog_pipeline: ASAN_EXTRA_SRCS = examples/modules/arrow_frontend.c
-$(BUILD_DIR)/test_maelys_datalog_pipeline: examples/modules/arrow_frontend.c
+$(BUILD_DIR)/test_maelys_datalog_modules: examples/sdk/exact_match.c
+$(BUILD_DIR)/test_maelys_datalog_compiler: ASAN_EXTRA_SRCS = examples/sdk/arrow_frontend.c examples/sdk/naive_backend.c
+$(BUILD_DIR)/test_maelys_datalog_compiler: examples/sdk/arrow_frontend.c examples/sdk/naive_backend.c
+$(BUILD_DIR)/test_maelys_datalog_pipeline: ASAN_EXTRA_SRCS = examples/sdk/arrow_frontend.c
+$(BUILD_DIR)/test_maelys_datalog_pipeline: examples/sdk/arrow_frontend.c
 
-$(BUILD_DIR)/%: tests/%.c $(ASAN_SRCS) $(wildcard include/maelys/*.h src/core/*.h src/compiler/*.h src/public/*.h src/modules/*.h modules/standard/*.h) | $(BUILD_DIR)
+$(BUILD_DIR)/%: tests/%.c $(ASAN_SRCS) $(wildcard include/maelys/*.h src/core/*.h src/compiler/*.h src/public/*.h src/registry/*.h modules/standard/*.h) | $(BUILD_DIR)
 	$(CC) $(ASAN_CFLAGS) -I. $(ASAN_SRCS) $(ASAN_EXTRA_SRCS) $< -o $@
 	$(if $(filter 1,$(ASAN_RUN_ON_BUILD)),$(ASAN_ENV) ./$@,@:)
 

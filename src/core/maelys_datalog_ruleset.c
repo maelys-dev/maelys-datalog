@@ -1,5 +1,5 @@
 #include "src/core/maelys_datalog_ruleset.h"
-#include "src/modules/maelys_datalog_modules_internal.h"
+#include "src/registry/maelys_datalog_modules_internal.h"
 
 #include "src/core/maelys_datalog_predicate_registry.h"
 #include "src/core/maelys_datalog_symbol_table.h"
