@@ -98,10 +98,10 @@ maelys_datalog_status_t maelys_datalog_backend_filter(maelys_datalog_backend_out
         return output_fail(out, MAELYS_DATALOG_STATUS_INVALID_ARGUMENT);
     if (out->error)
         return out->error;
-    const maelys_datalog_filter_definition_t *d = maelys_datalog_filter_by_name(name);
+    const maelys_datalog_ruleset_t *r = out->result->owner->program.ruleset;
+    const maelys_datalog_filter_definition_t *d = maelys_datalog_filter_by_name_in(r->modules, name);
     if (!d || strcmp(semantic_id, d->semantic_id))
         return output_fail(out, MAELYS_DATALOG_STATUS_UNSUPPORTED);
-    const maelys_datalog_ruleset_t *r = out->result->owner->program.ruleset;
     int declared = 0;
     for (size_t i = 0; i < r->filter_program_count; ++i) {
         const maelys_datalog_filter_program_t *f = &r->filter_programs[i];
@@ -115,7 +115,7 @@ maelys_datalog_status_t maelys_datalog_backend_filter(maelys_datalog_backend_out
     if (!declared)
         return output_fail(out, MAELYS_DATALOG_STATUS_INVALID_FIELD);
     size_t cost = 0;
-    maelys_result_t rc = maelys_datalog_filter_cost(d->kind, value_length, pattern_length, &cost);
+    maelys_result_t rc = maelys_datalog_filter_cost_in(r->modules, d->kind, value_length, pattern_length, &cost);
     if (rc != MAELYS_OK)
         return output_fail(out, (maelys_datalog_status_t)rc);
     if (out->filter_count >= MAELYS_DATALOG_MAX_FILTER_EVALUATIONS ||
@@ -123,10 +123,25 @@ maelys_datalog_status_t maelys_datalog_backend_filter(maelys_datalog_backend_out
         return output_fail(out, MAELYS_DATALOG_STATUS_PAYLOAD_TOO_LARGE);
     ++out->filter_count;
     out->filter_cost += cost;
-    rc = maelys_datalog_filter_evaluate(d->kind, value, value_length, pattern, pattern_length,
+    rc = maelys_datalog_filter_evaluate_in(r->modules, d->kind, value, value_length, pattern, pattern_length,
                                         matched);
     return rc == MAELYS_OK ? MAELYS_DATALOG_STATUS_OK
                            : output_fail(out, (maelys_datalog_status_t)rc);
+}
+
+maelys_datalog_status_t maelys_datalog_context_session_create(maelys_datalog_context_t *context,
+    const maelys_datalog_policy_t *policy, size_t index, const char *backend_name,
+    uint64_t required, uint64_t work_limit, maelys_datalog_session_t **out) {
+    if (out) *out = NULL;
+    if (!context || !policy || !out) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
+    if (!maelys_datalog_context_is_sealed(context)) return MAELYS_DATALOG_STATUS_INVALID_STATE;
+    if (index >= policy->set.policy_count) return MAELYS_DATALOG_STATUS_NOT_FOUND;
+    if (policy->set.policies[index].modules != context) return MAELYS_DATALOG_STATUS_INVALID_FIELD;
+    const maelys_datalog_backend_t *backend = maelys_datalog_context_backend(context, backend_name);
+    if (!backend) return MAELYS_DATALOG_STATUS_NOT_FOUND;
+    maelys_datalog_session_options_t options = {MAELYS_DATALOG_BACKEND_ABI_VERSION,
+        sizeof(options), backend, required, work_limit};
+    return maelys_datalog_session_create_ex(policy, index, &options, out);
 }
 
 maelys_datalog_status_t
@@ -145,13 +160,7 @@ maelys_datalog_session_create_ex(const maelys_datalog_policy_t *policy, size_t i
         return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
     const maelys_datalog_backend_t *b =
         options && options->backend ? options->backend : maelys_datalog_backend_reference();
-    if (b->abi_version != MAELYS_DATALOG_BACKEND_ABI_VERSION || b->struct_size != sizeof(*b) ||
-        !b->prepare || !b->solve || !b->destroy || !b->destroy_result ||
-        !maelys_datalog_identity_valid(b->name, 64u, 1) ||
-        !maelys_datalog_identity_valid(b->semantic_id, 128u, 0) ||
-        (b->capabilities & ~MAELYS_DATALOG_CAP_ALL) ||
-        ((b->capabilities & MAELYS_DATALOG_CAP_EXPLAIN_TRUE) && !b->explain_true) ||
-        ((b->capabilities & MAELYS_DATALOG_CAP_EXPLAIN_FALSE) && !b->explain_false))
+    if (!maelys_datalog_backend_descriptor_valid(b))
         return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
     maelys_datalog_program_t view = {.ruleset = &policy->set.policies[index]};
     maelys_datalog_program_info_t info;

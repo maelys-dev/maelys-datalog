@@ -1,17 +1,17 @@
 /**
  * maelys_playground.js — Ergonomic wrapper over MaelysDatalogDynamic.
- * Located in js/ (JS distribution), not src/wasm/ (C source).
+ * Lives beside its C boundary in bindings/wasm/.
  *
- * Paths: from js/, build/wasm is one level up (../build/wasm/).
- *        from tests/wasm/, build/wasm is two levels up (../../build/wasm/).
+ * Paths: from bindings/wasm/ or tests/wasm/, generated artifacts live in
+ *        ../../build/wasm/ (or ../../build/wasm-large/).
  *
- * Browser (MaelysDatalogDynamic loaded via script tag):
- *   const wasmUrl = new URL('../build/wasm/maelys_datalog_dynamic.wasm', import.meta.url).href
+ * Browser (example module in bindings/wasm/, factory loaded via script tag):
+ *   const wasmUrl = new URL('../../build/wasm/maelys_datalog_dynamic.wasm', import.meta.url).href
  *   const pg = await MaelysPlayground.create(MaelysDatalogDynamic, wasmUrl)
  *
  * Node.js (from tests/wasm/test_playground.mjs):
  *   import MaelysDatalogDynamic from '../../build/wasm/maelys_datalog_dynamic.js'
- *   import { MaelysPlayground, PredKind } from '../../js/maelys_playground.js'
+ *   import { MaelysPlayground, PredKind } from '../../bindings/wasm/maelys_playground.js'
  *   const wasmUrl = new URL('../../build/wasm/maelys_datalog_dynamic.wasm', import.meta.url).href
  *   const pg = await MaelysPlayground.create(MaelysDatalogDynamic, wasmUrl)
  *

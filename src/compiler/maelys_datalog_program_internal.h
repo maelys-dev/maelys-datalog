@@ -40,6 +40,7 @@ maelys_result_t maelys_datalog_parse_only(maelys_datalog_ruleset_t *, const char
 maelys_result_t maelys_datalog_compute_program_fingerprint(const maelys_datalog_ruleset_t *, char[65]);
 maelys_result_t maelys_datalog_compile_frontend(const char *, const char *, const char *, size_t,
                                                 const maelys_datalog_frontend_t *,
+                                                maelys_datalog_context_t *,
                                                 maelys_datalog_ruleset_t *,
                                                 maelys_datalog_public_diagnostic_t *);
 void maelys_datalog_copy_load_diagnostic(maelys_datalog_public_diagnostic_t *,

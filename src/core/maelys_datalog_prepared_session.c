@@ -4,6 +4,7 @@
 #include "src/core/maelys_datalog_prepared_session_internal.h"
 #include "src/core/maelys_datalog_solver_internal.h"
 #include "src/core/maelys_datalog_pipeline_testing.h"
+#include "src/registry/maelys_datalog_modules_internal.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -170,6 +171,7 @@ maelys_result_t maelys_datalog_prepared_session_create(
         free(session);
         return rc;
     }
+    maelys_datalog_context_retain(ruleset->modules);
     *out_session = session;
     MAELYS_DATALOG_COUNT_PIPELINE(preparations);
     return MAELYS_OK;
@@ -179,6 +181,7 @@ maelys_result_t maelys_datalog_prepared_session_destroy(
     maelys_datalog_prepared_session_t *session) {
     if (!session) return MAELYS_ERR_INVALID_ARGUMENT;
     if (session->active_result) return MAELYS_ERR_INVALID_STATE;
+    maelys_datalog_context_release(session->prepared.modules);
     memset(session, 0, sizeof(*session));
     free(session);
     return MAELYS_OK;

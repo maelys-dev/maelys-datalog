@@ -23,7 +23,8 @@ COMMON_SRCS =
 WASM_SRCS = $(ENGINE_SRCS) $(COMMON_SRCS)
 DOMAIN_FIXTURE_SRCS = tests/fixtures/domains/maelys_datalog_example_domains.c
 WASM_EXAMPLES_SRCS = $(WASM_SRCS) $(DOMAIN_FIXTURE_SRCS)
-WASM_BUILDER_SRC = src/wasm/maelys_datalog_wasm.c
+WASM_BUILDER_SRC = bindings/wasm/maelys_datalog_wasm.c
+WASM_BUILDER_HEADER = bindings/wasm/maelys_datalog_wasm.h
 WASM_DYNAMIC_SRCS = $(WASM_SRCS) $(WASM_BUILDER_SRC)
 
 WASM_EXPORTS = \
@@ -106,7 +107,7 @@ $(WASM_BUILD_DIR)/maelys_datalog_examples.js: $(WASM_EXAMPLES_SRCS)
 
 $(WASM_BUILD_DIR)/maelys_datalog_examples.wasm: $(WASM_BUILD_DIR)/maelys_datalog_examples.js
 
-$(WASM_BUILD_DIR)/maelys_datalog_dynamic.js: $(WASM_DYNAMIC_SRCS)
+$(WASM_BUILD_DIR)/maelys_datalog_dynamic.js: $(WASM_DYNAMIC_SRCS) $(WASM_BUILDER_HEADER)
 	@mkdir -p $(EM_CACHE) $(WASM_BUILD_DIR)
 	EM_CACHE=$(EM_CACHE) $(EMCC) $(WASM_CFLAGS) $(WASM_DYNAMIC_SRCS) $(WASM_DYNAMIC_LDFLAGS) -o $@
 
@@ -123,4 +124,4 @@ maelys_datalog_dynamic_large.js:
 clean:
 	rm -rf $(EM_CACHE)
 	rm -rf $(WASM_BUILD_DIR)
-	rm -f *.o src/core/*.o src/manifest/*.o src/wasm/*.o common/*.o vendor/yyjson/*.o tests/fixtures/domains/*.o
+	rm -f *.o src/core/*.o src/manifest/*.o bindings/wasm/*.o common/*.o vendor/yyjson/*.o tests/fixtures/domains/*.o

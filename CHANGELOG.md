@@ -7,6 +7,38 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+
+- Composite SDK example: a `permit` frontend and its `exact_match` filter in one
+  declaration, with end-to-end solving/proofs, explicit selection, dependency
+  rejection, source locations and atomic-registration checks in native/WASM CI.
+- Common extension declaration ABI v1 and opaque native contexts with atomic
+  registration, immutable catalogues, named frontend/backend/planner selection
+  and context-local filters. Existing global and typed APIs remain available;
+  domains stay process-wide and manifest/binding selectors are unchanged.
+- Four uniform standalone extension projects and an installed, test-only
+  conformance kit, exercised against static/shared SDKs in both size profiles.
+- Concurrent context isolation, retained-catalogue lifetime, registration
+  rollback and compatibility regression coverage. Internal ruleset POD consumers
+  must rebuild; public typed extension ABIs are unchanged.
+
+### Changed
+
+- WASM C boundary and JavaScript wrapper are grouped under `bindings/wasm/`;
+  distributed filenames, exported functions and wrapper APIs are unchanged.
+- Extension examples now live under `sdk/examples/`, alongside the conformance
+  kit. Root `examples/` contains engine-usage sources only; its executable and
+  macOS debug bundle are generated under `build/examples/`.
+
+### Fixed
+
+- Python validation replaces native libraries through fresh files when changing
+  size profiles, avoiding macOS code-signature page-cache kills after rebuilds.
+- WASM allocation tests resolve lazy Emscripten exports before installing
+  instrumentation, preserving failure injection and exact allocation counts
+  with the release toolchain. CI covers Emscripten 3.1.61 and 4.0.14 in both
+  size profiles; engine and binding behavior are unchanged.
+
 ## [0.1.0-alpha.4] - 2026-09-06
 
 ### Added

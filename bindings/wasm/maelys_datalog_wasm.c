@@ -1,4 +1,4 @@
-#include "src/wasm/maelys_datalog_wasm.h"
+#include "bindings/wasm/maelys_datalog_wasm.h"
 
 #include "src/core/maelys_datalog_domain_registry.h"
 #include "src/core/maelys_datalog_diagnostic.h"

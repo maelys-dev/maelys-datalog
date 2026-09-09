@@ -4,6 +4,8 @@ The MPL core includes a complete standard Datalog frontend and reference solver.
 The alpha C SDK has two independent extension points: source-language frontends
 and execution backends. Neither needs private engine headers. The filter/planner
 SDK remains available for narrower extensions; see [open core](open-core.md).
+All four kinds can also be declared together and selected through an immutable
+[extension context](extension-contexts.md), without changing the typed callbacks.
 
 ## Boundaries
 
@@ -73,7 +75,7 @@ access is zero-based; existing proof rule IDs are index + 1. This allows clients
 to map proofs to source via `session_program` and `program_rule`. There is no
 macro-expansion stack, end range, or new proof-text format in this ABI.
 
-The example `examples/sdk/arrow_frontend.c` implements only unary
+The example `sdk/examples/frontend/src/extension.c` implements only unary
 `allow <- seed` implications and line comments. It is not a regex or Gitolite
 parser. A richer domain frontend can lower its constructs into this IR, but a
 new semantic feature outside the IR requires an explicit core/SDK evolution.
@@ -104,7 +106,7 @@ maelys_datalog_status_t status =
 
 The core computes required language capabilities from the validated program;
 frontends do not declare them. The reference supports the full language,
-Why-true and bounded Why-false (EXPLAIN_FALSE is bit 7). The independent `examples/sdk/naive_backend.c` implements positive
+Why-true and bounded Why-false (EXPLAIN_FALSE is bit 7). The independent `sdk/examples/backend/src/extension.c` implements positive
 Datalog using full-scan fixed-point evaluation, with a cooperative work limit.
 It rejects negation, comparisons, arithmetic, filters and explanations. It is a
 conformance example, not an optimized product or a wrapper around the reference.

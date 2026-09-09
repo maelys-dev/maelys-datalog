@@ -336,7 +336,7 @@ static maelys_result_t validate_program_impl(maelys_datalog_ruleset_t *r, const 
             f->pattern_offset > r->filter_pattern_pool_used ||
             f->pattern_length > r->filter_pattern_pool_used - f->pattern_offset)
             goto malformed;
-        maelys_result_t rc = maelys_datalog_filter_validate(
+        maelys_result_t rc = maelys_datalog_filter_validate_in(r->modules,
             (maelys_datalog_filter_kind_t)f->kind, r->filter_pattern_pool + f->pattern_offset,
             f->pattern_length);
         if (rc != MAELYS_OK) {

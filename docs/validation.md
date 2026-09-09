@@ -17,8 +17,10 @@ make bench-pipeline
 
 Both Make test inventories use `tests/test_*.c`, including the policy-set
 fingerprint suite. `asan` reruns every test even if its binary is up to date.
-The current inventory has 31 executables: 622 framework cases, 12 module cases,
-11 compiler/backend cases, and 23 pipeline checks (668 total per profile).
+The current inventory has 32 executables: the existing 622 framework cases,
+12 module cases, 11 compiler/backend cases and 27 pipeline checks (672), plus
+the context suite for atomic registration, concurrent isolation, retained
+lifetimes, named selection, invalid planner output, capacity and fingerprints.
 ASan/UBSan run locally; macOS disables leak detection. The Linux CI enables
 LSan. A local macOS PASS alone is not evidence of Linux leak safety.
 
@@ -30,7 +32,8 @@ verifies that outcome on the installed static and shared libraries with `nm`,
 and `tools/check_module_boundaries.sh` keeps the instrumentation out of the
 public headers. The Make pipeline test observes parse/validation/fingerprint/
 preparation and materialization calls; CMake's static/shared pipeline tests
-check the same 21 transcript goldens and two filter validations. The benchmark's
+check the same 21 transcript goldens, two filter validations and four diagnostic
+ordering checks. The benchmark's
 CPU time is descriptive, not a throughput guarantee.
 
 ## Installed facade and SDK
@@ -45,8 +48,11 @@ bash tools/check_module_sdk.sh "$PWD/build/cmake"
 Repeat in `build/cmake-large` with `-DMAELYS_DATALOG_PROFILE_LARGE=ON`.
 The SDK check installs into a fresh temporary prefix, copies all consumers and
 providers outside the source tree and builds them with only installed includes
-and libraries, both static and shared. It checks all four headers independently
-as C11/C++17 and rejects `sizeof` on all five opaque handle types.
+and libraries, both static and shared. It checks all five headers independently
+as C11/C++17 and rejects `sizeof` on all six opaque handle types. All five
+standalone examples (including the frontend/filter bundle) are copied out, built
+with their own CMake projects and run through the installed conformance kit in
+both linkage modes and size profiles.
 
 The public consumer fixture proves result-scoped symbol authority by
 construction rather than by a mutant build: its domain declares no atoms and
@@ -56,6 +62,10 @@ that consulted the prepared policy's symbol table instead of the result's
 working table cannot pass that lookup (exit 9).
 
 ## Actual Python and WASM wrappers
+
+The WASM C boundary and JavaScript wrapper live together in
+[`bindings/wasm/`](../bindings/wasm/README.md). Tests import the wrapper from
+there; generated modules remain under `build/wasm` and `build/wasm-large`.
 
 After each profile's CMake shim build, rebuild cffi and run a fresh Python process:
 
@@ -70,6 +80,9 @@ The shim copies its two native libraries next to the Python package. Do not
 rely on an up-to-date CMake build to copy them again: `POST_BUILD` will not run.
 The check script explicitly selects the libraries from the requested build and
 sets `MAELYS_DATALOG_EXPECT_PROFILE`: the test checks the loaded limits.
+Libraries are copied to fresh files and renamed into place; overwriting an
+already loaded Mach-O inode can trigger macOS code-signature page-cache kills
+when changing profiles, even if `codesign --verify` reports valid files on disk.
 CTest's C shim test is complementary,
 not a replacement for pytest.
 
@@ -79,11 +92,21 @@ for profile in small large; do
   for script in tests/wasm/*.mjs; do
     MAELYS_WASM_PROFILE="$profile" node "$script"
   done
+  EM_CACHE="$PWD/build/emscripten-cache" bash tools/check_wasm_extensions.sh "$profile"
 done
 ```
 
 These run actual compiled Wasm under Node, not a browser. No backend selector
 is added to either binding by this validation work.
+The extension check separately links each C example and the C host into the same
+WASM module. It runs all five conformance executables under Node; it does not use
+side modules or alter the shipped JavaScript wrapper.
+
+CI runs both profiles with Emscripten 3.1.61 (the release toolchain) and
+4.0.14. Allocation-instrumentation tests resolve lazy `_malloc`/`_free`
+exports before installing hooks; warm-up allocations are outside the
+measured operations and injected failures. No production wrapper warm-up
+or relaxed allocation assertions are needed.
 
 ## Bounded robustness smoke and guards
 

@@ -287,7 +287,7 @@ maelys_result_t maelys_datalog_compute_program_fingerprint(const maelys_datalog_
                 }
             } else {
                 const maelys_datalog_filter_definition_t *d =
-                    maelys_datalog_filter_by_kind((maelys_datalog_filter_kind_t)l->filter_kind);
+                    maelys_datalog_filter_by_kind_in(r->modules, (maelys_datalog_filter_kind_t)l->filter_kind);
                 if (!d || l->filter_program_index >= r->filter_program_count)
                     return MAELYS_ERR_INVALID_STATE;
                 const maelys_datalog_filter_program_t *f =
@@ -380,7 +380,7 @@ maelys_datalog_status_t maelys_datalog_program_rule(const maelys_datalog_program
             }
         } else if (a->kind == MAELYS_DATALOG_LITERAL_FILTER) {
             const maelys_datalog_filter_definition_t *d =
-                maelys_datalog_filter_by_kind((maelys_datalog_filter_kind_t)a->filter_kind);
+                maelys_datalog_filter_by_kind_in(r->modules, (maelys_datalog_filter_kind_t)a->filter_kind);
             if (!d || a->filter_program_index >= r->filter_program_count)
                 return MAELYS_DATALOG_STATUS_INVALID_STATE;
             const maelys_datalog_filter_program_t *f = &r->filter_programs[a->filter_program_index];
@@ -538,7 +538,7 @@ maelys_datalog_status_t maelys_datalog_program_add_rule(maelys_datalog_program_b
             }
         } else if (a->kind == MAELYS_DATALOG_IR_FILTER) {
             const maelys_datalog_filter_definition_t *d =
-                maelys_datalog_filter_by_name(a->filter_name);
+                maelys_datalog_filter_by_name_in(r->modules, a->filter_name);
             if (!d || (a->filter_semantic_id && strcmp(a->filter_semantic_id, d->semantic_id)))
                 return fail(b, MAELYS_ERR_UNSUPPORTED);
             if (a->pattern_length > MAELYS_DATALOG_MAX_FILTER_PATTERN_BYTES ||
@@ -590,15 +590,13 @@ const maelys_datalog_frontend_t *maelys_datalog_frontend_datalog(void) {
 maelys_result_t maelys_datalog_compile_frontend(const char *domain, const char *policy_id,
                                                 const char *source, size_t length,
                                                 const maelys_datalog_frontend_t *frontend,
+                                                maelys_datalog_context_t *context,
                                                 maelys_datalog_ruleset_t *r,
                                                 maelys_datalog_public_diagnostic_t *out) {
     if (!frontend)
         frontend = maelys_datalog_frontend_datalog();
     if (!r || !domain || !policy_id || !source || !length || !domain[0] || !policy_id[0] ||
-        frontend->abi_version != MAELYS_DATALOG_PROGRAM_ABI_VERSION ||
-        frontend->struct_size != sizeof(*frontend) || !frontend->lower ||
-        !maelys_datalog_identity_valid(frontend->name, 64u, 1) ||
-        !maelys_datalog_identity_valid(frontend->semantic_id, 128u, 0))
+        !maelys_datalog_frontend_descriptor_valid(frontend))
         return MAELYS_ERR_INVALID_ARGUMENT;
     if (strlen(domain) >= sizeof(r->domain) || strlen(policy_id) >= sizeof(r->policy_id))
         return MAELYS_ERR_PAYLOAD_TOO_LARGE;
@@ -618,7 +616,7 @@ maelys_result_t maelys_datalog_compile_frontend(const char *domain, const char *
         return MAELYS_ERR_INVALID_FIELD;
     }
     maelys_result_t rc =
-        maelys_datalog_ruleset_init(r, policy_id, domain, MAELYS_DATALOG_SHA256_UNSET, 0);
+        maelys_datalog_ruleset_init_in(r, policy_id, domain, MAELYS_DATALOG_SHA256_UNSET, 0, context);
     if (rc != MAELYS_OK)
         return rc;
     rc = maelys_datalog_domain_registry_install(domain, &r->registry);

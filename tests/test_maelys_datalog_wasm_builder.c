@@ -3,7 +3,7 @@
 #include "src/core/maelys_datalog_solver.h"
 #include "src/core/maelys_datalog_symbol_table.h"
 #include "src/manifest/maelys_datalog_manifest.h"
-#include "src/wasm/maelys_datalog_wasm.h"
+#include "bindings/wasm/maelys_datalog_wasm.h"
 #include "tests/helpers/test_framework.h"
 
 #include <stdbool.h>

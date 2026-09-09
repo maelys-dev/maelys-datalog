@@ -19,6 +19,8 @@ typedef struct {
 
 typedef struct {
     int loaded;
+    /* Borrowed immutable extension catalog. NULL is the legacy registry. */
+    struct maelys_datalog_context *modules;
     char policy_id[128];
     char domain[64];
     char sha256[65];
@@ -58,6 +60,8 @@ maelys_result_t maelys_datalog_ruleset_init(maelys_datalog_ruleset_t *ruleset,
                                             const char *sha256,
                                             int test_only);
 void maelys_datalog_ruleset_clear(maelys_datalog_ruleset_t *ruleset);
+maelys_result_t maelys_datalog_ruleset_init_in(maelys_datalog_ruleset_t *, const char *,
+    const char *, const char *, int, struct maelys_datalog_context *);
 int maelys_datalog_ruleset_has_allow_all(const maelys_datalog_ruleset_t *ruleset);
 maelys_result_t maelys_datalog_ruleset_finalize_sha256(maelys_datalog_ruleset_t *ruleset);
 

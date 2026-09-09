@@ -2,7 +2,7 @@
 /* Independent, deliberately simple full-scan positive-Datalog fixed point.
  * A conformance example, not a performance product. Only the public SDK is
  * used; comparisons, negation, filters and explanations are rejected. */
-#include <maelys/datalog_backend.h>
+#include <maelys/datalog_extension.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -208,4 +208,14 @@ const maelys_datalog_backend_t *example_naive_backend(void) {
                                                      destroy_result,
                                                      destroy};
     return &backend;
+}
+maelys_datalog_extension_t example_backend_extension(void) {
+    maelys_datalog_extension_t e = {0};
+    e.abi_version = MAELYS_DATALOG_EXTENSION_ABI_VERSION;
+    e.struct_size = sizeof(e);
+    e.name = "example_backend";
+    e.semantic_id = "example.backend.v1";
+    e.backends = example_naive_backend();
+    e.backend_count = 1;
+    return e;
 }
