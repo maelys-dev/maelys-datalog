@@ -251,9 +251,12 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
+          # Plus de pré-versions (D4) : c'est la série 0.x qui porte
+          # désormais « API instable », donc le dist-tag `next`. `latest`
+          # commence à 1.0.0.
           case "${GITHUB_REF_NAME}" in
-            *-alpha*) dist_tag="next" ;;
-            *)        dist_tag="latest" ;;
+            v0.*) dist_tag="next" ;;
+            *)    dist_tag="latest" ;;
           esac
           echo "dist-tag npm : ${dist_tag}"
           NPM_DIST_TAG="${dist_tag}" bash scripts/build-npm-package.sh dist/ --publish

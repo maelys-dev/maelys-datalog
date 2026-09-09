@@ -10,14 +10,14 @@
 #      compilateurs réellement utilisés pour ce projet, avant que ça
 #      n'atteigne la CI ou un tag ;
 #   3. ouvre une PR de release et attend les checks requis ;
-#   4. fusionne la PR, puis crée et pousse le tag annoté vX.Y.Z[-alpha.N].
+#   4. fusionne la PR, puis crée et pousse le tag annoté vX.Y.Z.
 #
 # Le tag déclenche ensuite .github/workflows/release.yml, qui construit les
 # artefacts natifs et WASM et attend ton approbation sur l'environnement
 # `release` avant de les publier (voir docs/release-engineering.md).
 #
-# Usage: scripts/cut-release.sh X.Y.Z[-alpha.N] [--skip-container]
-#   Écris d'abord l'entrée CHANGELOG.md : `## [X.Y.Z] - <date>`.
+# Usage: scripts/cut-release.sh X.Y.Z [--skip-container]
+#   Écris d'abord l'entrée CHANGELOG.md : `## X.Y.Z — <date>`.
 #
 #   --skip-container  saute la porte GCC/Linux en conteneur (voir plus bas).
 #                      À n'utiliser qu'en connaissance de cause : ce n'est
@@ -26,9 +26,10 @@
 #
 # Modèle : porté depuis mcp-runtime/scripts/cut-release.sh (voir
 # docs/release-engineering.md, invariant 3). Adaptations propres à ce dépôt :
-#   - le regex de version accepte les pré-releases alpha (D4) ;
-#   - la porte CHANGELOG cherche le format Keep-a-Changelog avec crochets
-#     (`## [X.Y.Z] - <date>`), pas `## X.Y.Z - <date>` ;
+#   - le regex de version n'accepte que X.Y.Z, comme les conventions de
+#     maelys-release (D4, D7) ; la série alpha s'arrête à 0.1.0-alpha.4 ;
+#   - la porte CHANGELOG cherche le format des conventions du socle,
+#     `## X.Y.Z — <date>` (sans crochets, tiret cadratin) ;
 #   - le conteneur de la seconde porte n'installe que build-essential : le
 #     moteur n'a aucune dépendance tierce à l'exécution (D1) — pas de
 #     jansson/uriparser à installer comme côté mcp-runtime ;
@@ -50,12 +51,12 @@ for arg in "$@"; do
       skip_container=1
       ;;
     -*)
-      echo "usage: $0 X.Y.Z[-alpha.N] [--skip-container]" >&2
+      echo "usage: $0 X.Y.Z [--skip-container]" >&2
       exit 1
       ;;
     *)
       if [ -n "$ver" ]; then
-        echo "usage: $0 X.Y.Z[-alpha.N] [--skip-container]" >&2
+        echo "usage: $0 X.Y.Z [--skip-container]" >&2
         exit 1
       fi
       ver="$arg"
@@ -63,8 +64,8 @@ for arg in "$@"; do
   esac
 done
 
-if ! [[ "$ver" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-alpha\.[0-9]+)?$ ]]; then
-  echo "usage: $0 X.Y.Z[-alpha.N] [--skip-container]  (SemVer, alpha pré-release optionnelle — D4)" >&2
+if ! [[ "$ver" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  echo "usage: $0 X.Y.Z [--skip-container]  (SemVer sans pré-version — D4)" >&2
   exit 1
 fi
 tag="v${ver}"
@@ -77,8 +78,8 @@ git fetch origin --quiet
 if git ls-remote --exit-code --tags origin "$tag" >/dev/null 2>&1; then
   echo "le tag $tag existe déjà sur origin" >&2; exit 1
 fi
-grep -q "^## \[${ver}\] - " CHANGELOG.md \
-  || { echo "CHANGELOG.md n'a pas d'entrée '## [${ver}] - <date>' — écris les notes d'abord" >&2; exit 1; }
+grep -q "^## ${ver} — " CHANGELOG.md \
+  || { echo "CHANGELOG.md n'a pas d'entrée '## ${ver} — <date>' — écris les notes d'abord" >&2; exit 1; }
 
 # --- VERSION est la source de vérité unique ; régénère le header à partir d'elle ---
 printf '%s\n' "$ver" > VERSION

@@ -8,8 +8,9 @@ Maelys Datalog is a bounded, deterministic Datalog engine for embedded
 policy decisions. The engine is implemented in C11 and can be embedded as a
 native library or compiled to WebAssembly.
 
-> **Alpha software:** `v0.1.0-alpha.4` is suitable for evaluation and
-> integration experiments. Public APIs may still change before `v1.0.0`.
+> **Early software:** `v0.1.0-alpha.4` is suitable for evaluation and
+> integration experiments. Public APIs may still change before `v1.0.0`;
+> that is what the `0.` in the version number says.
 
 ## Why Maelys
 
@@ -123,8 +124,9 @@ is included. Python/JS bindings continue to use the reference backend.
 ## Versioning
 
 Maelys Datalog follows [Semantic Versioning](https://semver.org/). During the
-`0.x` series, minor releases may contain breaking API changes. Prereleases use
-tags such as `v0.1.0-alpha.1`.
+`0.x` series, minor releases may contain breaking API changes — that is what
+`0.` announces, so releases carry no `-alpha` suffix on top of it. The alpha
+series ended at `v0.1.0-alpha.4`; the next release is `v0.2.0`.
 
 The canonical version is stored in [`VERSION`](VERSION). Release tags and the
 website must use the same identifier. See [`CHANGELOG.md`](CHANGELOG.md) for
