@@ -29,4 +29,9 @@ Thank you for helping improve Maelys Datalog.
 - Keep commits small enough to review.
 
 By submitting a contribution, you agree that it may be distributed under the
-project's Mozilla Public License 2.0.
+project's Mozilla Public License 2.0, except contributions to the explicitly
+MIT-licensed starter directories `sdk/templates/{frontend,backend,planner,filter}/`,
+which you agree may be distributed under their MIT license. You must have the
+rights needed to offer your contribution under the applicable license. Do not
+copy MPL example or engine implementations into the MIT starters and change
+their notices; this exception does not relicense existing code.

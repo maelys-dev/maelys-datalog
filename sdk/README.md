@@ -6,6 +6,8 @@ providers shipped with the engine remain in `modules/standard/`.
 
 - [Examples](examples/README.md): four focused projects plus a frontend/filter
   bundle, all with the same layout, build commands and testing conventions.
+- [MIT starters](templates/README.md): four minimal, copyable skeletons for your
+  own open-source or proprietary implementations; deliberately unimplemented.
 - [Conformance](conformance/README.md): test-only helpers installed with the SDK.
 - [Contexts and migration](../docs/architecture/extension-contexts.md): declare,
   register, seal and select extensions while preserving legacy integrations.

@@ -3,6 +3,11 @@
 Five standalone C11 projects use the same layout, declaration envelope, build
 commands and test-only conformance kit. None includes private engine headers.
 
+These working examples are **MPL-2.0**, not permissive copy-and-close templates.
+For a proprietary implementation, start with the [MIT starters](../templates/README.md)
+and write your own logic. Copying or modifying these example files retains the
+applicable MPL obligations; using the public SDK alone is a different operation.
+
 | Project | Component | Deliberate scope |
 | --- | --- | --- |
 | `filter` | `exact_match` | Byte-for-byte string equality |

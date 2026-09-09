@@ -68,6 +68,17 @@ install(FILES LICENSE DESTINATION ${CMAKE_INSTALL_DATADIR}/maelys-datalog)
 install(FILES sdk/conformance/maelys_conformance.h sdk/conformance/README.md
     DESTINATION ${CMAKE_INSTALL_DATADIR}/maelys-datalog/conformance)
 install(FILES vendor/yyjson/LICENSE DESTINATION ${CMAKE_INSTALL_DATADIR}/maelys-datalog/yyjson)
+install(FILES sdk/templates/README.md
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/maelys-datalog/templates)
+foreach(role frontend backend planner filter)
+    set(starter sdk/templates/${role})
+    set(destination ${CMAKE_INSTALL_DATADIR}/maelys-datalog/templates/${role})
+    install(FILES ${starter}/LICENSE ${starter}/README.md ${starter}/CMakeLists.txt
+        DESTINATION ${destination})
+    install(FILES ${starter}/include/extension.h DESTINATION ${destination}/include)
+    install(FILES ${starter}/src/extension.c DESTINATION ${destination}/src)
+    install(FILES ${starter}/tests/smoke.c DESTINATION ${destination}/tests)
+endforeach()
 
 include(CTest)
 if(BUILD_TESTING)

@@ -56,6 +56,15 @@ for library in "$libdir/libmaelys_datalog.a" "$libdir"/libmaelys_datalog_shared.
   fi
 done
 echo 'installed libraries: no test instrumentation symbols'
+for role in frontend backend planner filter; do
+  starter="$prefix/share/maelys-datalog/templates/$role"
+  # A copied starter must keep its license without relying on the repository.
+  cmp "$root/sdk/templates/$role/LICENSE" "$starter/LICENSE"
+  grep -q '^MIT License$' "$starter/LICENSE"
+  for source in include/extension.h src/extension.c tests/smoke.c CMakeLists.txt README.md; do
+    grep -q 'SPDX-License-Identifier: MIT' "$starter/$source"
+  done
+done
 for linkage in static shared; do
   if [[ "$linkage" == static ]]; then
     libs=("$libdir/libmaelys_datalog.a")
@@ -82,5 +91,14 @@ for linkage in static shared; do
     cmake --build "$scratch/$role-$linkage/build" --parallel 2
     ctest --test-dir "$scratch/$role-$linkage/build" --output-on-failure
   done
-  echo "installed SDK external consumers: $linkage PASS"
+  for role in frontend backend planner filter; do
+    cp -R "$prefix/share/maelys-datalog/templates/$role" "$scratch/starter-$role-$linkage"
+    shared=OFF
+    if [[ "$linkage" == shared ]]; then shared=ON; fi
+    cmake -S "$scratch/starter-$role-$linkage" -B "$scratch/starter-$role-$linkage/build" \
+      -DCMAKE_BUILD_TYPE=Release -DMAELYS_SDK_PREFIX="$prefix" -DMAELYS_SDK_SHARED="$shared"
+    cmake --build "$scratch/starter-$role-$linkage/build" --parallel 2
+    ctest --test-dir "$scratch/starter-$role-$linkage/build" --output-on-failure
+  done
+  echo "installed SDK external consumers and MIT starters: $linkage PASS"
 done

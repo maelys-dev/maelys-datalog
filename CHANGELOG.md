@@ -9,6 +9,9 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 
+- Four MIT-licensed, copyable extension starters, separate from the MPL working
+  examples. Installed-SDK smoke tests cover registration and explicit rejection
+  of unimplemented callbacks; engine and existing SDK licenses are unchanged.
 - Composite SDK example: a `permit` frontend and its `exact_match` filter in one
   declaration, with end-to-end solving/proofs, explicit selection, dependency
   rejection, source locations and atomic-registration checks in native/WASM CI.

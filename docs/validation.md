@@ -54,6 +54,12 @@ standalone examples (including the frontend/filter bundle) are copied out, built
 with their own CMake projects and run through the installed conformance kit in
 both linkage modes and size profiles.
 
+The same check copies the four MIT starters from the installed prefix, verifies
+their packaged LICENSE files and MIT identifiers, then builds/runs each standalone
+project in Release mode with static/shared linkage. Their checks exercise
+registration and explicit `UNSUPPORTED` callbacks, not solver/filter correctness.
+The starters do not include the MPL conformance helper or private engine headers.
+
 The public consumer fixture proves result-scoped symbol authority by
 construction rather than by a mutant build: its domain declares no atoms and
 its policy no constants, so the only symbol it resolves through

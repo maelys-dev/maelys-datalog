@@ -241,7 +241,9 @@ ctest --test-dir build/cmake --output-on-failure
 bash tools/check_module_sdk.sh "$PWD/build/cmake"
 ```
 
-Everything delivered here, including both examples, stays MPL-2.0. Future
+The compiler/backend implementation, public headers and working examples stay
+MPL-2.0. Separate [MIT starters](../../sdk/templates/README.md) provide copyable,
+unimplemented scaffolding without relicensing those examples. Future
 independently authored proprietary frontends, optimized solvers or regex providers
 can be developed as separate private artifacts against these public interfaces.
 This repository contains no private implementation or paywall in the reference

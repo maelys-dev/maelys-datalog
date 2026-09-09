@@ -36,7 +36,7 @@ jobs:
           cmake --build build/cmake --parallel 2
           ctest --test-dir build/cmake --output-on-failure
 
-      - name: Verify separately compiled installed SDK consumer
+      - name: Verify installed SDK consumers, examples and MIT starters
         run: bash tools/check_module_sdk.sh "$PWD/build/cmake"
 
       - name: Check all native tests including facade with sanitizers

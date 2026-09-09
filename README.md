@@ -108,6 +108,7 @@ is included. Python/JS bindings continue to use the reference backend.
 | `src/registry/` | Module registration, identity and lifetime enforcement |
 | `modules/standard/` | Standard string filters the engine ships, built against the public SDK like any third-party module |
 | `sdk/examples/` | Four focused frontend/backend/planner/filter projects plus a composite bundle, using only the installed public SDK |
+| `sdk/templates/` | Four MIT-licensed, copyable starters for independently implemented extensions |
 | `sdk/conformance/` | Installed, test-only conformance helpers for all four extension contracts |
 | `examples/` | Application examples using the engine; generated executables and debug bundles go under `build/examples/` |
 | `build-support/` | Source manifests shared by native, WASM, fuzz and benchmark builds |
@@ -140,7 +141,10 @@ report suspected vulnerabilities privately as described in
 Copyright © 2026 David Bromberg.
 
 Maelys Datalog is distributed under the [Mozilla Public License 2.0](LICENSE),
-including the standard modules and example in this repository. Independently
+including the standard modules, SDK headers, conformance kit and working examples.
+The four [extension starters](sdk/templates/README.md) are explicitly MIT-licensed
+and may be adapted for proprietary implementations with their MIT notices retained.
+Independently
 authored external modules can use their own licenses, subject to the licenses
 of any code they incorporate. The vendored `yyjson` parser retains its own MIT
 license in `vendor/yyjson/LICENSE`. See [repository history](docs/repository-history.md)

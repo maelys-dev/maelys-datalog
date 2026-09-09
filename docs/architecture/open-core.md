@@ -149,13 +149,23 @@ links provider/consumer against both the static and shared engine.
 
 ## Licensing and product separation
 
-Everything in this repository, including standard providers, SDK headers and the
-example, is MPL-2.0 except explicitly identified third-party material such as
-yyjson (MIT). Future independently authored proprietary implementations should
+The engine, standard providers, SDK headers, conformance kit and working examples
+are MPL-2.0. Explicit exceptions are the newly authored MIT starters under
+`sdk/templates/{frontend,backend,planner,filter}/` and identified third-party
+material such as yyjson (MIT). The starters contain only declaration/callback
+scaffolding and rejection smoke tests, not relicensed example implementations.
+Each starter carries its full MIT notice, also preserved in SDK installations.
+Future independently authored proprietary implementations should
 live in separate private repositories and be built into separate artifacts.
 Using the SDK does not turn a private source file into an MPL file. Copying MPL
 implementation code or modifying covered files carries different obligations;
 directory names and linker flags do not change those licenses.
+
+For copy-and-adapt development, use the [MIT starters](../../sdk/templates/README.md)
+and preserve their copyright and permission notice. The existing MPL examples
+remain learning and conformance references, not code that can be copied and
+closed without considering MPL obligations. The same distinction applies to
+the header-only MPL conformance kit, which is not embedded in the starters.
 
 Consumers distributing the combined product must preserve notices and make the
 covered MPL sources available as required by the license. Alternative licensing
