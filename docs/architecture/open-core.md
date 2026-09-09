@@ -8,9 +8,9 @@ without including or modifying private engine headers.
 The tree states that separation rather than relying on the build files to
 imply it. `modules/standard/` holds what the engine ships through the SDK —
 the three string filters, registered at startup by `src/registry/` and
-compiled into every library and release artifact. `examples/sdk/` holds what
-a third party would write with the same headers: a frontend, a backend and a
-filter that no manifest in `build-support/` lists, so they reach no library;
+compiled into every library and release artifact. `sdk/examples/` holds what
+a third party would write with the same headers: frontend, backend, planner and
+filter projects that no manifest in `build-support/` lists, so they reach no library;
 tests link them, and `tools/check_module_sdk.sh` rebuilds them outside the
 tree against the installed SDK alone. `src/registry/` is the registry itself,
 private to the engine. A directory's name says which of the three it is.
@@ -21,6 +21,7 @@ private to the engine. A directory's name says which of the three it is.
 | --- | --- | --- |
 | Core | Parse, type/binding checks, snapshots, budgets, traversal, errors, provenance | `maelys/datalog.h` |
 | Module registry | Validate/copy descriptors, assign internal IDs, seal lifetime | `maelys/datalog_module.h` |
+| Extension context | Atomic four-kind declarations, isolated immutable catalogue, explicit selection | `maelys/datalog_extension.h` |
 | String provider | Validate a constant pattern, bound cost, evaluate bytes | `maelys_datalog_filter_module_t` |
 | Planner provider | Choose the next candidate from a core-validated safe set | `maelys_datalog_planner_module_t` |
 | Standard providers | Existing `starts_with`, `ends_with`, `contains` semantics | Same module SDK |
@@ -37,7 +38,12 @@ The string boundary permits such a provider to be developed outside this repo.
 The source language still has no string escape syntax; a provider must document
 its supported pattern dialect instead of implying full Gitolite compatibility.
 
-## Filter/planner integration and lifetime
+## Compatibility filter/planner integration and lifetime
+
+The steps below describe the retained process-global API. New integrations can
+use the [context migration guide](extension-contexts.md) and the
+[uniform examples](../../sdk/examples/README.md) for an isolated catalogue
+containing all four extension kinds. The callback contracts below apply to both.
 
 1. Build the provider using only installed `maelys/datalog_module.h` and its
    public dependency `datalog.h`. Do not include the legacy umbrella or `src/`.

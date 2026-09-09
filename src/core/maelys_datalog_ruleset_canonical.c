@@ -159,7 +159,7 @@ static maelys_result_t canonical_stream_literal(maelys_sha256_ctx_t *ctx,
                 return MAELYS_ERR_INVALID_STATE;
             }
             const maelys_datalog_filter_definition_t *definition =
-                maelys_datalog_filter_by_kind(
+                maelys_datalog_filter_by_kind_in(ruleset->modules,
                     (maelys_datalog_filter_kind_t)program->kind);
             if (!definition) return MAELYS_ERR_INVALID_STATE;
             maelys_result_t rc = canonical_printf(
@@ -197,7 +197,7 @@ static maelys_result_t ruleset_stream_canonical(maelys_sha256_ctx_t *ctx,
         rc = canonical_printf(ctx, "source=%s\n", ruleset->source_sha256);
         if (rc != MAELYS_OK) return rc;
     }
-    const maelys_datalog_planner_module_t *planner = maelys_datalog_active_planner();
+    const maelys_datalog_planner_module_t *planner = maelys_datalog_context_planner(ruleset->modules);
     if (planner) {
         rc = canonical_printf(ctx, "planner=%s/%s\n", planner->name, planner->semantic_id);
         if (rc != MAELYS_OK) return rc;
@@ -243,7 +243,7 @@ static maelys_result_t finalize_authority(maelys_datalog_ruleset_t *ruleset) {
     if (ruleset->filter_program_count > MAELYS_DATALOG_MAX_FILTER_PROGRAMS) {
         return MAELYS_ERR_INVALID_STATE;
     }
-    int extended = ruleset->frontend_name[0] || maelys_datalog_active_planner() != NULL;
+    int extended = ruleset->frontend_name[0] || maelys_datalog_context_planner(ruleset->modules) != NULL;
     for (size_t i = 0u; i < ruleset->filter_program_count; ++i) {
         if (ruleset->filter_programs[i].kind > MAELYS_DATALOG_FILTER_CONTAINS) extended = 1;
     }

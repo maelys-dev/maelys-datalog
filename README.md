@@ -82,13 +82,15 @@ language frontends lowering into a core-validated representation, and the
 session. All use public types; validation, input normalization, output limits,
 query permissions and result ownership remain in the core.
 
-Register modules before loading the first policy. Their identities are included
-in executable fingerprints; registration cannot change while policies are live.
-Frontend/backend selection is explicit and does not change that startup registry
-or the standard grammar. Missing capabilities fail without a fallback.
+The [extension envelope](include/maelys/datalog_extension.h) groups all four kinds
+in one declaration. Register packages in an explicit context, seal its immutable
+catalogue, then select frontends/backends by name. Used component identities enter
+fingerprints. Existing global registration and direct selection APIs remain
+compatible; missing capabilities fail without a fallback. See the
+[context and migration guide](docs/architecture/extension-contexts.md).
 Modules are trusted native code, not a sandbox. See the
 [architecture and integration contract](docs/architecture/open-core.md) and the
-[standalone filter example](examples/sdk/exact_match.c), plus the
+[uniform standalone examples](sdk/examples/README.md), plus the
 [compiler/backend integration guide](docs/architecture/compiler-backends.md).
 Public-only examples implement a small arrow DSL and an independent naive
 positive-Datalog solver. No proprietary code or Gitolite-compatible regex engine
@@ -105,12 +107,13 @@ is included. Python/JS bindings continue to use the reference backend.
 | `src/backends/` | Built-in reference solver adapter |
 | `src/registry/` | Module registration, identity and lifetime enforcement |
 | `modules/standard/` | Standard string filters the engine ships, built against the public SDK like any third-party module |
-| `examples/sdk/` | A frontend, a backend and a filter written against the public SDK alone; linked only by tests and by the installed-SDK check, never into the library |
+| `sdk/examples/` | Four focused frontend/backend/planner/filter projects plus a composite bundle, using only the installed public SDK |
+| `sdk/conformance/` | Installed, test-only conformance helpers for all four extension contracts |
+| `examples/` | Application examples using the engine; generated executables and debug bundles go under `build/examples/` |
 | `build-support/` | Source manifests shared by native, WASM, fuzz and benchmark builds |
 | `src/manifest/` | File and in-memory manifest loading |
-| `src/wasm/` | WebAssembly-facing C API |
+| `bindings/wasm/` | WebAssembly-facing C boundary and its JavaScript wrapper |
 | `bindings/python/` | Native Python binding |
-| `js/` | JavaScript playground wrapper |
 | `tests/` | Native, Python, WASM, corpus, and fuzz tests |
 | `tests/fixtures/` | Shared test material: the example domains every native test installs, and the out-of-tree SDK consumers |
 | `docs/specifications/` | Normative, executable language and output-format specifications |

@@ -160,7 +160,7 @@ maelys_datalog_status_t maelys_datalog_policy_load_inline(
         NULL, out_policy, out_diagnostic);
 }
 
-maelys_datalog_status_t maelys_datalog_policy_load_frontend(
+static maelys_datalog_status_t policy_load_in(maelys_datalog_context_t *context,
     const char *domain, const char *policy_id, const char *source, size_t source_length,
     const maelys_datalog_frontend_t *frontend, maelys_datalog_policy_t **out_policy,
     maelys_datalog_public_diagnostic_t *out_diagnostic) {
@@ -169,7 +169,7 @@ maelys_datalog_status_t maelys_datalog_policy_load_frontend(
     maelys_datalog_status_t rc = allocate_policy(out_policy, &policy);
     if (rc != MAELYS_DATALOG_STATUS_OK) return rc;
     maelys_result_t status = maelys_datalog_compile_frontend(domain, policy_id, source,
-        source_length, frontend, &policy->set.policies[0], out_diagnostic);
+        source_length, frontend, context, &policy->set.policies[0], out_diagnostic);
     if (status != MAELYS_OK) {
         if (out_diagnostic && out_diagnostic->source == MAELYS_DATALOG_DIAGNOSTIC_NONE) {
             out_diagnostic->source = MAELYS_DATALOG_DIAGNOSTIC_LOAD;
@@ -181,8 +181,27 @@ maelys_datalog_status_t maelys_datalog_policy_load_frontend(
         return public_status(status);
     }
     policy->set.policy_count = 1u;
+    maelys_datalog_context_retain(context);
     *out_policy = policy;
     return MAELYS_DATALOG_STATUS_OK;
+}
+
+maelys_datalog_status_t maelys_datalog_policy_load_frontend(
+    const char *domain, const char *policy_id, const char *source, size_t length,
+    const maelys_datalog_frontend_t *frontend, maelys_datalog_policy_t **out,
+    maelys_datalog_public_diagnostic_t *diag) {
+    return policy_load_in(NULL, domain, policy_id, source, length, frontend, out, diag);
+}
+maelys_datalog_status_t maelys_datalog_context_load_inline(maelys_datalog_context_t *context,
+    const char *frontend_name, const char *domain, const char *policy_id, const char *source,
+    size_t length, maelys_datalog_policy_t **out, maelys_datalog_public_diagnostic_t *diag) {
+    if (out) *out = NULL;
+    maelys_datalog_public_diagnostic_clear(diag);
+    if (!context || !out) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
+    if (!maelys_datalog_context_is_sealed(context)) return MAELYS_DATALOG_STATUS_INVALID_STATE;
+    const maelys_datalog_frontend_t *frontend = maelys_datalog_context_frontend(context, frontend_name);
+    if (!frontend) return MAELYS_DATALOG_STATUS_NOT_FOUND;
+    return policy_load_in(context, domain, policy_id, source, length, frontend, out, diag);
 }
 
 maelys_datalog_status_t maelys_datalog_policy_load_manifest(
@@ -246,6 +265,8 @@ maelys_datalog_status_t maelys_datalog_policy_fingerprint(
 
 maelys_datalog_status_t maelys_datalog_policy_free(maelys_datalog_policy_t *policy) {
     if (!policy) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
+    for (size_t i = 0; i < policy->set.policy_count; ++i)
+        maelys_datalog_context_release(policy->set.policies[i].modules);
     maelys_datalog_policy_set_clear(&policy->set);
     memset(policy, 0, sizeof(*policy));
     free(policy);

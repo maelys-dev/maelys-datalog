@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: MPL-2.0 */
 /* Demonstration DSL, NOT Gitolite: one unary implication per line,
  * e.g. "allow <- member" means allow(X) :- member(X). */
-#include <maelys/datalog_program.h>
+#include <maelys/datalog_extension.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -86,4 +86,14 @@ const maelys_datalog_frontend_t *example_arrow_frontend(void) {
                                                        sizeof(maelys_datalog_frontend_t), "arrow",
                                                        "example.arrow.v1", lower};
     return &frontend;
+}
+maelys_datalog_extension_t example_frontend_extension(void) {
+    maelys_datalog_extension_t e = {0};
+    e.abi_version = MAELYS_DATALOG_EXTENSION_ABI_VERSION;
+    e.struct_size = sizeof(e);
+    e.name = "example_frontend";
+    e.semantic_id = "example.frontend.v1";
+    e.frontends = example_arrow_frontend();
+    e.frontend_count = 1;
+    return e;
 }

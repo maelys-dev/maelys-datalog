@@ -263,7 +263,11 @@ if [ "$wasm_only" != 1 ]; then
   cp include/maelys_datalog.h "$stage/include/"
   cp include/maelys_datalog_version.h "$stage/include/"
   cp include/maelys/datalog.h include/maelys/datalog_module.h \
-     include/maelys/datalog_program.h include/maelys/datalog_backend.h "$stage/include/maelys/"
+     include/maelys/datalog_program.h include/maelys/datalog_backend.h \
+     include/maelys/datalog_extension.h "$stage/include/maelys/"
+  mkdir -p "$stage/share/maelys-datalog/conformance"
+  cp sdk/conformance/maelys_conformance.h sdk/conformance/README.md \
+     "$stage/share/maelys-datalog/conformance/"
   # Le header public inclut les headers moteur par chemins relatifs au dépôt
   # ("src/core/...", "common/..."). Sans cette fermeture, le tarball serait
   # incompilable pour un consommateur — même arborescence que la formule brew.
@@ -329,8 +333,8 @@ EOF
   fi
 
   dts_path=""
-  if [ -f "js/maelys_playground.d.ts" ]; then
-    dts_path="js/maelys_playground.d.ts"
+  if [ -f "bindings/wasm/maelys_playground.d.ts" ]; then
+    dts_path="bindings/wasm/maelys_playground.d.ts"
   else
     dts_path="$(find . -path ./build -prune -o -path ./dist -prune -o -iname 'maelys_playground.d.ts' -print 2>/dev/null | head -n1)"
   fi
@@ -351,7 +355,7 @@ EOF
     stage="$(mktemp -d)"
     cp "$build_dir/maelys_datalog_dynamic.js" "$stage/"
     cp "$build_dir/maelys_datalog_dynamic.wasm" "$stage/"
-    cp js/maelys_playground.js "$stage/"
+    cp bindings/wasm/maelys_playground.js "$stage/"
     if [ -n "$dts_path" ]; then
       cp "$dts_path" "$stage/maelys_playground.d.ts"
     fi

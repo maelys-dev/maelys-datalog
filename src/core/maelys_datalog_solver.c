@@ -637,7 +637,7 @@ static int filter_program_resolve(
         return 0;
     }
     const maelys_datalog_filter_definition_t *definition =
-        maelys_datalog_filter_by_kind((maelys_datalog_filter_kind_t)program->kind);
+        maelys_datalog_filter_by_kind_in(ruleset->modules, (maelys_datalog_filter_kind_t)program->kind);
     if (!definition) return 0;
     *out_program = program;
     *out_definition = definition;
@@ -1439,7 +1439,7 @@ static maelys_result_t build_static_join_order(
     while (pos < rule->body_count) {
         int best = -1;
         int64_t best_score = 0;
-        const maelys_datalog_planner_module_t *planner = maelys_datalog_active_planner();
+        const maelys_datalog_planner_module_t *planner = maelys_datalog_context_planner(ruleset->modules);
         if (planner) {
             maelys_result_t rc = module_choose_literal(
                 planner, ruleset, rule, planned_mask, bound_var_mask, &best);
@@ -1525,7 +1525,7 @@ static int solve_once_evaluate_filter_literal(
         return 0;
     }
     size_t cost = 0u;
-    maelys_result_t rc = maelys_datalog_filter_cost(
+    maelys_result_t rc = maelys_datalog_filter_cost_in(ruleset->modules,
         (maelys_datalog_filter_kind_t)program->kind,
         value_length,
         program->pattern_length,
@@ -1555,7 +1555,7 @@ static int solve_once_evaluate_filter_literal(
         return 0;
     }
     int matched = 0;
-    rc = maelys_datalog_filter_evaluate(
+    rc = maelys_datalog_filter_evaluate_in(ruleset->modules,
         (maelys_datalog_filter_kind_t)program->kind,
         value_bytes,
         value_length,
@@ -3597,9 +3597,9 @@ static int why_false_diagnostic_cmp(
             if (left_kind < right_kind) return -1;
             if (left_kind > right_kind) return 1;
         } else {
-            const maelys_datalog_filter_definition_t *left_def = maelys_datalog_filter_by_kind(
+            const maelys_datalog_filter_definition_t *left_def = maelys_datalog_filter_by_kind_in(context->result->ruleset->modules,
                 (maelys_datalog_filter_kind_t)left_kind);
-            const maelys_datalog_filter_definition_t *right_def = maelys_datalog_filter_by_kind(
+            const maelys_datalog_filter_definition_t *right_def = maelys_datalog_filter_by_kind_in(context->result->ruleset->modules,
                 (maelys_datalog_filter_kind_t)right_kind);
             if (!left_def || !right_def) {
                 context->fatal_error = MAELYS_ERR_INVALID_STATE;
@@ -3997,7 +3997,7 @@ static int why_false_evaluate_filter_literal(
                                      &value_bytes,
                                      &value_length)) return 0;
     size_t cost = 0u;
-    if (maelys_datalog_filter_cost(
+    if (maelys_datalog_filter_cost_in(ruleset->modules,
             (maelys_datalog_filter_kind_t)program->kind,
             value_length,
             program->pattern_length,
@@ -4012,7 +4012,7 @@ static int why_false_evaluate_filter_literal(
     }
     context->out->filter_cost_units += cost;
     int matched = 0;
-    if (maelys_datalog_filter_evaluate(
+    if (maelys_datalog_filter_evaluate_in(ruleset->modules,
             (maelys_datalog_filter_kind_t)program->kind,
             value_bytes,
             value_length,

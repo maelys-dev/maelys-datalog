@@ -18,10 +18,16 @@ maelys_result_t maelys_datalog_ruleset_init(maelys_datalog_ruleset_t *ruleset,
                                             const char *domain,
                                             const char *sha256,
                                             int test_only) {
+    return maelys_datalog_ruleset_init_in(ruleset, policy_id, domain, sha256, test_only, NULL);
+}
+maelys_result_t maelys_datalog_ruleset_init_in(maelys_datalog_ruleset_t *ruleset,
+    const char *policy_id, const char *domain, const char *sha256, int test_only,
+    maelys_datalog_context_t *context) {
     if (!ruleset || !policy_id || !domain || !sha256) return MAELYS_ERR_INVALID_ARGUMENT;
     if (ruleset->loaded) return MAELYS_ERR_INVALID_STATE;
-    maelys_datalog_modules_seal();
+    if (!context) maelys_datalog_modules_seal();
     memset(ruleset, 0, sizeof(*ruleset));
+    ruleset->modules = context;
     maelys_result_t rc = copy_ruleset_identity(ruleset->policy_id, sizeof(ruleset->policy_id), policy_id);
     if (rc != MAELYS_OK) return rc;
     rc = copy_ruleset_identity(ruleset->domain, sizeof(ruleset->domain), domain);

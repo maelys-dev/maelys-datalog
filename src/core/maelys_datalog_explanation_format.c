@@ -327,7 +327,7 @@ static void emit_explanation_text(const maelys_datalog_ruleset_t *ruleset,
                 const maelys_datalog_filter_program_t *program =
                     &ruleset->filter_programs[premise->as.filter.program_index];
                 const maelys_datalog_filter_definition_t *definition =
-                    maelys_datalog_filter_by_kind(
+                    maelys_datalog_filter_by_kind_in(ruleset->modules,
                         (maelys_datalog_filter_kind_t)program->kind);
                 WR_LIT(w, " filter=");
                 wr_quoted(w,
@@ -482,7 +482,7 @@ static maelys_result_t validate_premise(const maelys_datalog_ruleset_t *ruleset,
         const maelys_datalog_filter_program_t *program =
             &ruleset->filter_programs[premise->as.filter.program_index];
         if (program->kind != premise->as.filter.filter_kind ||
-            !maelys_datalog_filter_by_kind(
+            !maelys_datalog_filter_by_kind_in(ruleset->modules,
                 (maelys_datalog_filter_kind_t)program->kind) ||
             program->pattern_length > MAELYS_DATALOG_MAX_FILTER_PATTERN_BYTES ||
             program->pattern_offset > ruleset->filter_pattern_pool_used ||
@@ -641,7 +641,7 @@ static maelys_result_t validate_why_false(const maelys_datalog_ruleset_t *r,
                 return MAELYS_ERR_INVALID_FIELD;
             const maelys_datalog_filter_program_t *p = &r->filter_programs[o->filter_program_index];
             if (p->kind != o->filter_kind ||
-                !maelys_datalog_filter_by_kind((maelys_datalog_filter_kind_t)p->kind) ||
+                !maelys_datalog_filter_by_kind_in(r->modules, (maelys_datalog_filter_kind_t)p->kind) ||
                 r->filter_pattern_pool_used > MAELYS_DATALOG_FILTER_PATTERN_POOL_BYTES ||
                 p->pattern_offset > r->filter_pattern_pool_used ||
                 p->pattern_length > r->filter_pattern_pool_used - p->pattern_offset)
@@ -765,7 +765,7 @@ static void emit_why_false_text(const maelys_datalog_ruleset_t *r,
         } else if (o->kind == MAELYS_DATALOG_WHY_FALSE_OBSTACLE_FILTER_FALSE) {
             const maelys_datalog_filter_program_t *p = &r->filter_programs[o->filter_program_index];
             const maelys_datalog_filter_definition_t *f =
-                maelys_datalog_filter_by_kind((maelys_datalog_filter_kind_t)p->kind);
+                maelys_datalog_filter_by_kind_in(r->modules, (maelys_datalog_filter_kind_t)p->kind);
             WR_LIT(w, " filter=");
             wr_quoted(w, (const unsigned char *)f->name, strlen(f->name));
             WR_LIT(w, " semantic=");

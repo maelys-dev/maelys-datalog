@@ -17,8 +17,13 @@ grep -Fqx "CMAKE_HOME_DIRECTORY:INTERNAL=$root" "$build/CMakeCache.txt"
 cmake --build "$build" --target maelys_py_bind --parallel 2
 suffix=so
 if [[ "$(uname -s)" == Darwin ]]; then suffix=dylib; fi
+# Publish fresh inodes: overwriting a previously loaded Mach-O can leave macOS
+# with a stale code-signature page cache when switching SMALL/LARGE profiles.
+stage="$(mktemp -d "$root/bindings/python/maelys_datalog/.native-sdk.XXXXXX")"
+trap 'rm -rf -- "$stage"' EXIT
 for library in maelys_datalog_shared maelys_py_bind; do
-  cp "$build/lib$library.$suffix" "$root/bindings/python/maelys_datalog/"
+  cp "$build/lib$library.$suffix" "$stage/"
+  mv -f "$stage/lib$library.$suffix" "$root/bindings/python/maelys_datalog/"
 done
 cd "$root"
 "$python" bindings/python/build_cffi.py

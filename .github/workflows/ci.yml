@@ -66,8 +66,12 @@ jobs:
         run: make bench-pipeline
 
   wasm-tests:
-    name: WASM tests (SMALL and LARGE)
+    name: WASM tests (Emscripten ${{ matrix.emsdk }}, SMALL and LARGE)
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        emsdk: ['3.1.61', '4.0.14']
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -75,7 +79,7 @@ jobs:
           node-version: '22'
       - uses: mymindstorm/setup-emsdk@v14
         with:
-          version: '4.0.14'
+          version: ${{ matrix.emsdk }}
       - name: Build and run all Node tests sequentially in both profiles
         run: |
           for profile in small large; do
@@ -83,6 +87,7 @@ jobs:
             for test in tests/wasm/*.mjs; do
               MAELYS_WASM_PROFILE="$profile" node "$test"
             done
+            EM_CACHE="$PWD/build/emscripten-cache" bash tools/check_wasm_extensions.sh "$profile"
           done
 
   fuzz-smoke:

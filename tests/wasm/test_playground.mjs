@@ -1,4 +1,4 @@
-import playgroundPkg from '../../js/maelys_playground.js';
+import playgroundPkg from '../../bindings/wasm/maelys_playground.js';
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 
@@ -75,7 +75,7 @@ function expectThrowType(fn, type, label) {
 }
 
 const playgroundSource = readFileSync(
-  new URL('../../js/maelys_playground.js', import.meta.url),
+  new URL('../../bindings/wasm/maelys_playground.js', import.meta.url),
   'utf8',
 );
 const decodeEnumeratedTermForTest = runInNewContext(
@@ -1269,7 +1269,18 @@ async function setupWhyTrueTruncated(domainName) {
   return pg;
 }
 
+function prepareAllocationHooks(pg) {
+  /* Emscripten 3.1.61 installs lazy exports: their first invocation replaces
+   * Module._malloc/_free. Resolve both before capturing or wrapping them, or
+   * the first real allocation silently removes the test's instrumentation.
+   * Keep this warm-up outside the measured calls and failure injection. */
+  const ptr = pg._mod._malloc(8);
+  if (!ptr) throw new Error('allocation hook warm-up failed');
+  pg._mod._free(ptr);
+}
+
 function instrumentAllocations(pg) {
+  prepareAllocationHooks(pg);
   const originalMalloc = pg._mod._malloc;
   const originalFree = pg._mod._free;
   const stats = {
@@ -1510,6 +1521,7 @@ await test('playground_explain_fact_text_count_and_write_agree', async () => {
 
 await test('playground_explain_fact_text_malloc_failure_is_clean', async () => {
   const pg = await setupWhyTrueUnary('why_true_malloc_zero');
+  prepareAllocationHooks(pg);
   const originalMalloc = pg._mod._malloc;
   const originalFree = pg._mod._free;
 

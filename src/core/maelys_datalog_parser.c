@@ -687,7 +687,7 @@ static maelys_result_t parse_literal(parser_t *p,
             name[p->tok.len] = '\0';
             if (!predicate_name_exists(&p->ruleset->registry, name)) {
                 const maelys_datalog_filter_definition_t *definition =
-                    maelys_datalog_filter_by_name(name);
+                    maelys_datalog_filter_by_name_in(p->ruleset->modules, name);
                 if (definition) return parse_filter_literal(p, definition, lit);
             }
         }

@@ -1,4 +1,4 @@
-import playgroundPkg from '../../js/maelys_playground.js';
+import playgroundPkg from '../../bindings/wasm/maelys_playground.js';
 
 const { MaelysPlayground, PredKind } = playgroundPkg;
 
