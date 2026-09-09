@@ -97,7 +97,11 @@ jobs:
       - uses: actions/checkout@v4
       - run: make -f Makefile.fuzz fuzz-smoke CC=clang
       - name: Install AFL++ harness tooling
-        run: sudo apt-get update && sudo apt-get install -y afl++
+        run: |
+          # A broken third-party apt source of the runner image must not fail an
+          # install of Ubuntu archive packages: the update reports, the install decides.
+          sudo apt-get update || echo "::warning::apt-get update reported errors; the install decides"
+          sudo apt-get install -y afl++
       - name: Run existing AFL++ bounded smoke
         run: |
           # This hosted runner is disposable. Let AFL observe crash exits
