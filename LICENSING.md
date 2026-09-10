@@ -22,6 +22,37 @@ The managed blocks of `AGENTS.md` and `CLAUDE.md` are installed from the
 `share/` texts of the Maelys distributions, which are dedicated to the public
 domain under CC0-1.0. They carry no license obligation of their own.
 
+## The MAELYS-DATALOG-v2 specification: CC-BY-4.0, with its code components MIT
+
+`docs/specifications/maelys-datalog-v2/` is normative and exists to be
+implemented by third parties, so it does not follow the engine's license. It
+had none of its own until now and fell back to MPL-2.0 by default, which is a
+source-code copyleft: it would not have stopped anyone from implementing the
+specification, but it would have made quoting it — in another document, an
+article, a derived specification — a licensing question, for a text whose whole
+purpose is to be followed.
+
+The prose is **CC-BY-4.0**: quote, translate and redistribute it, with
+attribution.
+
+- [`specification.md`](docs/specifications/maelys-datalog-v2/specification.md),
+  [`semantics.md`](docs/specifications/maelys-datalog-v2/semantics.md),
+  [`conformance.md`](docs/specifications/maelys-datalog-v2/conformance.md)
+
+Its code components are **MIT**, because an implementer copies them into a
+parser generator or a test suite, and Creative Commons licenses are not meant
+for software:
+
+- the ABNF grammars `source-language.abnf` and `why-true-text.abnf`, which
+  carry the identifier in a `;` comment;
+- the `.dl` corpus under `examples/` and `invalid/`, which carries none: the
+  conformance runner reads the first line of each fixture for its `EXPECT:`
+  marker, so a header there would change what the test sees. They are MIT by
+  this statement and by their path.
+
+Changing the specification's license removes the patent grant MPL-2.0 carried
+over its text. The engine's own code stays MPL-2.0, with that grant intact.
+
 ## SDK templates: MIT
 
 The copyable extension starters under `sdk/templates/` carry

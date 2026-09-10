@@ -1,3 +1,4 @@
+; SPDX-License-Identifier: MIT
 ; MAELYS-DATALOG-v2 canonical Why-true document
 why-true-document = version-line document-line (not-derived / truncated / complete)
 version-line = %s"MAELYS-DATALOG-v2" lf
