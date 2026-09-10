@@ -1,6 +1,6 @@
 # Licensing
 
-Copyright 2026 Maelys Developers.
+Copyright 2026 David Bromberg.
 
 The socle wrote this file once because it was missing. It belongs to this
 repository now: state below what each part is licensed under, and name every
@@ -94,7 +94,18 @@ Referenced from [`README.md`](README.md), the repository's public entry point:
 - [`docs/repository-history.md`](docs/repository-history.md)
 - [`SECURITY.md`](SECURITY.md) and [`RELEASING.md`](RELEASING.md)
 
-Not engaged, and free to migrate: `docs/release-engineering.md`,
-`docs/validation.md` and `docs/extension-sdk-validation.md` — internal records
-of how this repository is released and validated, which nothing published
-points at.
+Referenced from material this repository ships or runs, which makes them
+engaged even though no reader arrives at them from the README:
+
+- [`docs/validation.md`](docs/validation.md) — named in
+  [`CHANGELOG.md`](CHANGELOG.md), which travels inside every released tarball,
+  and in [`bindings/wasm/README.md`](bindings/wasm/README.md). A reader of a
+  shipped changelog must find it here.
+- [`docs/release-engineering.md`](docs/release-engineering.md) — cited four
+  times by [`scripts/package-release.sh`](scripts/package-release.sh), which
+  builds every artifact and points at D1 and D2 for the target matrix and the
+  emsdk pin. The script says what it says for reasons a migration tool cannot
+  rewrite.
+
+Nothing else in `docs/` is unengaged: `maelys-platform docs --prose` reports
+no document to migrate.
