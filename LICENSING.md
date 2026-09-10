@@ -48,10 +48,14 @@ Shipped inside every released artifact by `scripts/package-release.sh`:
 
 Referenced from [`README.md`](README.md), the repository's public entry point:
 
-- [`docs/specifications/maelys-datalog-v2/specification.md`](docs/specifications/maelys-datalog-v2/specification.md),
-  with the `semantics.md`, `conformance.md`, ABNF grammars and `.dl` fixtures
-  beside it: they are the normative definition of the language this engine
-  implements, and third-party frontends and backends are written against them.
+- The normative definition of the language this engine implements, which
+  third-party frontends and backends are written against. The specification
+  links the other two, so they are engaged with it and must be named here to
+  stay beside it:
+  [`docs/specifications/maelys-datalog-v2/specification.md`](docs/specifications/maelys-datalog-v2/specification.md),
+  [`docs/specifications/maelys-datalog-v2/semantics.md`](docs/specifications/maelys-datalog-v2/semantics.md),
+  [`docs/specifications/maelys-datalog-v2/conformance.md`](docs/specifications/maelys-datalog-v2/conformance.md),
+  with the ABNF grammars and `.dl` fixtures beside them.
 - [`docs/architecture/open-core.md`](docs/architecture/open-core.md),
   [`docs/architecture/compiler-backends.md`](docs/architecture/compiler-backends.md)
   and [`docs/architecture/extension-contexts.md`](docs/architecture/extension-contexts.md):
