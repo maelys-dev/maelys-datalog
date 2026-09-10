@@ -1,3 +1,4 @@
+; SPDX-License-Identifier: MIT
 ; MAELYS-DATALOG-v2 source syntax (RFC 5234 + RFC 7405)
 program = ignored *(clause ignored)
 clause = atom ignored (dot / (neck ignored body dot))

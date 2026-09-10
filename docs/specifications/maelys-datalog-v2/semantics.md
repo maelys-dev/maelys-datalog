@@ -1,3 +1,4 @@
+<!-- SPDX-License-Identifier: CC-BY-4.0 -->
 # MAELYS-DATALOG-v2 semantics
 
 This document is normative where ABNF cannot express registry, typing, graph,

@@ -146,6 +146,10 @@ Maelys Datalog is distributed under the [Mozilla Public License 2.0](LICENSE),
 including the standard modules, SDK headers, conformance kit and working examples.
 The four [extension starters](sdk/templates/README.md) are explicitly MIT-licensed
 and may be adapted for proprietary implementations with their MIT notices retained.
+The [MAELYS-DATALOG-v2 specification](docs/specifications/maelys-datalog-v2/specification.md)
+is CC-BY-4.0 so that it can be quoted, translated and derived from; the ABNF
+grammars and `.dl` corpus beside it are MIT, because an implementer copies them
+into a parser or a test suite. [`LICENSING.md`](LICENSING.md) states each part.
 Independently
 authored external modules can use their own licenses, subject to the licenses
 of any code they incorporate. The vendored `yyjson` parser retains its own MIT

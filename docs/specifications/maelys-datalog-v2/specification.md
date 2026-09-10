@@ -1,3 +1,4 @@
+<!-- SPDX-License-Identifier: CC-BY-4.0 -->
 # MAELYS-DATALOG-v2
 
 Status: normative.
