@@ -7,8 +7,15 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## 0.2.0 — 2026-09-10
+
 ### Added
 
+- npm channel on GitHub Packages: `@maelys-dev/datalog-wasm`, assembled from the
+  release's own attested WASM tarballs and published by the tagged workflow with
+  the run's `GITHUB_TOKEN`. The npmjs.com channel never published: trusted
+  publishing cannot create a package, so every tagged run since `0.1.0-alpha.2`
+  ended on a 404.
 - Four MIT-licensed, copyable extension starters, separate from the MPL working
   examples. Installed-SDK smoke tests cover registration and explicit rejection
   of unimplemented callbacks; engine and existing SDK licenses are unchanged.
@@ -27,6 +34,20 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ### Changed
 
+- Releases carry no `-alpha` suffix: the `0.` already states that the API may
+  break between minor versions. `cut-release.sh` accepts `X.Y.Z` only, its
+  CHANGELOG gate reads `## X.Y.Z — <date>`, and the npm dist-tag follows the
+  series (`next` while `0.x`). This aligns the repository on the shared
+  `maelys-release` conventions; the release mechanism stays its own.
+- Directories are named after what they ship: `src/registry/` for the module
+  registry, `modules/standard/` for the filters the engine ships through the
+  SDK, `sdk/examples/` for third-party examples, `tests/fixtures/` for shared
+  test material.
+- The release receipt records a channel only after that channel published.
+  `0.1.0-alpha.4` shipped a receipt asserting an npm package whose publication
+  had failed, and that receipt feeds the public version line.
+- A broken third-party apt source of the runner image no longer fails CI: the
+  update reports, the install decides, and a missing package still fails loudly.
 - WASM C boundary and JavaScript wrapper are grouped under `bindings/wasm/`;
   distributed filenames, exported functions and wrapper APIs are unchanged.
 - Extension examples now live under `sdk/examples/`, alongside the conformance
@@ -35,6 +56,8 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ### Fixed
 
+- The release published as `0.1.0-alpha.4` is marked as a prerelease, and its
+  receipt no longer names an npm package that does not exist.
 - Python validation replaces native libraries through fresh files when changing
   size profiles, avoiding macOS code-signature page-cache kills after rebuilds.
 - WASM allocation tests resolve lazy Emscripten exports before installing
@@ -130,7 +153,7 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 - Policy identity, diagnostics, proof records, and decision receipts.
 - Public documentation, contribution guide, security policy, and CI workflow.
 
-[Unreleased]: https://github.com/maelys-dev/maelys-datalog/compare/v0.1.0-alpha.4...HEAD
+[Unreleased]: https://github.com/maelys-dev/maelys-datalog/compare/v0.2.0...HEAD
 [0.1.0-alpha.4]: https://github.com/maelys-dev/maelys-datalog/releases/tag/v0.1.0-alpha.4
 [0.1.0-alpha.3]: https://github.com/maelys-dev/maelys-datalog/releases/tag/v0.1.0-alpha.3
 [0.1.0-alpha.2]: https://github.com/maelys-dev/maelys-datalog/releases/tag/v0.1.0-alpha.2
