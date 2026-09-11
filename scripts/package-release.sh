@@ -8,7 +8,7 @@
 #
 # One command, used both locally and by the build job of maelys-release,
 # which runs `scripts/package-release.sh TARGET` on one runner per target
-# declared in packaging/release and attests dist/* (docs/release-engineering.md
+# declared in maelys-release.conf and attests dist/* (docs/release-engineering.md
 # D1, D7). Outputs to dist/; everything else happens in disposable staging
 # directories that are removed before the script exits.
 #

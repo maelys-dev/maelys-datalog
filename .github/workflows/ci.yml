@@ -10,12 +10,12 @@ permissions:
 
 jobs:
   # The shared CI of the socle: make check on the three release targets and
-  # the conventions drift, from the declarations in packaging/release. The
+  # the conventions drift, from the declarations in maelys-release.conf. The
   # sanitizers are left to the native-tests job below, which already runs the
   # whole inventory under ASan/UBSan in both size profiles; running them here
   # too would double the longest step for nothing.
   check:
-    uses: maelys-dev/maelys-release/.github/workflows/check-product.yml@1cc5b931cb24e55e8675a458b1cdadb00e57e9af # v0.36.0
+    uses: maelys-dev/maelys-release/.github/workflows/check-product.yml@5f49661f4d23062ba0c8588a914cf5b6ae2da986 # v0.37.0
     with:
       product: maelys-datalog
       sanitizer_command: ""

@@ -1,7 +1,7 @@
 # Releasing
 
 Releases are produced by the `maelys-release` socle: `.github/workflows/release.yml`
-is rendered by `maelys-release adopt` from [`packaging/release`](packaging/release)
+is rendered by `maelys-release adopt` from [`maelys-release.conf`](maelys-release.conf)
 and triggers only on a signed, annotated tag `vX.Y.Z` pushed to `main`. The
 decisions behind the ceremony are in
 [`docs/release-engineering.md`](docs/release-engineering.md); this page is the
@@ -49,7 +49,7 @@ commit to exist and to finish.
 Before writing anything, `cut` also runs `scripts/verify-release.sh` with
 this machine's target — `make check`, so the first stop lasts as long as it
 does — and, after writing `VERSION`, the `[cut] after-version` command of
-`packaging/release`: `scripts/generate-version-header.sh`, whose regenerated
+`maelys-release.conf`: `scripts/generate-version-header.sh`, whose regenerated
 `include/maelys_datalog_version.h` joins the bump commit. A failure of either
 restores `VERSION` and creates nothing.
 
@@ -73,7 +73,7 @@ changelog entry) and pushes. The push triggers `release.yml`.
 
 1. Verifies through the GitHub API that the tag is signed and names
    `VERSION`.
-2. One build job per target of `packaging/release` — `linux-x86_64`,
+2. One build job per target of `maelys-release.conf` — `linux-x86_64`,
    `linux-arm64`, `macos-arm64`, and `wasm32` on an Ubuntu runner — each
    with `contents: read` only: installs the packages of
    `dependencies/packages` (`clang`, `jq` on Linux), runs

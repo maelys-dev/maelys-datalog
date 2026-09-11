@@ -30,7 +30,7 @@ language or the engine.
    **compiles nothing** — it verifies checksums and attaches artifacts.
    Between the two: the `release` GitHub environment with a required
    reviewer — the material human gate, declared `[gate] reviewer` in
-   `packaging/release` so that `preflight` refuses to cut when it is
+   `maelys-release.conf` so that `preflight` refuses to cut when it is
    unarmed.
 6. **Provenance attestation** for every artifact; workflow actions pinned to
    full 40-hex SHAs — in the socle, whose workflows this repository pins by
@@ -41,7 +41,7 @@ language or the engine.
 
 Unlike mcp-runtime (which needs dynamic/static variants for jansson/uriparser),
 the engine has **zero third-party runtime dependencies** (yyjson is vendored).
-One native variant suffices. The targets are declared in `packaging/release`
+One native variant suffices. The targets are declared in `maelys-release.conf`
 and rendered by the socle into the build matrix; `wasm32` is a fourth
 target on an Ubuntu runner, not a separate job.
 
@@ -80,7 +80,7 @@ The equivalent of mcp-runtime's SHA-pinned jansson is the **pinned emsdk**:
 
 One receipt **per target**, `release-receipt-<target>.json`, written by
 `package-release.sh` beside the artifacts, listed in `SHA256SUMS` (declared
-under `[manifest]` in `packaging/release`) and attested like any artifact:
+under `[manifest]` in `maelys-release.conf`) and attested like any artifact:
 
 ```json
 {
@@ -175,7 +175,7 @@ workflow, and the `maelys-release` command that adopts, checks, rehearses and
 cuts. This repository ported its mechanism from `mcp-runtime` first, aligned
 on the socle's conventions at `0.2.0` (its own `release.yml` still cutting),
 and **now releases through the socle**: `.github/workflows/release.yml` is
-rendered by `maelys-release adopt` from `packaging/release` and is never
+rendered by `maelys-release adopt` from `maelys-release.conf` and is never
 edited by hand.
 
 What kept the mechanism local until socle v0.34 has been contributed
@@ -192,7 +192,7 @@ upstream from this repository's requirements and no longer exists:
 | A cut that runs the product's gate first and commits what the bump regenerates (invariants 1, 3) | `verify-release.sh` at the first stop and `[cut] after-version`, v0.34 |
 
 What this product still owns, because the socle cannot know it:
-`packaging/release` and `dependencies/packages` (the declarations),
+`maelys-release.conf` and `dependencies/packages` (the declarations),
 `scripts/package-release.sh` (D1, D2, D3), `scripts/verify-release.sh`
 (what `make check` means here), `scripts/publish-channel.sh` (how npm is
 published, idempotently), `scripts/generate-version-header.sh` (what a
