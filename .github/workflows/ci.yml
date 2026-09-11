@@ -9,6 +9,17 @@ permissions:
   contents: read
 
 jobs:
+  # The shared CI of the socle: make check on the three release targets and
+  # the conventions drift, from the declarations in packaging/release. The
+  # sanitizers are left to the native-tests job below, which already runs the
+  # whole inventory under ASan/UBSan in both size profiles; running them here
+  # too would double the longest step for nothing.
+  check:
+    uses: maelys-dev/maelys-release/.github/workflows/check-product.yml@12ac509405c9d79087412fe3d289e4e14b3bb329 # v0.35.0
+    with:
+      product: maelys-datalog
+      sanitizer_command: ""
+
   native-tests:
     name: Native tests (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
