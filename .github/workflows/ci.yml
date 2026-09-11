@@ -15,7 +15,7 @@ jobs:
   # whole inventory under ASan/UBSan in both size profiles; running them here
   # too would double the longest step for nothing.
   check:
-    uses: maelys-dev/maelys-release/.github/workflows/check-product.yml@1cc5b931cb24e55e8675a458b1cdadb00e57e9af # v0.36.0
+    uses: maelys-dev/maelys-release/.github/workflows/check-product.yml@6125242502e5216bbea7a0dd596adc0575ac3f0a # untagged
     with:
       product: maelys-datalog
       sanitizer_command: ""
