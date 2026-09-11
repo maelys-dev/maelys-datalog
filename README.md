@@ -1,14 +1,14 @@
 # Maelys Datalog
 
 [![CI](https://github.com/maelys-dev/maelys-datalog/actions/workflows/ci.yml/badge.svg)](https://github.com/maelys-dev/maelys-datalog/actions/workflows/ci.yml)
-[![Version](https://img.shields.io/badge/version-v0.1.0--alpha.4-775DFF)](https://github.com/maelys-dev/maelys-datalog/releases/tag/v0.1.0-alpha.4)
+[![Version](https://img.shields.io/github/v/release/maelys-dev/maelys-datalog?color=775DFF)](https://github.com/maelys-dev/maelys-datalog/releases/latest)
 [![License: MPL-2.0](https://img.shields.io/badge/license-MPL--2.0-00BFC0.svg)](LICENSE)
 
 Maelys Datalog is a bounded, deterministic Datalog engine for embedded
 policy decisions. The engine is implemented in C11 and can be embedded as a
 native library or compiled to WebAssembly.
 
-> **Early software:** `v0.1.0-alpha.4` is suitable for evaluation and
+> **Early software:** the `0.x` releases are suitable for evaluation and
 > integration experiments. Public APIs may still change before `v1.0.0`;
 > that is what the `0.` in the version number says.
 
@@ -126,7 +126,7 @@ is included. Python/JS bindings continue to use the reference backend.
 Maelys Datalog follows [Semantic Versioning](https://semver.org/). During the
 `0.x` series, minor releases may contain breaking API changes — that is what
 `0.` announces, so releases carry no `-alpha` suffix on top of it. The alpha
-series ended at `v0.1.0-alpha.4`; the next release is `v0.2.0`.
+series ended at `v0.1.0-alpha.4`.
 
 The canonical version is stored in [`VERSION`](VERSION). Release tags and the
 website must use the same identifier. See [`CHANGELOG.md`](CHANGELOG.md) for
