@@ -178,7 +178,7 @@ and **now releases through the socle**: `.github/workflows/release.yml` is
 rendered by `maelys-release adopt` from `packaging/release` and is never
 edited by hand.
 
-What kept the mechanism local until socle v0.33 has been contributed
+What kept the mechanism local until socle v0.34 has been contributed
 upstream from this repository's requirements and no longer exists:
 
 | Requirement | Socle answer |
@@ -189,19 +189,16 @@ upstream from this repository's requirements and no longer exists:
 | The human gate refused when unarmed (invariant 5) | `[gate] reviewer` and `preflight`, v0.30 |
 | Build jobs without write permission (invariant 5) | `contents: read`, v0.31 |
 | A cut that waits for the checks to exist (invariant 3) | `cut`, v0.33 |
+| A cut that runs the product's gate first and commits what the bump regenerates (invariants 1, 3) | `verify-release.sh` at the first stop and `[cut] after-version`, v0.34 |
 
 What this product still owns, because the socle cannot know it:
 `packaging/release` and `dependencies/packages` (the declarations),
 `scripts/package-release.sh` (D1, D2, D3), `scripts/verify-release.sh`
 (what `make check` means here), `scripts/publish-channel.sh` (how npm is
-published, idempotently), `scripts/release-gates.sh` (the two local gates of
-invariant 3, run before `cut`), and the pins these scripts carry. One gap
-remains with socle v0.33: `cut` commits `VERSION` and `CHANGELOG.md` only,
-and this repository's `include/maelys_datalog_version.h` is a committed file
-generated from `VERSION` that `make check` verifies. Until the socle lets a
-product declare a command run between writing `VERSION` and committing,
-`RELEASING.md` describes the extra commit on the release branch; the request
-has been sent upstream.
+published, idempotently), `scripts/generate-version-header.sh` (what a
+version bump regenerates, named under `[cut]`), `scripts/release-gates.sh`
+(the second-compiler gate of invariant 3, run before `cut`), and the pins
+these scripts carry.
 
 An upgrade of the socle is its own pull request: `maelys-release adopt`
 regenerates `release.yml`, the managed blocks of `AGENTS.md` and `CLAUDE.md`

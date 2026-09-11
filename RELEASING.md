@@ -24,10 +24,12 @@ Then run the two local gates on the tree that will be released:
 scripts/release-gates.sh
 ```
 
-Gate 1 is `scripts/verify-release.sh` on this machine (clang). Gate 2 is
-`make check CC=gcc` in a pinned `ubuntu:24.04` container on a disposable copy
-of the tree — the second compiler, before any tag exists. `--skip-container`
-exists and says loudly that it skipped.
+Gate 1 is `scripts/verify-release.sh` on this machine (clang); `cut` runs it
+again itself, so gate 1 is the fast answer before gate 2. Gate 2 is `make
+check CC=gcc` in a pinned `ubuntu:24.04` container on a disposable copy of
+the tree — the second compiler, which no runner of the release matrix uses,
+before any tag exists. `--skip-container` exists and says loudly that it
+skipped.
 
 ## 2. First stop: the release pull request
 
@@ -40,20 +42,16 @@ carrying anything but `VERSION` and `CHANGELOG.md`, a `HEAD` that is not
 `main` up to date with `origin`, and anything `preflight` holds: the signing
 configuration, the previous tag, a free `vX.Y.Z`, and the `release`
 environment armed with a reviewer (`[gate] reviewer`). It then writes
-`VERSION`, commits it signed on `release/vX.Y.Z`, opens the pull request and
-waits for the checks of that commit.
+`VERSION`, regenerates the version header, commits both signed on
+`release/vX.Y.Z`, opens the pull request and waits for the checks of that
+commit to exist and to finish.
 
-**Version header (interim, socle v0.33).** `include/maelys_datalog_version.h`
-is a committed file generated from `VERSION`, and `make check` fails when the
-two drift — so the bump commit `cut` writes is red by construction. On the
-release branch, add the header in a second commit before merging:
-
-```bash
-git switch release/vX.Y.Z && bash scripts/generate-version-header.sh && git commit -S -am "maelys-datalog X.Y.Z: version header" && git push
-```
-
-`cut`'s wait reports the bump commit's checks as failed; that is expected
-here. The request to run this step inside `cut` has been sent upstream.
+Before writing anything, `cut` also runs `scripts/verify-release.sh` with
+this machine's target — `make check`, so the first stop lasts as long as it
+does — and, after writing `VERSION`, the `[cut] after-version` command of
+`packaging/release`: `scripts/generate-version-header.sh`, whose regenerated
+`include/maelys_datalog_version.h` joins the bump commit. A failure of either
+restores `VERSION` and creates nothing.
 
 ## 3. Middle stop: GitHub
 

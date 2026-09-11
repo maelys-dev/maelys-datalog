@@ -26,3 +26,9 @@ npm github-packages
 # preflight fails if it does not (invariant 5).
 [gate]
 reviewer
+
+# include/maelys_datalog_version.h is generated from VERSION and committed;
+# make check fails when the two drift (invariant 1). cut runs this command
+# between writing VERSION and the bump commit, and the header joins the commit.
+[cut]
+after-version bash scripts/generate-version-header.sh
