@@ -90,15 +90,19 @@ changelog entry) and pushes. The push triggers `release.yml`.
    downloaded assets, then attaches `channel-npm.json` to the Release — the
    observation that it published, never written by a build.
 
-Replay a tag whose publication failed, after fixing the cause or adopting a
-corrected socle:
+A run that failed for a reason outside the code — a cancelled job, an
+expired approval, a runner lost — is replayed on the same tag, with the
+workflow file **of that tag**:
 
 ```bash
-gh workflow run release.yml -f tag=vX.Y.Z
+gh workflow run release.yml --ref vX.Y.Z -f tag=vX.Y.Z
 ```
 
 `publish-channel.sh` exits 0 without republishing a version the registry
-already holds, so a replay is safe.
+already holds, so a replay is safe. A replay pins the socle that tag pinned:
+when the socle itself is at fault, the remedy is a patch release of this
+product carrying the corrected pin, never a replay that would repeat the
+fault.
 
 ## Artifacts
 
