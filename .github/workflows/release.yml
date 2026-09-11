@@ -1,280 +1,46 @@
-name: Release
+name: release
 
-# Déclenché par le tag annoté vX.Y.Z[-alpha.N] que tu pousses à la main.
-# Le tag EST la cérémonie d'autorisation ; rien ne se publie sans lui
-# (docs/release-engineering.md, invariant 4).
+# Managed by maelys-release v0.33.0 (0.33.0). Regenerate with
+# 'maelys-release adopt' of maelys-release; do not edit by hand.
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing signed tag whose release and Homebrew publication are replayed
+        required: true
+        type: string
 
-# Défaut global : lecture seule, partout. Chaque job élève UNIQUEMENT ce dont
-# il a besoin, et jamais plus (invariant 5 — séparation des privilèges).
 permissions:
-  contents: read
+  contents: write
+  id-token: write
+  attestations: write
 
 jobs:
-  # ─── RÔLE « CONSTRUIT » (natif) : aucun droit d'écriture, aucun secret ───
-  # Ce job exécute le code candidat via scripts/package-release.sh — la même
-  # commande qu'en local (invariant 2). C'est l'un des deux seuls endroits où
-  # du code candidat s'exécute, donc l'un des deux seuls où un RCE pourrait
-  # vivre ; il ne peut ni publier, ni pousser, ni toucher à un token d'écriture
-  # du dépôt.
-  build:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          # D1 : une seule variante native par cible (le moteur n'a AUCUNE
-          # dépendance tierce à l'exécution — yyjson est vendorisé), donc pas
-          # de découpage dynamic/static comme dans mcp-runtime.
-          - os: ubuntu-24.04
-            target: linux-x86_64
-          - os: ubuntu-24.04-arm
-            target: linux-arm64
-          - os: macos-14
-            target: macos-arm64
-    runs-on: ${{ matrix.os }}
+  release:
+    uses: maelys-dev/maelys-release/.github/workflows/release.yml@15d4bac77af504dbe746ede23e1fe11612aab06a # v0.33.0
     permissions:
-      contents: read        # ne peut pas modifier le dépôt
-      id-token: write       # OIDC, requis par l'attestation de provenance
-      attestations: write   # écrit l'attestation — ce n'est PAS contents: write
-    steps:
-      # Actions épinglées sur SHA 40-hex (immuable), invariant 6. Mettre à jour
-      # par une PR dédiée, en re-résolvant le SHA du tag de version voulu.
-      - name: Checkout
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      contents: write
+      id-token: write
+      attestations: write
+    with:
+      product: maelys-datalog
+      tag: ${{ inputs.tag || github.ref_name }}
+      verify_command: sh scripts/verify-release.sh TARGET
+      linux_packages: build-essential dpkg-dev file rpm clang jq
+      targets: '[{"target": "linux-x86_64"}, {"target": "linux-arm64"}, {"target": "macos-arm64"}, {"target": "wasm32", "runner": "ubuntu-26.04"}]'
+      manifest_patterns: '*.tar.gz *.deb *.rpm release-receipt-*.json'
 
-      - name: Vérifie que le tag correspond à VERSION
-        shell: bash
-        run: |
-          set -euo pipefail
-          file_version="$(cat VERSION)"
-          test "v${file_version}" = "${GITHUB_REF_NAME}" \
-            || { echo "tag ${GITHUB_REF_NAME} != v${file_version} (fichier VERSION)"; exit 1; }
-          # Invariant 1 : le header public est GÉNÉRÉ depuis VERSION. Ce garde-fou
-          # refuse de publier un header qui aurait dérivé du fichier VERSION.
-          make check-version-header
-
-      # Aucune installation de dépendance tierce, volontairement : le moteur est
-      # zéro-dépendance et la chaîne C (clang/make) est déjà présente sur les
-      # runners. Toute apt-get/brew install ici serait une surface d'attaque
-      # ajoutée dans le seul job qui exécute du code candidat.
-
-      # Une seule source de vérité : le même script en local et en CI.
-      - name: Build + empaquète (natif ${{ matrix.target }})
-        run: bash scripts/package-release.sh ${{ matrix.target }}
-
-      # Lie cryptographiquement CHAQUE tarball à ce commit, ce workflow, ce runner.
-      - name: Atteste la provenance
-        uses: actions/attest-build-provenance@ef244123eb79f2f7a7e75d99086184180e6d0018 # v1
-        with:
-          subject-path: 'dist/*.tar.gz'
-
-      # dist/ contient aussi le reçu partiel (release-receipt.json) de cette
-      # cible ; il sera fusionné par le job publish (D3).
-      - name: Publie les artefacts internes
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: dist-${{ matrix.target }}
-          path: dist/
-          if-no-files-found: error
-
-  # ─── RÔLE « CONSTRUIT » (wasm) : mêmes droits nuls que le job natif ───
-  # Job séparé parce qu'il est le seul à avoir besoin d'une chaîne d'outils
-  # externe (emsdk). Cette exception est encadrée par D2 : version épinglée,
-  # et package-release.sh RE-VÉRIFIE `emcc --version` avant de compiler — pas
-  # de repli silencieux sur ce qui traîne dans le PATH.
-  build-wasm:
-    runs-on: ubuntu-24.04
+  channel-npm:
+    needs: release
+    if: needs.release.result == 'success'
+    uses: maelys-dev/maelys-release/.github/workflows/channel.yml@15d4bac77af504dbe746ede23e1fe11612aab06a # v0.33.0
     permissions:
-      contents: read        # ne peut pas modifier le dépôt
-      id-token: write       # OIDC, requis par l'attestation de provenance
-      attestations: write   # écrit l'attestation — ce n'est PAS contents: write
-    env:
-      # D2 : doit rester identique à EMSDK_VERSION dans scripts/package-release.sh.
-      # Le script échoue durement en cas de divergence — le pin est vérifié, pas
-      # seulement déclaré. Se met à jour délibérément, dans une PR dédiée.
-      EMSDK_VERSION: "3.1.61"
-    steps:
-      - name: Checkout
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-
-      - name: Vérifie que le tag correspond à VERSION
-        shell: bash
-        run: |
-          set -euo pipefail
-          file_version="$(cat VERSION)"
-          test "v${file_version}" = "${GITHUB_REF_NAME}" \
-            || { echo "tag ${GITHUB_REF_NAME} != v${file_version} (fichier VERSION)"; exit 1; }
-          make check-version-header
-
-      # emsdk est cloné SUR SON TAG (pas sur la branche par défaut) : le
-      # programme d'installation lui-même est ainsi épinglé, pas seulement la
-      # version qu'on lui demande d'installer.
-      # Cloné dans RUNNER_TEMP et non dans le workspace : l'arborescence du
-      # dépôt doit rester exactement celle du tag pendant l'empaquetage.
-      # NB : `set -u` est volontairement absent — emsdk_env.sh référence des
-      # variables non définies et planterait sous `set -u`.
-      - name: Installe l'emsdk épinglé (${{ env.EMSDK_VERSION }})
-        shell: bash
-        run: |
-          set -eo pipefail
-          emsdk_dir="${RUNNER_TEMP}/emsdk"
-          git clone --depth 1 --branch "${EMSDK_VERSION}" \
-            https://github.com/emscripten-core/emsdk.git "${emsdk_dir}"
-          cd "${emsdk_dir}"
-          ./emsdk install "${EMSDK_VERSION}"
-          ./emsdk activate "${EMSDK_VERSION}"
-          source ./emsdk_env.sh
-          emcc --version | head -n1
-          echo "EMSDK_DIR=${emsdk_dir}" >> "${GITHUB_ENV}"
-
-      # L'environnement emsdk est re-sourcé ici plutôt que propagé via
-      # GITHUB_PATH : une seule définition de PATH, celle que l'emsdk produit
-      # lui-même. package-release.sh revérifie le pin avant de compiler.
-      - name: Build + empaquète (wasm small + large)
-        shell: bash
-        run: |
-          set -eo pipefail
-          source "${EMSDK_DIR}/emsdk_env.sh"
-          bash scripts/package-release.sh --wasm-only
-
-      - name: Atteste la provenance
-        uses: actions/attest-build-provenance@ef244123eb79f2f7a7e75d99086184180e6d0018 # v1
-        with:
-          subject-path: 'dist/*.tar.gz'
-
-      - name: Publie les artefacts internes
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: dist-wasm
-          path: dist/
-          if-no-files-found: error
-
-  # ─── RÔLES « AUTORISE » + « PUBLIE » : seul job avec contents: write ───
-  # Il ne compile RIEN. Il télécharge des tarballs déjà construits, vérifie
-  # leurs checksums (lecture d'octets), fusionne les reçus partiels et attache
-  # le tout à la Release. L'environnement `release` suspend ce job jusqu'à une
-  # approbation humaine explicite : c'est le gate matériel de l'invariant 5.
-  #
-  # LIMITE ADMISE ET DOCUMENTÉE : ce job manipule des octets produits par les
-  # jobs de build (décompression des tarballs pour assembler le paquet npm).
-  # Il ne COMPILE rien et n'exécute aucun binaire issu des artefacts ; mais
-  # `npm publish` lit un package.json assemblé à partir d'octets construits en
-  # amont. C'est la seule concession à la règle « aucun code candidat dans le
-  # job privilégié », rendue nécessaire par D5 (canal npm automatisé). Elle est
-  # bornée en aval par le gate humain et en amont par les attestations.
-  publish:
-    needs: [build, build-wasm]
-    runs-on: ubuntu-24.04
-    environment: release
-    permissions:
-      contents: write   # LE seul endroit du workflow — crée la GitHub Release
-      packages: write   # publie @maelys-dev/datalog-wasm sur GitHub Packages (D5)
-    steps:
-      # Checkout nécessaire ici bien qu'on ne compile rien : le job a besoin de
-      # scripts/package-release.sh (--merge-receipts) et de
-      # scripts/build-npm-package.sh (scaffold npm, D5). Ce sont des scripts du
-      # TAG, pas des artefacts téléchargés — ils ne viennent pas des jobs build.
-      - name: Checkout
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-
-      - name: Récupère tous les artefacts
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
-        with:
-          path: incoming
-
-      - name: Rassemble et vérifie les checksums
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p dist
-          # Uniquement les tarballs et leurs checksums : les reçus partiels
-          # restent dans incoming/ (même nom de fichier dans chaque artefact,
-          # ils se piétineraient) et sont fusionnés à l'étape suivante.
-          find incoming -type f \( -name '*.tar.gz' -o -name '*.sha256' \) \
-            -exec cp {} dist/ \;
-          ( cd dist && sha256sum -c ./*.sha256 )
-          echo "Artefacts vérifiés :"; ls -1 dist
-
-      # D3 : un reçu partiel par job de build → un reçu unique pour la release.
-      # Le script refuse de fusionner des reçus dont version/commit divergent.
-      # Écrit dist/release-receipt.json. (jq est préinstallé sur ubuntu-24.04.)
-      - name: Fusionne les reçus partiels
-        shell: bash
-        run: bash scripts/package-release.sh --merge-receipts incoming
-
-      # La Release GitHub d'abord : c'est le canal réversible (une release peut
-      # être supprimée et recréée). npm passe après, car une version npm publiée
-      # est irréversible — rien ne doit pouvoir échouer APRÈS elle.
-      - name: Crée la GitHub Release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          # Liste explicite (tableau) plutôt que globs nus en fin de commande :
-          # les noms sont développés avant l'appel, aucun ne peut être pris pour
-          # une option, et la composition de la release est lisible d'un coup.
-          assets=( dist/*.tar.gz dist/*.sha256 dist/release-receipt.json )
-          gh release create "${GITHUB_REF_NAME}" \
-            --repo maelys-dev/maelys-datalog \
-            --title "maelys-datalog ${GITHUB_REF_NAME#v}" \
-            --generate-notes \
-            --verify-tag \
-            "${assets[@]}"
-
-      # ─── Canal npm sur GitHub Packages (D5) ───
-      # Le registre est celui du dépôt : npm.pkg.github.com. Conséquences
-      # assumées, par rapport à npmjs.com :
-      #   - authentification par le GITHUB_TOKEN de l'exécution (portée
-      #     `packages: write`, durée de vie : ce job). Aucun secret longue
-      #     durée dans le dépôt, aucun trusted publisher à configurer ;
-      #   - le scope DOIT être celui du propriétaire du dépôt, d'où
-      #     @maelys-dev/datalog-wasm ;
-      #   - `npm publish --provenance` n'est pas disponible hors npmjs.com :
-      #     la provenance des octets reste portée par les attestations
-      #     `attest-build-provenance` des jobs de build, sur les tarballs.
-      - name: Node (pour npm publish)
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: '22'
-          registry-url: 'https://npm.pkg.github.com'
-          scope: '@maelys-dev'
-
-      # D5 : dist-tag `next` tant que la version est une alpha, `latest` ensuite.
-      # La règle est décidée ICI (elle dépend du tag, donc de la cérémonie) et
-      # transmise au script via l'environnement.
-      - name: Assemble et publie @maelys-dev/datalog-wasm
-        shell: bash
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          # Plus de pré-versions (D4) : c'est la série 0.x qui porte
-          # désormais « API instable », donc le dist-tag `next`. `latest`
-          # commence à 1.0.0.
-          case "${GITHUB_REF_NAME}" in
-            v0.*) dist_tag="next" ;;
-            *)    dist_tag="latest" ;;
-          esac
-          echo "dist-tag npm : ${dist_tag}"
-          NPM_DIST_TAG="${dist_tag}" bash scripts/build-npm-package.sh dist/ --publish
-
-      # D3 : le reçu constate, il ne promet pas. Le canal n'y entre qu'ici,
-      # après une publication réussie — une étape en échec plus haut arrête le
-      # job et le reçu attaché à la Release reste sans canal npm, ce qui est
-      # alors la vérité. L'asset est remplacé en place ; les attestations ne
-      # portent que sur les tarballs, elles ne sont pas concernées.
-      - name: Consigne le canal npm dans le reçu
-        env:
-          GH_TOKEN: ${{ github.token }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          version="$(jq -r '.version' dist/release-receipt.json)"
-          bash scripts/package-release.sh --record-channel npm \
-            "@maelys-dev/datalog-wasm@${version}"
-          gh release upload "${GITHUB_REF_NAME}" dist/release-receipt.json \
-            --repo maelys-dev/maelys-datalog --clobber
-          cat dist/release-receipt.json
+      contents: write
+      packages: write
+    with:
+      product: maelys-datalog
+      tag: ${{ inputs.tag || github.ref_name }}
+      channel: npm
+      publish_command: sh scripts/publish-channel.sh TAG CHANNEL

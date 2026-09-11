@@ -7,6 +7,19 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Changed
+
+- Releases go through the `maelys-release` socle: `release.yml` is rendered
+  from `packaging/release` (three native targets plus `wasm32`, the receipts
+  under the manifest, the npm channel, the reviewer gate), the cut is
+  `maelys-release cut` after the two local gates of `scripts/release-gates.sh`,
+  and the npm channel is `scripts/publish-channel.sh`, idempotent on a
+  replayed tag. `package-release.sh` builds one target per run — `wasm32`
+  installs the pinned emsdk itself — and writes one immutable
+  `release-receipt-<target>.json` per target; what a channel published is
+  recorded by the socle in `channel-<name>.json`, never in a receipt.
+  `cut-release.sh`, the receipt merge and `--record-channel` are gone.
+
 ## 0.2.0 — 2026-09-10
 
 ### Added

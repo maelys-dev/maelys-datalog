@@ -16,34 +16,28 @@
 #
 # Usage:
 #   scripts/build-npm-package.sh dist/            # assemble + npm pack (local)
-#   scripts/build-npm-package.sh dist/ --publish  # assemble + npm publish
-#                                                 #   vers GitHub Packages
-#                                                 #   dist-tag: next si prérelease,
-#                                                 #   latest sinon
+#   (la publication est faite par scripts/publish-channel.sh, appelé par le
+#    job de canal du socle avec les assets de la release dans dist/)
 #
-# La version vient du reçu (dist/release-receipt.json) si présent, sinon du
-# fichier VERSION — jamais d'un argument, pour qu'on ne puisse pas publier
-# une version qui ne correspond pas aux artefacts.
+# La version vient du fichier VERSION du checkout — jamais d'un argument, pour
+# qu'on ne puisse pas assembler une version qui ne correspond pas aux
+# artefacts présents dans dist/.
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$root"
 
 dist="${1:-dist}"
-publish=0
-[ "${2:-}" = "--publish" ] && publish=1
 
 [ -d "$dist" ] || { echo "erreur: répertoire d'artefacts introuvable: $dist" >&2; exit 1; }
 dist="$(cd "$dist" && pwd)"   # chemin absolu : accepte dist/ relatif ou absolu
 
-# ── Version : reçu d'abord, VERSION sinon ────────────────────────────────────
-if [ -f "$dist/release-receipt.json" ]; then
-  version="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["version"])' \
-    "$dist/release-receipt.json")"
-else
-  version="$(cat VERSION)"
-  echo "note: pas de release-receipt.json dans $dist — version lue depuis VERSION ($version)" >&2
-fi
+# ── Version : VERSION du checkout ────────────────────────────────────────────
+# Le socle exécute ce script au tag (scripts/publish-channel.sh), donc VERSION
+# est celle de la release ; en local, c'est celle de l'arbre. Jamais un
+# argument : on ne peut pas assembler une version qui ne correspond pas aux
+# artefacts présents dans dist/.
+version="$(cat VERSION)"
 
 small_tar="$dist/maelys-datalog-${version}-wasm-small.tar.gz"
 large_tar="$dist/maelys-datalog-${version}-wasm-large.tar.gz"
@@ -133,23 +127,9 @@ EOF
 # maelys_playground.d.ts absent aujourd'hui : npm ignore silencieusement les
 # entrées "files" manquantes, l'entrée est prête pour le jour où il existera.
 
-# ── Pack ou publish ──────────────────────────────────────────────────────────
-if [ "$publish" -eq 1 ]; then
-  # Le workflow release calcule le dist-tag et le passe via NPM_DIST_TAG ;
-  # en absence (usage local), il est dérivé de la version.
-  if [ -n "${NPM_DIST_TAG:-}" ]; then
-    npm_tag="$NPM_DIST_TAG"
-  else
-    case "$version" in
-      *-alpha.*|*-beta.*|*-rc.*) npm_tag="next" ;;
-      *) npm_tag="latest" ;;
-    esac
-  fi
-  echo "publication npm: @maelys-dev/datalog-wasm@${version} (dist-tag: ${npm_tag})"
-  # Registre : publishConfig du package.json ci-dessus. La visibilité du
-  # paquet suit celle du dépôt, il n'y a pas d'--access à forcer ici.
-  ( cd "$pkg" && npm publish --tag "$npm_tag" )
-else
+# ── Pack ─────────────────────────────────────────────────────────────────────
+# La publication est le rôle de scripts/publish-channel.sh (idempotence,
+# jeton du socle, marqueur de canal) ; ce script assemble, rien d'autre.
   ( cd "$pkg" && npm pack --pack-destination "$dist" >/dev/null )
   # npm pack nomme le tarball d'après name+version scopés : retrouve-le.
   # npm dérive le nom du tarball du name scopé : @maelys-dev/datalog-wasm
@@ -159,4 +139,3 @@ else
   echo "paquet assemblé: ${produced}"
   echo "contenu:"
   tar -tzf "${produced}" | sed 's/^/  /'
-fi

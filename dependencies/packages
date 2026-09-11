@@ -1,0 +1,7 @@
+# System packages the release build needs on the socle's runners, installed
+# by release.yml after the socle's own packaging tools (docs/conventions.md,
+# "Dependencies"). The Makefiles compile with clang; package-release.sh
+# writes the receipt with jq. macOS runners ship both.
+[linux]
+clang
+jq

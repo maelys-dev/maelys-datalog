@@ -1,58 +1,43 @@
 #!/usr/bin/env bash
 #
-# Build and package the release artifacts for maelys-datalog:
-#   - native : lib/libmaelys_datalog.a + public headers, one tarball per
-#              supported (os, arch) target
-#   - wasm   : maelys_datalog_dynamic.{js,wasm} + the JS wrapper/types, one
-#              tarball per memory profile (small, large)
+# Build and package the release artifacts of maelys-datalog for ONE target:
+#   - linux-x86_64, linux-arm64, macos-arm64 : lib/libmaelys_datalog.a + the
+#     public headers, one tarball
+#   - wasm32 : maelys_datalog_dynamic.{js,wasm} + the JS wrapper/types, one
+#     tarball per memory profile (small, large)
 #
-# One command, used both locally and by .github/workflows/release.yml (see
-# docs/release-engineering.md). Outputs to dist/; everything else happens in
-# disposable staging directories that are removed before the script exits.
+# One command, used both locally and by the build job of maelys-release,
+# which runs `scripts/package-release.sh TARGET` on one runner per target
+# declared in packaging/release and attests dist/* (docs/release-engineering.md
+# D1, D7). Outputs to dist/; everything else happens in disposable staging
+# directories that are removed before the script exits.
 #
 # Usage:
-#   scripts/package-release.sh [target-label] [--wasm] [--wasm-only]
-#   scripts/package-release.sh --merge-receipts DIR
+#   scripts/package-release.sh [TARGET]
 #
-#   target-label   defaults to <os>-<arch> auto-detected from uname
-#                  (linux-x86_64, linux-arm64, macos-arm64 — the only
-#                  targets in docs/release-engineering.md D1). Any other
-#                  OS/arch, detected or explicit, is refused.
-#   --wasm         also build the WASM artifacts alongside the native one.
-#                  Requires emcc pinned to exactly $EMSDK_VERSION; fails
-#                  otherwise (no silent fallback to whatever is on PATH).
-#   --wasm-only    build only the WASM artifacts (skip the native one). Used
-#                  by the dedicated WASM job in release.yml. Same pin
-#                  enforcement as --wasm.
-#   --merge-receipts DIR
-#                  merge every release-receipt*.json found under DIR into a
-#                  single dist/release-receipt.json (same version/commit
-#                  required, union of artifacts/channels). Used by the
-#                  publish job, which never compiles anything itself. All
-#                  other flags are ignored/rejected in this mode.
-#   --record-channel NAME SPEC
-#                  record a channel in dist/release-receipt.json, AFTER that
-#                  channel has actually published. A build job never writes
-#                  one: a receipt states what happened, not what was planned
-#                  — v0.1.0-alpha.4 shipped a receipt claiming an npm package
-#                  whose publication had failed, and D3 feeds that receipt to
-#                  the public site. SPEC must carry the receipt's own version.
+#   TARGET   one of linux-x86_64, linux-arm64, macos-arm64, wasm32. Defaults
+#            to <os>-<arch> detected from uname; any other OS/arch, detected
+#            or explicit, is refused (D1).
 #
-# Auto-detection note (default invocation, no --wasm/--wasm-only): the WASM
-# stage is attempted only when emcc is on PATH *and* already reports the
-# pinned $EMSDK_VERSION. A stray/mismatched emcc on PATH is treated as "not
-# available" and silently skipped in this mode — the script never builds
-# with an unpinned tool, but it also never lets an incidental toolchain on a
-# dev machine block the native artifact. Once a WASM build is explicitly
-# requested (--wasm / --wasm-only), the pin is mandatory: a mismatch is a
-# hard failure per docs/release-engineering.md D2.
+# wasm32 needs emcc pinned to exactly $EMSDK_VERSION (D2). An emcc of that
+# version on PATH is used as is; otherwise the script installs the pinned
+# emsdk itself under $EMSDK_DIR (default: $RUNNER_TEMP/emsdk on a runner,
+# build/emsdk locally) and activates it for this process only. A mismatched
+# emcc on PATH is never used: no silent fallback to whatever is installed.
+#
+# Every run writes dist/release-receipt-<TARGET>.json, the immutable record
+# of what this target built (D3). The receipts are per target and never
+# merged: the socle's SHA256SUMS lists them beside the archives, and what
+# happened after the build — a channel publication — is recorded by the
+# socle in channel-<name>.json, never here.
 set -euo pipefail
 
 # Pinned emsdk version (D2). Update deliberately, in a dedicated PR, the same
 # way action SHAs are bumped — never silently.
 EMSDK_VERSION="3.1.61"
 
-KNOWN_TARGETS="linux-x86_64 linux-arm64 macos-arm64"
+NATIVE_TARGETS="linux-x86_64 linux-arm64 macos-arm64"
+KNOWN_TARGETS="$NATIVE_TARGETS wasm32"
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$root"
@@ -63,66 +48,17 @@ sha256() {
 }
 
 usage() {
-  cat >&2 <<'USAGE'
-Usage: scripts/package-release.sh [target-label] [--wasm] [--wasm-only]
-       scripts/package-release.sh --merge-receipts DIR
-       scripts/package-release.sh --record-channel NAME SPEC
-USAGE
+  echo "Usage: scripts/package-release.sh [TARGET]   (TARGET: $KNOWN_TARGETS)" >&2
 }
 
 target=""
-wasm_requested=0
-wasm_only=0
-merge_dir=""
-channel_name=""
-channel_spec=""
-
 while [ $# -gt 0 ]; do
   case "$1" in
-    --wasm)
-      wasm_requested=1
-      shift
-      ;;
-    --wasm-only)
-      wasm_requested=1
-      wasm_only=1
-      shift
-      ;;
-    --merge-receipts)
-      if [ -z "${2:-}" ]; then
-        echo "error: --merge-receipts requires a directory argument" >&2
-        exit 1
-      fi
-      merge_dir="$2"
-      shift 2
-      ;;
-    --record-channel)
-      if [ -z "${2:-}" ] || [ -z "${3:-}" ]; then
-        echo "error: --record-channel requires a channel name and a spec" >&2
-        exit 1
-      fi
-      channel_name="$2"
-      channel_spec="$3"
-      shift 3
-      ;;
-    -h|--help)
-      usage
-      exit 0
-      ;;
-    -*)
-      echo "error: unknown flag: $1" >&2
-      usage
-      exit 1
-      ;;
+    -h|--help) usage; exit 0 ;;
+    -*) echo "error: unknown flag: $1" >&2; usage; exit 1 ;;
     *)
-      if [ -n "$target" ]; then
-        echo "error: unexpected argument: $1" >&2
-        usage
-        exit 1
-      fi
-      target="$1"
-      shift
-      ;;
+      [ -z "$target" ] || { echo "error: unexpected argument: $1" >&2; usage; exit 1; }
+      target="$1"; shift ;;
   esac
 done
 
@@ -131,92 +67,7 @@ dist="$root/dist"
 mkdir -p "$dist"
 
 # ---------------------------------------------------------------------------
-# --record-channel mode: no compilation either. Amends the merged receipt
-# once a channel has really published, so `channels` is an observation.
-# ---------------------------------------------------------------------------
-if [ -n "$channel_name" ]; then
-  if [ "$wasm_requested" = 1 ] || [ -n "$target" ] || [ -n "$merge_dir" ]; then
-    echo "error: --record-channel cannot be combined with other modes" >&2
-    exit 1
-  fi
-  if ! command -v jq >/dev/null 2>&1; then
-    echo "error: jq is required for --record-channel" >&2
-    exit 1
-  fi
-  receipt="$dist/release-receipt.json"
-  [ -f "$receipt" ] || { echo "error: receipt not found: $receipt" >&2; exit 1; }
-  receipt_version="$(jq -r '.version' "$receipt")"
-  # The spec must name the version this receipt is about: a channel recorded
-  # against another version would be a false statement, not a typo.
-  case "$channel_spec" in
-    *"@${receipt_version}") ;;
-    *)
-      echo "error: channel spec '${channel_spec}' does not carry the receipt version ${receipt_version}" >&2
-      exit 1
-      ;;
-  esac
-  tmp="$(mktemp)"
-  jq --arg name "$channel_name" --arg spec "$channel_spec" \
-    '.channels = ((.channels // {}) + {($name): $spec})' "$receipt" > "$tmp"
-  mv "$tmp" "$receipt"
-  echo "recorded channel ${channel_name}=${channel_spec} in $receipt"
-  exit 0
-fi
-
-# ---------------------------------------------------------------------------
-# --merge-receipts mode: no compilation, just fold partial receipts into one.
-# ---------------------------------------------------------------------------
-if [ -n "$merge_dir" ]; then
-  if [ "$wasm_requested" = 1 ] || [ -n "$target" ]; then
-    echo "error: --merge-receipts cannot be combined with a target or --wasm/--wasm-only" >&2
-    exit 1
-  fi
-  if [ ! -d "$merge_dir" ]; then
-    echo "error: --merge-receipts directory not found: $merge_dir" >&2
-    exit 1
-  fi
-  if ! command -v jq >/dev/null 2>&1; then
-    echo "error: jq is required for --merge-receipts" >&2
-    exit 1
-  fi
-
-  files=()
-  while IFS= read -r -d '' f; do files+=("$f"); done < <(find "$merge_dir" -type f -name '*.json' -print0 | sort -z)
-  if [ "${#files[@]}" -eq 0 ]; then
-    echo "error: no receipt JSON files found under $merge_dir" >&2
-    exit 1
-  fi
-
-  jq -s '
-    (.[0].version) as $v
-    | (.[0].commit) as $c
-    | if any(.[]; .version != $v) then error("version mismatch across receipts being merged") else . end
-    | if any(.[]; .commit != $c) then error("commit mismatch across receipts being merged") else . end
-    | {
-        name: .[0].name,
-        version: $v,
-        tag: .[0].tag,
-        commit: $c,
-        date: .[0].date,
-        emsdk_version: (
-          [ .[] | select(.emsdk_version != null) | .emsdk_version ] | unique
-          | if length > 1 then error("emsdk_version mismatch across receipts being merged")
-            elif length == 1 then .[0]
-            else null
-            end
-        ),
-        artifacts: ([ .[] | .artifacts[] ] | unique_by(.file) | sort_by(.file)),
-        channels: (reduce .[] as $r ({}; . * ($r.channels // {})))
-      }
-  ' "${files[@]}" > "$dist/release-receipt.json"
-
-  echo "merged ${#files[@]} receipt(s) from $merge_dir into $dist/release-receipt.json"
-  cat "$dist/release-receipt.json"
-  exit 0
-fi
-
-# ---------------------------------------------------------------------------
-# Target detection / validation (D1: only these three are shipped).
+# Target detection / validation (D1: only these four are shipped).
 # ---------------------------------------------------------------------------
 if [ -z "$target" ]; then
   case "$(uname -s)" in
@@ -246,7 +97,7 @@ emsdk_recorded="null"
 # ---------------------------------------------------------------------------
 # Native artifact.
 # ---------------------------------------------------------------------------
-if [ "$wasm_only" != 1 ]; then
+if [ "$target" != wasm32 ]; then
   if [ ! -f include/maelys_datalog_version.h ]; then
     echo "error: include/maelys_datalog_version.h not found. Run scripts/generate-version-header.sh first." >&2
     exit 1
@@ -290,47 +141,47 @@ fi
 # ---------------------------------------------------------------------------
 # WASM artifacts (D1 wasm-small / wasm-large rows, D2 pinned emsdk).
 # ---------------------------------------------------------------------------
-do_wasm=0
-if [ "$wasm_requested" = 1 ]; then
-  do_wasm=1
-elif command -v emcc >/dev/null 2>&1; then
-  probe_ver="$(emcc --version 2>&1 | head -n1)"
-  if [[ "$probe_ver" == *"$EMSDK_VERSION"* ]]; then
-    do_wasm=1
+# ---------------------------------------------------------------------------
+# WASM artifacts (D1 wasm32 row: small and large profiles, D2 pinned emsdk).
+# ---------------------------------------------------------------------------
+# The first run of a freshly activated emcc prints its cache notices before
+# the version line, so the version is looked for in the whole output.
+emcc_is_pinned() {
+  command -v emcc >/dev/null 2>&1 || return 1
+  emcc --version 2>&1 | grep -q "^emcc .* ${EMSDK_VERSION} "
+}
+
+# Install the pinned emsdk when no emcc of that version is on PATH. The
+# checkout is reused across runs (a local build/emsdk, or the runner's temp
+# directory); the activation touches only this process's environment.
+ensure_pinned_emsdk() {
+  if emcc_is_pinned; then
+    echo "==> emcc ${EMSDK_VERSION} found on PATH"
+    return 0
+  fi
+  local dir="${EMSDK_DIR:-${RUNNER_TEMP:-$root/build}/emsdk}"
+  if command -v emcc >/dev/null 2>&1; then
+    echo "note: emcc on PATH ($(emcc --version 2>&1 | head -n1)) is not emsdk ${EMSDK_VERSION}; installing the pinned one under ${dir}" >&2
   else
-    echo "note: emcc found (${probe_ver}) but does not match pinned EMSDK_VERSION=${EMSDK_VERSION}; skipping WASM artifacts (pass --wasm or --wasm-only to force and get a hard failure with activation instructions)" >&2
+    echo "==> emcc not on PATH; installing emsdk ${EMSDK_VERSION} under ${dir}"
   fi
-fi
-
-if [ "$do_wasm" = 1 ]; then
-  if ! command -v emcc >/dev/null 2>&1; then
-    cat >&2 <<EOF
-error: emcc not found on PATH, but a WASM build was requested.
-Install/activate the pinned emsdk ${EMSDK_VERSION}:
-  git clone https://github.com/emscripten-core/emsdk.git
-  cd emsdk
-  ./emsdk install ${EMSDK_VERSION}
-  ./emsdk activate ${EMSDK_VERSION}
-  source ./emsdk_env.sh
-EOF
+  if [ ! -x "$dir/emsdk" ]; then
+    git clone -q --depth 1 https://github.com/emscripten-core/emsdk.git "$dir"
+  fi
+  ( cd "$dir" && ./emsdk install "$EMSDK_VERSION" && ./emsdk activate "$EMSDK_VERSION" ) >/dev/null
+  # emsdk_env.sh reads variables it does not set; it is not written for set -u.
+  set +u
+  # shellcheck disable=SC1091
+  source "$dir/emsdk_env.sh" >/dev/null 2>&1
+  set -u
+  emcc_is_pinned || {
+    echo "error: emsdk ${EMSDK_VERSION} activated under ${dir} but emcc does not report it: $(emcc --version 2>&1 | head -n1)" >&2
     exit 1
-  fi
+  }
+}
 
-  emcc_ver="$(emcc --version 2>&1 | head -n1)"
-  if [[ "$emcc_ver" != *"$EMSDK_VERSION"* ]]; then
-    cat >&2 <<EOF
-error: emcc version mismatch. Found:
-  ${emcc_ver}
-Expected emsdk ${EMSDK_VERSION} (pinned at the top of scripts/package-release.sh).
-Activate the pinned version before packaging:
-  cd /path/to/emsdk
-  ./emsdk install ${EMSDK_VERSION}
-  ./emsdk activate ${EMSDK_VERSION}
-  source ./emsdk_env.sh
-No silent fallback to whatever is on PATH is permitted (docs/release-engineering.md D2).
-EOF
-    exit 1
-  fi
+if [ "$target" = wasm32 ]; then
+  ensure_pinned_emsdk
 
   dts_path=""
   if [ -f "bindings/wasm/maelys_playground.d.ts" ]; then
@@ -378,13 +229,8 @@ EOF
   emsdk_recorded="$EMSDK_VERSION"
 fi
 
-if [ "${#artifacts[@]}" -eq 0 ]; then
-  echo "error: nothing was packaged (native skipped via --wasm-only, WASM skipped/unavailable)" >&2
-  exit 1
-fi
-
 # ---------------------------------------------------------------------------
-# Release receipt (D3).
+# Release receipt (D3): one per target, immutable, listed by SHA256SUMS.
 # ---------------------------------------------------------------------------
 if ! command -v jq >/dev/null 2>&1; then
   echo "error: jq is required to write the release receipt" >&2
@@ -405,17 +251,19 @@ else
   emsdk_json="$(jq -n --arg v "$emsdk_recorded" '$v')"
 fi
 
+receipt="$dist/release-receipt-${target}.json"
 jq -n \
   --arg name "maelys-datalog" \
   --arg version "$version" \
   --arg tag "v${version}" \
   --arg commit "$commit" \
   --arg date "$date_utc" \
+  --arg target "$target" \
   --argjson emsdk "$emsdk_json" \
   --argjson artifacts "$artifacts_json" \
-  '{name:$name, version:$version, tag:$tag, commit:$commit, date:$date, emsdk_version:$emsdk, artifacts:$artifacts, channels:{}}' \
-  > "$dist/release-receipt.json"
+  '{name:$name, version:$version, tag:$tag, commit:$commit, date:$date, target:$target, emsdk_version:$emsdk, artifacts:$artifacts}' \
+  > "$receipt"
 
-echo "wrote $dist/release-receipt.json"
+echo "wrote $receipt"
 echo "==> artifacts in dist/:"
 ls -1 "$dist"

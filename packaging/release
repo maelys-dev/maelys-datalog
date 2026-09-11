@@ -1,0 +1,28 @@
+# What this product publishes, read by maelys-release (docs/conventions.md,
+# "Packaging"). The socle renders it into release.yml; nothing here is a
+# workflow. Every section replaces or extends a documented default.
+
+# The three native targets the socle builds by default, plus wasm32: the
+# two WASM profiles, built by scripts/package-release.sh on an Ubuntu runner
+# with the pinned emsdk it installs itself (D2).
+[targets]
+linux-x86_64
+linux-arm64
+macos-arm64
+wasm32 ubuntu-26.04
+
+# Archive kinds SHA256SUMS vouches for, beyond *.tar.gz *.deb *.rpm. The
+# per-target receipts are immutable build outputs (D3); listing them puts
+# their hashes under the manifest like any artifact.
+[manifest]
+release-receipt-*.json
+
+# Registry channels, published after the GitHub release by
+# scripts/publish-channel.sh TAG CHANNEL (D5).
+[channels]
+npm github-packages
+
+# The human gate: the release environment must require a reviewer, and
+# preflight fails if it does not (invariant 5).
+[gate]
+reviewer

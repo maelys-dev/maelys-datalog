@@ -108,11 +108,12 @@ engaged even though no reader arrives at them from the README:
   [`CHANGELOG.md`](CHANGELOG.md), which travels inside every released tarball,
   and in [`bindings/wasm/README.md`](bindings/wasm/README.md). A reader of a
   shipped changelog must find it here.
-- [`docs/release-engineering.md`](docs/release-engineering.md) — cited four
-  times by [`scripts/package-release.sh`](scripts/package-release.sh), which
-  builds every artifact and points at D1 and D2 for the target matrix and the
-  emsdk pin. The script says what it says for reasons a migration tool cannot
-  rewrite.
+- [`docs/release-engineering.md`](docs/release-engineering.md) — cited by
+  [`scripts/package-release.sh`](scripts/package-release.sh), which builds
+  every artifact and points at D1, D2, D3 and D7 for the target matrix, the
+  emsdk pin, the receipts and the socle; by `scripts/release-gates.sh`; and
+  by [`RELEASING.md`](RELEASING.md), the operator's sequence. The scripts
+  say what they say for reasons a migration tool cannot rewrite.
 
 Nothing else in `docs/` is unengaged: `maelys-platform docs --prose` reports
 no document to migrate.
