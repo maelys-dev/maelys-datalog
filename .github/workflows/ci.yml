@@ -12,17 +12,16 @@ jobs:
   # The shared CI of the socle: make check on the three release targets and
   # the conventions drift, from the declarations in maelys-release.conf. Its
   # sanitizers and fuzz jobs run in parallel on Linux with clang and
-  # libclang-rt: ASan/UBSan over the whole native inventory in both size
-  # profiles, and the libFuzzer smoke over the committed corpus. The AFL++
-  # smoke stays below: it needs afl++ and a core-pattern change.
+  # libclang-rt: ASan/UBSan over the whole native inventory in the SMALL
+  # profile (LARGE has its own job below: the ASan build of the inventory
+  # is the longest step of this file, so one profile per job), and the
+  # libFuzzer smoke over the committed corpus. The AFL++ smoke stays below:
+  # it needs afl++ and a core-pattern change.
   check:
     uses: maelys-dev/maelys-release/.github/workflows/check-product.yml@ceeba94a60fadbd1bd6bc79748cd22ee188265ff # v0.40.0
     with:
       product: maelys-datalog
-      sanitizer_command: >-
-        make -j2 -f Makefile.asan asan &&
-        make -j2 -f Makefile.asan asan BUILD_DIR=build/asan-large
-        CFLAGS='-Wall -Wextra -g -I. -Iinclude -DMAELYS_DATALOG_PROFILE_LARGE'
+      sanitizer_command: make -j4 -f Makefile.asan asan
       fuzz_command: make -f Makefile.fuzz fuzz-smoke
 
   # One job per concern, so that the wall time of a run is the longest
@@ -40,10 +39,10 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Run native test suite
-        run: make -j2 test
+        run: make -j4 test
 
       - name: Run every native test in LARGE
-        run: make -j2 test BUILD_DIR=build/native-large CFLAGS='-Wall -Wextra -g -I. -Iinclude -DMAELYS_DATALOG_PROFILE_LARGE'
+        run: make -j4 test BUILD_DIR=build/native-large CFLAGS='-Wall -Wextra -g -I. -Iinclude -DMAELYS_DATALOG_PROFILE_LARGE'
 
       - name: Check module boundaries
         run: bash tools/check_module_boundaries.sh
@@ -62,7 +61,7 @@ jobs:
       - name: Verify CMake build
         run: |
           cmake -S . -B build/cmake -DMAELYS_DATALOG_BUILD_PYTHON_BINDING=ON
-          cmake --build build/cmake --parallel 2
+          cmake --build build/cmake --parallel 4
           ctest --test-dir build/cmake --output-on-failure
 
       - name: Verify installed SDK consumers, examples and MIT starters
@@ -81,24 +80,35 @@ jobs:
       - name: Verify LARGE installed SDK and Python wrapper
         run: |
           cmake -S . -B build/cmake-large -DMAELYS_DATALOG_PROFILE_LARGE=ON -DMAELYS_DATALOG_BUILD_PYTHON_BINDING=ON
-          cmake --build build/cmake-large --parallel 2
+          cmake --build build/cmake-large --parallel 4
           ctest --test-dir build/cmake-large --output-on-failure
           bash tools/check_module_sdk.sh "$PWD/build/cmake-large"
           bash tools/check_python_binding.sh "$PWD/build/cmake-large" python large
 
-  # The socle's sanitizers job is Linux only; macOS keeps its own run so the
-  # coverage of the previous single job is unchanged.
-  sanitizers-macos:
-    name: Sanitizers (macos-latest)
-    runs-on: macos-latest
+  # The socle's sanitizers job covers SMALL on Linux; the three other cells
+  # (LARGE on Linux, both profiles on macOS) keep the coverage of the
+  # previous single job, one per job.
+  sanitizers:
+    name: Sanitizers (${{ matrix.os }}, ${{ matrix.profile }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, profile: LARGE }
+          - { os: macos-latest, profile: SMALL }
+          - { os: macos-latest, profile: LARGE }
     steps:
       - name: Check out source
         uses: actions/checkout@v4
 
-      - name: Check all native tests including facade with sanitizers
-        run: |
-          make -j2 -f Makefile.asan asan
-          make -j2 -f Makefile.asan asan BUILD_DIR=build/asan-large CFLAGS='-Wall -Wextra -g -I. -Iinclude -DMAELYS_DATALOG_PROFILE_LARGE'
+      - name: Check all native tests including facade with sanitizers (SMALL)
+        if: matrix.profile == 'SMALL'
+        run: make -j4 -f Makefile.asan asan
+
+      - name: Check all native tests including facade with sanitizers (LARGE)
+        if: matrix.profile == 'LARGE'
+        run: make -j4 -f Makefile.asan asan BUILD_DIR=build/asan-large CFLAGS='-Wall -Wextra -g -I. -Iinclude -DMAELYS_DATALOG_PROFILE_LARGE'
 
   bench:
     name: Single-pass benchmark
