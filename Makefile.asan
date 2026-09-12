@@ -52,8 +52,20 @@ $(BUILD_DIR)/test_maelys_datalog_context: sdk/examples/frontend/src/extension.c 
 $(BUILD_DIR)/test_maelys_datalog_pipeline: ASAN_EXTRA_SRCS = sdk/examples/frontend/src/extension.c
 $(BUILD_DIR)/test_maelys_datalog_pipeline: sdk/examples/frontend/src/extension.c
 
-$(BUILD_DIR)/%: tests/%.c $(ASAN_SRCS) $(wildcard include/maelys/*.h src/core/*.h src/compiler/*.h src/public/*.h src/registry/*.h modules/standard/*.h bindings/wasm/*.h) | $(BUILD_DIR)
-	$(CC) $(ASAN_CFLAGS) -I. $(ASAN_SRCS) $(ASAN_EXTRA_SRCS) $< -o $@
+ASAN_HEADERS = $(wildcard include/maelys/*.h src/core/*.h src/compiler/*.h src/public/*.h src/registry/*.h modules/standard/*.h bindings/wasm/*.h)
+
+# The engine, fixtures and helpers are instrumented once into objects and
+# linked into every test: compiling them again per test binary made the
+# sanitizer job the longest of the CI by a factor of thirty. Only the test
+# file and its ASAN_EXTRA_SRCS are compiled per binary.
+ASAN_OBJS = $(ASAN_SRCS:%.c=$(BUILD_DIR)/obj/%.o)
+
+$(BUILD_DIR)/obj/%.o: %.c $(ASAN_HEADERS)
+	@mkdir -p $(dir $@)
+	$(CC) $(ASAN_CFLAGS) -I. -c $< -o $@
+
+$(BUILD_DIR)/%: tests/%.c $(ASAN_OBJS) $(ASAN_HEADERS) | $(BUILD_DIR)
+	$(CC) $(ASAN_CFLAGS) -I. $(ASAN_OBJS) $(ASAN_EXTRA_SRCS) $< -o $@
 	$(if $(filter 1,$(ASAN_RUN_ON_BUILD)),$(ASAN_ENV) ./$@,@:)
 
 $(BUILD_DIR):
