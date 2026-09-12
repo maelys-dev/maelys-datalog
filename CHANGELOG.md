@@ -7,6 +7,17 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## 0.3.1 — 2026-09-12
+
+### Fixed
+
+- The npm channel of 0.3.0 never published: `scripts/publish-channel.sh`
+  handed npm the tarball as `dist/maelys-dev-datalog-wasm-0.3.0.tgz`, which
+  npm reads as the GitHub shorthand `owner/repo` and tries to clone over
+  SSH. The path now starts with `./`. The GitHub release of 0.3.0 is
+  complete and untouched; the channel job runs the script of the tag it
+  publishes, so the remedy is this release, not a replay.
+
 ## 0.3.0 — 2026-09-11
 
 ### Changed
