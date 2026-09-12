@@ -1,6 +1,6 @@
 name: release
 
-# Managed by maelys-release v0.37.0 (0.37.0). Regenerate with
+# Managed by maelys-release v0.40.0 (0.40.0). Regenerate with
 # 'maelys-release adopt' of maelys-release; do not edit by hand.
 on:
   push:
@@ -19,7 +19,7 @@ permissions:
 
 jobs:
   release:
-    uses: maelys-dev/maelys-release/.github/workflows/release.yml@5f49661f4d23062ba0c8588a914cf5b6ae2da986 # v0.37.0
+    uses: maelys-dev/maelys-release/.github/workflows/release.yml@ceeba94a60fadbd1bd6bc79748cd22ee188265ff # v0.40.0
     permissions:
       contents: write
       id-token: write
@@ -35,7 +35,7 @@ jobs:
   channel-npm:
     needs: release
     if: needs.release.result == 'success'
-    uses: maelys-dev/maelys-release/.github/workflows/channel.yml@5f49661f4d23062ba0c8588a914cf5b6ae2da986 # v0.37.0
+    uses: maelys-dev/maelys-release/.github/workflows/channel.yml@ceeba94a60fadbd1bd6bc79748cd22ee188265ff # v0.40.0
     permissions:
       contents: write
       packages: write
@@ -43,4 +43,4 @@ jobs:
       product: maelys-datalog
       tag: ${{ inputs.tag || github.ref_name }}
       channel: npm
-      publish_command: sh scripts/publish-channel.sh TAG CHANNEL
+      publish_command: bash scripts/publish-channel.sh TAG CHANNEL
