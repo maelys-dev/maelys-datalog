@@ -56,8 +56,13 @@ if npm view "$package@$version" version >/dev/null 2>&1; then
 fi
 
 bash scripts/build-npm-package.sh dist/ >/dev/null
-tgz="$(find dist -maxdepth 1 -name 'maelys-dev-datalog-wasm-*.tgz' | head -1)"
+# npm reads a bare "dir/name.tgz" as the GitHub shorthand "owner/repo" and
+# tries to clone it: v0.3.0's channel job died on "git ls-remote
+# ssh://git@github.com/dist/maelys-dev-datalog-wasm-0.3.0.tgz.git". The path
+# must start with "./" (or "/") to be taken as a file.
+tgz="$(find ./dist -maxdepth 1 -name 'maelys-dev-datalog-wasm-*.tgz' | head -1)"
 [ -n "$tgz" ] || { echo "error: no package tarball assembled in dist/" >&2; exit 1; }
-echo "publishing $package@$version to $registry (dist-tag: $dist_tag)"
+case "$tgz" in ./*|/*) ;; *) tgz="./$tgz" ;; esac
+echo "publishing $package@$version from $tgz to $registry (dist-tag: $dist_tag)"
 npm publish "$tgz" --tag "$dist_tag"
 record false
