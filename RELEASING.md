@@ -136,10 +136,11 @@ Docker — the closest thing to the workflow without a tag. Before cutting a
 release, `maelys-release rehearse . --channel npm --tag vX.Y.Z` (the previous
 tag, with `NODE_AUTH_TOKEN` set to a token carrying `read:packages`) runs
 `scripts/publish-channel.sh` the way the channel job does, on the release's
-own assets, with `CHANNEL_DRY_RUN=1`: the script then takes its real
-publishing path under `npm publish --dry-run` — assembly, spec resolution,
-registry handshake — and treats npm's refusal of an already-held version as
-the dry run's success. Without the variable, on a held version, the script
+own assets, with `CHANNEL_DRY_RUN=1`: the script then takes its real path up
+to the registry's write — assembly, the tarball checked as a file, the
+registry read with the token — and stops there (not `npm publish
+--dry-run`, which refuses a held version and would have to be read through
+its error text). Without the variable, on a held version, the script
 exits before `npm publish` and proves only the idempotent path; 0.3.0's npm
 channel failed on the other one with a green rehearsal.
 

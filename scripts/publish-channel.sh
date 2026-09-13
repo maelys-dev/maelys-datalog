@@ -14,11 +14,14 @@
 # intention (D3).
 #
 # `maelys-release rehearse . --channel npm --tag vX.Y.Z` sets CHANNEL_DRY_RUN=1,
-# which channel.yml never sets: the script then takes its real publishing
-# path — assembly, spec resolution, registry handshake — under
-# `npm publish --dry-run`, on a version the registry may already hold. The
-# idempotent early exit alone never reaches that path; v0.3.0 died there, on
-# a tarball path npm read as a GitHub shorthand, with a rehearsal green.
+# which channel.yml never sets: the script then takes its real path up to
+# the registry's write and stops there — assembly, the tarball checked as a
+# file, the registry read with the run's token — instead of exiting early
+# on a version the registry holds. Not `npm publish --dry-run`: against a
+# released tag npm refuses the held version, and a refusal cannot be read
+# as a pass without deciding on an error's text (conventions, 0.46.1). The
+# idempotent early exit alone never reaches that path; v0.3.0 died there,
+# on a tarball path npm read as a GitHub shorthand, with a rehearsal green.
 #
 # Usage: scripts/publish-channel.sh TAG CHANNEL
 set -eu
@@ -41,11 +44,14 @@ case "$version" in 0.*) dist_tag=next ;; *) dist_tag=latest ;; esac
 dry_run=0
 [ "${CHANNEL_DRY_RUN:-0}" = 1 ] && dry_run=1
 
+# What joins the marker: where, what, which version, under which dist-tag.
+# Nothing that differs between the publication and its rehearsal — the
+# marker's own `published` and `run` say when and by which run.
 record() {
   [ -n "${CHANNEL_RECORD:-}" ] || return 0
   jq -n --arg registry "$registry" --arg package "$package" --arg version "$version" \
-        --arg dist_tag "$dist_tag" --argjson already "$1" \
-        '{registry:$registry, package:$package, version:$version, dist_tag:$dist_tag, already_published:$already}' \
+        --arg dist_tag "$dist_tag" \
+        '{registry:$registry, package:$package, version:$version, dist_tag:$dist_tag}' \
     > "$CHANNEL_RECORD"
 }
 
@@ -61,7 +67,7 @@ export NPM_CONFIG_USERCONFIG="$npmrc"
 
 if [ "$dry_run" = 0 ] && npm view "$package@$version" version >/dev/null 2>&1; then
   echo "$package@$version is already on $registry; nothing to publish (replayed tag)"
-  record true
+  record
   exit 0
 fi
 
@@ -74,21 +80,15 @@ tgz="$(find ./dist -maxdepth 1 -name 'maelys-dev-datalog-wasm-*.tgz' | head -1)"
 [ -n "$tgz" ] || { echo "error: no package tarball assembled in dist/" >&2; exit 1; }
 case "$tgz" in ./*|/*) ;; *) tgz="./$tgz" ;; esac
 if [ "$dry_run" = 1 ]; then
-  # npm's dry run still resolves the spec, assembles, authenticates and reads
-  # the packument — everything that failed on v0.3.0 — and then refuses a
-  # version the registry already holds, exactly as the real publication
-  # would. That refusal, on a version npm confirms is held, is the dry run
-  # succeeding: the rehearsal runs against a released tag by construction.
-  echo "dry run: publishing $package@$version from $tgz to $registry (dist-tag: $dist_tag) with --dry-run"
-  if ! npm publish "$tgz" --tag "$dist_tag" --dry-run; then
-    npm view "$package@$version" version >/dev/null 2>&1 \
-      || { echo "error: the dry run failed on a version $registry does not hold" >&2; exit 1; }
-    echo "dry run: $registry already holds $package@$version, as it should for a released tag"
-    record true
-    exit 0
-  fi
-else
-  echo "publishing $package@$version from $tgz to $registry (dist-tag: $dist_tag)"
-  npm publish "$tgz" --tag "$dist_tag"
+  # The real path up to the write: the tarball is a readable archive under a
+  # path npm takes as a file, and the registry answers with this token. Then
+  # stop: the write is the one step a rehearsal must not take.
+  tar -tzf "$tgz" >/dev/null || { echo "error: $tgz is not a readable tarball" >&2; exit 1; }
+  held="$(npm view "$package@$version" version 2>/dev/null || true)"
+  echo "dry run: would publish $package@$version from $tgz to $registry (dist-tag: $dist_tag); the registry holds: ${held:-nothing}"
+  record
+  exit 0
 fi
-record false
+echo "publishing $package@$version from $tgz to $registry (dist-tag: $dist_tag)"
+npm publish "$tgz" --tag "$dist_tag"
+record
