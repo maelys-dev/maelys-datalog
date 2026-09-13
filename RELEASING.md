@@ -132,7 +132,16 @@ that version on PATH is used, otherwise the script installs it under
 other target than the four above is refused.
 
 `maelys-release rehearse . linux-arm64` replays the socle's Linux build job in
-Docker — the closest thing to the workflow without a tag.
+Docker — the closest thing to the workflow without a tag. Before cutting a
+release, `maelys-release rehearse . --channel npm --tag vX.Y.Z` (the previous
+tag, with `NODE_AUTH_TOKEN` set to a token carrying `read:packages`) runs
+`scripts/publish-channel.sh` the way the channel job does, on the release's
+own assets, with `CHANNEL_DRY_RUN=1`: the script then takes its real
+publishing path under `npm publish --dry-run` — assembly, spec resolution,
+registry handshake — and treats npm's refusal of an already-held version as
+the dry run's success. Without the variable, on a held version, the script
+exits before `npm publish` and proves only the idempotent path; 0.3.0's npm
+channel failed on the other one with a green rehearsal.
 
 ## The npm package
 
