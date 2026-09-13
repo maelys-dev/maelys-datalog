@@ -13,6 +13,13 @@
 # attaches to the release — the observation of a publication, never an
 # intention (D3).
 #
+# `maelys-release rehearse . --channel npm --tag vX.Y.Z` sets CHANNEL_DRY_RUN=1,
+# which channel.yml never sets: the script then takes its real publishing
+# path — assembly, spec resolution, registry handshake — under
+# `npm publish --dry-run`, on a version the registry may already hold. The
+# idempotent early exit alone never reaches that path; v0.3.0 died there, on
+# a tarball path npm read as a GitHub shorthand, with a rehearsal green.
+#
 # Usage: scripts/publish-channel.sh TAG CHANNEL
 set -eu
 cd "$(dirname "$0")/.."
@@ -30,6 +37,9 @@ package="@maelys-dev/datalog-wasm"
 registry="https://npm.pkg.github.com"
 # The dist-tag follows the series (D4/D5): next while 0.x, latest from 1.0.0.
 case "$version" in 0.*) dist_tag=next ;; *) dist_tag=latest ;; esac
+
+dry_run=0
+[ "${CHANNEL_DRY_RUN:-0}" = 1 ] && dry_run=1
 
 record() {
   [ -n "${CHANNEL_RECORD:-}" ] || return 0
@@ -49,7 +59,7 @@ printf '@maelys-dev:registry=%s\n//npm.pkg.github.com/:_authToken=%s\n' \
   "$registry" "$NODE_AUTH_TOKEN" > "$npmrc"
 export NPM_CONFIG_USERCONFIG="$npmrc"
 
-if npm view "$package@$version" version >/dev/null 2>&1; then
+if [ "$dry_run" = 0 ] && npm view "$package@$version" version >/dev/null 2>&1; then
   echo "$package@$version is already on $registry; nothing to publish (replayed tag)"
   record true
   exit 0
@@ -63,6 +73,22 @@ bash scripts/build-npm-package.sh dist/ >/dev/null
 tgz="$(find ./dist -maxdepth 1 -name 'maelys-dev-datalog-wasm-*.tgz' | head -1)"
 [ -n "$tgz" ] || { echo "error: no package tarball assembled in dist/" >&2; exit 1; }
 case "$tgz" in ./*|/*) ;; *) tgz="./$tgz" ;; esac
-echo "publishing $package@$version from $tgz to $registry (dist-tag: $dist_tag)"
-npm publish "$tgz" --tag "$dist_tag"
+if [ "$dry_run" = 1 ]; then
+  # npm's dry run still resolves the spec, assembles, authenticates and reads
+  # the packument — everything that failed on v0.3.0 — and then refuses a
+  # version the registry already holds, exactly as the real publication
+  # would. That refusal, on a version npm confirms is held, is the dry run
+  # succeeding: the rehearsal runs against a released tag by construction.
+  echo "dry run: publishing $package@$version from $tgz to $registry (dist-tag: $dist_tag) with --dry-run"
+  if ! npm publish "$tgz" --tag "$dist_tag" --dry-run; then
+    npm view "$package@$version" version >/dev/null 2>&1 \
+      || { echo "error: the dry run failed on a version $registry does not hold" >&2; exit 1; }
+    echo "dry run: $registry already holds $package@$version, as it should for a released tag"
+    record true
+    exit 0
+  fi
+else
+  echo "publishing $package@$version from $tgz to $registry (dist-tag: $dist_tag)"
+  npm publish "$tgz" --tag "$dist_tag"
+fi
 record false
