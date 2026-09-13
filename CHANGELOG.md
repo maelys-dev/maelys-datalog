@@ -10,10 +10,13 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 ### Changed
 
 - `scripts/publish-channel.sh` honours `CHANNEL_DRY_RUN=1`, set by
-  `maelys-release rehearse --channel` (socle 0.42.0): it takes its real
-  publishing path under `npm publish --dry-run` instead of returning early on
-  a version the registry holds, and reads npm's refusal of that version as
-  the dry run's success. The socle is pinned at v0.45.0.
+  `maelys-release rehearse --channel` (socle 0.42.0): it takes its real path
+  up to the registry's write — assembly, the tarball as a file, the registry
+  read — instead of returning early on a version the registry holds, and
+  stops there. Its record for the channel marker drops `already_published`,
+  which differed between a publication and its rehearsal by construction.
+  The socle is pinned at v0.47.0, whose 0.46.1 makes the marker carry that
+  record.
 
 ## 0.3.1 — 2026-09-12
 
