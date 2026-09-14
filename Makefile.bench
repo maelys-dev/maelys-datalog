@@ -18,7 +18,10 @@ BENCH_SRC = bench/bench_datalog.c
 BENCH_SRCS = $(ENGINE_SRCS) $(COMMON_SRCS) $(VENDOR_SRCS) $(BENCH_SRC)
 
 COMMIT ?= $(shell git rev-parse HEAD 2>/dev/null || echo unknown)
-DIRTY ?= $(shell test -z "$$(git status --short 2>/dev/null)" && echo false || echo true)
+# The results, reports and build tree the harness writes are not changes to
+# what was measured: once the SMALL profile has written its files, the LARGE
+# run would otherwise record itself as taken on a dirty tree.
+DIRTY ?= $(shell test -z "$$(git status --short -- . ':(exclude)bench/results' ':(exclude)bench/reports' ':(exclude)bench/build' 2>/dev/null)" && echo false || echo true)
 COMPILER := $(shell $(CC) --version 2>/dev/null | head -n 1 | sed 's/[^A-Za-z0-9._-]/_/g')
 
 BENCH_DEFS = \
