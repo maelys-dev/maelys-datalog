@@ -1,6 +1,6 @@
 name: release
 
-# Managed by maelys-release v0.51.1 (0.51.1). Regenerate with
+# Managed by maelys-release untagged (0.51.2). Regenerate with
 # 'maelys-release adopt' of maelys-release; do not edit by hand.
 on:
   push:
@@ -19,7 +19,7 @@ permissions:
 
 jobs:
   release:
-    uses: maelys-dev/maelys-release/.github/workflows/release.yml@128597d44b99618dbe2b4dfacd35377ac7865cf8 # v0.51.1
+    uses: maelys-dev/maelys-release/.github/workflows/release.yml@1cd397f36611ae8731c654f18c29da280842db61 # untagged
     permissions:
       contents: write
       id-token: write
@@ -35,7 +35,7 @@ jobs:
   channel-npm:
     needs: release
     if: needs.release.result == 'success'
-    uses: maelys-dev/maelys-release/.github/workflows/channel.yml@128597d44b99618dbe2b4dfacd35377ac7865cf8 # v0.51.1
+    uses: maelys-dev/maelys-release/.github/workflows/channel.yml@1cd397f36611ae8731c654f18c29da280842db61 # untagged
     permissions:
       contents: write
       packages: write
