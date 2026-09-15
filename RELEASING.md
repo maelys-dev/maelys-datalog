@@ -88,7 +88,9 @@ changelog entry) and pushes. The push triggers `release.yml`.
 5. The channel job publishes `@maelys-dev/datalog-wasm` to GitHub Packages
    through `scripts/publish-channel.sh vX.Y.Z npm`, from the Release's own
    downloaded assets, then attaches `channel-npm.json` to the Release — the
-   observation that it published, never written by a build.
+   observation that it published, never written by a build. It asks for no
+   approval of its own (`npm github-packages none`): the approval of step 3
+   covers it, and it starts as soon as the Release exists.
 
 A run that failed for a reason outside the code — a cancelled job, an
 expired approval, a runner lost — is replayed on the same tag, with the
