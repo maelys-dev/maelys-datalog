@@ -44,3 +44,4 @@ jobs:
       tag: ${{ inputs.tag || github.ref_name }}
       channel: npm
       publish_command: bash scripts/publish-channel.sh TAG CHANNEL
+      release_environment: ''
