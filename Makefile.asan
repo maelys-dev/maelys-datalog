@@ -7,7 +7,11 @@ COMMON_SRCS =
 
 VENDOR_SRCS =
 
-BUILD_DIR ?= build/asan
+PROFILE ?= SMALL
+ifeq ($(filter $(PROFILE),SMALL LARGE),)
+$(error PROFILE must be SMALL or LARGE)
+endif
+BUILD_DIR ?= $(if $(filter LARGE,$(PROFILE)),build/asan-large,build/asan)
 UNAME_S := $(shell uname -s)
 ASAN_IMAGE ?= maelys-datalog-asan-linux:ubuntu24.04
 ASAN_DOCKERFILE ?= docker/asan-linux/Dockerfile
@@ -37,6 +41,9 @@ ASAN_SRCS = $(ENGINE_SRCS) $(COMMON_SRCS) $(VENDOR_SRCS) \
 	tests/helpers/test_framework.c
 
 ASAN_CFLAGS = $(CFLAGS) $(ASAN_FLAGS) -DMAELYS_TESTING
+ifeq ($(PROFILE),LARGE)
+ASAN_CFLAGS += -DMAELYS_DATALOG_PROFILE_LARGE
+endif
 ASAN_RUN_ON_BUILD ?= 1
 
 ASAN_TEST_SRCS = $(wildcard tests/test_*.c)
@@ -59,10 +66,27 @@ ASAN_HEADERS = $(wildcard include/maelys/*.h src/core/*.h src/compiler/*.h src/p
 # sanitizer job the longest of the CI by a factor of thirty. Only the test
 # file and its ASAN_EXTRA_SRCS are compiled per binary.
 ASAN_OBJS = $(ASAN_SRCS:%.c=$(BUILD_DIR)/obj/%.o)
+ASAN_GUARD_OBJS = $(ASAN_SRCS:%.c=$(BUILD_DIR)/guard-obj/%.o)
+.SECONDARY: $(ASAN_OBJS) $(ASAN_GUARD_OBJS)
 
 $(BUILD_DIR)/obj/%.o: %.c $(ASAN_HEADERS)
 	@mkdir -p $(dir $@)
 	$(CC) $(ASAN_CFLAGS) -I. -c $< -o $@
+
+# This test includes the input implementation with its own allocator hooks.
+$(BUILD_DIR)/test_maelys_datalog_input_edb_alloc: tests/test_maelys_datalog_input_edb_alloc.c $(filter-out $(BUILD_DIR)/obj/src/runtime/maelys_datalog_input_edb.o,$(ASAN_OBJS)) $(ASAN_HEADERS) src/runtime/maelys_datalog_input_edb.c | $(BUILD_DIR)
+	$(CC) $(ASAN_CFLAGS) -UNDEBUG $(filter-out $(BUILD_DIR)/obj/src/runtime/maelys_datalog_input_edb.o,$(ASAN_OBJS)) $< -o $@
+	$(if $(filter 1,$(ASAN_RUN_ON_BUILD)),$(ASAN_ENV) ./$@,@:)
+
+# Only the allocation-contract executable uses this separate instrumented set.
+# All other tests keep sharing the ordinary ASan objects above.
+$(BUILD_DIR)/guard-obj/%.o: %.c $(ASAN_HEADERS) tests/fixtures/allocation_guard.h
+	@mkdir -p $(dir $@)
+	$(CC) $(ASAN_CFLAGS) -include tests/fixtures/allocation_guard.h -c $< -o $@
+
+$(BUILD_DIR)/test_maelys_datalog_hot_path_alloc: tests/test_maelys_datalog_hot_path_alloc.c $(ASAN_GUARD_OBJS) $(ASAN_HEADERS) tests/fixtures/allocation_guard.h | $(BUILD_DIR)
+	$(CC) $(ASAN_CFLAGS) -UNDEBUG $(ASAN_GUARD_OBJS) $< -o $@
+	$(if $(filter 1,$(ASAN_RUN_ON_BUILD)),$(ASAN_ENV) ./$@,@:)
 
 $(BUILD_DIR)/%: tests/%.c $(ASAN_OBJS) $(ASAN_HEADERS) | $(BUILD_DIR)
 	$(CC) $(ASAN_CFLAGS) -I. $(ASAN_OBJS) $(ASAN_EXTRA_SRCS) $< -o $@

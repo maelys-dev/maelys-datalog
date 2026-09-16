@@ -12,17 +12,8 @@ extern "C" {
 #define MAELYS_DATALOG_IR_MAX_VARIABLES 32u
 #define MAELYS_DATALOG_IR_NO_EXPRESSION UINT32_MAX
 
-/* Required language features are computed by the core, never by a frontend. */
-#define MAELYS_DATALOG_CAP_POSITIVE (UINT64_C(1) << 0)
-#define MAELYS_DATALOG_CAP_NEGATION (UINT64_C(1) << 1)
-#define MAELYS_DATALOG_CAP_COMPARISONS (UINT64_C(1) << 2)
-#define MAELYS_DATALOG_CAP_ARITHMETIC (UINT64_C(1) << 3)
-#define MAELYS_DATALOG_CAP_FILTERS (UINT64_C(1) << 4)
-#define MAELYS_DATALOG_CAP_EXPLAIN_TRUE (UINT64_C(1) << 5)
-#define MAELYS_DATALOG_CAP_WORK_LIMIT (UINT64_C(1) << 6)
-#define MAELYS_DATALOG_CAP_EXPLAIN_FALSE (UINT64_C(1) << 7)
-#define MAELYS_DATALOG_CAP_LANGUAGE (UINT64_C(31))
-#define MAELYS_DATALOG_CAP_ALL (UINT64_C(255))
+/* Capability constants live in datalog.h, also for ordinary consumers.
+ * Required language features are computed by the core, never by a frontend. */
 
 typedef enum {
     MAELYS_DATALOG_IR_SYMBOL = 1,

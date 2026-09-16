@@ -8,8 +8,71 @@
 #include "common/maelys_sha256.h"
 #include <stdlib.h>
 #include <stdio.h>
+#include <stdarg.h>
 #include <string.h>
 
+struct maelys_datalog_session_config {
+    uint64_t required_capabilities;
+    uint64_t work_limit;
+};
+
+maelys_datalog_status_t maelys_datalog_session_config_create(
+    maelys_datalog_session_config_t **out) {
+    if (!out) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
+    *out = calloc(1u, sizeof(**out));
+    return *out ? MAELYS_DATALOG_STATUS_OK : MAELYS_DATALOG_STATUS_INTERNAL;
+}
+maelys_datalog_status_t maelys_datalog_session_config_set_required_capabilities(
+    maelys_datalog_session_config_t *config, uint64_t capabilities) {
+    if (!config || (capabilities & ~MAELYS_DATALOG_CAP_ALL))
+        return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
+    config->required_capabilities = capabilities;
+    return MAELYS_DATALOG_STATUS_OK;
+}
+maelys_datalog_status_t maelys_datalog_session_config_get_required_capabilities(
+    const maelys_datalog_session_config_t *config, uint64_t *out) {
+    if (!config || !out) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
+    *out = config->required_capabilities;
+    return MAELYS_DATALOG_STATUS_OK;
+}
+maelys_datalog_status_t maelys_datalog_session_config_set_work_limit(
+    maelys_datalog_session_config_t *config, uint64_t work_limit) {
+    if (!config) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
+    config->work_limit = work_limit;
+    return MAELYS_DATALOG_STATUS_OK;
+}
+maelys_datalog_status_t maelys_datalog_session_config_get_work_limit(
+    const maelys_datalog_session_config_t *config, uint64_t *out) {
+    if (!config || !out) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
+    *out = config->work_limit;
+    return MAELYS_DATALOG_STATUS_OK;
+}
+maelys_datalog_status_t maelys_datalog_session_config_free(
+    maelys_datalog_session_config_t *config) {
+    free(config);
+    return MAELYS_DATALOG_STATUS_OK;
+}
+maelys_datalog_status_t maelys_datalog_session_create_configured(
+    const maelys_datalog_policy_t *policy, size_t index,
+    const maelys_datalog_session_config_t *config, maelys_datalog_session_t **out) {
+    if (!config) return maelys_datalog_session_create(policy, index, out);
+    const maelys_datalog_session_options_t options = {
+        .abi_version = MAELYS_DATALOG_BACKEND_ABI_VERSION,
+        .struct_size = sizeof(options),
+        .backend = NULL,
+        .required_capabilities = config->required_capabilities,
+        .work_limit = config->work_limit,
+    };
+    return maelys_datalog_session_create_ex(policy, index, &options, out);
+}
+
+struct maelys_datalog_result {
+    maelys_datalog_session_t *owner;
+    void *state;
+    maelys_datalog_fact_set_t derived;
+    maelys_datalog_fact_t facts[MAELYS_DATALOG_MAX_IDB_FACTS];
+    size_t per_predicate[MAELYS_DATALOG_MAX_PREDICATES];
+};
 struct maelys_datalog_session {
     maelys_datalog_prepared_session_t *inputs;
     maelys_datalog_program_t program;
@@ -20,13 +83,6 @@ struct maelys_datalog_session {
     uint64_t work_limit;
     int busy;
     int borrows_inputs; /* The reference solves the materialized EDB directly. */
-};
-struct maelys_datalog_result {
-    maelys_datalog_session_t *owner;
-    void *state;
-    maelys_datalog_fact_set_t derived;
-    maelys_datalog_fact_t facts[MAELYS_DATALOG_MAX_IDB_FACTS];
-    size_t per_predicate[MAELYS_DATALOG_MAX_PREDICATES];
 };
 struct maelys_datalog_backend_output {
     maelys_datalog_result_t *result;
@@ -255,6 +311,23 @@ maelys_datalog_status_t maelys_datalog_session_free(maelys_datalog_session_t *s)
     free(s);
     return MAELYS_DATALOG_STATUS_OK;
 }
+static maelys_datalog_status_t solve_input_error(
+    maelys_datalog_public_diagnostic_t *diag, maelys_datalog_status_t status,
+    const char *format, ...) {
+    if (diag) {
+        diag->source = MAELYS_DATALOG_DIAGNOSTIC_SOLVE;
+        diag->code = status;
+        snprintf(diag->phase, sizeof(diag->phase), "input");
+        va_list args;
+        va_start(args, format);
+        vsnprintf(diag->message, sizeof(diag->message), format, args);
+        va_end(args);
+        snprintf(diag->hint, sizeof(diag->hint),
+                 "Fact and term indices are zero-based. Correct the batch and retry; no result was published.");
+    }
+    return status;
+}
+
 maelys_datalog_status_t maelys_datalog_session_solve(maelys_datalog_session_t *s,
                                                      const maelys_datalog_public_fact_t *facts,
                                                      size_t count, maelys_datalog_result_t **out,
@@ -262,48 +335,62 @@ maelys_datalog_status_t maelys_datalog_session_solve(maelys_datalog_session_t *s
     if (out)
         *out = NULL;
     maelys_datalog_public_diagnostic_clear(diag);
-    if (!s || !out || (!facts && count))
+    if (!s || !out)
         return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
     if (s->busy || s->active)
         return MAELYS_DATALOG_STATUS_INVALID_STATE;
+    if (!facts && count)
+        return solve_input_error(diag, MAELYS_DATALOG_STATUS_INVALID_ARGUMENT,
+                                 "Input batch is NULL but fact_count is %zu.", count);
     if (count > MAELYS_DATALOG_MAX_EDB_FACTS)
-        return MAELYS_DATALOG_STATUS_PAYLOAD_TOO_LARGE;
+        return solve_input_error(diag, MAELYS_DATALOG_STATUS_PAYLOAD_TOO_LARGE,
+                                 "Input batch contains %zu facts; EDB fact limit is %u (before deduplication).",
+                                 count, MAELYS_DATALOG_MAX_EDB_FACTS);
     maelys_datalog_input_fact_t *inputs = count ? calloc(count, sizeof(*inputs)) : NULL;
-    if (count && !inputs)
-        return MAELYS_DATALOG_STATUS_INTERNAL;
+    if (count && !inputs) return MAELYS_DATALOG_STATUS_INTERNAL;
     maelys_datalog_status_t status = MAELYS_DATALOG_STATUS_OK;
     for (size_t i = 0; i < count && status == MAELYS_DATALOG_STATUS_OK; ++i) {
-        if (!facts[i].predicate || facts[i].arity > MAELYS_DATALOG_MAX_TERMS) {
-            status = MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
+        if (!facts[i].predicate) {
+            status = solve_input_error(diag, MAELYS_DATALOG_STATUS_INVALID_ARGUMENT,
+                                       "Invalid fact at index %zu: predicate is NULL.", i);
+            break;
+        }
+        if (facts[i].arity > MAELYS_DATALOG_MAX_TERMS) {
+            status = solve_input_error(diag, MAELYS_DATALOG_STATUS_INVALID_ARGUMENT,
+                                       "Invalid fact at index %zu (%.63s): arity %zu exceeds limit %u.",
+                                       i, facts[i].predicate, facts[i].arity, MAELYS_DATALOG_MAX_TERMS);
             break;
         }
         inputs[i].predicate = facts[i].predicate;
         inputs[i].arity = facts[i].arity;
         for (size_t j = 0; j < facts[i].arity; ++j) {
             status = maelys_datalog_import_public_value(&facts[i].terms[j], 0, &inputs[i].terms[j]);
-            if (status != MAELYS_DATALOG_STATUS_OK)
+            if (status != MAELYS_DATALOG_STATUS_OK) {
+                solve_input_error(diag, status,
+                                  "Invalid fact at index %zu (%.63s), term %zu: %s (kind %d).",
+                                  i, facts[i].predicate, j,
+                                  facts[i].terms[j].kind == MAELYS_DATALOG_VALUE_SYMBOL
+                                      ? "NULL symbol" : "unsupported value kind",
+                                  (int)facts[i].terms[j].kind);
                 break;
+            }
         }
     }
-    if (status == MAELYS_DATALOG_STATUS_OK)
-        status = (maelys_datalog_status_t)maelys_datalog_prepared_session_materialize_inputs(
-            s->inputs, inputs, count);
+    if (status == MAELYS_DATALOG_STATUS_OK) {
+        char message[256] = {0};
+        status = (maelys_datalog_status_t)maelys_datalog_prepared_session_materialize_inputs_diagnosed(
+            s->inputs, inputs, count, message, sizeof(message));
+        if (status != MAELYS_DATALOG_STATUS_OK)
+            solve_input_error(diag, status, "%s", message[0] ? message : "Input materialization failed.");
+    }
     free(inputs);
-    if (status != MAELYS_DATALOG_STATUS_OK) {
-        if (diag) {
-            diag->source = MAELYS_DATALOG_DIAGNOSTIC_SOLVE;
-            diag->code = status;
-            snprintf(diag->phase, sizeof(diag->phase), "input");
-            snprintf(diag->message, sizeof(diag->message), "invalid solve input");
-        }
+    if (status != MAELYS_DATALOG_STATUS_OK)
         return status;
-    }
     /* Canonical public facts exist for external backends only. */
     size_t canonical_count = s->borrows_inputs ? 0 : s->inputs->edb.fact_set.count;
     maelys_datalog_public_fact_t *canonical =
         canonical_count ? calloc(canonical_count, sizeof(*canonical)) : NULL;
-    if (canonical_count && !canonical)
-        return MAELYS_DATALOG_STATUS_INTERNAL;
+    if (canonical_count && !canonical) return MAELYS_DATALOG_STATUS_INTERNAL;
     for (size_t i = 0; i < canonical_count; ++i) {
         status = (maelys_datalog_status_t)maelys_datalog_export_fact(
             &s->inputs->working, &s->inputs->edb.fact_set.facts[i], &canonical[i]);
@@ -313,10 +400,7 @@ maelys_datalog_status_t maelys_datalog_session_solve(maelys_datalog_session_t *s
         }
     }
     maelys_datalog_result_t *result = calloc(1u, sizeof(*result));
-    if (!result) {
-        free(canonical);
-        return MAELYS_DATALOG_STATUS_INTERNAL;
-    }
+    if (!result) { free(canonical); return MAELYS_DATALOG_STATUS_INTERNAL; }
     result->owner = s;
     maelys_datalog_fact_set_init(&result->derived, result->facts, MAELYS_DATALOG_MAX_IDB_FACTS);
     maelys_datalog_backend_output_t output = {result, MAELYS_DATALOG_STATUS_OK, 0, 0, 0};
@@ -422,6 +506,16 @@ maelys_datalog_status_t maelys_datalog_result_enumerate(const maelys_datalog_res
     *count = n;
     return MAELYS_DATALOG_STATUS_OK;
 }
+maelys_datalog_status_t maelys_datalog_result_derived_fact_count(
+    const maelys_datalog_result_t *result, size_t *out_count) {
+    if (!result || !result->owner || !out_count)
+        return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
+    if (result->owner->busy)
+        return MAELYS_DATALOG_STATUS_INVALID_STATE;
+    *out_count = result->derived.count;
+    return MAELYS_DATALOG_STATUS_OK;
+}
+
 maelys_datalog_status_t maelys_datalog_result_symbol_text(const maelys_datalog_result_t *result,
                                                           uint32_t id, const char **text,
                                                           size_t *length) {

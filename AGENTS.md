@@ -97,3 +97,22 @@ when it has what they name.
   public one anyone can open a pull request. `linux-x86_64` is also where the
   release's write token runs.
 <!-- maelys-release:end -->
+
+## Memory-allocation contract
+
+- Prefer caller-owned, aligned storage and explicit bounded capacities for new
+  runtime APIs. Opaque handles do not justify mandatory heap allocation.
+- Do not add per-fact, per-term, or grow-on-demand allocations to input paths.
+  Validate a whole batch before mutation; capacity exhaustion must fail without
+  partial insertion or silent heap fallback. Reuse session scratch space.
+- An allocating convenience constructor must state its allocation count and
+  capacity policy separately from the caller-owned path. Python/CFFI allocations
+  must never be represented as a zero-allocation binding.
+- Test the allocation contract, not just functional results: allocator counters,
+  disabled-allocator execution, capacity boundaries, atomic failure and reuse.
+- Intern repeated input strings rather than reserving worst-case text for every
+  occurrence. Defaults derive from native symbol/registry budgets, not arbitrary
+  MiB multipliers. Preserve canonical result IDs regardless of insertion order.
+- Never claim the whole engine is zero-malloc based on an input-buffer test.
+  Session/results, compilation, backend and explanation allocations must be
+  audited separately. Keep the public header and docs/validation.md accurate.
