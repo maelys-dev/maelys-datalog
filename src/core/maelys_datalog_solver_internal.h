@@ -4,6 +4,15 @@
 
 #include "src/core/maelys_datalog_solver.h"
 
+/* Prepared-session workspace allocated only during initialization. The ordinary
+ * result release ends a lease and resets this workspace, without freeing it. */
+maelys_datalog_solve_result_t *maelys_datalog_solve_workspace_create(void);
+void maelys_datalog_solve_workspace_destroy(maelys_datalog_solve_result_t *);
+maelys_result_t maelys_datalog_solve_reusing_workspace(
+    const maelys_datalog_ruleset_t *, const maelys_datalog_edb_t *,
+    maelys_datalog_solve_result_t *workspace,
+    maelys_datalog_solve_result_t **out_result, maelys_datalog_solve_diagnostic_t *);
+
 typedef void (*maelys_datalog_solve_result_release_fn)(
     void *owner,
     maelys_datalog_solve_result_t *result);

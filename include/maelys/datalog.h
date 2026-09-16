@@ -278,7 +278,14 @@ MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_session_execution_fing
  * the bound. Message prose is diagnostic, not a machine-readable grammar;
  * line/column remain source coordinates and are not repurposed as fact indices.
  * Inputs are borrowed only for this call. A failed input can be retried with a
- * corrected batch on the same session. */
+ * corrected batch on the same session.
+ * After reference-session creation, engine-owned input conversion, sorting,
+ * solving, querying and result release make no allocator calls. The session
+ * reserves its public/native result and provenance at initialization. One live
+ * result leases that storage; release it before solving again or freeing the
+ * session. A released handle must never be used again (its address may recur).
+ * Policy/session setup and on-demand explanations may allocate. Custom
+ * backends/filter callbacks and host libc internals are outside this guarantee. */
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_session_solve(
     maelys_datalog_session_t *session,
     const maelys_datalog_public_fact_t *facts,

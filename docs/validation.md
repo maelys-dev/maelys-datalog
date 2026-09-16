@@ -72,6 +72,8 @@ working table cannot pass that lookup (exit 9).
 | Gate | Verified behavior |
 | --- | --- |
 | `test_maelys_datalog_input_edb_alloc` | Caller-owned alignment/size, copied and shared strings, byte-for-byte atomic rejection, fixed capacities and allocation-free append/clear. |
+| `test_maelys_datalog_hot_path_alloc` | All engine units use allocator hooks: repeated reference append/solve/query/release without allocator calls, constructor allocation failures, independent sessions and failure recovery. Explanations are outside this guard. |
+| `test_maelys_datalog_pipeline` | Existing fingerprint/proof goldens and identical result symbol IDs under input permutation. |
 | `check_module_sdk.sh` | All eight opaque handle layouts rejected in C11/C++17; static/shared external consumers pass. |
 
 Run the sanitizer build used by CI, not only CMake's separate targets:
@@ -82,9 +84,10 @@ make -j4 -f Makefile.asan asan PROFILE=LARGE
 ```
 
 Ordinary tests share ASan objects. The input allocator test excludes the input
-implementation object it already includes. macOS runs ASan/UBSan with LSAN
-disabled; Linux also runs LSAN. The input allocator gate does not assert
-allocation freedom in the solver or libc internals.
+implementation object it already includes; the whole-engine allocator test uses
+its own guarded object set. macOS runs ASan/UBSan with LSAN disabled; Linux also
+runs LSAN. Custom callbacks/backends, Python/CFFI and libc internals are not
+covered by the reference-engine no-allocation assertion.
 
 The WASM C boundary and JavaScript wrapper live together in
 [`bindings/wasm/`](../bindings/wasm/README.md). Tests import the wrapper from

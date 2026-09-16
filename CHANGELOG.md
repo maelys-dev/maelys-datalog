@@ -48,6 +48,15 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
   consume neither entries nor bytes. The default text budget is the
   native symbol pool plus registry names (40 KiB, not 5/10 MiB); repeated strings
   share storage. `INPUT_EDB_TEXT_BYTES` reports this bound through `limit_get`.
+- Opaque sessions reuse bounded scratch storage for input conversion and
+  external-backend canonical export. Reference/prepared sessions now reserve
+  native and public results at initialization: solving and result release no
+  longer allocate or free. Provenance stays preallocated; requested explanations
+  can still allocate bounded workspaces. The one-live-result lease is unchanged.
+  Hot-path libc qsort calls are replaced by an in-place, nonrecursive heapsort.
+  A whole-engine allocator-guard test disables allocation through repeated solves,
+  queries, failed transactions and result release. Custom backends/callbacks,
+  Python/CFFI allocations and libc internals are outside this guarantee.
 - `scripts/publish-channel.sh` honours `CHANNEL_DRY_RUN=1`, set by
   `maelys-release rehearse --channel` (socle 0.42.0): it takes its real path
   up to the registry's write — assembly, the tarball as a file, the registry

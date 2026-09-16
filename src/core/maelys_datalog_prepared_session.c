@@ -3,6 +3,7 @@
 #include "common/maelys_sha256.h"
 #include "src/core/maelys_datalog_prepared_session_internal.h"
 #include "src/core/maelys_datalog_solver_internal.h"
+#include "src/core/maelys_datalog_sort_internal.h"
 #include "src/core/maelys_datalog_pipeline_testing.h"
 #include "src/registry/maelys_datalog_modules_internal.h"
 
@@ -95,7 +96,7 @@ static maelys_result_t intern_input_symbols(
         return MAELYS_ERR_INVALID_ARGUMENT;
     }
     if (count > 1u) {
-        qsort(session->symbol_inputs,
+        maelys_datalog_sort(session->symbol_inputs,
               count,
               sizeof(session->symbol_inputs[0]),
               symbol_pointer_cmp);
@@ -211,6 +212,8 @@ maelys_result_t maelys_datalog_prepared_session_create(
     }
     maelys_datalog_prepared_session_t *session = calloc(1u, sizeof(*session));
     if (!session) return MAELYS_ERR_INTERNAL;
+    session->result_workspace = maelys_datalog_solve_workspace_create();
+    if (!session->result_workspace) { free(session); return MAELYS_ERR_INTERNAL; }
     session->prepared = *ruleset;
     session->working = *ruleset;
     maelys_result_t rc = maelys_datalog_edb_init(
@@ -220,6 +223,7 @@ maelys_result_t maelys_datalog_prepared_session_create(
         &session->working.symbols,
         &session->working.registry);
     if (rc != MAELYS_OK) {
+        maelys_datalog_solve_workspace_destroy(session->result_workspace);
         memset(session, 0, sizeof(*session));
         free(session);
         return rc;
@@ -235,6 +239,7 @@ maelys_result_t maelys_datalog_prepared_session_destroy(
     if (!session) return MAELYS_ERR_INVALID_ARGUMENT;
     if (session->active_result) return MAELYS_ERR_INVALID_STATE;
     maelys_datalog_context_release(session->prepared.modules);
+    maelys_datalog_solve_workspace_destroy(session->result_workspace);
     memset(session, 0, sizeof(*session));
     free(session);
     return MAELYS_OK;
@@ -359,8 +364,8 @@ maelys_result_t maelys_datalog_prepared_session_solve_materialized_ex(
     if (out_result) *out_result = NULL;
     if (!session || !out_result) return MAELYS_ERR_INVALID_ARGUMENT;
     if (session->active_result || !session->edb.immutable) return MAELYS_ERR_INVALID_STATE;
-    maelys_result_t rc = maelys_datalog_solve_once_ex(
-        &session->working, &session->edb, out_result, out_diag);
+    maelys_result_t rc = maelys_datalog_solve_reusing_workspace(
+        &session->working, &session->edb, session->result_workspace, out_result, out_diag);
     if (rc != MAELYS_OK) return reject_transaction(session, rc);
     maelys_datalog_solve_result_set_release(
         *out_result,

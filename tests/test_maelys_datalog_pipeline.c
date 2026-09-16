@@ -145,9 +145,28 @@ static void probe_case(size_t index, const char *source, int loader) {
         facts[i].terms[1].kind = MAELYS_DATALOG_VALUE_SYMBOL;
         facts[i].terms[1].as.symbol = i == 5 ? "bob" : "carol";
     }
+    unsigned char first_symbols[32];
     for (size_t repeat = 0; repeat < 2; ++repeat) {
         maelys_datalog_result_t *result;
         assert(!maelys_datalog_session_solve(session, facts, 7, &result, NULL));
+        /* Preserve the complete ID -> value mapping, not merely query truth,
+         * when input order changes. Fingerprint/proof goldens below are unchanged. */
+        maelys_sha256_ctx_t symbols_hash;
+        maelys_sha256_init(&symbols_hash);
+        for (uint32_t id = 1;; ++id) {
+            const char *text;
+            size_t length;
+            maelys_datalog_status_t rc = maelys_datalog_result_symbol_text(
+                result, id, &text, &length);
+            if (rc == MAELYS_DATALOG_STATUS_INVALID_STATE) { assert(id > 1u); break; }
+            assert(rc == MAELYS_DATALOG_STATUS_OK && id <= 512u);
+            assert(length == strlen(text));
+            hash_text(&symbols_hash, text);
+        }
+        unsigned char symbols_digest[32];
+        maelys_sha256_final(&symbols_hash, symbols_digest);
+        if (!repeat) memcpy(first_symbols, symbols_digest, sizeof(first_symbols));
+        else assert(!memcmp(first_symbols, symbols_digest, sizeof(first_symbols)));
         maelys_datalog_public_value_t value = {0};
         value.kind = MAELYS_DATALOG_VALUE_SYMBOL;
         for (size_t absent = 0; absent < 2; ++absent) {

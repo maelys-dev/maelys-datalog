@@ -15,6 +15,7 @@ struct maelys_datalog_prepared_session {
     maelys_datalog_edb_t edb;
     const char *symbol_inputs[MAELYS_DATALOG_MAX_INPUT_SYMBOLS];
     maelys_datalog_solve_result_t *active_result;
+    maelys_datalog_solve_result_t *result_workspace;
 };
 
 void maelys_datalog_prepared_session_result_released(
