@@ -104,7 +104,7 @@ when it has what they name.
   runtime APIs. Opaque handles do not justify mandatory heap allocation.
 - Do not add per-fact, per-term, or grow-on-demand allocations to input paths.
   Validate a whole batch before mutation; capacity exhaustion must fail without
-  partial insertion or silent heap fallback. Reuse session scratch space.
+  partial insertion or silent heap fallback.
 - An allocating convenience constructor must state its allocation count and
   capacity policy separately from the caller-owned path. Python/CFFI allocations
   must never be represented as a zero-allocation binding.

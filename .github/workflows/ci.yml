@@ -108,7 +108,7 @@ jobs:
 
       - name: Check all native tests including facade with sanitizers (LARGE)
         if: matrix.profile == 'LARGE'
-        run: make -j4 -f Makefile.asan asan BUILD_DIR=build/asan-large CFLAGS='-Wall -Wextra -g -I. -Iinclude -DMAELYS_DATALOG_PROFILE_LARGE'
+        run: make -j4 -f Makefile.asan asan PROFILE=LARGE
 
   bench:
     name: Single-pass benchmark
