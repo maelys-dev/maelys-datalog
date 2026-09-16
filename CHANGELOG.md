@@ -7,6 +7,13 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Tooling
+
+- Manual-only Ubuntu revision-comparison workflow: sequential SMALL/LARGE O2
+  builds, two A/A pairs before A B A B, solver and input-index probes, per-metric
+  noise floors, explicit indeterminate results and raw run artifacts. This adds
+  no PR check and does not change runtime behavior.
+
 ### Added
 
 - Opaque owned `maelys_datalog_input_edb_t` with atomic copied single/batch

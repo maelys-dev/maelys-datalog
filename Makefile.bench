@@ -59,6 +59,20 @@ bench-all: bench-small bench-large
 
 check: check-small
 
+# Same public-input harness used by the manual revision-comparison driver.
+.PHONY: bench-input-small bench-input-large
+INPUT_HEADERS = $(wildcard include/*.h include/maelys/*.h src/core/*.h src/compiler/*.h src/public/*.h src/registry/*.h modules/standard/*.h)
+bench-input-small: $(BUILD_ROOT)/input-small
+	$<
+bench-input-large: $(BUILD_ROOT)/input-large
+	$<
+$(BUILD_ROOT)/input-small: $(ENGINE_SRCS) bench/bench_input_edb.c $(INPUT_HEADERS)
+	@mkdir -p $(BUILD_ROOT)
+	$(CC) $(CFLAGS_COMMON) -O2 -UNDEBUG $(ENGINE_SRCS) bench/bench_input_edb.c -o $@
+$(BUILD_ROOT)/input-large: $(ENGINE_SRCS) bench/bench_input_edb.c $(INPUT_HEADERS)
+	@mkdir -p $(BUILD_ROOT)
+	$(CC) $(CFLAGS_COMMON) -O2 -UNDEBUG -DMAELYS_DATALOG_PROFILE_LARGE $(ENGINE_SRCS) bench/bench_input_edb.c -o $@
+
 check-small:
 	MAELYS_BENCH_CSV_O0="$(RESULT_DIR)/datalog-bench-small-O0.csv" \
 	MAELYS_BENCH_CSV_O2="$(RESULT_DIR)/datalog-bench-small-O2.csv" \

@@ -1,0 +1,26 @@
+# SPDX-License-Identifier: MPL-2.0
+# Invoked from an immutable archived revision. The driver owns both harnesses.
+CC = clang
+PROFILE ?= SMALL
+ifeq ($(filter $(PROFILE),SMALL LARGE),)
+$(error PROFILE must be SMALL or LARGE)
+endif
+ENGINE_SRCS = $(shell sed -n '/^[^\#]/p' build-support/core-sources.txt build-support/standard-sources.txt build-support/native-sources.txt)
+FLAGS = -Wall -Wextra -g -I. -Iinclude -O2 -UNDEBUG
+ifeq ($(PROFILE),LARGE)
+FLAGS += -DMAELYS_DATALOG_PROFILE_LARGE
+endif
+OBJECTS = $(ENGINE_SRCS:%.c=$(OUT)/obj/%.o)
+COMPILER := $(shell $(CC) --version | head -n 1 | sed 's/[^A-Za-z0-9._-]/_/g')
+DEFS = -DBENCH_COMMIT=\"$(REVISION)\" -DBENCH_DIRTY=\"false\" -DBENCH_COMPILER=\"$(COMPILER)\" -DBENCH_PROFILE=\"$(PROFILE)\" -DBENCH_OPT_LEVEL=\"-O2\" -DBENCH_CFLAGS=\"$(subst $(space),_,$(FLAGS))\"
+empty :=
+space := $(empty) $(empty)
+.PHONY: all
+all: $(OUT)/solver $(OUT)/input
+$(OUT)/obj/%.o: %.c
+	@mkdir -p $(dir $@)
+	$(CC) $(FLAGS) -c $< -o $@
+$(OUT)/solver: $(OBJECTS) $(DRIVER)/bench/bench_datalog.c
+	$(CC) $(FLAGS) $(DEFS) $(DRIVER)/bench/bench_datalog.c $(OBJECTS) -o $@
+$(OUT)/input: $(OBJECTS) $(DRIVER)/bench/bench_input_edb.c
+	$(CC) $(FLAGS) $(DRIVER)/bench/bench_input_edb.c $(OBJECTS) -o $@
