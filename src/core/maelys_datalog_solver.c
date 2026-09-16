@@ -174,6 +174,7 @@ static void solve_once_init_proof_indices(maelys_datalog_solve_result_t *result)
 }
 
 static void solve_once_assert_windows(const maelys_datalog_solve_result_t *result) {
+    (void)result; /* Release builds compile the window assertions out. */
     assert(result);
     assert(result->idb_delta_begin <= result->idb_delta_end);
     assert(result->idb_delta_end <= result->idb_current_end);

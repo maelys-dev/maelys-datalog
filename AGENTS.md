@@ -123,6 +123,9 @@ when it has what they name.
 - Never claim the whole engine is zero-malloc based on an input-buffer test.
   Session/results, compilation, backend and explanation allocations must be
   audited separately. Keep the public header and docs/validation.md accurate.
+- Hot-path changes require same-compiler/profile A/A noise floors and alternating
+  A/B passes without concurrent builds. Allocation tests do not establish speed.
+  Include sorted/reverse/duplicate/adversarial inputs and canonical IDs.
 
 ## Manual benchmark evidence
 

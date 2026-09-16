@@ -33,6 +33,8 @@ static int symbol_pointer_cmp(const void *lhs, const void *rhs) {
     return strcmp(left, right);
 }
 
+MAELYS_DEFINE_SORT(sort_symbol_pointers, const char *, symbol_pointer_cmp)
+
 static maelys_result_t collect_input_symbols(
     maelys_datalog_prepared_session_t *session,
     const maelys_datalog_input_fact_t *facts,
@@ -96,10 +98,7 @@ static maelys_result_t intern_input_symbols(
         return MAELYS_ERR_INVALID_ARGUMENT;
     }
     if (count > 1u) {
-        maelys_datalog_sort(session->symbol_inputs,
-              count,
-              sizeof(session->symbol_inputs[0]),
-              symbol_pointer_cmp);
+        sort_symbol_pointers(session->symbol_inputs, count);
     }
     const char *previous = NULL;
     for (size_t i = 0u; i < count; i++) {

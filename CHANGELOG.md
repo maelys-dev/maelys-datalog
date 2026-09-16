@@ -53,7 +53,8 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
   native and public results at initialization: solving and result release no
   longer allocate or free. Provenance stays preallocated; requested explanations
   can still allocate bounded workspaces. The one-live-result lease is unchanged.
-  Hot-path libc qsort calls are replaced by an in-place, nonrecursive heapsort.
+  Hot-path libc qsort calls are replaced by a typed in-place introsort: ordered
+  input fast path, logarithmically bounded stack and worst-case heapsort fallback.
   A whole-engine allocator-guard test disables allocation through repeated solves,
   queries, failed transactions and result release. Custom backends/callbacks,
   Python/CFFI allocations and libc internals are outside this guarantee.

@@ -79,19 +79,24 @@ int main(void) {
     maelys_datalog_input_edb_t *edb = NULL;
     assert(maelys_datalog_input_edb_create_with_capacity(64u, 4096u, &edb) == 0);
     maelys_datalog_result_t *result = NULL, *other = NULL;
+    char names[32][16];
+    strcpy(names[0], "alpha"); strcpy(names[31], "zeta");
+    for (size_t i = 1u; i < 31u; ++i)
+        snprintf(names[i], sizeof(names[i]), "name-%02zu", i);
     forbidden = 1;
     for (size_t cycle = 0; cycle < 40u; ++cycle) {
         assert(maelys_datalog_input_edb_clear(edb) == 0);
         /* Sorting, duplicate text and multi-instance isolation are exercised. */
-        const char *names[] = {"zeta", "gamma", "beta", "alpha"};
-        maelys_datalog_public_fact_t facts[5] = {0};
-        for (size_t i = 0; i < 4u; ++i) {
+        /* More than the insertion cutoff: exercise the partitioning path in
+         * both symbol and fact sorts, not just the tiny-array fast path. */
+        maelys_datalog_public_fact_t facts[33] = {0};
+        for (size_t i = 0; i < 32u; ++i) {
             facts[i].predicate = "seed"; facts[i].arity = 1;
-            facts[i].terms[0] = symbol(names[cycle % 2u ? 3u-i : i]);
+            facts[i].terms[0] = symbol(names[cycle % 2u ? 31u-i : (i * 13u) % 32u]);
         }
-        facts[4].predicate = "blocked"; facts[4].arity = 1;
-        facts[4].terms[0] = symbol("zeta");
-        assert(maelys_datalog_input_edb_add_facts(edb, facts, 5u, &diag) == 0);
+        facts[32].predicate = "blocked"; facts[32].arity = 1;
+        facts[32].terms[0] = symbol("zeta");
+        assert(maelys_datalog_input_edb_add_facts(edb, facts, 33u, &diag) == 0);
         assert(maelys_datalog_session_solve_edb(session, edb, &result, &diag) == 0);
         assert(maelys_datalog_session_solve_edb(second, edb, &other, &diag) == 0);
         assert(maelys_datalog_session_free(session) == MAELYS_DATALOG_STATUS_INVALID_STATE);

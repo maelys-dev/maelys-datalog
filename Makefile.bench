@@ -10,6 +10,7 @@ DOCKER_PLATFORM ?= linux/arm64
 DOCKER_PLATFORM_ARG = $(if $(DOCKER_PLATFORM),--platform $(DOCKER_PLATFORM),)
 
 ENGINE_SRCS = $(shell sed -n '/^[^\#]/p' build-support/core-sources.txt build-support/standard-sources.txt build-support/native-sources.txt)
+ENGINE_HEADERS = $(wildcard include/*.h include/maelys/*.h src/core/*.h src/compiler/*.h src/public/*.h src/registry/*.h modules/standard/*.h)
 
 COMMON_SRCS =
 
@@ -92,16 +93,16 @@ check-all: check-small check-large
 check-selftest:
 	bash bench/check_selftest.sh
 
-$(BENCH_SMALL_O0): $(BENCH_SRCS) | $(SMALL_O0_DIR)
+$(BENCH_SMALL_O0): $(BENCH_SRCS) $(ENGINE_HEADERS) | $(SMALL_O0_DIR)
 	$(CC) $(CFLAGS_COMMON) -O0 $(BENCH_DEFS) $(SMALL_DEFS) -DBENCH_OPT_LEVEL=\"-O0\" -DBENCH_CFLAGS=\"-Wall_-Wextra_-g_-I._-Iinclude_-O0\" $(BENCH_SRCS) -o $@
 
-$(BENCH_SMALL_O2): $(BENCH_SRCS) | $(SMALL_O2_DIR)
+$(BENCH_SMALL_O2): $(BENCH_SRCS) $(ENGINE_HEADERS) | $(SMALL_O2_DIR)
 	$(CC) $(CFLAGS_COMMON) -O2 $(BENCH_DEFS) $(SMALL_DEFS) -DBENCH_OPT_LEVEL=\"-O2\" -DBENCH_CFLAGS=\"-Wall_-Wextra_-g_-I._-Iinclude_-O2\" $(BENCH_SRCS) -o $@
 
-$(BENCH_LARGE_O0): $(BENCH_SRCS) | $(LARGE_O0_DIR)
+$(BENCH_LARGE_O0): $(BENCH_SRCS) $(ENGINE_HEADERS) | $(LARGE_O0_DIR)
 	$(CC) $(CFLAGS_COMMON) -O0 $(LARGE_DEFS) $(BENCH_DEFS) -DBENCH_OPT_LEVEL=\"-O0\" -DBENCH_CFLAGS=\"-Wall_-Wextra_-g_-I._-Iinclude_-DMAELYS_DATALOG_PROFILE_LARGE_-O0\" $(BENCH_SRCS) -o $@
 
-$(BENCH_LARGE_O2): $(BENCH_SRCS) | $(LARGE_O2_DIR)
+$(BENCH_LARGE_O2): $(BENCH_SRCS) $(ENGINE_HEADERS) | $(LARGE_O2_DIR)
 	$(CC) $(CFLAGS_COMMON) -O2 $(LARGE_DEFS) $(BENCH_DEFS) -DBENCH_OPT_LEVEL=\"-O2\" -DBENCH_CFLAGS=\"-Wall_-Wextra_-g_-I._-Iinclude_-DMAELYS_DATALOG_PROFILE_LARGE_-O2\" $(BENCH_SRCS) -o $@
 
 $(SMALL_O0_DIR) $(SMALL_O2_DIR) $(LARGE_O0_DIR) $(LARGE_O2_DIR):

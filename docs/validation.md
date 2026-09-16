@@ -10,17 +10,15 @@ not proof that tests ran; check the exit status and the suite summaries.
 make -j3
 make -j3 test
 make -j3 test BUILD_DIR=build/native-large CFLAGS='-Wall -Wextra -g -I. -Iinclude -DMAELYS_DATALOG_PROFILE_LARGE'
-make -j3 -f Makefile.asan asan
-make -j3 -f Makefile.asan asan BUILD_DIR=build/asan-large CFLAGS='-Wall -Wextra -g -I. -Iinclude -DMAELYS_DATALOG_PROFILE_LARGE'
+make -j4 -f Makefile.asan asan PROFILE=SMALL
+make -j4 -f Makefile.asan asan PROFILE=LARGE
 make bench-pipeline
 ```
 
 Both Make test inventories use `tests/test_*.c`, including the policy-set
 fingerprint suite. `asan` reruns every test even if its binary is up to date.
-The current inventory has 32 executables: the existing 622 framework cases,
-12 module cases, 11 compiler/backend cases and 27 pipeline checks (672), plus
-the context suite for atomic registration, concurrent isolation, retained
-lifetimes, named selection, invalid planner output, capacity and fingerprints.
+The executable inventory is derived from `tests/test_*.c`; report the actual
+suite summaries rather than a hardcoded historical count.
 ASan/UBSan run locally; macOS disables leak detection. The Linux CI enables
 LSan. A local macOS PASS alone is not evidence of Linux leak safety.
 
@@ -35,6 +33,20 @@ preparation and materialization calls; CMake's static/shared pipeline tests
 check the same 21 transcript goldens, two filter validations and four diagnostic
 ordering checks. The benchmark's
 CPU time is descriptive, not a throughput guarantee.
+
+The bounded-sort test compares canonical values with a libc reference for
+ordered, reverse, equal, duplicate-heavy, organ-pipe, sawtooth and random input,
+including overlapping ordered suffixes, profile capacity and an explicitly
+exhausted introsort depth budget. The whole-engine allocation test includes
+partition-sized input; performance does not replace its allocation assertions.
+
+```sh
+make -f Makefile.bench bench-all CC=clang
+```
+
+Compare the same compiler/profile on baseline and candidate, without concurrent
+builds. Establish a per-case A/A noise floor before interpreting A/B ratios.
+The solver benchmark includes EDB finalization, solve, query and result release.
 
 ## Installed facade and SDK
 
