@@ -21,7 +21,7 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 - Input EDB string lookup uses a preallocated index and bounded undo journal.
   Rejected batches restore the complete arena, including colliding hash chains.
   The storage-requirements query includes index and journal memory separately
-  from the text budget. A dedicated benchmark measures batch and unit insertion.
+  from the text budget.
 
 ### Added
 
