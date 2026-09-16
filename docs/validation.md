@@ -69,6 +69,104 @@ working table cannot pass that lookup (exit 9).
 
 ## Actual Python and WASM wrappers
 
+The experimental `bindings/python-next` wrapper includes only public
+`maelys/datalog.h`. A test rejects backend/IR headers in the generated bridge.
+Build its shared library and CFFI extension from the same checkout:
+
+```sh
+cmake -S . -B build/python-next-small -DBUILD_TESTING=ON
+cmake --build build/python-next-small --parallel 3
+ctest --test-dir build/python-next-small --output-on-failure
+python3 bindings/python-next/build_cffi.py --build-dir build/python-next-small
+MAELYS_DATALOG_EXPECT_PROFILE=small PYTHONPATH=bindings/python-next \
+  python3 -m unittest discover -s bindings/python-next/tests -v
+```
+
+Repeat in a distinct build directory with `-DMAELYS_DATALOG_PROFILE_LARGE=ON`
+and `MAELYS_DATALOG_EXPECT_PROFILE=large`. The gates exercise buffered single and
+batch additions, rejected-batch atomicity, original-input diagnostic indices,
+loaded-library limits, non-queryable derived counts and result lifetime. They
+also exercise manifest SHA/query validation, policy-local atoms without registry
+leakage, multi-policy indices, full diagnostics, prepared A/B/A reuse and retry,
+Why-true/Why-false (including truncation), ground filters, result-owned raw terms,
+creating-thread enforcement and distinct authority/execution fingerprints.
+Explicit work budgets are tested as UNSUPPORTED on the reference backend,
+not falsely advertised as enforced. The
+parity test requires the existing Python extension below; when it is absent,
+that test reports a skip. The installed SDK consumer also calls the public
+limit/count getters in both static and shared linkage. Native facade tests
+cover corrected-input retries after predicate, term, symbol and capacity errors.
+
+Opaque session configuration tests cover zero defaults, rejected unknown bits
+without mutation, NULL arguments and unchanged getter outputs, independent
+session snapshots after config mutation/free, and default fingerprint parity.
+The installed consumer uses only `datalog.h` to configure and solve; it fails
+compilation if that header pulls in backend/IR/module declarations. The SDK
+gate rejects `sizeof(session_config)` in both C11 and C++17, alongside the
+other opaque handles. Existing extension consumers still use `session_create_ex`.
+
+The owned input EDB gates check copied caller strings, typed scalar values,
+atomic invalid batches, entry bounds before deduplication, UTF-8 byte limits,
+clear/retry, result independence after buffer clear/free, and session result
+leases. Python tests additionally exercise failed iterators, iterator-triggered
+closure, parent cleanup, successful-solve mutation freeze, and the new earlier
+storage errors. The installed SDK exercises the EDB in static/shared linkage;
+its layout must remain incomplete in C11 and C++17. No persistent Python fact
+list is kept. ASan/UBSan can run the same native tests; macOS does not support
+LeakSanitizer, so disabling LSAN there is not evidence of leak checking.
+
+### Allocation contract (opaque input path)
+
+`input_edb_storage_requirements(fact_capacity, text_capacity, ...)` reports
+the byte size and alignment required by the loaded library. `input_edb_init`
+uses caller-owned storage; its lifetime spans init through free, and inputs,
+outputs and diagnostics must not overlap it. Capacities never grow. Copied
+predicate/symbol bytes include one NUL per distinct byte string. Repeated strings
+share storage, including repeats within a batch and across predicate/symbol roles.
+Clear reuses the entire reserve; it does not securely erase old data.
+
+| Path | Allocation contract |
+| --- | --- |
+| Input EDB requirements/init, append, count, clear, caller-owned free | No allocator calls. Capacity failures never fall back to heap. |
+| Input EDB create/create_with_capacity | One allocation at creation, one free at destruction; no later growth. |
+| Opaque solve input conversion / canonical export | Bounded scratch reused inside the session; no separate per-solve allocation. |
+| Reference/prepared session solve, query and result release | No engine allocator calls after initialization. Native/public results and provenance are reserved per session. |
+| Policy/session creation, legacy standalone solve_once, on-demand explanations | May allocate. Session construction fails if its result workspace cannot be reserved. |
+| Python Next | Native input storage follows the constructor contract; Python/CFFI still allocate temporary objects. |
+
+The default input constructor reserves the profile's maximum fact count plus
+`INPUT_EDB_TEXT_BYTES` of text. This budget is the native 32 KiB symbol pool plus
+8 KiB of registry-name storage (128 names of up to 63 bytes and their NULs), not
+worst-case repeated strings per fact. Query it with `limit_get`; explicit budgets
+can be smaller, never larger. Shape/string/text-capacity checks happen at insertion;
+the domain and its symbol-count/pool/per-predicate limits are still checked at solve.
+The input buffer retains logical facts independently of any policy, not public
+native symbol IDs. Conversion into the session's native EDB remains necessary to
+assign IDs canonically, independent of insertion order, using preallocated scratch.
+
+`test_maelys_datalog_input_edb_alloc` disables and counts the input allocator,
+checks aligned/undersized/misaligned storage and overflow, checks byte-for-byte
+unchanged arenas after invalid batches or exhausted text capacity, and exercises
+repeated clear/reuse. Its build rejects calloc/realloc in the input implementation.
+It proves input-buffer behavior only, not allocation freedom inside libc or the
+solver. The installed SDK consumer uses caller-owned input storage with C11 and
+C++17 and static/shared linkage, without exposing private layouts.
+
+`test_maelys_datalog_hot_path_alloc` recompiles all engine units with allocator
+hooks, refuses allocations during repeated append/solve/query/release cycles,
+checks independent sessions and input/solver failure recovery, and injects failure
+at every session-construction allocation. Explanations are explicitly tested
+outside that guard. Hot-path sorting uses an in-place nonrecursive heapsort rather
+than libc qsort, which is permitted to allocate. The test does not interpose libc
+internals or promise allocation freedom in custom backend/filter callbacks.
+
+The result is a lease on reserved session storage, not an independently allocated
+object. No second solve or session destruction is permitted while it is live.
+Release invalidates the handle even if its address is reused later. EDB clear/free
+does not change that live result. Why-true/Why-false workspaces requested afterward
+remain bounded, temporary allocations; provenance collected during solve is already
+reserved. Legacy standalone `solve_once` remains an allocating convenience API.
+
 The WASM C boundary and JavaScript wrapper live together in
 [`bindings/wasm/`](../bindings/wasm/README.md). Tests import the wrapper from
 there; generated modules remain under `build/wasm` and `build/wasm-large`.
