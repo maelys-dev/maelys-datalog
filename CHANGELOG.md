@@ -16,6 +16,13 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
   noise floors, explicit indeterminate results and raw run artifacts. This adds
   no PR check and does not change runtime behavior.
 
+### Performance
+
+- Input EDB string lookup uses a preallocated index and bounded undo journal.
+  Rejected batches restore the complete arena, including colliding hash chains.
+  The storage-requirements query includes index and journal memory separately
+  from the text budget. A dedicated benchmark measures batch and unit insertion.
+
 ### Added
 
 - Complete the C/C++ predicate initializer family with `EDB_QUERY`,

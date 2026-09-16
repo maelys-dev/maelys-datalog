@@ -309,7 +309,44 @@ int main(void) {
     assert(edb->text_used == 4u);
     assert(maelys_datalog_input_edb_free(edb) == 0);
 
+    /* Deliberate hash collisions, including rollback in the middle of an
+     * existing probe chain. Every arena byte (index and journal included)
+     * must be restored, and surviving entries must remain discoverable. */
+    assert(maelys_datalog_input_edb_init(arena.bytes, sizeof(arena.bytes), 8u, 256u, &edb) == 0);
+    char colliding[7][24];
+    size_t found = 0u;
+    for (size_t candidate = 0; found < 7u; ++candidate) {
+        char name[24]; snprintf(name, sizeof(name), "collision-%zu", candidate);
+        /* Empty index: text_slot returns the initial bucket. */
+        if (text_slot(edb, name, NULL) == edb->index_slots - 1u)
+            strcpy(colliding[found++], name);
+    }
+    value.as.symbol = colliding[1];
+    assert(maelys_datalog_input_edb_add_fact(edb, colliding[0], &value, 1u, NULL) == 0);
+    batch[0].predicate = colliding[2]; batch[0].arity = 1;
+    batch[0].terms[0] = value; batch[0].terms[0].as.symbol = colliding[3];
+    batch[1] = batch[0]; batch[1].predicate = colliding[4];
+    batch[1].terms[0].as.symbol = NULL;
+    memcpy(snapshot, arena.bytes, sizeof(snapshot));
+    assert(maelys_datalog_input_edb_add_facts(edb, batch, 2u, &diag) != 0);
+    assert(memcmp(snapshot, arena.bytes, sizeof(snapshot)) == 0);
+    batch[1].arity = MAELYS_DATALOG_MAX_TERMS + 1u;
+    assert(maelys_datalog_input_edb_add_facts(edb, batch, 2u, &diag) != 0);
+    assert(memcmp(snapshot, arena.bytes, sizeof(snapshot)) == 0);
+    batch[1].arity = 1u; batch[1].terms[0].as.symbol = colliding[5];
+    assert(maelys_datalog_input_edb_add_facts(edb, batch, 2u, &diag) == 0);
+    assert(!strcmp(edb->facts[0].predicate, colliding[0]));
+    assert(!strcmp(edb->facts[1].predicate, colliding[2]));
+    assert(!strcmp(edb->facts[2].terms[0].as.symbol, colliding[5]));
+    value.as.symbol = colliding[1];
+    assert(maelys_datalog_input_edb_add_fact(edb, colliding[0], &value, 1u, NULL) == 0);
+    assert(edb->facts[0].predicate == edb->facts[3].predicate);
+    assert(edb->facts[0].terms[0].as.symbol == edb->facts[3].terms[0].as.symbol);
+    assert(maelys_datalog_input_edb_free(edb) == 0);
+
     /* One construction allocation, none during append/clear, one release. */
+    batch[0].predicate = "p"; batch[0].arity = 1; value.as.symbol = "x";
+    batch[0].terms[0] = value; batch[1] = batch[0];
     assert(maelys_datalog_input_edb_create_with_capacity(2u, 32u, &edb) == MAELYS_DATALOG_STATUS_INTERNAL && !edb);
     assert(allocations == 1u);
     forbid_allocations = 0;

@@ -48,6 +48,15 @@ Compare the same compiler/profile on baseline and candidate, without concurrent
 builds. Establish a per-case A/A noise floor before interpreting A/B ratios.
 The solver benchmark includes EDB finalization, solve, query and result release.
 
+The input-allocation test checks colliding/wrapping hash chains and byte-for-byte
+arena restoration on rejected batches. The input probe measures unit and batch
+append separately; allocation, clear and reporting are outside its timer.
+
+```sh
+make -s -f Makefile.bench bench-input-small CC=clang
+make -s -f Makefile.bench bench-input-large CC=clang
+```
+
 ## Installed facade and SDK
 
 ```sh

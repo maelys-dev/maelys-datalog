@@ -59,6 +59,20 @@ bench-large: $(BENCH_LARGE_O0) $(BENCH_LARGE_O2)
 bench-all: bench-small bench-large
 
 check: check-small
+# Input API probe writes measurements to stdout, never tracked bench/results.
+.PHONY: bench-input-small bench-input-large
+INPUT_HEADERS = $(wildcard include/*.h include/maelys/*.h src/core/*.h src/compiler/*.h src/public/*.h src/registry/*.h modules/standard/*.h)
+bench-input-small: $(BUILD_ROOT)/input-small
+	$<
+bench-input-large: $(BUILD_ROOT)/input-large
+	$<
+$(BUILD_ROOT)/input-small: $(ENGINE_SRCS) bench/bench_input_edb.c $(INPUT_HEADERS)
+	@mkdir -p $(BUILD_ROOT)
+	$(CC) $(CFLAGS_COMMON) -O2 -UNDEBUG $(ENGINE_SRCS) bench/bench_input_edb.c -o $@
+$(BUILD_ROOT)/input-large: $(ENGINE_SRCS) bench/bench_input_edb.c $(INPUT_HEADERS)
+	@mkdir -p $(BUILD_ROOT)
+	$(CC) $(CFLAGS_COMMON) -O2 -UNDEBUG -DMAELYS_DATALOG_PROFILE_LARGE $(ENGINE_SRCS) bench/bench_input_edb.c -o $@
+
 
 # Same public-input harness used by the manual revision-comparison driver.
 .PHONY: bench-input-small bench-input-large

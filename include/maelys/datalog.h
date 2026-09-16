@@ -297,6 +297,8 @@ MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_session_solve(
  * fact_capacity must be 1..MAX_EDB_FACTS; text_capacity is 0..INPUT_EDB_TEXT_BYTES.
  * Distinct predicate/symbol strings share one text arena, including one NUL per
  * distinct byte string. Repeated strings share storage across facts and roles.
+ * The returned storage size also includes a bounded string index and a batch
+ * rollback journal, sized from fact_capacity; neither consumes text_capacity.
  * Requirements outputs are unchanged on failure; init/create outputs become
  * NULL on failure. init requires the returned alignment and at least the
  * returned size. Caller storage must remain alive, unmoved and exclusively
@@ -313,8 +315,9 @@ MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_session_solve(
  *
  * add_fact/add_facts copy predicate names and symbol bytes before returning;
  * integer/boolean values are copied by value (nonzero booleans become 1).
- * Each append validates the entire batch before writing; failures consume no
- * entries or text bytes. Inputs must remain unchanged until return and must
+ * Each append validates the entire batch before publishing facts or text;
+ * failures restore the internal index and leave the entire arena unchanged.
+ * Inputs must remain unchanged until return and must
  * not alias EDB storage. Empty batches are OK. There is no heap fallback.
  * MAX_EDB_FACTS bounds entries BEFORE deduplication; MAX_STRING_BYTES bounds
  * each predicate name and symbol, excluding NUL; MAX_ARITY bounds each fact.
