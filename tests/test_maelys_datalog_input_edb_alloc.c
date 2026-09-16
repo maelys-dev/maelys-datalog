@@ -297,6 +297,25 @@ int main(void) {
     assert(maelys_datalog_input_edb_free(edb) == 0);
     assert(allocations == 0u && releases == 0u);
 
+    /* The empty byte string costs one byte. With three text bytes, two
+     * distinct strings fit: a text_capacity/2 bound would undercount them.
+     * Predicate/domain semantics remain the solver's responsibility. */
+    assert(maelys_datalog_input_edb_init(arena.bytes, sizeof(arena.bytes), 2u, 1u, &edb) == 0);
+    assert(maelys_datalog_input_edb_add_fact(edb, "", NULL, 0u, NULL) == 0);
+    assert(edb->text_used == 1u);
+    assert(maelys_datalog_input_edb_free(edb) == 0);
+    assert(maelys_datalog_input_edb_init(arena.bytes, sizeof(arena.bytes), 2u, 3u, &edb) == 0);
+    value.as.symbol = "";
+    assert(maelys_datalog_input_edb_add_fact(edb, "p", &value, 1u, NULL) == 0);
+    assert(edb->text_used == 3u);
+    memcpy(snapshot, arena.bytes, sizeof(snapshot));
+    value.as.symbol = "q";
+    assert(maelys_datalog_input_edb_add_fact(edb, "p", &value, 1u, &diag) != 0);
+    assert(memcmp(snapshot, arena.bytes, sizeof(snapshot)) == 0);
+    assert(maelys_datalog_input_edb_free(edb) == 0);
+    assert(allocations == 0u && releases == 0u);
+    value.as.symbol = "x";
+
     /* Cross-fact, cross-role and intra-batch strings share one copy. Repeated
      * strings consume no bytes even when the pool is already exactly full. */
     assert(maelys_datalog_input_edb_init(arena.bytes, sizeof(arena.bytes), 8u, 4u, &edb) == 0);
