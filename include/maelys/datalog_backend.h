@@ -24,6 +24,8 @@ MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_backend_filter(
     const unsigned char *value, size_t value_length, const unsigned char *pattern,
     size_t pattern_length, int *out_matched);
 
+/* Extension-author descriptor. Ordinary consumers need only datalog.h and
+ * its opaque session configuration, not this callback contract. */
 typedef struct {
     uint32_t abi_version;
     size_t struct_size;
@@ -69,10 +71,7 @@ MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_session_create_ex(
     maelys_datalog_session_t **);
 MAELYS_DATALOG_API maelys_datalog_status_t
 maelys_datalog_session_program(const maelys_datalog_session_t *, const maelys_datalog_program_t **);
-/* Existing session_fingerprint remains the policy authority identity. This
- * separate execution identity also binds backend/version/options. */
-MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_session_execution_fingerprint(
-    const maelys_datalog_session_t *, char out[MAELYS_DATALOG_PUBLIC_FINGERPRINT_BYTES]);
+/* Consumer fingerprint accessors are declared in datalog.h, included above. */
 
 #ifdef __cplusplus
 }

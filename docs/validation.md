@@ -69,6 +69,23 @@ working table cannot pass that lookup (exit 9).
 
 ## Actual Python and WASM wrappers
 
+| Gate | Verified behavior |
+| --- | --- |
+| `test_maelys_datalog_input_edb_alloc` | Caller-owned alignment/size, copied and shared strings, byte-for-byte atomic rejection, fixed capacities and allocation-free append/clear. |
+| `check_module_sdk.sh` | All eight opaque handle layouts rejected in C11/C++17; static/shared external consumers pass. |
+
+Run the sanitizer build used by CI, not only CMake's separate targets:
+
+```sh
+make -j4 -f Makefile.asan asan PROFILE=SMALL
+make -j4 -f Makefile.asan asan PROFILE=LARGE
+```
+
+Ordinary tests share ASan objects. The input allocator test excludes the input
+implementation object it already includes. macOS runs ASan/UBSan with LSAN
+disabled; Linux also runs LSAN. The input allocator gate does not assert
+allocation freedom in the solver or libc internals.
+
 The WASM C boundary and JavaScript wrapper live together in
 [`bindings/wasm/`](../bindings/wasm/README.md). Tests import the wrapper from
 there; generated modules remain under `build/wasm` and `build/wasm-large`.

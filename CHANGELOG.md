@@ -7,8 +7,40 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+
+- Opaque owned `maelys_datalog_input_edb_t` with atomic copied single/batch
+  additions, entry count, clear/free and `maelys_datalog_session_solve_edb()`.
+  The existing array solve and legacy core EDB API remain unchanged. Input
+  buffers retain no borrowed strings and solve results retain no buffer pointer.
+- Opaque `maelys_datalog_session_config_t` with checked setters/getters and
+  `maelys_datalog_session_create_configured()` in `<maelys/datalog.h>`.
+  Sessions snapshot configuration values. Capability constants and the execution
+  fingerprint declaration now live in that consumer header; extension headers
+  still expose them transitively. Backend descriptors and `session_create_ex()`
+  remain unchanged. This is additive to public API v1, not a layout change.
+- Additive opaque C facade getters for loaded-library capacities
+  (`maelys_datalog_limit_get`) and all distinct derived IDB facts
+  (`maelys_datalog_result_derived_fact_count`). Existing public struct layouts
+  are unchanged; limits are append-only scalar keys.
+
+### Fixed
+
+- Opaque solve input diagnostics identify zero-based fact/term indices and the
+  cause of predicate, arity, value and capacity failures instead of discarding
+  the details as `invalid solve input`. Rejected native batches remain atomic
+  and sessions can retry with corrected inputs.
+
 ### Changed
 
+- Input EDB storage is now fixed-capacity: `storage_requirements`/`init` support
+  caller-owned aligned storage without allocation; `create_with_capacity` uses
+  one allocation and `create` reserves profile-bounded capacity. Append,
+  batch append, count and clear never allocate or grow storage. Text capacity
+  includes distinct names, symbols and their NUL terminators. Failed batches
+  consume neither entries nor bytes. The default text budget is the
+  native symbol pool plus registry names (40 KiB, not 5/10 MiB); repeated strings
+  share storage. `INPUT_EDB_TEXT_BYTES` reports this bound through `limit_get`.
 - `scripts/publish-channel.sh` honours `CHANNEL_DRY_RUN=1`, set by
   `maelys-release rehearse --channel` (socle 0.42.0): it takes its real path
   up to the registry's write — assembly, the tarball as a file, the registry

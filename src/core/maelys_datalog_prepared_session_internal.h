@@ -26,6 +26,11 @@ void maelys_datalog_prepared_session_result_released(
 maelys_result_t maelys_datalog_prepared_session_materialize_inputs(
     maelys_datalog_prepared_session_t *, const maelys_datalog_input_fact_t *, size_t);
 
+/* Optional internal explanation; public diagnostic layout remains unchanged. */
+maelys_result_t maelys_datalog_prepared_session_materialize_inputs_diagnosed(
+    maelys_datalog_prepared_session_t *, const maelys_datalog_input_fact_t *, size_t,
+    char *message, size_t message_capacity);
+
 /* Execute the already canonicalized EDB and acquire its result lease. */
 maelys_result_t maelys_datalog_prepared_session_solve_materialized_ex(
     maelys_datalog_prepared_session_t *, maelys_datalog_solve_result_t **,

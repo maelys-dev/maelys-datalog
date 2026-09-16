@@ -723,8 +723,445 @@ static int test_public_api_errors_are_atomic_and_diagnostic(void) {
     TEST_END();
 }
 
+static int test_public_api_limits_and_derived_count(void) {
+    TEST_BEGIN();
+    size_t limit = 777u;
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_UNSUPPORTED,
+                      maelys_datalog_limit_get((maelys_datalog_limit_t)999, &limit), "%d");
+    TEST_ASSERT_EQUAL((size_t)777u, limit, "%zu");
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_INVALID_ARGUMENT,
+                      maelys_datalog_limit_get(MAELYS_DATALOG_LIMIT_MAX_ARITY, NULL), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK,
+                      maelys_datalog_limit_get(MAELYS_DATALOG_LIMIT_MAX_ARITY, &limit), "%d");
+    TEST_ASSERT_EQUAL((size_t)MAELYS_DATALOG_PUBLIC_MAX_TERMS, limit, "%zu");
+
+    const maelys_datalog_public_predicate_t predicates[] = {
+        {"observed", 1u, MAELYS_DATALOG_PREDICATE_EDB},
+        {"helper", 1u, MAELYS_DATALOG_PREDICATE_IDB},
+        {"allow", 1u, MAELYS_DATALOG_PREDICATE_IDB | MAELYS_DATALOG_PREDICATE_QUERY},
+        {"fixed", 1u, MAELYS_DATALOG_PREDICATE_POLICY_FACT},
+    };
+    const char *atoms[] = {"public"};
+    const maelys_datalog_public_domain_t domain = {
+        "public_count", predicates, 4u, atoms, 1u,
+    };
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK, maelys_datalog_domain_register(&domain), "%d");
+    const char source[] = "fixed(\"public\"). helper(X) :- observed(X). allow(X) :- helper(X).";
+    maelys_datalog_policy_t *policy = NULL;
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK, maelys_datalog_policy_load_inline(
+        domain.name, "count", source, strlen(source), &policy, NULL), "%d");
+    maelys_datalog_session_t *session = NULL;
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK,
+                      maelys_datalog_session_create(policy, 0u, &session), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK, maelys_datalog_policy_free(policy), "%d");
+    maelys_datalog_public_fact_t inputs[] = {
+        fact("observed", symbol_value("alice")), fact("observed", symbol_value("alice")),
+    };
+    maelys_datalog_result_t *result = NULL;
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK,
+                      maelys_datalog_session_solve(session, inputs, 2u, &result, NULL), "%d");
+    size_t count = 777u;
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_INVALID_ARGUMENT,
+                      maelys_datalog_result_derived_fact_count(NULL, &count), "%d");
+    TEST_ASSERT_EQUAL((size_t)777u, count, "%zu");
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_INVALID_ARGUMENT,
+                      maelys_datalog_result_derived_fact_count(result, NULL), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK,
+                      maelys_datalog_result_derived_fact_count(result, &count), "%d");
+    TEST_ASSERT_EQUAL((size_t)2u, count, "%zu"); /* helper + allow; no EDB/policy facts */
+    size_t query_count = 0u;
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK, maelys_datalog_result_enumerate(
+        result, "allow", 1u, NULL, 0u, &query_count), "%d");
+    TEST_ASSERT_EQUAL((size_t)1u, query_count, "%zu");
+    TEST_ASSERT_TRUE(maelys_datalog_result_enumerate(
+        result, "helper", 1u, NULL, 0u, &query_count) != MAELYS_DATALOG_STATUS_OK);
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK, maelys_datalog_result_free(result), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK,
+                      maelys_datalog_session_solve(session, NULL, 0u, &result, NULL), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK,
+                      maelys_datalog_result_derived_fact_count(result, &count), "%d");
+    TEST_ASSERT_EQUAL((size_t)0u, count, "%zu");
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK, maelys_datalog_result_free(result), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK, maelys_datalog_session_free(session), "%d");
+    TEST_END();
+}
+
+static int test_public_api_input_diagnostics_and_retry(void) {
+    TEST_BEGIN();
+    const char *domain = "public_input_errors";
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK, register_domain(domain), "%d");
+    const char source[] = "allow(X) :- observed(X).";
+    maelys_datalog_policy_t *policy = NULL;
+    maelys_datalog_session_t *session = NULL;
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK, maelys_datalog_policy_load_inline(
+        domain, "input-errors", source, strlen(source), &policy, NULL), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK, maelys_datalog_session_create(policy, 0u, &session), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK, maelys_datalog_policy_free(policy), "%d");
+    maelys_datalog_public_fact_t bad[] = {
+        fact("missing", symbol_value("alice")),
+        fact("observed", symbol_value("alice")),
+        fact("allow", symbol_value("alice")),
+        fact("policy_value", symbol_value("alice")),
+        fact(NULL, symbol_value("alice")),
+        fact("observed", symbol_value("alice")),
+        fact("observed", symbol_value(NULL)),
+        fact("observed", symbol_value("alice")),
+    };
+    bad[1].arity = 0u;
+    bad[5].arity = MAELYS_DATALOG_PUBLIC_MAX_TERMS + 1u;
+    bad[7].terms[0].kind = (maelys_datalog_value_kind_t)999;
+    const char *reasons[] = {
+        "unknown predicate missing/1", "observed expects 1 arguments, received 0",
+        "allow is not an EDB predicate", "policy_value is a policy-fact predicate",
+        "predicate is NULL", "arity 5 exceeds limit 4", "term 0: NULL symbol",
+        "term 0: unsupported value kind",
+    };
+    const maelys_datalog_status_t statuses[] = {
+        MAELYS_DATALOG_STATUS_INVALID_FIELD, MAELYS_DATALOG_STATUS_INVALID_FIELD,
+        MAELYS_DATALOG_STATUS_INVALID_FIELD, MAELYS_DATALOG_STATUS_FORBIDDEN,
+        MAELYS_DATALOG_STATUS_INVALID_ARGUMENT, MAELYS_DATALOG_STATUS_INVALID_ARGUMENT,
+        MAELYS_DATALOG_STATUS_INVALID_ARGUMENT, MAELYS_DATALOG_STATUS_INVALID_FIELD,
+    };
+    for (size_t i = 0u; i < sizeof(bad) / sizeof(bad[0]); ++i) {
+        maelys_datalog_public_fact_t inputs[] = {fact("observed", symbol_value("stale")), bad[i]};
+        maelys_datalog_result_t *result = NULL;
+        maelys_datalog_public_diagnostic_t diag;
+        TEST_ASSERT_EQUAL(statuses[i],
+                          maelys_datalog_session_solve(session, inputs, 2u, &result, &diag), "%d");
+        TEST_ASSERT_NULL(result);
+        TEST_ASSERT_EQUAL(MAELYS_DATALOG_DIAGNOSTIC_SOLVE, diag.source, "%d");
+        TEST_ASSERT_EQUAL((int)statuses[i], diag.code, "%d");
+        TEST_ASSERT_EQUAL_STRING("input", diag.phase);
+        TEST_ASSERT_NOT_NULL(strstr(diag.message, "index 1"));
+        TEST_ASSERT_NOT_NULL(strstr(diag.message, reasons[i]));
+        TEST_ASSERT_EQUAL((size_t)0u, diag.line, "%zu");
+        TEST_ASSERT_EQUAL((size_t)0u, diag.column, "%zu");
+        maelys_datalog_public_fact_t good = fact("observed", symbol_value("fresh"));
+        TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK,
+                          maelys_datalog_session_solve(session, &good, 1u, &result, &diag), "%d");
+        TEST_ASSERT_EQUAL(MAELYS_DATALOG_DIAGNOSTIC_NONE, diag.source, "%d");
+        TEST_ASSERT_EQUAL_STRING("", diag.message);
+        maelys_datalog_public_value_t query = symbol_value("stale");
+        int present = 1;
+        TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK,
+                          maelys_datalog_result_query(result, "allow", &query, 1u, &present), "%d");
+        TEST_ASSERT_EQUAL(0, present, "%d");
+        TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK, maelys_datalog_result_free(result), "%d");
+    }
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK, maelys_datalog_session_free(session), "%d");
+    TEST_END();
+}
+
+static int test_public_api_capacity_diagnostics(void) {
+    TEST_BEGIN();
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK, register_domain("public_capacity_errors"), "%d");
+    const char source[] = "allow(X) :- observed(X).";
+    maelys_datalog_policy_t *policy = NULL;
+    maelys_datalog_session_t *session = NULL;
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK, maelys_datalog_policy_load_inline(
+        "public_capacity_errors", "capacity-errors", source, strlen(source), &policy, NULL), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK, maelys_datalog_session_create(policy, 0u, &session), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK, maelys_datalog_policy_free(policy), "%d");
+    size_t edb_limit, per_predicate, symbol_limit, string_limit, pool_limit;
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK, maelys_datalog_limit_get(MAELYS_DATALOG_LIMIT_MAX_EDB_FACTS, &edb_limit), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK, maelys_datalog_limit_get(MAELYS_DATALOG_LIMIT_MAX_FACTS_PER_PRED, &per_predicate), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK, maelys_datalog_limit_get(MAELYS_DATALOG_LIMIT_MAX_SYMBOLS, &symbol_limit), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK, maelys_datalog_limit_get(MAELYS_DATALOG_LIMIT_MAX_STRING_BYTES, &string_limit), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK, maelys_datalog_limit_get(MAELYS_DATALOG_LIMIT_STRING_POOL_BYTES, &pool_limit), "%d");
+    maelys_datalog_public_fact_t *inputs = calloc(edb_limit + 1u, sizeof(*inputs));
+    char *strings = calloc(symbol_limit + 1u, string_limit + 2u);
+    TEST_ASSERT_NOT_NULL(inputs);
+    TEST_ASSERT_NOT_NULL(strings);
+    if (!inputs || !strings) { free(inputs); free(strings); (void)maelys_datalog_session_free(session); TEST_END(); }
+    maelys_datalog_result_t *result = NULL;
+    maelys_datalog_public_diagnostic_t diag;
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_PAYLOAD_TOO_LARGE,
+                      maelys_datalog_session_solve(session, inputs, edb_limit + 1u, &result, &diag), "%d");
+    TEST_ASSERT_NULL(result);
+    TEST_ASSERT_NOT_NULL(strstr(diag.message, "before deduplication"));
+    for (size_t i = 0u; i <= per_predicate; ++i) {
+        inputs[i] = fact("observed", symbol_value(NULL));
+        inputs[i].terms[0].kind = MAELYS_DATALOG_VALUE_INTEGER;
+        inputs[i].terms[0].as.integer = (int64_t)i;
+    }
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_PAYLOAD_TOO_LARGE,
+                      maelys_datalog_session_solve(session, inputs, per_predicate + 1u, &result, &diag), "%d");
+    TEST_ASSERT_NULL(result);
+    char expected[128];
+    snprintf(expected, sizeof(expected), "index %zu (observed): per-predicate fact limit %zu", per_predicate, per_predicate);
+    TEST_ASSERT_NOT_NULL(strstr(diag.message, expected));
+    memset(strings, 'x', string_limit + 1u);
+    inputs[0] = fact("observed", symbol_value(strings));
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_INVALID_ARGUMENT,
+                      maelys_datalog_session_solve(session, inputs, 1u, &result, &diag), "%d");
+    TEST_ASSERT_NOT_NULL(strstr(diag.message, "index 0 (observed), term 0: symbol exceeds"));
+    for (size_t i = 0u; i <= symbol_limit; ++i) {
+        char *text = strings + i * (string_limit + 2u);
+        snprintf(text, string_limit + 2u, "s%05zu", i);
+        inputs[i] = fact("observed", symbol_value(text));
+    }
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_PAYLOAD_TOO_LARGE,
+                      maelys_datalog_session_solve(session, inputs, symbol_limit + 1u, &result, &diag), "%d");
+    TEST_ASSERT_NULL(result);
+    TEST_ASSERT_NOT_NULL(strstr(diag.message, "symbol count limit"));
+    size_t long_count = pool_limit / (string_limit + 1u) + 1u;
+    for (size_t i = 0u; i < long_count; ++i) {
+        char *text = strings + i * (string_limit + 2u);
+        snprintf(text, string_limit + 2u, "s%05zu", i);
+        memset(text + 6u, 'x', string_limit - 6u);
+        text[string_limit] = '\0';
+    }
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_PAYLOAD_TOO_LARGE,
+                      maelys_datalog_session_solve(session, inputs, long_count, &result, &diag), "%d");
+    TEST_ASSERT_NULL(result);
+    TEST_ASSERT_NOT_NULL(strstr(diag.message, "symbol storage byte limit"));
+    /* Even a late capacity failure leaves the session reusable with empty input. */
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK,
+                      maelys_datalog_session_solve(session, NULL, 0u, &result, &diag), "%d");
+    size_t derived = 999u;
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK, maelys_datalog_result_derived_fact_count(result, &derived), "%d");
+    TEST_ASSERT_EQUAL((size_t)0u, derived, "%zu");
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK, maelys_datalog_result_free(result), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK, maelys_datalog_session_free(session), "%d");
+    free(inputs);
+    free(strings);
+    TEST_END();
+}
+
+static int test_public_api_opaque_session_config(void) {
+    TEST_BEGIN();
+    maelys_datalog_session_config_t *config = NULL;
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_INVALID_ARGUMENT,
+                      maelys_datalog_session_config_create(NULL), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK,
+                      maelys_datalog_session_config_create(&config), "%d");
+    TEST_ASSERT_NOT_NULL(config);
+    if (!config) TEST_END();
+    uint64_t value = 123u;
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK,
+                      maelys_datalog_session_config_get_required_capabilities(config, &value), "%d");
+    TEST_ASSERT_TRUE(value == UINT64_C(0));
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK,
+                      maelys_datalog_session_config_get_work_limit(config, &value), "%d");
+    TEST_ASSERT_TRUE(value == UINT64_C(0));
+    value = 123u;
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_INVALID_ARGUMENT,
+                      maelys_datalog_session_config_get_work_limit(NULL, &value), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_INVALID_ARGUMENT,
+                      maelys_datalog_session_config_get_required_capabilities(NULL, &value), "%d");
+    TEST_ASSERT_TRUE(value == UINT64_C(123));
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_INVALID_ARGUMENT,
+                      maelys_datalog_session_config_get_work_limit(config, NULL), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_INVALID_ARGUMENT,
+                      maelys_datalog_session_config_get_required_capabilities(config, NULL), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_INVALID_ARGUMENT,
+                      maelys_datalog_session_config_set_work_limit(NULL, 1u), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_INVALID_ARGUMENT,
+                      maelys_datalog_session_config_set_required_capabilities(NULL, 0u), "%d");
+
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK, register_domain("public_config"), "%d");
+    const char source[] = "allow(X) :- observed(X).";
+    maelys_datalog_policy_t *policy = NULL;
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK,
+                      maelys_datalog_policy_load_inline("public_config", "config", source,
+                                                       strlen(source), &policy, NULL), "%d");
+    if (!policy) {
+        maelys_datalog_session_config_free(config);
+        TEST_END();
+    }
+    maelys_datalog_session_t *plain = NULL, *configured = NULL, *defaults = NULL;
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK,
+                      maelys_datalog_session_create(policy, 0u, &plain), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK,
+                      maelys_datalog_session_create_configured(policy, 0u, config, &configured), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK,
+                      maelys_datalog_session_create_configured(policy, 0u, NULL, &defaults), "%d");
+    char original[65], identity[65];
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK,
+                      maelys_datalog_session_execution_fingerprint(plain, original), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK,
+                      maelys_datalog_session_execution_fingerprint(configured, identity), "%d");
+    TEST_ASSERT_TRUE(strcmp(original, identity) == 0);
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK,
+                      maelys_datalog_session_execution_fingerprint(defaults, identity), "%d");
+    TEST_ASSERT_TRUE(strcmp(original, identity) == 0);
+
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK,
+                      maelys_datalog_session_config_set_required_capabilities(config, MAELYS_DATALOG_CAP_EXPLAIN_FALSE), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_INVALID_ARGUMENT,
+                      maelys_datalog_session_config_set_required_capabilities(config, UINT64_C(1) << 63), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK,
+                      maelys_datalog_session_config_get_required_capabilities(config, &value), "%d");
+    TEST_ASSERT_TRUE(value == MAELYS_DATALOG_CAP_EXPLAIN_FALSE);
+    maelys_datalog_session_t *required = NULL;
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK,
+                      maelys_datalog_session_create_configured(policy, 0u, config, &required), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK,
+                      maelys_datalog_session_execution_fingerprint(required, identity), "%d");
+    TEST_ASSERT_TRUE(strcmp(original, identity) != 0);
+    /* Changing the builder does not change existing sessions. */
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK,
+                      maelys_datalog_session_execution_fingerprint(configured, identity), "%d");
+    TEST_ASSERT_TRUE(strcmp(original, identity) == 0);
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK,
+                      maelys_datalog_session_config_set_work_limit(config, UINT64_MAX), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK,
+                      maelys_datalog_session_config_get_work_limit(config, &value), "%d");
+    TEST_ASSERT_TRUE(value == UINT64_MAX);
+    maelys_datalog_session_t *rejected = plain;
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_UNSUPPORTED,
+                      maelys_datalog_session_create_configured(policy, 0u, config, &rejected), "%d");
+    TEST_ASSERT_NULL(rejected);
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK,
+                      maelys_datalog_session_config_set_work_limit(config, 0u), "%d");
+    rejected = plain;
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_NOT_FOUND,
+                      maelys_datalog_session_create_configured(policy, 1u, config, &rejected), "%d");
+    TEST_ASSERT_NULL(rejected);
+    rejected = plain;
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_INVALID_ARGUMENT,
+                      maelys_datalog_session_create_configured(NULL, 0u, config, &rejected), "%d");
+    TEST_ASSERT_NULL(rejected);
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_INVALID_ARGUMENT,
+                      maelys_datalog_session_create_configured(policy, 0u, config, NULL), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK, maelys_datalog_session_config_free(config), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK, maelys_datalog_session_config_free(NULL), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK, maelys_datalog_policy_free(policy), "%d");
+    /* Neither policy nor configuration is retained as a borrowed pointer. */
+    maelys_datalog_public_fact_t input = fact("observed", symbol_value("alice"));
+    maelys_datalog_result_t *result = NULL;
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK,
+                      maelys_datalog_session_solve(required, &input, 1u, &result, NULL), "%d");
+    int present = 0;
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK,
+                      maelys_datalog_result_query(result, "allow", input.terms, 1u, &present), "%d");
+    TEST_ASSERT_TRUE(present);
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK, maelys_datalog_result_free(result), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK, maelys_datalog_session_free(required), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK, maelys_datalog_session_free(defaults), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK, maelys_datalog_session_free(configured), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK, maelys_datalog_session_free(plain), "%d");
+    TEST_END();
+}
+
+static int test_public_api_owned_input_edb(void) {
+    TEST_BEGIN();
+    maelys_datalog_input_edb_t *edb = NULL;
+    maelys_datalog_public_diagnostic_t diag;
+    size_t count = 99u, limit = 0u, string_limit = 0u;
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_INVALID_ARGUMENT,
+                      maelys_datalog_input_edb_create(NULL), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK, maelys_datalog_input_edb_create(&edb), "%d");
+    TEST_ASSERT_NOT_NULL(edb);
+    if (!edb) TEST_END();
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK, maelys_datalog_input_edb_count(edb, &count), "%d");
+    TEST_ASSERT_EQUAL((size_t)0u, count, "%zu");
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_INVALID_ARGUMENT,
+                      maelys_datalog_input_edb_count(NULL, &count), "%d");
+    TEST_ASSERT_EQUAL((size_t)0u, count, "%zu");
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK,
+                      maelys_datalog_input_edb_add_facts(edb, NULL, 0u, &diag), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_INVALID_ARGUMENT,
+                      maelys_datalog_input_edb_add_fact(edb, "observed", NULL, 1u, &diag), "%d");
+    char predicate[] = "observed", text[] = "alice";
+    maelys_datalog_public_value_t value = symbol_value(text);
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK,
+                      maelys_datalog_input_edb_add_fact(edb, predicate, &value, 1u, &diag), "%d");
+    predicate[0] = 'x'; text[0] = 'x'; /* Caller memory is not retained. */
+    maelys_datalog_public_fact_t batch[] = {
+        fact("observed", symbol_value("bob")), fact("observed", symbol_value(NULL))
+    };
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_INVALID_ARGUMENT,
+                      maelys_datalog_input_edb_add_facts(edb, batch, 2u, &diag), "%d");
+    TEST_ASSERT_NOT_NULL(strstr(diag.message, "Fact 1, term 0"));
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK, maelys_datalog_input_edb_count(edb, &count), "%d");
+    TEST_ASSERT_EQUAL((size_t)1u, count, "%zu");
+    batch[1].terms[0].kind = (maelys_datalog_value_kind_t)999;
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_INVALID_FIELD,
+                      maelys_datalog_input_edb_add_facts(edb, batch, 2u, &diag), "%d");
+    batch[1].arity = MAELYS_DATALOG_PUBLIC_MAX_TERMS + 1u;
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_INVALID_ARGUMENT,
+                      maelys_datalog_input_edb_add_facts(edb, batch, 2u, &diag), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_PAYLOAD_TOO_LARGE,
+                      maelys_datalog_input_edb_add_facts(edb, batch, SIZE_MAX, &diag), "%d");
+
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK, register_domain("public_owned_edb"), "%d");
+    const char *source = "allow(X) :- observed(X), count(7), enabled(true).";
+    maelys_datalog_policy_t *policy = NULL;
+    maelys_datalog_session_t *session = NULL;
+    maelys_datalog_result_t *result = NULL;
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK,
+        maelys_datalog_policy_load_inline("public_owned_edb", "owned", source, strlen(source), &policy, &diag), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK, maelys_datalog_session_create(policy, 0u, &session), "%d");
+    batch[0] = fact("count", (maelys_datalog_public_value_t){.kind=MAELYS_DATALOG_VALUE_INTEGER, .as.integer=7});
+    batch[1] = fact("enabled", (maelys_datalog_public_value_t){.kind=MAELYS_DATALOG_VALUE_BOOLEAN, .as.boolean=-2});
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK, maelys_datalog_input_edb_add_facts(edb, batch, 2u, &diag), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK, maelys_datalog_session_solve_edb(session, edb, &result, &diag), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK, maelys_datalog_input_edb_count(edb, &count), "%d");
+    TEST_ASSERT_EQUAL((size_t)3u, count, "%zu");
+    maelys_datalog_result_t *blocked = result;
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_INVALID_STATE,
+                      maelys_datalog_session_solve_edb(session, edb, &blocked, &diag), "%d");
+    TEST_ASSERT_NULL(blocked);
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK, maelys_datalog_input_edb_clear(edb), "%d");
+    int present = 0;
+    value = symbol_value("alice");
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK,
+                      maelys_datalog_result_query(result, "allow", &value, 1u, &present), "%d");
+    TEST_ASSERT_TRUE(present);
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK, maelys_datalog_input_edb_free(edb), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK,
+                      maelys_datalog_result_query(result, "allow", &value, 1u, &present), "%d");
+    TEST_ASSERT_TRUE(present);
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK, maelys_datalog_result_free(result), "%d");
+
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK, maelys_datalog_input_edb_create(&edb), "%d");
+    /* Domain rejection is deferred, and the buffer/session can be retried. */
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK, maelys_datalog_input_edb_add_fact(edb, "unknown", &value, 1u, &diag), "%d");
+    TEST_ASSERT_TRUE(maelys_datalog_session_solve_edb(session, edb, &result, &diag) != MAELYS_DATALOG_STATUS_OK);
+    TEST_ASSERT_NULL(result);
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK, maelys_datalog_input_edb_clear(edb), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK, maelys_datalog_session_solve_edb(session, edb, &result, &diag), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK, maelys_datalog_result_free(result), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK, maelys_datalog_session_free(session), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK, maelys_datalog_policy_free(policy), "%d");
+
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK, maelys_datalog_limit_get(MAELYS_DATALOG_LIMIT_MAX_STRING_BYTES, &string_limit), "%d");
+    char *long_text = malloc(string_limit + 2u);
+    TEST_ASSERT_NOT_NULL(long_text);
+    if (long_text) {
+        memset(long_text, 'a', string_limit + 1u);
+        long_text[string_limit + 1u] = '\0';
+        value = symbol_value(long_text);
+        TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_PAYLOAD_TOO_LARGE,
+                          maelys_datalog_input_edb_add_fact(edb, "observed", &value, 1u, &diag), "%d");
+        long_text[string_limit] = '\0';
+        TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK,
+                          maelys_datalog_input_edb_add_fact(edb, "observed", &value, 1u, &diag), "%d");
+        free(long_text);
+    }
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK, maelys_datalog_input_edb_clear(edb), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK, maelys_datalog_limit_get(MAELYS_DATALOG_LIMIT_MAX_EDB_FACTS, &limit), "%d");
+    value = symbol_value("duplicate");
+    for (size_t i = 0; i < limit; ++i)
+        TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK,
+                          maelys_datalog_input_edb_add_fact(edb, "observed", &value, 1u, &diag), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_PAYLOAD_TOO_LARGE,
+                      maelys_datalog_input_edb_add_fact(edb, "observed", &value, 1u, &diag), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK, maelys_datalog_input_edb_count(edb, &count), "%d");
+    TEST_ASSERT_EQUAL(limit, count, "%zu");
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK, maelys_datalog_input_edb_free(edb), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK, maelys_datalog_input_edb_free(NULL), "%d");
+    TEST_END();
+}
+
 int main(int argc, char **argv) {
     const test_case_t cases[] = {
+        {"public_api/owned_input_edb", TEST_MODE_NON_BLOCKING, test_public_api_owned_input_edb},
+        {"public_api/opaque_session_config", TEST_MODE_NON_BLOCKING, test_public_api_opaque_session_config},
+        {"public_api/limits_and_derived_count", TEST_MODE_NON_BLOCKING, test_public_api_limits_and_derived_count},
+        {"public_api/input_diagnostics_and_retry", TEST_MODE_NON_BLOCKING, test_public_api_input_diagnostics_and_retry},
+        {"public_api/capacity_diagnostics", TEST_MODE_NON_BLOCKING, test_public_api_capacity_diagnostics},
         {"public_api/complete_lifecycle", TEST_MODE_NON_BLOCKING,
          test_public_api_complete_lifecycle},
         {"public_api/domain_is_copied_and_divergence_refused", TEST_MODE_NON_BLOCKING,
