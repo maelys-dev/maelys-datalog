@@ -3,11 +3,22 @@
 #include "common/maelys_sha256.h"
 #include "src/core/maelys_datalog_prepared_session_internal.h"
 #include "src/core/maelys_datalog_solver_internal.h"
+#include "src/core/maelys_datalog_sort_internal.h"
 #include "src/core/maelys_datalog_pipeline_testing.h"
 #include "src/registry/maelys_datalog_modules_internal.h"
 
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
+#include <stdarg.h>
+
+static void input_message(char *out, size_t capacity, const char *format, ...) {
+    if (!out || !capacity) return;
+    va_list args;
+    va_start(args, format);
+    vsnprintf(out, capacity, format, args);
+    va_end(args);
+}
 
 #ifdef MAELYS_TESTING
 _Thread_local maelys_datalog_pipeline_counts_t maelys_datalog_pipeline_counts;
@@ -26,7 +37,7 @@ static maelys_result_t collect_input_symbols(
     maelys_datalog_prepared_session_t *session,
     const maelys_datalog_input_fact_t *facts,
     size_t fact_count,
-    size_t *out_count) {
+    size_t *out_count, char *message, size_t message_capacity) {
     if (!session || (!facts && fact_count > 0u) || !out_count) {
         return MAELYS_ERR_INVALID_ARGUMENT;
     }
@@ -34,6 +45,9 @@ static maelys_result_t collect_input_symbols(
     for (size_t i = 0u; i < fact_count; i++) {
         const maelys_datalog_input_fact_t *fact = &facts[i];
         if (!fact->predicate || fact->arity > MAELYS_DATALOG_MAX_TERMS) {
+            input_message(message, message_capacity,
+                          "Invalid fact at index %zu: missing predicate or arity exceeds %u.",
+                          i, MAELYS_DATALOG_MAX_TERMS);
             return MAELYS_ERR_INVALID_ARGUMENT;
         }
         for (size_t j = 0u; j < fact->arity; j++) {
@@ -41,9 +55,20 @@ static maelys_result_t collect_input_symbols(
             switch (term->kind) {
                 case MAELYS_DATALOG_TERM_SYMBOL:
                     if (!term->as.symbol || count >= MAELYS_DATALOG_MAX_INPUT_SYMBOLS) {
+                        input_message(message, message_capacity,
+                                      "Invalid fact at index %zu (%.63s), term %zu: %s.",
+                                      i, fact->predicate, j,
+                                      term->as.symbol ? "input symbol capacity exceeded" : "NULL symbol");
                         return term->as.symbol
                             ? MAELYS_ERR_PAYLOAD_TOO_LARGE
                             : MAELYS_ERR_INVALID_ARGUMENT;
+                    }
+                    if (strnlen(term->as.symbol, MAELYS_DATALOG_MAX_STRING_BYTES + 1u) >
+                        MAELYS_DATALOG_MAX_STRING_BYTES) {
+                        input_message(message, message_capacity,
+                                      "Invalid fact at index %zu (%.63s), term %zu: symbol exceeds %u bytes.",
+                                      i, fact->predicate, j, MAELYS_DATALOG_MAX_STRING_BYTES);
+                        return MAELYS_ERR_INVALID_ARGUMENT;
                     }
                     session->symbol_inputs[count++] = term->as.symbol;
                     break;
@@ -52,6 +77,9 @@ static maelys_result_t collect_input_symbols(
                     break;
                 case MAELYS_DATALOG_TERM_VAR:
                 default:
+                    input_message(message, message_capacity,
+                                  "Invalid fact at index %zu (%.63s), term %zu: unsupported value kind %d.",
+                                  i, fact->predicate, j, (int)term->kind);
                     return MAELYS_ERR_INVALID_FIELD;
             }
         }
@@ -62,12 +90,13 @@ static maelys_result_t collect_input_symbols(
 
 static maelys_result_t intern_input_symbols(
     maelys_datalog_prepared_session_t *session,
-    size_t count) {
+    size_t count, const maelys_datalog_input_fact_t *facts, size_t fact_count,
+    char *message, size_t message_capacity) {
     if (!session || count > MAELYS_DATALOG_MAX_INPUT_SYMBOLS) {
         return MAELYS_ERR_INVALID_ARGUMENT;
     }
     if (count > 1u) {
-        qsort(session->symbol_inputs,
+        maelys_datalog_sort(session->symbol_inputs,
               count,
               sizeof(session->symbol_inputs[0]),
               symbol_pointer_cmp);
@@ -79,7 +108,32 @@ static maelys_result_t intern_input_symbols(
         maelys_datalog_symbol_id_t id = MAELYS_DATALOG_SYMBOL_ID_INVALID;
         maelys_result_t rc = maelys_datalog_symbol_intern(
             &session->working.symbols, text, strlen(text), &id);
-        if (rc != MAELYS_OK) return rc;
+        if (rc != MAELYS_OK) {
+            /* Sorting makes IDs deterministic; locate the original occurrence
+             * only on failure, without exposing symbol contents in diagnostics. */
+            const char *reason = "symbol interning failed";
+            size_t bound = 0u;
+            if (session->working.symbols.count >= MAELYS_DATALOG_MAX_SYMBOLS) {
+                reason = "symbol count limit";
+                bound = MAELYS_DATALOG_MAX_SYMBOLS;
+            } else if (strlen(text) + 1u >
+                       sizeof(session->working.symbols.storage) - session->working.symbols.used) {
+                reason = "symbol storage byte limit";
+                bound = sizeof(session->working.symbols.storage);
+            }
+            for (size_t f = 0u; f < fact_count; ++f) {
+                for (size_t t = 0u; t < facts[f].arity; ++t) {
+                    if (facts[f].terms[t].kind == MAELYS_DATALOG_TERM_SYMBOL &&
+                        strcmp(facts[f].terms[t].as.symbol, text) == 0) {
+                        input_message(message, message_capacity,
+                                      "Invalid fact at index %zu (%.63s), term %zu: %s (%zu).",
+                                      f, facts[f].predicate, t, reason, bound);
+                        return rc;
+                    }
+                }
+            }
+            return rc;
+        }
         previous = text;
     }
     return MAELYS_OK;
@@ -158,6 +212,8 @@ maelys_result_t maelys_datalog_prepared_session_create(
     }
     maelys_datalog_prepared_session_t *session = calloc(1u, sizeof(*session));
     if (!session) return MAELYS_ERR_INTERNAL;
+    session->result_workspace = maelys_datalog_solve_workspace_create();
+    if (!session->result_workspace) { free(session); return MAELYS_ERR_INTERNAL; }
     session->prepared = *ruleset;
     session->working = *ruleset;
     maelys_result_t rc = maelys_datalog_edb_init(
@@ -167,6 +223,7 @@ maelys_result_t maelys_datalog_prepared_session_create(
         &session->working.symbols,
         &session->working.registry);
     if (rc != MAELYS_OK) {
+        maelys_datalog_solve_workspace_destroy(session->result_workspace);
         memset(session, 0, sizeof(*session));
         free(session);
         return rc;
@@ -182,6 +239,7 @@ maelys_result_t maelys_datalog_prepared_session_destroy(
     if (!session) return MAELYS_ERR_INVALID_ARGUMENT;
     if (session->active_result) return MAELYS_ERR_INVALID_STATE;
     maelys_datalog_context_release(session->prepared.modules);
+    maelys_datalog_solve_workspace_destroy(session->result_workspace);
     memset(session, 0, sizeof(*session));
     free(session);
     return MAELYS_OK;
@@ -196,15 +254,69 @@ maelys_result_t maelys_datalog_prepared_session_solve(
         session, facts, fact_count, out_result, NULL);
 }
 
+static void explain_fact_rejection(
+    const maelys_datalog_prepared_session_t *session,
+    const maelys_datalog_input_fact_t *fact, size_t index,
+    char *message, size_t message_capacity) {
+    maelys_datalog_predicate_id_t pid;
+    const maelys_datalog_predicate_registry_t *registry = &session->working.registry;
+    if (!maelys_datalog_predicate_registry_find(registry, fact->predicate, fact->arity, &pid)) {
+        for (size_t i = 0u; i < registry->count; ++i) {
+            if (strcmp(registry->defs[i].name, fact->predicate) == 0) {
+                input_message(message, message_capacity,
+                              "Invalid fact at index %zu: %.63s expects %zu arguments, received %zu.",
+                              index, fact->predicate, registry->defs[i].arity, fact->arity);
+                return;
+            }
+        }
+        input_message(message, message_capacity,
+                      "Invalid fact at index %zu: unknown predicate %.63s/%zu.",
+                      index, fact->predicate, fact->arity);
+        return;
+    }
+    const maelys_datalog_predicate_def_t *def = maelys_datalog_predicate_registry_get(registry, pid);
+    if (def->kind_flags & MAELYS_DATALOG_PRED_KIND_POLICY_FACT) {
+        input_message(message, message_capacity,
+                      "Invalid fact at index %zu: %.63s is a policy-fact predicate; runtime input is forbidden.",
+                      index, fact->predicate);
+    } else if (!(def->kind_flags & MAELYS_DATALOG_PRED_KIND_EDB)) {
+        input_message(message, message_capacity,
+                      "Invalid fact at index %zu: %.63s is not an EDB predicate.", index, fact->predicate);
+    } else if (session->edb.fact_count >= MAELYS_DATALOG_MAX_EDB_FACTS) {
+        input_message(message, message_capacity,
+                      "Invalid fact at index %zu (%.63s): EDB fact limit %u reached.",
+                      index, fact->predicate, MAELYS_DATALOG_MAX_EDB_FACTS);
+    } else if (session->edb.facts_per_pred[pid] >= MAELYS_DATALOG_MAX_FACTS_PER_PRED) {
+        input_message(message, message_capacity,
+                      "Invalid fact at index %zu (%.63s): per-predicate fact limit %u reached.",
+                      index, fact->predicate, MAELYS_DATALOG_MAX_FACTS_PER_PRED);
+    } else {
+        input_message(message, message_capacity,
+                      "Invalid fact at index %zu (%.63s): input materialization failed.", index, fact->predicate);
+    }
+}
+
 maelys_result_t maelys_datalog_prepared_session_materialize_inputs(
     maelys_datalog_prepared_session_t *session,
     const maelys_datalog_input_fact_t *facts,
     size_t fact_count) {
+    return maelys_datalog_prepared_session_materialize_inputs_diagnosed(
+        session, facts, fact_count, NULL, 0u);
+}
+
+maelys_result_t maelys_datalog_prepared_session_materialize_inputs_diagnosed(
+    maelys_datalog_prepared_session_t *session,
+    const maelys_datalog_input_fact_t *facts, size_t fact_count,
+    char *message, size_t message_capacity) {
+    if (message && message_capacity) message[0] = '\0';
     if (!session || (!facts && fact_count > 0u)) {
         return MAELYS_ERR_INVALID_ARGUMENT;
     }
     if (session->active_result) return MAELYS_ERR_INVALID_STATE;
     if (fact_count > MAELYS_DATALOG_MAX_EDB_FACTS) {
+        input_message(message, message_capacity,
+                      "Input batch contains %zu facts; EDB fact limit is %u (before deduplication).",
+                      fact_count, MAELYS_DATALOG_MAX_EDB_FACTS);
         return MAELYS_ERR_PAYLOAD_TOO_LARGE;
     }
 
@@ -215,17 +327,23 @@ maelys_result_t maelys_datalog_prepared_session_materialize_inputs(
     if (rc != MAELYS_OK) return rc;
 
     size_t symbol_count = 0u;
-    rc = collect_input_symbols(session, facts, fact_count, &symbol_count);
+    rc = collect_input_symbols(session, facts, fact_count, &symbol_count, message, message_capacity);
     if (rc != MAELYS_OK) return reject_transaction(session, rc);
-    rc = intern_input_symbols(session, symbol_count);
+    rc = intern_input_symbols(session, symbol_count, facts, fact_count, message, message_capacity);
     memset(session->symbol_inputs, 0, sizeof(session->symbol_inputs));
     if (rc != MAELYS_OK) return reject_transaction(session, rc);
     for (size_t i = 0u; i < fact_count; i++) {
         rc = materialize_input_fact(session, &facts[i]);
-        if (rc != MAELYS_OK) return reject_transaction(session, rc);
+        if (rc != MAELYS_OK) {
+            explain_fact_rejection(session, &facts[i], i, message, message_capacity);
+            return reject_transaction(session, rc);
+        }
     }
     rc = maelys_datalog_edb_finalize(&session->edb);
-    if (rc != MAELYS_OK) return reject_transaction(session, rc);
+    if (rc != MAELYS_OK) {
+        input_message(message, message_capacity, "Input batch finalization failed (status %d).", (int)rc);
+        return reject_transaction(session, rc);
+    }
     return MAELYS_OK;
 }
 
@@ -246,8 +364,8 @@ maelys_result_t maelys_datalog_prepared_session_solve_materialized_ex(
     if (out_result) *out_result = NULL;
     if (!session || !out_result) return MAELYS_ERR_INVALID_ARGUMENT;
     if (session->active_result || !session->edb.immutable) return MAELYS_ERR_INVALID_STATE;
-    maelys_result_t rc = maelys_datalog_solve_once_ex(
-        &session->working, &session->edb, out_result, out_diag);
+    maelys_result_t rc = maelys_datalog_solve_reusing_workspace(
+        &session->working, &session->edb, session->result_workspace, out_result, out_diag);
     if (rc != MAELYS_OK) return reject_transaction(session, rc);
     maelys_datalog_solve_result_set_release(
         *out_result,

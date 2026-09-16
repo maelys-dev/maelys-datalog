@@ -15,6 +15,7 @@ struct maelys_datalog_prepared_session {
     maelys_datalog_edb_t edb;
     const char *symbol_inputs[MAELYS_DATALOG_MAX_INPUT_SYMBOLS];
     maelys_datalog_solve_result_t *active_result;
+    maelys_datalog_solve_result_t *result_workspace;
 };
 
 void maelys_datalog_prepared_session_result_released(
@@ -25,6 +26,11 @@ void maelys_datalog_prepared_session_result_released(
  * pointers. The owning public session supplies its separate result lease. */
 maelys_result_t maelys_datalog_prepared_session_materialize_inputs(
     maelys_datalog_prepared_session_t *, const maelys_datalog_input_fact_t *, size_t);
+
+/* Optional internal explanation; public diagnostic layout remains unchanged. */
+maelys_result_t maelys_datalog_prepared_session_materialize_inputs_diagnosed(
+    maelys_datalog_prepared_session_t *, const maelys_datalog_input_fact_t *, size_t,
+    char *message, size_t message_capacity);
 
 /* Execute the already canonicalized EDB and acquire its result lease. */
 maelys_result_t maelys_datalog_prepared_session_solve_materialized_ex(

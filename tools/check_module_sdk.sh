@@ -28,7 +28,7 @@ for header in datalog.h datalog_module.h datalog_program.h datalog_backend.h dat
   "$cxx" -x c++ -std=c++17 -Wall -Wextra -Werror -I"$prefix/include" \
     -DSDK_HEADER="\"maelys/$header\"" -fsyntax-only sdk_header.c
 done
-for handle in policy session result program program_builder context; do
+for handle in policy session result session_config input_edb program program_builder context; do
   for language in c c++; do
     compiler="$cc"; standard=c11
     if [[ "$language" == c++ ]]; then compiler="$cxx"; standard=c++17; fi
@@ -42,7 +42,7 @@ for handle in policy session result program program_builder context; do
     fi
   done
 done
-echo 'installed SDK headers: C11/C++17 PASS; six opaque layouts rejected in both languages'
+echo 'installed SDK headers: C11/C++17 PASS; eight opaque layouts rejected in both languages'
 for provider in exact_match arrow_frontend naive_backend; do
   "$cc" "${flags[@]}" -c "$provider.c" -o "$provider.o"
 done

@@ -53,6 +53,14 @@ $(BUILD_DIR)/tests/test_maelys_datalog_context: sdk/examples/frontend/src/extens
 $(BUILD_DIR)/tests/test_maelys_datalog_pipeline: TEST_EXTRA_SRCS = sdk/examples/frontend/src/extension.c
 $(BUILD_DIR)/tests/test_maelys_datalog_pipeline: sdk/examples/frontend/src/extension.c
 
+# This test includes the EDB implementation with local allocator fault hooks.
+# Do not link a second copy of that translation unit into its executable.
+$(BUILD_DIR)/tests/test_maelys_datalog_input_edb_alloc: tests/test_maelys_datalog_input_edb_alloc.c $(SRCS) $(ENGINE_HEADERS) | $(BUILD_DIR)/tests
+	$(CC) $(TEST_CFLAGS) -UNDEBUG -I. -Iinclude $(filter-out src/runtime/maelys_datalog_input_edb.c,$(SRCS)) $< -o $@
+
+$(BUILD_DIR)/tests/test_maelys_datalog_hot_path_alloc: tests/test_maelys_datalog_hot_path_alloc.c tests/fixtures/allocation_guard.h $(SRCS) $(ENGINE_HEADERS) | $(BUILD_DIR)/tests
+	$(CC) $(TEST_CFLAGS) -UNDEBUG -include tests/fixtures/allocation_guard.h $(SRCS) $< -o $@
+
 .PHONY: bench-pipeline
 bench-pipeline: $(BUILD_DIR)/tests/test_maelys_datalog_pipeline
 	./$(BUILD_DIR)/tests/test_maelys_datalog_pipeline --bench

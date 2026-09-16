@@ -79,6 +79,7 @@ typedef enum {
 } maelys_datalog_compare_result_t;
 
 struct maelys_datalog_solve_result {
+    int reusable;
     const maelys_datalog_ruleset_t *ruleset;
     void *release_owner;
     maelys_datalog_solve_result_release_fn release;
@@ -127,6 +128,22 @@ struct maelys_datalog_solve_result {
     int edb_full_scan_reference;
 #endif
 };
+
+maelys_datalog_solve_result_t *maelys_datalog_solve_workspace_create(void) {
+    maelys_datalog_solve_result_t *result = calloc(1u, sizeof(*result));
+    if (result) result->reusable = 1;
+    return result;
+}
+void maelys_datalog_solve_workspace_destroy(maelys_datalog_solve_result_t *result) {
+    if (!result) return;
+    assert(result->reusable && !result->release && !result->ruleset);
+    free(result);
+}
+static maelys_datalog_solve_result_t *solve_result_acquire(maelys_datalog_solve_result_t *workspace) {
+    if (!workspace) return calloc(1u, sizeof(maelys_datalog_solve_result_t));
+    assert(workspace->reusable && !workspace->release && !workspace->ruleset);
+    return workspace;
+}
 
 maelys_result_t maelys_datalog_solve_result_symbol_text(
     const maelys_datalog_solve_result_t *result,
@@ -2260,7 +2277,7 @@ static maelys_result_t solve_stratified_path(
     const maelys_datalog_edb_t *edb,
     maelys_datalog_solve_result_t **out_result,
     maelys_datalog_solve_diagnostic_t *out_diag,
-    int full_scan_reference) {
+    int full_scan_reference, maelys_datalog_solve_result_t *workspace) {
     solve_once_diag_clear(out_diag);
     if (!ruleset || !ruleset->loaded || !edb || !out_result) {
         solve_once_diag_base(out_diag,
@@ -2309,7 +2326,7 @@ static maelys_result_t solve_stratified_path(
         return MAELYS_ERR_PAYLOAD_TOO_LARGE;
     }
 
-    maelys_datalog_solve_result_t *result = calloc(1, sizeof(*result));
+    maelys_datalog_solve_result_t *result = solve_result_acquire(workspace);
     if (!result) {
         solve_once_diag_base(out_diag,
                              MAELYS_DATALOG_SOLVE_DIAG_INTERNAL_ERROR,
@@ -2531,7 +2548,7 @@ static maelys_result_t maelys_datalog_solve_once_run(
     maelys_datalog_solve_result_t **out_result,
     maelys_datalog_solve_diagnostic_t *out_diag,
     int use_static_join_order,
-    int full_scan_reference) {
+    int full_scan_reference, maelys_datalog_solve_result_t *workspace) {
     solve_once_diag_clear(out_diag);
     if (!ruleset || !ruleset->loaded || !edb || !out_result) {
         solve_once_diag_base(out_diag,
@@ -2572,7 +2589,7 @@ static maelys_result_t maelys_datalog_solve_once_run(
         return MAELYS_ERR_PAYLOAD_TOO_LARGE;
     }
 
-    maelys_datalog_solve_result_t *result = calloc(1, sizeof(*result));
+    maelys_datalog_solve_result_t *result = solve_result_acquire(workspace);
     if (!result) {
         solve_once_diag_base(out_diag,
                              MAELYS_DATALOG_SOLVE_DIAG_INTERNAL_ERROR,
@@ -2800,9 +2817,20 @@ maelys_result_t maelys_datalog_solve_once_ex(
     maelys_datalog_solve_result_t **out_result,
     maelys_datalog_solve_diagnostic_t *out_diag) {
     if (ruleset && ruleset->negation_supported) {
-        return solve_stratified_path(ruleset, edb, out_result, out_diag, 0);
+        return solve_stratified_path(ruleset, edb, out_result, out_diag, 0, NULL);
     }
-    return maelys_datalog_solve_once_run(ruleset, edb, out_result, out_diag, 1, 0);
+    return maelys_datalog_solve_once_run(ruleset, edb, out_result, out_diag, 1, 0, NULL);
+}
+
+maelys_result_t maelys_datalog_solve_reusing_workspace(
+    const maelys_datalog_ruleset_t *ruleset, const maelys_datalog_edb_t *edb,
+    maelys_datalog_solve_result_t *workspace, maelys_datalog_solve_result_t **out_result,
+    maelys_datalog_solve_diagnostic_t *diag) {
+    if (!workspace || !workspace->reusable || workspace->ruleset || workspace->release)
+        return MAELYS_ERR_INVALID_STATE;
+    if (ruleset && ruleset->negation_supported)
+        return solve_stratified_path(ruleset, edb, out_result, diag, 0, workspace);
+    return maelys_datalog_solve_once_run(ruleset, edb, out_result, diag, 1, 0, workspace);
 }
 
 maelys_result_t maelys_datalog_solve_once(const maelys_datalog_ruleset_t *ruleset,
@@ -2826,7 +2854,7 @@ maelys_result_t maelys_datalog_test_solve_once_legacy_order(
     const maelys_datalog_edb_t *edb,
     maelys_datalog_solve_result_t **out_result,
     maelys_datalog_solve_diagnostic_t *out_diag) {
-    return maelys_datalog_solve_once_run(ruleset, edb, out_result, out_diag, 0, 0);
+    return maelys_datalog_solve_once_run(ruleset, edb, out_result, out_diag, 0, 0, NULL);
 }
 
 maelys_result_t maelys_datalog_test_solve_once_full_scan(
@@ -2835,9 +2863,9 @@ maelys_result_t maelys_datalog_test_solve_once_full_scan(
     maelys_datalog_solve_result_t **out_result,
     maelys_datalog_solve_diagnostic_t *out_diag) {
     if (ruleset && ruleset->negation_supported) {
-        return solve_stratified_path(ruleset, edb, out_result, out_diag, 1);
+        return solve_stratified_path(ruleset, edb, out_result, out_diag, 1, NULL);
     }
-    return maelys_datalog_solve_once_run(ruleset, edb, out_result, out_diag, 1, 1);
+    return maelys_datalog_solve_once_run(ruleset, edb, out_result, out_diag, 1, 1, NULL);
 }
 
 maelys_result_t maelys_datalog_test_solve_once_legacy_full_scan(
@@ -2845,7 +2873,7 @@ maelys_result_t maelys_datalog_test_solve_once_legacy_full_scan(
     const maelys_datalog_edb_t *edb,
     maelys_datalog_solve_result_t **out_result,
     maelys_datalog_solve_diagnostic_t *out_diag) {
-    return maelys_datalog_solve_once_run(ruleset, edb, out_result, out_diag, 0, 1);
+    return maelys_datalog_solve_once_run(ruleset, edb, out_result, out_diag, 0, 1, NULL);
 }
 
 maelys_result_t maelys_datalog_test_solve_result_idb_facts(
@@ -3252,11 +3280,13 @@ maelys_result_t maelys_datalog_solve_result_enumerate_predicate_facts(
 
 void maelys_datalog_solve_result_free(maelys_datalog_solve_result_t *result) {
     if (!result) return;
+    int reusable = result->reusable;
     if (result->release) {
         result->release(result->release_owner, result);
     }
     memset(result, 0, sizeof(*result));
-    free(result);
+    if (reusable) result->reusable = 1;
+    else free(result);
 }
 
 void maelys_datalog_solve_result_set_release(
