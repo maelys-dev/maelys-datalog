@@ -25,11 +25,23 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
   Sessions snapshot configuration values. Capability constants and the execution
   fingerprint declaration now live in that consumer header; extension headers
   still expose them transitively. Backend descriptors and `session_create_ex()`
-  remain unchanged. This is additive to public API v1, not a layout change.
+  remain unchanged. Python Next no longer includes backend/IR headers or depends
+  on the backend ABI. This is additive to public API v1, not a layout change.
 - Additive opaque C facade getters for loaded-library capacities
   (`maelys_datalog_limit_get`) and all distinct derived IDB facts
   (`maelys_datalog_result_derived_fact_count`). Existing public struct layouts
   are unchanged; limits are append-only scalar keys.
+- Experimental `bindings/python-next`, importing as `maelys_datalog_next`,
+  compiles CFFI directly against the opaque facade. It buffers `add_fact()` and
+  atomic `add_facts()` additions for one native batch, exposes immutable
+  `Engine.limits` and `SolveResult.derived_fact_count()`, and keeps the existing
+  Python binding separate. It is not a published replacement package.
+- Python Next now exposes manifest loading with policy-local vocabulary opt-in,
+  policy selection, reusable prepared sessions, policy and execution fingerprints,
+  required capabilities and work-budget requests (explicitly unsupported by
+  the current reference backend), Why-true/Why-false text, full native
+  diagnostics, and result-owned raw terms. Engine handles enforce creating-thread
+  use. Prepared sessions still solve complete batches, not incremental updates.
 
 ### Fixed
 
@@ -49,7 +61,8 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
   one allocation and `create` reserves profile-bounded capacity. Append,
   batch append, count and clear never allocate or grow storage. Text capacity
   includes distinct names, symbols and their NUL terminators. Failed batches
-  consume neither entries nor bytes. The default text budget is the
+  consume neither entries nor bytes. Python Next accepts optional
+  `fact_capacity`/`text_capacity` budgets. The default text budget is now the
   native symbol pool plus registry names (40 KiB, not 5/10 MiB); repeated strings
   share storage. `INPUT_EDB_TEXT_BYTES` reports this bound through `limit_get`.
 - Opaque sessions reuse bounded scratch storage for input conversion and
@@ -62,6 +75,14 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
   A whole-engine allocator-guard test disables allocation through repeated solves,
   queries, failed transactions and result release. Custom backends/callbacks,
   Python/CFFI allocations and libc internals are outside this guarantee.
+- Python Next `Edb.add_fact()` / `add_facts()` now store inputs in the native
+  opaque EDB instead of a persistent Python list. Total entry and individual
+  string limits fail at insertion; policy-domain, declared-arity, symbol-pool
+  and per-predicate limits remain solve-time checks. Batches stay atomic,
+  successful solves still freeze Python EDB mutation, and existing calls remain
+  valid. `len(edb)` and pre-solve `edb.clear()` expose native buffer operations.
+  Explicit `edb.reset()` starts a new batch in the same storage after a successful
+  solve without invalidating a live result or releasing its session lease.
 - `scripts/publish-channel.sh` honours `CHANNEL_DRY_RUN=1`, set by
   `maelys-release rehearse --channel` (socle 0.42.0): it takes its real path
   up to the registry's write — assembly, the tarball as a file, the registry
