@@ -67,5 +67,6 @@ for profile in SMALL LARGE; do
     run_pass "$profile" B "ab-B$pass"
   done
 done
-python3 "$driver/bench/compare_runs.py" "$output" > "$output/comparison.md"
+python3 "$driver/bench/compare_runs.py" "$output" > "$output/comparison.incomplete.md"
+mv "$output/comparison.incomplete.md" "$output/comparison.md"
 # Deliberately no git writes, PR comments, release, or bench/results files.

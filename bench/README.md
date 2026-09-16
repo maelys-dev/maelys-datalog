@@ -93,7 +93,8 @@ The run uploads `bench-comparison-RUN_ID-ATTEMPT`, retained for 30 days:
 - `comparison.md`, `metadata.json` and `commands.log`.
 
 Partial artifacts are retained on failure, but an incomplete data set cannot
-produce a valid comparison report. The driver refuses an existing output path.
+produce a final comparison report: a failed rendering remains explicitly named
+`comparison.incomplete.md`. The driver refuses an existing output path.
 Nothing is written to `bench/results`; no results are committed and no PR comment
 is generated. Archives/binaries live separately in runner temporary storage.
 
