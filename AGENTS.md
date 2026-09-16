@@ -116,3 +116,19 @@ when it has what they name.
 - Never claim the whole engine is zero-malloc based on an input-buffer test.
   Session/results, compilation, backend and explanation allocations must be
   audited separately. Keep the public header and docs/validation.md accurate.
+
+## Manual benchmark evidence
+
+- Keep `bench-compare.yml` workflow_dispatch-only, with base/head inputs and
+  one sequential GitHub-hosted Ubuntu job. Never add it to PR events or required
+  checks. Do not reuse a release job or token to run a benchmark.
+- Compile both revisions/profiles once before timing; run two A/A pairs before
+  A B A B. Keep both solver and input probes in the same run, with no concurrent
+  builds, priority/affinity tuning or undisclosed case selection.
+- Below 10 microseconds use minima; otherwise retain median and p95 with their
+  own A/A floors. Below-floor differences are indeterminate, not zero or wins.
+  An unresolved hosted-runner effect calls for a dedicated machine, not a new
+  interpretation. Never select an index threshold from inconclusive timings.
+- Upload raw CSV and the comparison report as run artifacts only. Never commit
+  generated results or add automatic PR comments. Distinguish synthetic tooling
+  tests/local Docker smoke from actual hosted-runner performance measurements.

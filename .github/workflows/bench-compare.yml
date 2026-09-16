@@ -1,0 +1,42 @@
+name: Benchmark comparison (manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      base:
+        description: Baseline branch, tag or commit SHA
+        required: true
+        type: string
+      head:
+        description: Candidate branch, tag or commit SHA
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  compare:
+    name: Sequential A-A and A-B comparison
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Check comparison tooling
+        run: python3 -m unittest discover -s bench -p 'test_compare*.py'
+      - name: Compare immutable revisions
+        env:
+          BASE_REF: ${{ inputs.base }}
+          HEAD_REF: ${{ inputs.head }}
+        run: bash bench/compare_revisions.sh "$BASE_REF" "$HEAD_REF" "$RUNNER_TEMP/bench-comparison"
+      - name: Upload measurements and report (including partial failed runs)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bench-comparison-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/bench-comparison/
+          if-no-files-found: warn
+          retention-days: 30
