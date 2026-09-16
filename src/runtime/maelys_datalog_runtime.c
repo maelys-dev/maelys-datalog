@@ -70,8 +70,9 @@ struct maelys_datalog_result {
     maelys_datalog_session_t *owner;
     void *state;
     maelys_datalog_fact_set_t derived;
-    maelys_datalog_fact_t facts[MAELYS_DATALOG_MAX_IDB_FACTS];
     size_t per_predicate[MAELYS_DATALOG_MAX_PREDICATES];
+    /* Retained payload; live entries are defined solely by derived.count. */
+    maelys_datalog_fact_t facts[MAELYS_DATALOG_MAX_IDB_FACTS];
 };
 struct maelys_datalog_session {
     maelys_datalog_prepared_session_t *inputs;
@@ -405,7 +406,7 @@ maelys_datalog_status_t maelys_datalog_session_solve(maelys_datalog_session_t *s
         }
     }
     maelys_datalog_result_t *result = &s->result_storage;
-    memset(result, 0, sizeof(*result));
+    memset(result, 0, offsetof(maelys_datalog_result_t, facts));
     result->owner = s;
     maelys_datalog_fact_set_init(&result->derived, result->facts, MAELYS_DATALOG_MAX_IDB_FACTS);
     maelys_datalog_backend_output_t output = {result, MAELYS_DATALOG_STATUS_OK, 0, 0, 0};
@@ -418,7 +419,7 @@ maelys_datalog_status_t maelys_datalog_session_solve(maelys_datalog_session_t *s
         status = (maelys_datalog_status_t)maelys_datalog_fact_set_sort(&result->derived);
     if (status != MAELYS_DATALOG_STATUS_OK) {
         s->backend.destroy_result(s->state, result->state);
-        memset(result, 0, sizeof(*result));
+        memset(result, 0, offsetof(maelys_datalog_result_t, facts));
         s->busy = 0;
         if (diag && diag->source == MAELYS_DATALOG_DIAGNOSTIC_NONE) {
             diag->source = MAELYS_DATALOG_DIAGNOSTIC_SOLVE;
@@ -590,6 +591,6 @@ maelys_datalog_status_t maelys_datalog_result_free(maelys_datalog_result_t *resu
     s->backend.destroy_result(s->state, result->state);
     s->active = NULL;
     s->busy = 0;
-    memset(result, 0, sizeof(*result));
+    memset(result, 0, offsetof(maelys_datalog_result_t, facts));
     return MAELYS_DATALOG_STATUS_OK;
 }

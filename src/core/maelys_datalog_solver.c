@@ -11,6 +11,7 @@
 #include "src/core/maelys_datalog_symbol_table.h"
 
 #include <assert.h>
+#include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -79,15 +80,13 @@ typedef enum {
 } maelys_datalog_compare_result_t;
 
 struct maelys_datalog_solve_result {
+    /* Only this metadata prefix is reset on workspace release. Payload arrays
+     * below edb_facts are overwritten/validated by the next solve, not scrubbed. */
     int reusable;
     const maelys_datalog_ruleset_t *ruleset;
     void *release_owner;
     maelys_datalog_solve_result_release_fn release;
-    maelys_datalog_fact_t edb_facts[MAELYS_DATALOG_MAX_EDB_FACTS];
-    maelys_datalog_fact_t idb_facts[MAELYS_DATALOG_MAX_IDB_FACTS];
-    uint16_t idb_proof_index[MAELYS_DATALOG_MAX_IDB_FACTS];
     maelys_datalog_fact_set_t edb_snapshot;
-    maelys_datalog_pred_range_t edb_ranges[MAELYS_DATALOG_MAX_PREDICATES];
     maelys_datalog_fact_set_t idb_final;
     size_t facts_per_pred[MAELYS_DATALOG_MAX_PREDICATES];
     size_t stratum_idb_end[MAELYS_DATALOG_MAX_STRATA + 1u];
@@ -97,6 +96,21 @@ struct maelys_datalog_solve_result {
     size_t idb_merge_end;
     uint32_t active_stratum;
     int stratified;
+    uint16_t premise_pool_count;
+    uint32_t witness_filled_mask;
+    maelys_datalog_deny_reason_t failure_reason;
+    maelys_result_t failure_error;
+    maelys_datalog_diagnostic_t runtime_diag;
+    maelys_datalog_filter_statistics_t filter_statistics;
+    int finalized;
+    int failed;
+#ifdef MAELYS_TESTING
+    int edb_full_scan_reference;
+#endif
+    maelys_datalog_fact_t edb_facts[MAELYS_DATALOG_MAX_EDB_FACTS];
+    maelys_datalog_fact_t idb_facts[MAELYS_DATALOG_MAX_IDB_FACTS];
+    uint16_t idb_proof_index[MAELYS_DATALOG_MAX_IDB_FACTS];
+    maelys_datalog_pred_range_t edb_ranges[MAELYS_DATALOG_MAX_PREDICATES];
     maelys_datalog_proof_tree_t proof;
     /* P4-C64 — Bounded Why-true provenance, stored in parallel with the
      * historic proof tree. The proof tree layout/bytes are unchanged; this
@@ -115,18 +129,7 @@ struct maelys_datalog_solve_result {
     uint16_t node_premise_begin[MAELYS_DATALOG_MAX_PROOF_NODES];
     uint16_t node_premise_count[MAELYS_DATALOG_MAX_PROOF_NODES];
     uint8_t node_has_premises[MAELYS_DATALOG_MAX_PROOF_NODES];
-    uint16_t premise_pool_count;
     maelys_datalog_explanation_premise_t witness_slots[MAELYS_DATALOG_MAX_BODY_LITERALS];
-    uint32_t witness_filled_mask;
-    maelys_datalog_deny_reason_t failure_reason;
-    maelys_result_t failure_error;
-    maelys_datalog_diagnostic_t runtime_diag;
-    maelys_datalog_filter_statistics_t filter_statistics;
-    int finalized;
-    int failed;
-#ifdef MAELYS_TESTING
-    int edb_full_scan_reference;
-#endif
 };
 
 maelys_datalog_solve_result_t *maelys_datalog_solve_workspace_create(void) {
@@ -1159,7 +1162,11 @@ static void witness_record_filter(
 static void witness_commit_range(maelys_datalog_solve_result_t *result,
                                  uint16_t proof_node_idx,
                                  const maelys_datalog_rule_t *rule) {
-    if (!result || !rule || proof_node_idx >= MAELYS_DATALOG_MAX_PROOF_NODES) return;
+    if (!result || proof_node_idx >= MAELYS_DATALOG_MAX_PROOF_NODES) return;
+    /* This slot may belong to a previous solve. Invalidate BEFORE any early
+     * return: an unavailable witness must never expose that old provenance. */
+    result->node_has_premises[proof_node_idx] = 0u;
+    if (!rule) return;
     const size_t body_count = rule->body_count;
     if (body_count > MAELYS_DATALOG_MAX_BODY_LITERALS) return;
     const uint32_t need_mask = (body_count == 0u)
@@ -3285,9 +3292,17 @@ void maelys_datalog_solve_result_free(maelys_datalog_solve_result_t *result) {
     if (result->release) {
         result->release(result->release_owner, result);
     }
-    memset(result, 0, sizeof(*result));
-    if (reusable) result->reusable = 1;
-    else free(result);
+    if (!reusable) {
+        free(result);
+        return;
+    }
+    /* No secure-erasure promise. Clang can eliminate a memset before free on
+     * the owned path; sharing it with a reusable path made that large write
+     * observable on BOTH paths. Reset only metadata for the reusable case.
+     * Proof init, EDB range construction and IDB-index init run at next solve;
+     * witness_commit_range invalidates each new provenance slot before use. */
+    memset(result, 0, offsetof(maelys_datalog_solve_result_t, edb_facts));
+    result->reusable = 1;
 }
 
 void maelys_datalog_solve_result_set_release(

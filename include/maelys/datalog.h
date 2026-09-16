@@ -413,6 +413,10 @@ MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_result_explain_false_t
     char *out_text,
     size_t out_capacity,
     size_t *out_required);
+/* Releases the result lease. The reference backend resets bookkeeping, not
+ * the retained fact/provenance storage: this is NOT secure memory erasure.
+ * Result views become invalid immediately; subsequent solves cannot query
+ * data outside their newly initialized counts and validity markers. */
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_result_free(
     maelys_datalog_result_t *result);
 

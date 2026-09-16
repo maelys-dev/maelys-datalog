@@ -126,6 +126,13 @@ when it has what they name.
 - Hot-path changes require same-compiler/profile A/A noise floors and alternating
   A/B passes without concurrent builds. Allocation tests do not establish speed.
   Include sorted/reverse/duplicate/adversarial inputs and canonical IDs.
+- Treat release-time writes as a hot-path cost, not just allocations. Clang on
+  Linux can eliminate a memset immediately before free as a dead store; adding
+  a reusable branch can make the same bulk write live on both paths and cause a
+  regression. Free owned results before any reset. Reset only reusable metadata,
+  initialize payload validity before reuse, and test release reset bytes. Never
+  claim secure erasure from ordinary memset; an explicit erasure contract would
+  require a non-elidable primitive and its own measurements.
 
 ## Manual benchmark evidence
 

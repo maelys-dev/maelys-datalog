@@ -33,6 +33,10 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ### Fixed
 
+- Result release frees owned solver results without clearing them first, and
+  resets only reusable metadata instead of the entire fact/provenance storage.
+  New proof witnesses invalidate reused slots before any truncation path;
+  allocator-guard tests also bound release-time bulk reset bytes.
 - Opaque solve input diagnostics identify zero-based fact/term indices and the
   cause of predicate, arity, value and capacity failures instead of discarding
   the details as `invalid solve input`. Rejected native batches remain atomic

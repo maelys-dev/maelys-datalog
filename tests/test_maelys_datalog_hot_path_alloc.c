@@ -4,13 +4,46 @@
 #undef calloc
 #undef realloc
 #undef free
+#undef memset
 #include "maelys/datalog.h"
+#include "src/core/maelys_datalog_solver.h"
+#include "src/core/maelys_datalog_ruleset.h"
+#include "src/core/maelys_datalog_edb.h"
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
 
 static int forbidden;
 static size_t attempts, hot_frees, live, total, fault_after = SIZE_MAX;
+static size_t memset_bytes, max_release_bytes;
+void *maelys_test_memset(void *p, int value, size_t n) {
+    memset_bytes += n;
+    return memset(p, value, n);
+}
+static void release_bounded(maelys_datalog_result_t *result) {
+    size_t before = memset_bytes;
+    assert(maelys_datalog_result_free(result) == 0);
+    size_t written = memset_bytes - before;
+    /* Source-level bulk reset accounting (not a hardware store counter).
+     * Both profiles must reset metadata only, never their 200+ KiB payload.
+     * The memset hook keeps these writes observable even when optimized. */
+    assert(written > 0u && written <= 4096u);
+    if (written > max_release_bytes) max_release_bytes = written;
+}
+static void owned_release_does_not_clear(void) {
+    static maelys_datalog_ruleset_t ruleset;
+    static maelys_datalog_edb_t edb;
+    static maelys_datalog_fact_t facts[1];
+    assert(maelys_datalog_ruleset_init(&ruleset, "empty", "hot_path", "", 1) == MAELYS_OK);
+    assert(maelys_datalog_edb_init(&edb, facts, 1u, &ruleset.symbols, &ruleset.registry) == MAELYS_OK);
+    assert(maelys_datalog_edb_finalize(&edb) == MAELYS_OK);
+    maelys_datalog_solve_result_t *result = NULL;
+    size_t baseline = live;
+    assert(maelys_datalog_solve_once(&ruleset, &edb, &result) == MAELYS_OK);
+    size_t before = memset_bytes;
+    maelys_datalog_solve_result_free(result);
+    assert(memset_bytes == before && live == baseline);
+}
 static int refuse(void) {
     ++total;
     if (forbidden) { ++attempts; return 1; }
@@ -55,6 +88,7 @@ int main(void) {
     maelys_datalog_public_diagnostic_t diag;
     maelys_datalog_policy_t *policy = NULL;
     assert(maelys_datalog_policy_load_inline("hot_path", "hot", source, strlen(source), &policy, &diag) == 0);
+    owned_release_does_not_clear();
     maelys_datalog_session_t *session = NULL, *second = NULL, *filtered = NULL;
     size_t before = total, baseline = live;
     assert(maelys_datalog_session_create(policy, 0, &session) == 0);
@@ -107,15 +141,17 @@ int main(void) {
         int present = 0;
         assert(maelys_datalog_result_query(result, "allow", &alpha, 1u, &present) == 0 && present);
         assert(maelys_datalog_result_query(result, "allow", &zeta, 1u, &present) == 0 && !present);
-        assert(maelys_datalog_result_free(result) == 0);
+        release_bounded(result);
         assert(maelys_datalog_result_query(other, "allow", &alpha, 1u, &present) == 0 && present);
-        assert(maelys_datalog_result_free(other) == 0);
+        release_bounded(other);
         /* A rejected input must not poison the reserved result or symbols. */
         assert(maelys_datalog_input_edb_add_fact(edb, "unknown", &alpha, 1u, NULL) == 0);
         assert(maelys_datalog_session_solve_edb(session, edb, &result, &diag) != 0 && !result);
         assert(maelys_datalog_input_edb_clear(edb) == 0);
         assert(maelys_datalog_session_solve_edb(session, edb, &result, &diag) == 0);
-        assert(maelys_datalog_result_free(result) == 0);
+        size_t derived = SIZE_MAX;
+        assert(maelys_datalog_result_derived_fact_count(result, &derived) == 0 && derived == 0u);
+        release_bounded(result);
     }
     /* Fail inside the solver (not just during input validation), then reuse the
      * same native result workspace. No result is published on filter errors. */
@@ -137,7 +173,7 @@ int main(void) {
         explanation, sizeof(explanation), &required) == 0);
     assert(total > before);
     forbidden = 1;
-    assert(maelys_datalog_result_free(result) == 0);
+    release_bounded(result);
     assert(attempts == 0u && hot_frees == 0u);
     forbidden = 0;
     assert(maelys_datalog_input_edb_free(edb) == 0);
@@ -147,5 +183,6 @@ int main(void) {
     assert(maelys_datalog_policy_free(filter_policy) == 0);
     assert(maelys_datalog_policy_free(policy) == 0);
     printf("reference hot path: 40 repeated transactions, zero allocator calls; %zu constructor failure points checked\n", create_allocations);
+    printf("release reset: owned=0 bytes, reusable maximum=%zu bytes (budget=4096, both profiles)\n", max_release_bytes);
     return 0;
 }
