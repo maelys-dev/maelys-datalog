@@ -64,6 +64,84 @@ New integrations use the opaque, installed C API:
 The legacy `include/maelys_datalog.h` umbrella remains available for alpha
 compatibility. New modules must not depend on its internal engine types.
 
+Unreleased declaration initializers keep common predicate roles explicit:
+
+```c
+static const maelys_datalog_public_predicate_t predicates[] = {
+    MAELYS_DATALOG_EDB("seed", 1),
+    MAELYS_DATALOG_IDB("hidden", 1),
+    MAELYS_DATALOG_IDB_QUERY("allow", 1),
+};
+```
+
+These C/C++ macros initialize ordinary declarations without allocating or
+registering anything. `IDB_QUERY` means `IDB | QUERY`: a derived predicate also
+exposed for queries. Names and arities are still validated by domain registration.
+Other flag combinations use the ordinary struct initializer.
+
+The unreleased C11 fact builders, included automatically from the separate
+installed `<maelys/datalog_builders.h>`, simplify input without
+changing the ABI. Given a successfully initialized `edb` and a diagnostic:
+
+```c
+maelys_datalog_status_t rc = MAELYS_DATALOG_ADD_FACT(
+    edb, &diagnostic, "owns", "alice", "roadmap.pdf");
+/* Check rc exactly as for maelys_datalog_input_edb_add_fact(). */
+```
+
+The macro infers zero to four terms: strings become symbols, representable
+integers become signed 64-bit integers, and `_Bool` becomes a boolean.
+`MAELYS_DATALOG_BOOL(value)` requests boolean semantics explicitly: C11 `true`
+and comparison expressions otherwise have integer type. Arguments are evaluated
+once, with no evaluation-order guarantee and no extra allocation. Invalid
+types fail compilation; out-of-range integers return an input diagnostic before
+any insertion. C++ and FFI consumers continue using the typed-value API.
+The [public header](include/maelys/datalog.h) specifies the complete contract.
+
+For several facts, submit one atomic batch instead of independent additions:
+
+```c
+rc = MAELYS_DATALOG_ADD_FACTS(
+    edb, &diagnostic,
+    MAELYS_DATALOG_FACT("user", "alice"),
+    MAELYS_DATALOG_FACT("owns", "alice", "roadmap.pdf"),
+    MAELYS_DATALOG_FACT("blocked", "mallory"));
+/* Check rc: failure appends none of these facts; older facts remain. */
+```
+
+`FACT` builds a checked descriptor without inserting or copying strings.
+`ADD_FACTS` counts the descriptors and calls `input_edb_add_facts` once, using
+automatic temporary arrays and the same conversions as `ADD_FACT`. Strings
+are copied by the native batch call before it returns. Arguments are evaluated
+once, in unspecified order. The macro requires at least one `FACT`; for large,
+dynamic or empty batches, use `maelys_datalog_input_edb_add_facts(edb, facts,
+count, &diagnostic)` with an ordinary `maelys_datalog_public_fact_t` array.
+`FACT` is not a public-fact initializer. Multiple independent `ADD_FACT` calls
+do not roll back earlier successful calls if a later one fails.
+
+After solving, the C11 query shortcut uses the same conversions:
+
+```c
+int present = 0;
+rc = MAELYS_DATALOG_QUERY(result, &present, "allow", "alice", "roadmap.pdf");
+/* Check rc first: present == 0 means absence only when rc is OK. */
+```
+
+The explicit typed API remains available, including in C++17. A symbol
+initializer reduces boilerplate without hiding the values array:
+
+```c
+const maelys_datalog_public_value_t terms[] = {
+    MAELYS_DATALOG_SYMBOL("alice"),
+    MAELYS_DATALOG_SYMBOL("roadmap.pdf"),
+};
+rc = maelys_datalog_result_query(result, "allow", terms, 2u, &present);
+```
+
+`MAELYS_DATALOG_SYMBOL` is an initializer, not an expression. It borrows its
+string without copying or allocating. These conveniences are additive and
+unreleased; existing typed declarations and functions are not deprecated.
+
 `maelys_datalog_policy_set_fingerprint()` returns a stable SHA-256 identity for
 the exact executable bundle: ordered canonical rulesets, their domains and the
 effective query whitelist. It is suitable for binding a reviewed authorization
