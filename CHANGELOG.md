@@ -18,6 +18,25 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 
+- C11 `MAELYS_DATALOG_FACT` and `MAELYS_DATALOG_ADD_FACTS` batch conveniences:
+  checked term conversions, exactly-once argument evaluation, automatic
+  temporary storage and one atomic native batch call. Range diagnostics
+  identify zero-based fact/term positions; no new allocation or ABI change.
+- C/C++ `MAELYS_DATALOG_SYMBOL(value)` borrowed symbol initializer and C11
+  `MAELYS_DATALOG_QUERY(result, present, predicate, ...)` checked query shortcut.
+  The typed API remains available. Query errors leave the output unchanged;
+  successful absence writes zero. No ABI change or additional allocation.
+- `MAELYS_DATALOG_EDB`, `MAELYS_DATALOG_IDB` and
+  `MAELYS_DATALOG_IDB_QUERY` declaration initializers in `<maelys/datalog.h>`.
+  They work in C and C++, preserve the existing flags and registration checks,
+  and introduce no allocation, exported symbol or ABI change.
+- C11 `MAELYS_DATALOG_ADD_FACT(edb, diagnostic, predicate, ...)` convenience
+  macro in `<maelys/datalog.h>`: zero to four inferred string/integer/boolean
+  terms, checked signed-64-bit range, single evaluation of each argument and
+  no extra allocations. `MAELYS_DATALOG_BOOL(value)` explicitly selects boolean
+  semantics for C11 integer expressions such as `true` and comparisons.
+  Unsupported term types fail compilation; C++ keeps the ordinary typed API.
+  Public API version, ABI, exported symbols and structure layouts are unchanged.
 - Opaque owned `maelys_datalog_input_edb_t` with atomic copied single/batch
   additions, entry count, clear/free and `maelys_datalog_session_solve_edb()`.
   The existing array solve and legacy core EDB API remain unchanged. Input

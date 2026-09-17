@@ -89,8 +89,11 @@ check-version-header:
 	rm -f "$$tmp"; \
 	echo "$$target matches VERSION ($$(cat VERSION))"
 
-.PHONY: check
-check: test check-version-header
+.PHONY: check check-c11-fact-builders
+check-c11-fact-builders:
+	sh tools/check_c11_fact_builders.sh "$(CC)" "$(CXX)"
+
+check: test check-version-header check-c11-fact-builders
 
 .PHONY: test_maelys_datalog_boundary
 test_maelys_datalog_boundary: $(BUILD_DIR)/tests/test_maelys_datalog_boundary

@@ -424,4 +424,8 @@ MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_result_free(
 }
 #endif
 
+/* Source conveniences are separate from the exported API. Their _Generic
+ * implementation is guarded against C++ in this installed header. */
+#include <maelys/datalog_builders.h>
+
 #endif
