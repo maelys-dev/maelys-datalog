@@ -69,6 +69,10 @@ def predicates(binding):
 
 def evaluate(binding, domain):
     with binding.Engine() as engine:
+        profile = os.environ.get("MAELYS_DATALOG_EXPECT_PROFILE")
+        if profile:
+            assert profile in ("small", "large"), profile
+            assert engine.limits.max_edb_facts == (2048 if profile == "large" else 1024)
         engine.register_domain(domain, predicates(binding))
         ruleset = engine.load_inline_ruleset(domain, "documents.main", POLICY)
         edb = ruleset.edb()
@@ -84,8 +88,11 @@ def evaluate(binding, domain):
 
 
 class PythonNextTest(unittest.TestCase):
-    @unittest.skipUnless(CURRENT_EXTENSION_AVAILABLE, "build the current Python binding to run the parity gate")
+    @unittest.skipUnless(CURRENT_EXTENSION_AVAILABLE or os.environ.get("MAELYS_DATALOG_REQUIRE_PARITY") == "1",
+                         "build the current Python binding to run the parity gate")
     def test_document_access_matches_current_binding(self):
+        self.assertTrue(CURRENT_EXTENSION_AVAILABLE,
+                        "Required legacy parity extension is missing; build bindings/python first")
         next_answers, next_rows = evaluate(next_binding, "next_access_parity")
         completed = subprocess.run(
             [sys.executable, str(Path(__file__).resolve()), "--current-parity"],

@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 import os
 from enum import IntFlag
 import threading
+import warnings
 
 from ._maelys_cffi import ffi, lib
 
@@ -384,6 +385,12 @@ class Session:
         self._closed = False
         self._active: SolveResult | None = None
 
+    def __del__(self) -> None:
+        if not getattr(self, "_closed", True):
+            warnings.warn("Unclosed Session; use close() or a context manager. "
+                          "Garbage collection does not release native resources.",
+                          ResourceWarning, stacklevel=2)
+
     def _require_open(self) -> None:
         self.ruleset._require_open()
         if self._closed:
@@ -466,9 +473,16 @@ class Edb:
         _check(lib.maelys_datalog_input_edb_create_with_capacity(
             fact_capacity, text_capacity, out), "create input EDB")
         self._edb = out[0]
+        self._fact_capacity = fact_capacity
         self._closed = False
         self._finalized = False
         ruleset._edbs.append(self)
+
+    def __del__(self) -> None:
+        if not getattr(self, "_closed", True):
+            warnings.warn("Unclosed Edb; use close() or close its owner. "
+                          "Garbage collection does not release native resources.",
+                          ResourceWarning, stacklevel=2)
 
     def __len__(self) -> int:
         self.ruleset._require_open()
@@ -500,14 +514,15 @@ class Edb:
     def add_facts(self, facts: Iterable[tuple[str, Sequence[object]]]) -> None:
         """Buffer an iterable atomically: validation/iteration failure adds nothing.
 
-        The temporary Python staging area is bounded by the native entry limit.
+        Staging is bounded by this EDB's actual fact capacity. At most one
+        extra item is consumed to detect overflow, before any native call.
+        Remaining native capacity is checked atomically at append.
         After success only the native EDB retains the input values.
         """
         self._require_mutable()
         staged: list[tuple[str, tuple[object, ...]]] = []
-        remaining = self.ruleset.engine.limits.max_edb_facts - len(self)
         for item in facts:
-            if len(staged) >= remaining:
+            if len(staged) >= self._fact_capacity:
                 raise MaelysDatalogError(
                     int(lib.MAELYS_DATALOG_STATUS_PAYLOAD_TOO_LARGE),
                     "Input batch exceeds the EDB fact limit (before deduplication)",
@@ -579,6 +594,12 @@ class SolveResult:
         self._result = result
         self._closed = False
         self._owns_session = False
+
+    def __del__(self) -> None:
+        if not getattr(self, "_closed", True):
+            warnings.warn("Unclosed SolveResult; use close() or a context manager. "
+                          "Garbage collection does not release native resources.",
+                          ResourceWarning, stacklevel=2)
 
     def _require_open(self) -> None:
         self.ruleset._require_open()

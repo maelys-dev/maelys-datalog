@@ -7,6 +7,11 @@ from pathlib import Path
 import tempfile
 import threading
 import unittest
+from unittest.mock import patch
+from types import SimpleNamespace
+import subprocess
+import sys
+import textwrap
 
 from maelys_datalog_next import (
     Capability, Engine, Predicate, PRED_EDB, PRED_IDB, PRED_QUERY, MaelysDatalogError,
@@ -62,6 +67,28 @@ class FacadeTest(unittest.TestCase):
 
     def test_explicit_input_storage_bounds_are_atomic_and_reusable(self):
         rules = self.policy()
+        # Five entries overflow a capacity-four EDB before ANY native call;
+        # never request a sixth item, even from an unbounded iterator.
+        bounded = rules.edb(fact_capacity=4)
+        consumed = []
+
+        def too_many():
+            for i in range(5):
+                consumed.append(i)
+                yield "seed", [i]
+            self.fail("overflow detection consumed beyond the fifth item")
+
+        constants_only = SimpleNamespace(MAELYS_DATALOG_STATUS_PAYLOAD_TOO_LARGE=-12,
+                                         MAELYS_DATALOG_PUBLIC_MAX_TERMS=4)
+        with patch.object(binding, "lib", constants_only):
+            with self.assertRaisesRegex(MaelysDatalogError, "before deduplication"):
+                bounded.add_facts(too_many())
+        self.assertEqual(consumed, list(range(5)))
+        self.assertEqual(len(bounded), 0)
+        bounded.add_facts(("seed", [i]) for i in range(4))
+        with self.assertRaises(MaelysDatalogError):
+            bounded.add_facts([("seed", [5])])
+        self.assertEqual(len(bounded), 4)
         # seed\0 + alice\0 = 11 bytes; distinct strings, not occurrences.
         edb = rules.edb(fact_capacity=2, text_capacity=11)
         with self.assertRaises(MaelysDatalogError) as error:
@@ -313,6 +340,61 @@ class FacadeTest(unittest.TestCase):
         result.close()
         session.close()
         rules.close()
+
+        # Collect a genuinely abandoned owner graph in a subprocess. Native
+        # storage is intentionally not freed by __del__; process exit reclaims
+        # it without leaking into the rest of this test interpreter.
+        program = textwrap.dedent('''
+            import gc, json, sys, warnings, weakref
+            from maelys_datalog_next import Engine, Predicate, PRED_EDB, PRED_IDB, PRED_QUERY
+            from maelys_datalog_next import engine as binding
+
+            def abandoned(closed):
+                engine = Engine()
+                engine.register_domain("gc_warning_test", [
+                    Predicate("seed", 1, PRED_EDB),
+                    Predicate("allow", 1, PRED_IDB | PRED_QUERY)])
+                rules = engine.load_inline_ruleset("gc_warning_test", "gc", "allow(X) :- seed(X).")
+                edb = rules.edb()
+                session = rules.prepare()
+                result = session.solve(edb)
+                refs = [weakref.ref(obj) for obj in (edb, session, result)]
+                if closed:
+                    result.close()
+                    engine.close()
+                return refs
+
+            calls, unraisable = [], []
+            class NoNative:
+                def __getattr__(self, name):
+                    calls.append(name)
+                    raise AssertionError("native access during finalization: " + name)
+            gc.disable()
+            refs = abandoned(sys.argv[1] == "closed")
+            binding.lib = NoNative()
+            sys.unraisablehook = lambda event: unraisable.append(str(event.exc_value))
+            with warnings.catch_warnings(record=True) as seen:
+                warnings.simplefilter("always", ResourceWarning)
+                # __init__ can fail before a native handle exists.
+                for cls in (binding.Session, binding.Edb, binding.SolveResult):
+                    partial = object.__new__(cls)
+                    del partial
+                gc.collect()
+            assert not calls, calls
+            assert not unraisable, unraisable
+            assert all(ref() is None for ref in refs)
+            assert all(item.category is ResourceWarning for item in seen)
+            print(json.dumps([str(item.message) for item in seen]))
+        ''')
+        for state in ("open", "closed"):
+            with self.subTest(finalization=state):
+                child = subprocess.run([sys.executable, "-c", program, state],
+                                       capture_output=True, text=True, check=True)
+                messages = json.loads(child.stdout)
+                self.assertEqual(len(messages), 3 if state == "open" else 0)
+                if state == "open":
+                    self.assertEqual({message.split(";")[0] for message in messages},
+                                     {"Unclosed Edb", "Unclosed Session", "Unclosed SolveResult"})
 
     def test_thread_confinement_rejects_use_and_close(self):
         rules = self.policy()

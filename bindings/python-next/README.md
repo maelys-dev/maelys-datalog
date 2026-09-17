@@ -46,8 +46,17 @@ run with `MAELYS_DATALOG_EXPECT_PROFILE=large`. For SMALL use
 `MAELYS_DATALOG_EXPECT_PROFILE=small`; this verifies the library actually loaded,
 not merely the headers used at compile time.
 
-The builder copies the shared native library next to the extension. Both
-generated files are ignored by Git. On a release or CI runner, build them
+CI sets `MAELYS_DATALOG_REQUIRE_PARITY=1`: a missing legacy extension fails
+instead of skipping. It builds/tests legacy SMALL, then Python-next SMALL,
+then legacy LARGE and Python-next LARGE, on Linux and macOS. The legacy
+extension must remain importable by the same Python interpreter throughout.
+
+`build_cffi.py` copies the shared native library and writes the compiled CFFI
+module into the **source directory** `bindings/python-next/maelys_datalog_next/`;
+temporary compilation files live in `bindings/python-next/build/`. These
+generated paths are covered by the repository's `.gitignore`. This in-tree
+build is an experimentation choice, not a package publication mechanism or
+a wheel installation strategy. On a CI runner, build both bindings
 against the **same** source commit and size profile; this experiment does not
 yet have package or release integration.
 
@@ -118,6 +127,13 @@ terms into a temporary, entry-bounded staging area, then calls one atomic native
 append. Neither method retains a Python fact list after returning: C owns copied
 predicate names and UTF-8 symbol bytes. Later changes to the caller's term lists
 cannot change the EDB. Integers and booleans are copied by value.
+
+Staging uses this EDB's actual `fact_capacity`, not the profile maximum. A
+capacity-four EDB rejects a five-item iterator before calling native code,
+consuming at most the fifth item to detect overflow, never a sixth. For a batch
+within that bound, native append checks remaining capacity atomically, including
+facts already present. Python allocation remains bounded by the configured
+capacity, not necessarily by the number of currently free slots.
 
 Python type errors, malformed pairs, integers outside int64, embedded NULs,
 failed iteration, native storage-limit failures and Python/CFFI allocation failures reject
@@ -297,7 +313,8 @@ Ruleset, Session and SolveResult also support context managers.
 Engine and all its handles are confined to the thread that created the Engine;
 cross-thread use/close is rejected before entering C. Separate workers create
 their own Engines; domain registration remains process-wide and serialized.
-Use `with`/`close()` deterministically: this prototype has no GC finalizer.
+Use `with`/`close()` deterministically: GC finalizers only warn; they never free
+native storage or release a result lease.
 
 ## Explanations and full diagnostics
 
@@ -355,6 +372,14 @@ and preserve query permissions.
 
 This remains experimental, not a drop-in replacement for `maelys_datalog`:
 
+- Garbage collection **never releases native resources**. `SolveResult`,
+  `Session` and `Edb` emit `ResourceWarning` if collected unclosed; their
+  destructors make no native calls. Enable these normally hidden warnings with
+  `python -W always::ResourceWarning`. Owners retain their children, so merely
+  deleting a result variable does not necessarily collect it or warn immediately.
+  Close the result to release its session lease; close the owning Engine/Ruleset
+  or use context managers to free the graph deterministically. An abandoned
+  graph can retain native memory until process exit, even after the warning.
 - Inputs are strings/int64/bools, never raw result IDs; no ruleset `intern_symbol`.
 - EDB additions copy into native opaque storage; policy-specific validation occurs at solve.
 - Native custom frontend/backend/planner/filter callbacks and program IR builders

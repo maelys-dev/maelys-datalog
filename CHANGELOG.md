@@ -9,6 +9,8 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ### Tooling
 
+- Python-next's 28-test suite runs after each matching legacy binding build in
+  the Linux/macOS SDK jobs for SMALL and LARGE; required parity cannot skip.
 - Manual-only Ubuntu revision-comparison workflow: sequential SMALL/LARGE O2
   builds, two A/A pairs before A B A B, solver and input-index probes, per-metric
   noise floors, explicit indeterminate results and raw run artifacts. This adds
@@ -45,6 +47,9 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ### Fixed
 
+- Python-next bounds iterable staging by the EDB's configured fact capacity and
+  warns about unclosed input buffers, sessions and results without performing
+  native cleanup during garbage collection.
 - Result release frees owned solver results without clearing them first, and
   resets only reusable metadata instead of the entire fact/provenance storage.
   New proof witnesses invalidate reused slots before any truncation path;
