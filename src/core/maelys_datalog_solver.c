@@ -3413,7 +3413,36 @@ typedef struct {
     size_t frontier_capacity;
     int frontier_truncated;
     maelys_result_t fatal_error;
+    /* One immutable, sorted candidate pool shared by recursive body frames. */
+    why_false_candidate_t *shared_candidates;
+    size_t shared_candidate_count;
 } why_false_context_t;
+
+typedef struct {
+    maelys_datalog_why_false_explanation_t explanation;
+    why_false_rule_task_t frontier[MAELYS_DATALOG_MAX_RULES];
+    why_false_candidate_t candidates[];
+} why_false_workspace_t;
+
+maelys_result_t maelys_datalog_why_false_storage_requirements(
+    const maelys_datalog_solve_result_t *result, size_t *bytes, size_t *alignment) {
+    if (!result || !bytes || !alignment) return MAELYS_ERR_INVALID_ARGUMENT;
+    if (!result->finalized || result->failed || !result->ruleset || !result->ruleset->loaded ||
+        result->ruleset->fact_count > MAELYS_DATALOG_MAX_RULE_FACTS ||
+        result->edb_snapshot.count > MAELYS_DATALOG_MAX_EDB_FACTS ||
+        result->idb_final.count > MAELYS_DATALOG_MAX_IDB_FACTS)
+        return MAELYS_ERR_INVALID_STATE;
+    size_t n = result->ruleset->fact_count + result->edb_snapshot.count + result->idb_final.count;
+    if (n > (SIZE_MAX - sizeof(why_false_workspace_t)) / sizeof(why_false_candidate_t))
+        return MAELYS_ERR_PAYLOAD_TOO_LARGE;
+    *bytes = sizeof(why_false_workspace_t) + n * sizeof(why_false_candidate_t);
+    *alignment = _Alignof(why_false_workspace_t);
+    return MAELYS_OK;
+}
+const maelys_datalog_why_false_explanation_t *maelys_datalog_why_false_workspace_view(
+    const void *storage) {
+    return &((const why_false_workspace_t *)storage)->explanation;
+}
 
 static maelys_result_t why_false_build_symbol_ranks(
     why_false_context_t *context) {
@@ -3606,6 +3635,38 @@ static int why_false_candidate_cmp(
     const int fact_cmp = why_false_fact_cmp(context, left->fact, right->fact);
     if (fact_cmp != 0) return fact_cmp;
     return (int)left->origin - (int)right->origin;
+}
+
+/* Context-aware, bounded in-place heapsort: canonical comparator unchanged,
+ * no qsort allocator and no per-recursion candidate allocation. */
+static void why_false_candidate_sift(why_false_context_t *context,
+    why_false_candidate_t *a, size_t root, size_t n) {
+    why_false_candidate_t value = a[root];
+    while (root < n / 2u) {
+        size_t child = root * 2u + 1u;
+        if (child + 1u < n && why_false_candidate_cmp(context, &a[child], &a[child + 1u]) < 0) ++child;
+        if (why_false_candidate_cmp(context, &value, &a[child]) >= 0) break;
+        a[root] = a[child]; root = child;
+    }
+    a[root] = value;
+}
+static void why_false_prepare_candidates(why_false_context_t *context, why_false_candidate_t *a) {
+    size_t n = 0;
+    const maelys_datalog_solve_result_t *r = context->result;
+    for (size_t i = 0; i < r->ruleset->fact_count; ++i)
+        a[n++] = (why_false_candidate_t){&r->ruleset->facts[i], MAELYS_DATALOG_EXPLANATION_ORIGIN_POLICY_FACT};
+    for (size_t i = 0; i < r->edb_snapshot.count; ++i)
+        a[n++] = (why_false_candidate_t){&r->edb_snapshot.facts[i], MAELYS_DATALOG_EXPLANATION_ORIGIN_EDB};
+    for (size_t i = 0; i < r->idb_final.count; ++i)
+        a[n++] = (why_false_candidate_t){&r->idb_final.facts[i], MAELYS_DATALOG_EXPLANATION_ORIGIN_IDB};
+    for (size_t i = n / 2u; i; --i) why_false_candidate_sift(context, a, i - 1u, n);
+    for (size_t end = n; end > 1u;) {
+        --end;
+        why_false_candidate_t value = a[0]; a[0] = a[end]; a[end] = value;
+        why_false_candidate_sift(context, a, 0u, end);
+    }
+    context->shared_candidates = a;
+    context->shared_candidate_count = n;
 }
 
 static int why_false_diagnostic_cmp(
@@ -4074,6 +4135,16 @@ static why_false_candidate_t *why_false_collect_candidates(
     const maelys_datalog_literal_t *literal,
     size_t *out_count) {
     *out_count = 0u;
+    if (context->shared_candidates) {
+        /* Equal predicates form a contiguous slice; each recursive call only
+         * borrows it, so no frame can overwrite its parent's candidates. */
+        size_t first = 0u, n = context->shared_candidate_count;
+        while (first < n && context->shared_candidates[first].fact->predicate_id < literal->atom.predicate_id) ++first;
+        size_t end = first;
+        while (end < n && context->shared_candidates[end].fact->predicate_id == literal->atom.predicate_id) ++end;
+        *out_count = end - first;
+        return context->shared_candidates + first;
+    }
     const maelys_datalog_predicate_def_t *def =
         maelys_datalog_predicate_registry_get(
             &context->result->ruleset->registry, literal->atom.predicate_id);
@@ -4131,7 +4202,7 @@ static why_false_candidate_t *why_false_collect_candidates(
             insertion--;
         }
         if (context->fatal_error != MAELYS_OK) {
-            free(candidates);
+            if (!context->shared_candidates) free(candidates);
             return NULL;
         }
         candidates[insertion] = candidate;
@@ -4318,7 +4389,7 @@ static int why_false_explore_body(
         (*rule_substitution_count)++;
         context->out->substitution_count++;
         if (next.support_count >= MAELYS_DATALOG_MAX_WHY_FALSE_SUPPORTS) {
-            free(candidates);
+            if (!context->shared_candidates) free(candidates);
             context->fatal_error = MAELYS_ERR_INVALID_STATE;
             return 0;
         }
@@ -4337,12 +4408,12 @@ static int why_false_explore_body(
                                     depth,
                                     rule_substitution_count)) {
             if (context->fatal_error != MAELYS_OK) {
-                free(candidates);
+                if (!context->shared_candidates) free(candidates);
                 return 0;
             }
         }
     }
-    free(candidates);
+    if (!context->shared_candidates) free(candidates);
     if (matching_count > 0u) return 1;
 
     maelys_datalog_why_false_diagnostic_t diagnostic;
@@ -4420,11 +4491,12 @@ static void why_false_explore_frontier(
     }
 }
 
-maelys_result_t maelys_datalog_explain_absent_solved_fact(
+static maelys_result_t explain_absent_solved_fact(
     const maelys_datalog_solve_result_t *result,
     const maelys_datalog_fact_t *queried_fact,
     const maelys_datalog_why_false_limits_t *limits,
-    maelys_datalog_why_false_explanation_t *out_explanation) {
+    maelys_datalog_why_false_explanation_t *out_explanation,
+    why_false_workspace_t *workspace) {
     if (!result || !queried_fact || !limits || !out_explanation) {
         return MAELYS_ERR_INVALID_ARGUMENT;
     }
@@ -4449,9 +4521,10 @@ maelys_result_t maelys_datalog_explain_absent_solved_fact(
         return MAELYS_ERR_INVALID_FIELD;
     }
 
-    maelys_datalog_why_false_explanation_t *work =
-        calloc(1u, sizeof(*work));
+    maelys_datalog_why_false_explanation_t *work = workspace
+        ? &workspace->explanation : calloc(1u, sizeof(*work));
     if (!work) return MAELYS_ERR_INTERNAL;
+    if (workspace) memset(work, 0, sizeof(*work));
     work->query = *queried_fact;
 
     why_false_context_t context;
@@ -4465,7 +4538,7 @@ maelys_result_t maelys_datalog_explain_absent_solved_fact(
     }
     if (rc != MAELYS_OK) {
         memset(work, 0, sizeof(*work));
-        free(work);
+        if (!workspace) free(work);
         return rc;
     }
 
@@ -4477,24 +4550,25 @@ maelys_result_t maelys_datalog_explain_absent_solved_fact(
             (uint8_t)MAELYS_DATALOG_WHY_FALSE_STATUS_NOT_APPLICABLE;
         work->query_origin = (uint8_t)present_origin;
         *out_explanation = *work;
-        free(work);
+        if (!workspace) free(work);
         return MAELYS_OK;
     }
 
     context.frontier_capacity = limits->max_candidate_rules;
-    context.frontier = calloc(
+    context.frontier = workspace ? workspace->frontier : calloc(
         context.frontier_capacity, sizeof(*context.frontier));
     if (!context.frontier) {
         memset(work, 0, sizeof(*work));
-        free(work);
+        if (!workspace) free(work);
         return MAELYS_ERR_INTERNAL;
     }
-    why_false_explore_frontier(&context, queried_fact);
+    if (workspace) why_false_prepare_candidates(&context, workspace->candidates);
+    if (context.fatal_error == MAELYS_OK) why_false_explore_frontier(&context, queried_fact);
     if (context.fatal_error != MAELYS_OK) {
         rc = context.fatal_error;
-        free(context.frontier);
+        if (!workspace) free(context.frontier);
         memset(work, 0, sizeof(*work));
-        free(work);
+        if (!workspace) free(work);
         return rc;
     }
     for (size_t i = 1u; i < work->diagnostic_count; i++) {
@@ -4511,9 +4585,9 @@ maelys_result_t maelys_datalog_explain_absent_solved_fact(
         }
         if (context.fatal_error != MAELYS_OK) {
             rc = context.fatal_error;
-            free(context.frontier);
+            if (!workspace) free(context.frontier);
             memset(work, 0, sizeof(*work));
-            free(work);
+            if (!workspace) free(work);
             return rc;
         }
         work->diagnostics[insertion] = diagnostic;
@@ -4522,8 +4596,31 @@ maelys_result_t maelys_datalog_explain_absent_solved_fact(
         ? (uint8_t)MAELYS_DATALOG_WHY_FALSE_STATUS_TRUNCATED
         : (uint8_t)MAELYS_DATALOG_WHY_FALSE_STATUS_COMPLETE;
     *out_explanation = *work;
-    free(context.frontier);
-    memset(work, 0, sizeof(*work));
-    free(work);
+    if (!workspace) {
+        free(context.frontier);
+        memset(work, 0, sizeof(*work));
+        free(work);
+    }
     return MAELYS_OK;
+}
+
+maelys_result_t maelys_datalog_explain_absent_solved_fact(
+    const maelys_datalog_solve_result_t *result, const maelys_datalog_fact_t *fact,
+    const maelys_datalog_why_false_limits_t *limits, maelys_datalog_why_false_explanation_t *out) {
+    return explain_absent_solved_fact(result, fact, limits, out, NULL);
+}
+maelys_result_t maelys_datalog_explain_absent_in_workspace(
+    const maelys_datalog_solve_result_t *result, const maelys_datalog_fact_t *fact,
+    const maelys_datalog_why_false_limits_t *limits, void *storage, size_t bytes,
+    const maelys_datalog_why_false_explanation_t **out) {
+    if (!storage || !out) return MAELYS_ERR_INVALID_ARGUMENT;
+    size_t required, alignment;
+    maelys_result_t rc = maelys_datalog_why_false_storage_requirements(result, &required, &alignment);
+    if (rc) return rc;
+    if ((uintptr_t)storage % alignment) return MAELYS_ERR_INVALID_ARGUMENT;
+    if (bytes < required) return MAELYS_ERR_PAYLOAD_TOO_LARGE;
+    why_false_workspace_t *w = storage;
+    rc = explain_absent_solved_fact(result, fact, limits, &w->explanation, w);
+    if (!rc) *out = &w->explanation;
+    return rc;
 }

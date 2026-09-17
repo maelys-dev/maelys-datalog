@@ -403,7 +403,7 @@ MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_result_explain_true_te
  * variable id reported by maelys_datalog_program_rule; the standard grammar
  * maps A-Z to 0-25 and anonymous variables to 26 and above. The reference
  * explores at most 128 candidate rules, 4,096 substitutions per rule, depth 10
- * and 16 diagnostics; backend ABI v2 fixes these bounds, they are not
+ * and 16 diagnostics; backend ABI v3 preserves these bounds, they are not
  * caller-tunable. Truncated text is not a proof of non-derivability. */
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_result_explain_false_text(
     const maelys_datalog_result_t *result,
@@ -419,6 +419,55 @@ MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_result_explain_false_t
  * data outside their newly initialized counts and validity markers. */
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_result_free(
     maelys_datalog_result_t *result);
+
+typedef struct maelys_datalog_prepared_explanation maelys_datalog_prepared_explanation_t;
+typedef enum {
+    MAELYS_DATALOG_EXPLAIN_TRUE = 1,
+    MAELYS_DATALOG_EXPLAIN_FALSE = 2
+} maelys_datalog_explanation_kind_t;
+
+/* Prepare once, then measure/render the retained explanation without searching
+ * again. These functions never re-solve. Unlike the allocating *_explain_*_text
+ * convenience calls above, the reference implementation makes NO allocator
+ * calls on this path (including Why-false scratch). Bounded automatic stack
+ * storage remains in use. Custom filters/backends must honor their own contract.
+ *
+ * Requirements depend on the live result, kind, backend and build profile;
+ * query them for each result. Alignment is a power of two <= alignof(max_align_t).
+ * Use an appropriately aligned caller arena; no hidden fallback/growth occurs.
+ * Storage is exclusive, immovable and must not overlap arguments, output text,
+ * another live handle or engine objects. Do not reuse it before release.
+ *
+ * Preparation borrows the result (not query strings): result_free returns
+ * INVALID_STATE until every prepared explanation is released. Release does NOT
+ * free caller memory or erase sensitive data. No function is thread-safe on a
+ * shared session; the existing session-confinement rule applies.
+ *
+ * Errors leave scalar/handle output parameters unchanged; failed preparation may modify the
+ * supplied storage but acquires no lease. Missing capabilities -> UNSUPPORTED;
+ * invalid alignment -> INVALID_ARGUMENT; insufficient storage -> PAYLOAD_TOO_LARGE.
+ * The text/status/limits match the convenience calls (a bounded/truncated
+ * explanation is distinct from a too-small text buffer).
+ */
+MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_result_explanation_storage_requirements(
+    const maelys_datalog_result_t *result, maelys_datalog_explanation_kind_t kind,
+    size_t *out_bytes, size_t *out_alignment);
+MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_result_prepare_explanation(
+    maelys_datalog_result_t *result, maelys_datalog_explanation_kind_t kind,
+    const char *predicate, const maelys_datalog_public_value_t *terms, size_t arity,
+    void *storage, size_t storage_bytes, maelys_datalog_prepared_explanation_t **out);
+/* Cached size, excluding the terminating NUL; no formatting or proof traversal. */
+MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_prepared_explanation_text_size(
+    const maelys_datalog_prepared_explanation_t *, size_t *out_required);
+/* Write only: NULL is invalid, including at capacity zero. No size-query mode.
+ * Needs text_size + 1 bytes. On PAYLOAD_TOO_LARGE only out_text[0] is set to NUL
+ * when capacity > 0; no partial text. Repeated successful writes are byte-identical.
+ * If a third-party backend violates its callback contract, output text after
+ * the resulting error is unspecified and must not be consumed. */
+MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_prepared_explanation_write_text(
+    const maelys_datalog_prepared_explanation_t *, char *out_text, size_t capacity);
+MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_prepared_explanation_release(
+    maelys_datalog_prepared_explanation_t *);
 
 #ifdef __cplusplus
 }

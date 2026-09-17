@@ -74,6 +74,11 @@ typedef struct maelys_datalog_session maelys_datalog_session_t;
 typedef struct maelys_datalog_result maelys_datalog_result_t;
 typedef struct maelys_datalog_session_config maelys_datalog_session_config_t;
 typedef struct maelys_datalog_input_edb maelys_datalog_input_edb_t;
+typedef struct maelys_datalog_prepared_explanation maelys_datalog_prepared_explanation_t;
+typedef enum {
+    MAELYS_DATALOG_EXPLAIN_TRUE = 1,
+    MAELYS_DATALOG_EXPLAIN_FALSE = 2
+} maelys_datalog_explanation_kind_t;
 #define MAELYS_DATALOG_STATUS_PAYLOAD_TOO_LARGE ...
 int maelys_datalog_session_config_create(maelys_datalog_session_config_t **);
 int maelys_datalog_session_config_set_required_capabilities(maelys_datalog_session_config_t *, uint64_t);
@@ -190,6 +195,19 @@ int maelys_datalog_result_symbol_text(
     const maelys_datalog_result_t *result, uint32_t symbol_id,
     const char **out_text, size_t *out_length);
 int maelys_datalog_result_free(maelys_datalog_result_t *result);
+int maelys_datalog_result_explanation_storage_requirements(
+    const maelys_datalog_result_t *, maelys_datalog_explanation_kind_t,
+    size_t *, size_t *);
+int maelys_datalog_result_prepare_explanation(
+    maelys_datalog_result_t *, maelys_datalog_explanation_kind_t,
+    const char *, const maelys_datalog_public_value_t *, size_t,
+    void *, size_t, maelys_datalog_prepared_explanation_t **);
+int maelys_datalog_prepared_explanation_text_size(
+    const maelys_datalog_prepared_explanation_t *, size_t *);
+int maelys_datalog_prepared_explanation_write_text(
+    const maelys_datalog_prepared_explanation_t *, char *, size_t);
+int maelys_datalog_prepared_explanation_release(
+    maelys_datalog_prepared_explanation_t *);
 int maelys_datalog_result_explain_true_text(
     const maelys_datalog_result_t *, const char *,
     const maelys_datalog_public_value_t *, size_t, char *, size_t, size_t *);
