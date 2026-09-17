@@ -87,6 +87,7 @@ working table cannot pass that lookup (exit 9).
 | `test_maelys_datalog_hot_path_alloc` | All engine units use allocator hooks: repeated reference append/solve/query/release without allocator calls, constructor allocation failures, independent sessions and failure recovery. A source-level `memset` hook checks zero reset bytes on owned native release and at most 4,096 on reusable public release, on both profiles; this is not a hardware store counter or secure-erasure guarantee. Explanations are outside the allocation guard. |
 | `test_maelys_datalog_pipeline` | Existing fingerprint/proof goldens and identical result symbol IDs under input permutation. |
 | `check_module_sdk.sh` | All eight opaque handle layouts rejected in C11/C++17; static/shared external consumers pass. |
+| `bindings/python-next/tests` | Public-header-only CFFI, native atomic input, limits/diagnostics, manifest/domain isolation, prepared sessions, explicit reset, one-result lease, filters and Why-true/Why-false truncation. Parity is skipped if the legacy extension is absent. |
 
 Run the sanitizer build used by CI, not only CMake's separate targets:
 
@@ -100,6 +101,9 @@ implementation object it already includes; the whole-engine allocator test uses
 its own guarded object set. macOS runs ASan/UBSan with LSAN disabled; Linux also
 runs LSAN. Custom callbacks/backends, Python/CFFI and libc internals are not
 covered by the reference-engine no-allocation assertion.
+
+Python-next's executable build/test commands and lifecycle examples are in its
+[README](../bindings/python-next/README.md); run both SMALL and LARGE builds.
 
 The WASM C boundary and JavaScript wrapper live together in
 [`bindings/wasm/`](../bindings/wasm/README.md). Tests import the wrapper from
