@@ -61,7 +61,7 @@ Repeat in `build/cmake-large` with `-DMAELYS_DATALOG_PROFILE_LARGE=ON`.
 The SDK check installs into a fresh temporary prefix, copies all consumers and
 providers outside the source tree and builds them with only installed includes
 and libraries, both static and shared. It checks all five headers independently
-as C11/C++17 and rejects `sizeof` on all six opaque handle types. All five
+as C11/C++17 and rejects `sizeof` on all nine opaque handle types. All five
 standalone examples (including the frontend/filter bundle) are copied out, built
 with their own CMake projects and run through the installed conformance kit in
 both linkage modes and size profiles.
@@ -90,8 +90,10 @@ working table cannot pass that lookup (exit 9).
 | `test_maelys_datalog_pipeline` | Existing fingerprint/proof goldens and identical result symbol IDs under input permutation. |
 | C11 cases in `test_maelys_datalog_input_edb_alloc` | Unit/batch arity 0–4, integer ranks, copied strings, typed/explicit booleans, exactly-once arguments, multi-digit fact/term range diagnostics, and byte-identical late range/type/text/fact-capacity rejection with the allocator disabled. |
 | `make check-c11-fact-builders` / CTest `c11_fact_builder_compilation` | Strict C11 unit/batch/query consumers; float, double, pointer, struct and five-term compilation failures for each macro. The Make gate additionally checks C++17 symbol/predicate initializers and absence of C11-only macros; CMake keeps its C-only compiler requirement. |
-| `check_module_sdk.sh` | All eight opaque handle layouts rejected in C11/C++17; static/shared external consumers pass. |
 | `bindings/python-next/tests` | Public-header-only CFFI, native atomic input, limits/diagnostics, manifest/domain isolation, prepared sessions, explicit reset, one-result lease, filters and Why-true/Why-false truncation. Parity is skipped if the legacy extension is absent. |
+| `test_maelys_datalog_prepared_explanations` | All engine units use allocator hooks; Why-true/Why-false prepare/size/write/release run with allocation disabled. Repeated writes call no preparation callback; result leases, alignment, short buffers, storage reuse, unknown symbols, invalid callbacks and ABI 2 rejection are checked. |
+| `test_maelys_datalog_why_false` | Every successful legacy fixture is compared byte-for-byte with the caller-owned workspace path, including recursion, reordered symbol vocabularies, filters and truncation budgets. |
+| `check_module_sdk.sh` | All nine opaque handle layouts rejected in C11/C++17; static/shared external consumers exercise caller-owned explanations and result leases. |
 
 Run the sanitizer build used by CI, not only CMake's separate targets:
 
@@ -101,8 +103,8 @@ make -j4 -f Makefile.asan asan PROFILE=LARGE
 ```
 
 Ordinary tests share ASan objects. The input allocator test excludes the input
-implementation object it already includes; the whole-engine allocator test uses
-its own guarded object set. macOS runs ASan/UBSan with LSAN disabled; Linux also
+implementation object it already includes; the whole-engine allocator tests share
+one separate guarded object set. macOS runs ASan/UBSan with LSAN disabled; Linux also
 runs LSAN. Custom callbacks/backends, Python/CFFI and libc internals are not
 covered by the reference-engine no-allocation assertion.
 

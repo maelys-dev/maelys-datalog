@@ -42,11 +42,21 @@ static maelys_datalog_status_t solve(void *state, const maelys_datalog_public_fa
     }
     return (maelys_datalog_status_t)rc;
 }
-static maelys_datalog_status_t explain_result(void *state, void *result_state,
-                                              const char *predicate,
-                                              const maelys_datalog_public_value_t *terms,
-                                              size_t arity, char *text, size_t capacity,
-                                              size_t *required, int absent) {
+static maelys_datalog_status_t explanation_storage_requirements(
+    void *state, void *result, maelys_datalog_explanation_kind_t kind,
+    size_t *bytes, size_t *alignment) {
+    (void)state;
+    if (kind == MAELYS_DATALOG_EXPLAIN_FALSE)
+        return (maelys_datalog_status_t)maelys_datalog_why_false_storage_requirements(result, bytes, alignment);
+    if (kind != MAELYS_DATALOG_EXPLAIN_TRUE) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
+    *bytes = sizeof(maelys_datalog_explanation_t);
+    *alignment = _Alignof(maelys_datalog_explanation_t);
+    return MAELYS_DATALOG_STATUS_OK;
+}
+static maelys_datalog_status_t explanation_prepare(
+    void *state, void *result_state, maelys_datalog_explanation_kind_t kind,
+    const char *predicate, const maelys_datalog_public_value_t *terms, size_t arity,
+    void *storage, size_t bytes, size_t *required) {
     maelys_datalog_prepared_session_t *session = state;
     maelys_datalog_solve_result_t *result = result_state;
     maelys_datalog_fact_t fact = {0};
@@ -61,41 +71,37 @@ static maelys_datalog_status_t explain_result(void *state, void *result_state,
         return status;
     if (!found)
         return MAELYS_DATALOG_STATUS_NOT_FOUND;
-    if (absent) {
+    if (kind == MAELYS_DATALOG_EXPLAIN_FALSE) {
         const maelys_datalog_why_false_limits_t limits = {
             MAELYS_DATALOG_MAX_RULES, MAELYS_DATALOG_MAX_WHY_FALSE_SUBSTITUTIONS_PER_RULE,
             MAELYS_DATALOG_MAX_PROOF_DEPTH, MAELYS_DATALOG_MAX_WHY_FALSE_DIAGNOSTICS};
-        maelys_datalog_why_false_explanation_t *why = calloc(1, sizeof(*why));
-        if (!why)
-            return MAELYS_DATALOG_STATUS_INTERNAL;
-        maelys_result_t rc = maelys_datalog_explain_absent_solved_fact(result, &fact, &limits, why);
+        const maelys_datalog_why_false_explanation_t *why;
+        maelys_result_t rc = maelys_datalog_explain_absent_in_workspace(result, &fact, &limits, storage, bytes, &why);
         if (!rc)
-            rc = maelys_datalog_format_why_false_text(&session->working, why, text, capacity,
+            rc = maelys_datalog_format_why_false_text(&session->working, why, NULL, 0,
                                                       required);
-        free(why);
         return (maelys_datalog_status_t)rc;
     }
-    maelys_datalog_explanation_t *explanation = calloc(1u, sizeof(*explanation));
-    if (!explanation)
-        return MAELYS_DATALOG_STATUS_INTERNAL;
+    if (kind != MAELYS_DATALOG_EXPLAIN_TRUE) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
+    if (bytes < sizeof(maelys_datalog_explanation_t)) return MAELYS_DATALOG_STATUS_PAYLOAD_TOO_LARGE;
+    maelys_datalog_explanation_t *explanation = storage;
     maelys_result_t rc = maelys_datalog_explain_solved_fact(result, &fact, explanation);
     if (rc == MAELYS_OK)
-        rc = maelys_datalog_format_explanation_text(&session->working, explanation, text, capacity,
+        rc = maelys_datalog_format_explanation_text(&session->working, explanation, NULL, 0,
                                                     required);
-    free(explanation);
     return (maelys_datalog_status_t)rc;
 }
-static maelys_datalog_status_t explain_true(void *state, void *result, const char *predicate,
-                                            const maelys_datalog_public_value_t *terms,
-                                            size_t arity, char *text, size_t capacity,
-                                            size_t *required) {
-    return explain_result(state, result, predicate, terms, arity, text, capacity, required, 0);
-}
-static maelys_datalog_status_t explain_false(void *state, void *result, const char *predicate,
-                                             const maelys_datalog_public_value_t *terms,
-                                             size_t arity, char *text, size_t capacity,
-                                             size_t *required) {
-    return explain_result(state, result, predicate, terms, arity, text, capacity, required, 1);
+static maelys_datalog_status_t explanation_write_text(
+    void *state, void *result, maelys_datalog_explanation_kind_t kind,
+    const void *storage, char *text, size_t capacity) {
+    (void)result;
+    maelys_datalog_prepared_session_t *session = state;
+    size_t required;
+    if (kind == MAELYS_DATALOG_EXPLAIN_FALSE)
+        return (maelys_datalog_status_t)maelys_datalog_format_why_false_text(
+            &session->working, maelys_datalog_why_false_workspace_view(storage), text, capacity, &required);
+    return (maelys_datalog_status_t)maelys_datalog_format_explanation_text(
+        &session->working, storage, text, capacity, &required);
 }
 static void destroy_result(void *state, void *result) {
     (void)state;
@@ -114,8 +120,9 @@ const maelys_datalog_backend_t *maelys_datalog_backend_reference(void) {
                                                          MAELYS_DATALOG_CAP_EXPLAIN_FALSE,
                                                      prepare,
                                                      solve,
-                                                     explain_true,
-                                                     explain_false,
+                                                     explanation_storage_requirements,
+                                                     explanation_prepare,
+                                                     explanation_write_text,
                                                      destroy_result,
                                                      destroy};
     return &backend;

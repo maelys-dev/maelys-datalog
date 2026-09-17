@@ -184,6 +184,11 @@ class FacadeTest(unittest.TestCase):
             "result_symbol_text": "SolveResult.resolve_term",
             "result_explain_true_text": "SolveResult.explain_true",
             "result_explain_false_text": "SolveResult.explain_false",
+            "result_explanation_storage_requirements": "Native only; Python convenience in a follow-up PR",
+            "result_prepare_explanation": "Native only; Python convenience in a follow-up PR",
+            "prepared_explanation_text_size": "Native only; Python convenience in a follow-up PR",
+            "prepared_explanation_write_text": "Native only; Python convenience in a follow-up PR",
+            "prepared_explanation_release": "Native only; Python convenience in a follow-up PR",
             "result_free": "SolveResult.close",
         }
         header = Path(__file__).resolve().parents[3] / "include/maelys/datalog.h"

@@ -205,6 +205,7 @@ const maelys_datalog_backend_t *example_naive_backend(void) {
                                                      solve,
                                                      NULL,
                                                      NULL,
+                                                     NULL,
                                                      destroy_result,
                                                      destroy};
     return &backend;

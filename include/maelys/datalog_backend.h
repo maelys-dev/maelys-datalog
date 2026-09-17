@@ -6,7 +6,7 @@
 extern "C" {
 #endif
 
-#define MAELYS_DATALOG_BACKEND_ABI_VERSION 2u
+#define MAELYS_DATALOG_BACKEND_ABI_VERSION 3u
 typedef struct maelys_datalog_backend_output maelys_datalog_backend_output_t;
 
 /* Emit the complete derived IDB, including non-query helpers. The core copies,
@@ -37,14 +37,31 @@ typedef struct {
                                      const maelys_datalog_public_fact_t *canonical_inputs,
                                      size_t input_count, maelys_datalog_backend_output_t *,
                                      void **out_result_state, maelys_datalog_public_diagnostic_t *);
-    /* Required when EXPLAIN_TRUE is advertised. Read-only: never re-solve. */
-    maelys_datalog_status_t (*explain_true)(void *state, void *result_state, const char *,
-                                            const maelys_datalog_public_value_t *, size_t, char *,
-                                            size_t, size_t *);
-    /* Required when EXPLAIN_FALSE is advertised. Same read-only buffer contract. */
-    maelys_datalog_status_t (*explain_false)(void *state, void *result_state, const char *,
-                                             const maelys_datalog_public_value_t *, size_t, char *,
-                                             size_t, size_t *);
+    /* ABI 3 replaces the two direct-text callbacks with caller-owned storage.
+     * All three are required if either EXPLAIN capability is advertised; the
+     * host calls only supported kinds. No allocator calls, acquired resources,
+     * engine reentry or retained query-string pointers. Result state stays alive
+     * until all explanations are released. Scratch belongs in the same storage;
+     * bounded automatic locals are allowed. No destroy hook is needed: this
+     * storage contains only values and references borrowed from the live result.
+     *
+     * storage_requirements is read-only and deterministic for (result, kind).
+     * Alignment must be a nonzero power of two <= alignof(max_align_t), size > 0.
+     * prepare extracts once and returns the EXACT text length excluding NUL;
+     * SIZE_MAX is invalid. On failure storage may change, retained state may not.
+     * write_text only formats the prepared storage; never extracts/searches again.
+     * The host checks capacity first. Successful output is NUL-terminated and
+     * exactly the prepared length. All callbacks are trusted and bounded. */
+    maelys_datalog_status_t (*explanation_storage_requirements)(
+        void *state, void *result_state, maelys_datalog_explanation_kind_t,
+        size_t *out_bytes, size_t *out_alignment);
+    maelys_datalog_status_t (*explanation_prepare)(
+        void *state, void *result_state, maelys_datalog_explanation_kind_t,
+        const char *, const maelys_datalog_public_value_t *, size_t,
+        void *storage, size_t storage_bytes, size_t *out_text_size);
+    maelys_datalog_status_t (*explanation_write_text)(
+        void *state, void *result_state, maelys_datalog_explanation_kind_t,
+        const void *storage, char *text, size_t capacity);
     void (*destroy_result)(void *state, void *result_state);
     void (*destroy)(void *state);
 } maelys_datalog_backend_t;

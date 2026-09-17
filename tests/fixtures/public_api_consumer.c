@@ -107,6 +107,25 @@ int main(void) {
             result, "allow", fact.terms, 1u, explanation, required + 1u, &required))) return 12;
     if (!strstr(explanation, "document=why-true")) return 13;
     free(explanation);
+    /* Fixed application budget, not a guess about a private native layout.
+     * Query requirements and refuse if this caller-owned arena is too small. */
+    static union { max_align_t alignment; unsigned char bytes[256u * 1024u]; } arena;
+    size_t storage_bytes = 0u, storage_alignment = 0u;
+    if (!require_status(maelys_datalog_result_explanation_storage_requirements(
+            result, MAELYS_DATALOG_EXPLAIN_TRUE, &storage_bytes, &storage_alignment))) return 25;
+    if (storage_bytes > sizeof(arena.bytes) || (uintptr_t)arena.bytes % storage_alignment) return 26;
+    maelys_datalog_prepared_explanation_t *prepared = NULL;
+    if (!require_status(maelys_datalog_result_prepare_explanation(
+            result, MAELYS_DATALOG_EXPLAIN_TRUE, "allow", fact.terms, 1u,
+            arena.bytes, sizeof(arena.bytes), &prepared))) return 27;
+    if (!require_status(maelys_datalog_prepared_explanation_text_size(prepared, &required))) return 28;
+    char rendered[8192];
+    if (required >= sizeof(rendered)) return 29;
+    if (!require_status(maelys_datalog_prepared_explanation_write_text(
+            prepared, rendered, sizeof(rendered)))) return 30;
+    if (!strstr(rendered, "document=why-true")) return 31;
+    if (maelys_datalog_result_free(result) != MAELYS_DATALOG_STATUS_INVALID_STATE) return 32;
+    if (!require_status(maelys_datalog_prepared_explanation_release(prepared))) return 33;
     if (!require_status(maelys_datalog_result_free(result))) return 14;
     if (!require_status(maelys_datalog_session_free(session))) return 15;
     puts("public-api-consumer: PASS");

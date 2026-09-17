@@ -9,8 +9,11 @@ The generated CFFI extension includes only public `<maelys/datalog.h>` and links
 `src/core/` include. The package exercises the opaque facade's domain → policy →
 session → facts → solve → query path, including additive public limit/count
 getters introduced alongside this experiment. Build it with the native library
-from this branch; the previously released API v1 library lacks those getters
-and the opaque session configuration and input EDB APIs.
+from this branch; the previously released API v1 library lacks those getters,
+the opaque session configuration and input EDB APIs, and the newly declared
+caller-owned explanation functions. These five explanation functions are
+native-only CFFI declarations for now: the Python conveniences still use the
+existing direct-text path. Their implementation changes in a follow-up PR.
 
 The facade now owns the capability constants, opaque `session_config` handle
 and execution fingerprint accessor. `Ruleset.prepare()` creates a temporary

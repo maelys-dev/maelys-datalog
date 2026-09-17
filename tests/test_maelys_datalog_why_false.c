@@ -1,9 +1,33 @@
 #include "include/maelys_datalog.h"
+#include "src/core/maelys_datalog_solver_internal.h"
 #include "tests/helpers/test_framework.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+/* Every successful legacy fixture is also an independent byte-for-byte
+ * oracle for the allocation-free workspace path, including truncated prefixes,
+ * reordered symbol vocabularies, recursion, filters and all exploration limits. */
+static maelys_result_t compare_workspace_explanation(
+    const maelys_datalog_solve_result_t *result, const maelys_datalog_fact_t *fact,
+    const maelys_datalog_why_false_limits_t *limits, maelys_datalog_why_false_explanation_t *out) {
+    maelys_result_t rc = maelys_datalog_explain_absent_solved_fact(result, fact, limits, out);
+    if (rc != MAELYS_OK) return rc;
+    size_t bytes, alignment;
+    if (maelys_datalog_why_false_storage_requirements(result, &bytes, &alignment)) return MAELYS_ERR_INTERNAL;
+    void *storage = malloc(bytes);
+    if (!storage) return MAELYS_ERR_INTERNAL;
+    const maelys_datalog_why_false_explanation_t *prepared = NULL;
+    rc = maelys_datalog_explain_absent_in_workspace(result, fact, limits, storage, bytes, &prepared);
+    if (!rc && memcmp(out, prepared, sizeof(*out))) {
+        fprintf(stderr, "Why-false caller workspace differs from legacy result\n");
+        rc = MAELYS_ERR_INTERNAL;
+    }
+    free(storage);
+    return rc;
+}
+#define maelys_datalog_explain_absent_solved_fact compare_workspace_explanation
 
 maelys_result_t maelys_datalog_test_solve_result_idb_facts(
     const maelys_datalog_solve_result_t *result,

@@ -69,6 +69,7 @@ maelys_datalog_status_t maelys_datalog_session_create_configured(
 struct maelys_datalog_result {
     maelys_datalog_session_t *owner;
     void *state;
+    maelys_datalog_prepared_explanation_t *explanations;
     maelys_datalog_fact_set_t derived;
     size_t per_predicate[MAELYS_DATALOG_MAX_PREDICATES];
     /* Retained payload; live entries are defined solely by derived.count. */
@@ -98,6 +99,16 @@ struct maelys_datalog_backend_output {
     uint64_t work;
     size_t filter_count, filter_cost;
 };
+struct maelys_datalog_prepared_explanation {
+    maelys_datalog_result_t *owner;
+    maelys_datalog_prepared_explanation_t *next;
+    size_t storage_bytes, text_size;
+    maelys_datalog_explanation_kind_t kind;
+};
+#define EXPLANATION_ALIGNMENT _Alignof(max_align_t)
+#define EXPLANATION_HEADER_BYTES \
+    ((sizeof(maelys_datalog_prepared_explanation_t) + EXPLANATION_ALIGNMENT - 1u) \
+     / EXPLANATION_ALIGNMENT * EXPLANATION_ALIGNMENT)
 static maelys_datalog_status_t output_fail(maelys_datalog_backend_output_t *out,
                                            maelys_datalog_status_t rc) {
     if (out && out->error == MAELYS_DATALOG_STATUS_OK)
@@ -532,39 +543,155 @@ maelys_datalog_status_t maelys_datalog_result_symbol_text(const maelys_datalog_r
     *length = symbols->entries[id - 1u].len;
     return MAELYS_DATALOG_STATUS_OK;
 }
-static maelys_datalog_status_t result_explain_text(const maelys_datalog_result_t *result,
-                                                   const char *predicate,
-                                                   const maelys_datalog_public_value_t *terms,
-                                                   size_t arity, char *text, size_t capacity,
-                                                   size_t *required, int why_false) {
-    if (!result || !result->owner || !required || (!text && capacity))
+static maelys_datalog_status_t explanation_available(
+    const maelys_datalog_result_t *result, maelys_datalog_explanation_kind_t kind) {
+    if (!result || !result->owner ||
+        (kind != MAELYS_DATALOG_EXPLAIN_TRUE && kind != MAELYS_DATALOG_EXPLAIN_FALSE))
         return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
-    maelys_datalog_predicate_id_t pid;
-    maelys_datalog_status_t rc = query_predicate(result, predicate, arity, &pid);
-    if (rc != MAELYS_DATALOG_STATUS_OK)
-        return rc;
+    if (result->owner->busy || result->owner->active != result)
+        return MAELYS_DATALOG_STATUS_INVALID_STATE;
+    uint64_t cap = kind == MAELYS_DATALOG_EXPLAIN_TRUE
+        ? MAELYS_DATALOG_CAP_EXPLAIN_TRUE : MAELYS_DATALOG_CAP_EXPLAIN_FALSE;
+    return result->owner->backend.capabilities & cap
+        ? MAELYS_DATALOG_STATUS_OK : MAELYS_DATALOG_STATUS_UNSUPPORTED;
+}
+maelys_datalog_status_t maelys_datalog_result_explanation_storage_requirements(
+    const maelys_datalog_result_t *result, maelys_datalog_explanation_kind_t kind,
+    size_t *bytes, size_t *alignment) {
+    if (!bytes || !alignment) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
+    maelys_datalog_status_t rc = explanation_available(result, kind);
+    if (rc) return rc;
     maelys_datalog_session_t *s = result->owner;
-    if (!(s->backend.capabilities &
-          (why_false ? MAELYS_DATALOG_CAP_EXPLAIN_FALSE : MAELYS_DATALOG_CAP_EXPLAIN_TRUE)))
-        return MAELYS_DATALOG_STATUS_UNSUPPORTED;
+    size_t n = 0, a = 0;
+    s->busy = 1;
+    rc = maelys_datalog_callback_status(s->backend.explanation_storage_requirements(
+        s->state, result->state, kind, &n, &a));
+    s->busy = 0;
+    if (rc) return rc;
+    if (!n || !a || (a & (a - 1u)) || a > EXPLANATION_ALIGNMENT ||
+        n > SIZE_MAX - EXPLANATION_HEADER_BYTES)
+        return MAELYS_DATALOG_STATUS_INVALID_STATE;
+    *bytes = EXPLANATION_HEADER_BYTES + n;
+    *alignment = EXPLANATION_ALIGNMENT;
+    return MAELYS_DATALOG_STATUS_OK;
+}
+static int explanation_overlap(const void *a, size_t an, const void *b, size_t bn) {
+    uintptr_t x = (uintptr_t)a, y = (uintptr_t)b;
+    return x <= y ? y - x < an : x - y < bn;
+}
+maelys_datalog_status_t maelys_datalog_result_prepare_explanation(
+    maelys_datalog_result_t *result, maelys_datalog_explanation_kind_t kind,
+    const char *predicate, const maelys_datalog_public_value_t *terms, size_t arity,
+    void *storage, size_t bytes, maelys_datalog_prepared_explanation_t **out) {
+    if (!storage || !out || (uintptr_t)storage % EXPLANATION_ALIGNMENT ||
+        bytes > UINTPTR_MAX - (uintptr_t)storage)
+        return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
+    maelys_datalog_status_t rc = explanation_available(result, kind);
+    if (rc) return rc;
+    maelys_datalog_predicate_id_t pid;
+    rc = query_predicate(result, predicate, arity, &pid);
+    if (rc) return rc;
+    maelys_datalog_session_t *s = result->owner;
     maelys_datalog_term_t checked[MAELYS_DATALOG_MAX_TERMS];
     int found;
     rc = maelys_datalog_resolve_public_terms(&s->inputs->working.symbols, terms, arity, checked,
                                              &found, 0);
-    if (rc != MAELYS_DATALOG_STATUS_OK)
-        return rc;
-    if (!found)
-        return MAELYS_DATALOG_STATUS_NOT_FOUND;
+    if (rc) return rc;
+    if (!found) return MAELYS_DATALOG_STATUS_NOT_FOUND;
+    size_t needed_bytes, alignment;
+    rc = maelys_datalog_result_explanation_storage_requirements(result, kind, &needed_bytes, &alignment);
+    if (rc) return rc;
+    if (bytes < needed_bytes) return MAELYS_DATALOG_STATUS_PAYLOAD_TOO_LARGE;
+    for (maelys_datalog_prepared_explanation_t *p = result->explanations; p; p = p->next)
+        if (explanation_overlap(storage, bytes, p, p->storage_bytes))
+            return MAELYS_DATALOG_STATUS_INVALID_STATE;
     size_t needed = SIZE_MAX;
     s->busy = 1;
-    rc = maelys_datalog_callback_status(
-        (why_false ? s->backend.explain_false : s->backend.explain_true)(
-            s->state, result->state, predicate, terms, arity, text, capacity, &needed));
+    rc = maelys_datalog_callback_status(s->backend.explanation_prepare(
+        s->state, result->state, kind, predicate, terms, arity,
+        (unsigned char *)storage + EXPLANATION_HEADER_BYTES,
+        needed_bytes - EXPLANATION_HEADER_BYTES, &needed));
     s->busy = 0;
-    if (needed != SIZE_MAX)
-        *required = needed;
-    else if (rc == MAELYS_DATALOG_STATUS_OK)
+    if (rc) return rc;
+    if (needed == SIZE_MAX) return MAELYS_DATALOG_STATUS_INVALID_STATE;
+    maelys_datalog_prepared_explanation_t *p = storage;
+    *p = (maelys_datalog_prepared_explanation_t){
+        result, result->explanations, bytes, needed, kind};
+    result->explanations = p;
+    *out = p;
+    return MAELYS_DATALOG_STATUS_OK;
+}
+static maelys_datalog_status_t prepared_valid(const maelys_datalog_prepared_explanation_t *p) {
+    if (!p) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
+    if (!p->owner) return MAELYS_DATALOG_STATUS_INVALID_STATE;
+    maelys_datalog_status_t rc = explanation_available(p->owner, p->kind);
+    if (rc) return rc;
+    for (const maelys_datalog_prepared_explanation_t *q = p->owner->explanations; q; q = q->next)
+        if (q == p) return MAELYS_DATALOG_STATUS_OK;
+    return MAELYS_DATALOG_STATUS_INVALID_STATE;
+}
+maelys_datalog_status_t maelys_datalog_prepared_explanation_text_size(
+    const maelys_datalog_prepared_explanation_t *p, size_t *out) {
+    if (!out) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
+    maelys_datalog_status_t rc = prepared_valid(p);
+    if (rc) return rc;
+    *out = p->text_size;
+    return MAELYS_DATALOG_STATUS_OK;
+}
+maelys_datalog_status_t maelys_datalog_prepared_explanation_write_text(
+    const maelys_datalog_prepared_explanation_t *p, char *text, size_t capacity) {
+    if (!text) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
+    maelys_datalog_status_t rc = prepared_valid(p);
+    if (rc) return rc;
+    if (capacity > UINTPTR_MAX - (uintptr_t)text ||
+        explanation_overlap(text, capacity, p, p->storage_bytes))
+        return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
+    if (capacity <= p->text_size) {
+        if (capacity) text[0] = '\0';
+        return MAELYS_DATALOG_STATUS_PAYLOAD_TOO_LARGE;
+    }
+    maelys_datalog_session_t *s = p->owner->owner;
+    s->busy = 1;
+    rc = maelys_datalog_callback_status(s->backend.explanation_write_text(
+        s->state, p->owner->state, p->kind,
+        (const unsigned char *)p + EXPLANATION_HEADER_BYTES, text, capacity));
+    s->busy = 0;
+    if (!rc && memchr(text, '\0', p->text_size + 1u) != text + p->text_size)
         return MAELYS_DATALOG_STATUS_INVALID_STATE;
+    return rc;
+}
+maelys_datalog_status_t maelys_datalog_prepared_explanation_release(
+    maelys_datalog_prepared_explanation_t *p) {
+    maelys_datalog_status_t rc = prepared_valid(p);
+    if (rc) return rc;
+    maelys_datalog_prepared_explanation_t **link = &p->owner->explanations;
+    while (*link != p) link = &(*link)->next;
+    *link = p->next;
+    memset(p, 0, sizeof(*p));
+    return MAELYS_DATALOG_STATUS_OK;
+}
+static maelys_datalog_status_t result_explain_text(const maelys_datalog_result_t *result,
+    const char *predicate, const maelys_datalog_public_value_t *terms, size_t arity,
+    char *text, size_t capacity, size_t *required, int why_false) {
+    if (!required || (!text && capacity)) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
+    maelys_datalog_predicate_id_t pid;
+    maelys_datalog_status_t rc = query_predicate(result, predicate, arity, &pid);
+    if (rc) return rc;
+    maelys_datalog_explanation_kind_t kind = why_false ? MAELYS_DATALOG_EXPLAIN_FALSE : MAELYS_DATALOG_EXPLAIN_TRUE;
+    size_t bytes, alignment;
+    rc = maelys_datalog_result_explanation_storage_requirements(result, kind, &bytes, &alignment);
+    if (rc) return rc;
+    void *storage = malloc(bytes);
+    if (!storage) return MAELYS_DATALOG_STATUS_INTERNAL;
+    maelys_datalog_prepared_explanation_t *p = NULL;
+    rc = maelys_datalog_result_prepare_explanation((maelys_datalog_result_t *)result,
+        kind, predicate, terms, arity, storage, bytes, &p);
+    if (!rc) {
+        *required = p->text_size;
+        if (text) rc = maelys_datalog_prepared_explanation_write_text(p, text, capacity);
+        (void)maelys_datalog_prepared_explanation_release(p);
+    }
+    free(storage);
     return rc;
 }
 maelys_datalog_status_t
@@ -585,7 +712,7 @@ maelys_datalog_status_t maelys_datalog_result_free(maelys_datalog_result_t *resu
     if (!result || !result->owner)
         return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
     maelys_datalog_session_t *s = result->owner;
-    if (s->busy || s->active != result)
+    if (s->busy || s->active != result || result->explanations)
         return MAELYS_DATALOG_STATUS_INVALID_STATE;
     s->busy = 1;
     s->backend.destroy_result(s->state, result->state);
