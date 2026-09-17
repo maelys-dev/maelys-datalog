@@ -110,14 +110,21 @@ The declaration constructors match the unreleased C convenience initializers:
 | C declaration | Python declaration | Flags |
 | --- | --- | --- |
 | `MAELYS_DATALOG_EDB(name, arity)` | `Predicate.edb(name, arity)` | `EDB` |
+| `MAELYS_DATALOG_EDB_QUERY(name, arity)` | `Predicate.edb_query(name, arity)` | `EDB \| QUERY` |
 | `MAELYS_DATALOG_IDB(name, arity)` | `Predicate.idb(name, arity)` | `IDB` |
 | `MAELYS_DATALOG_IDB_QUERY(name, arity)` | `Predicate.idb_query(name, arity)` | `IDB \| QUERY` |
+| `MAELYS_DATALOG_POLICY_FACT(name, arity)` | `Predicate.policy_fact(name, arity)` | `POLICY_FACT` |
+| `MAELYS_DATALOG_POLICY_FACT_QUERY(name, arity)` | `Predicate.policy_fact_query(name, arity)` | `POLICY_FACT \| QUERY` |
 
 They construct immutable `Predicate` values; they do not register or validate a
 domain. `Engine.register_domain()` retains its existing validation and error
-behavior. `QUERY` is an additional flag, not a third category of facts.
+behavior. `QUERY` is an additional permission, not an origin of facts; a
+query-only declaration is rejected when a policy loads its predicate registry
+(registration itself stores the flags). EDB facts come from request inputs, IDB
+facts from rule evaluation, and POLICY_FACT facts from trusted policy source.
+The `_query` suffix does not change that origin or authorize input injection.
 `Predicate(name, arity, flags)` and all `PRED_*` constants remain available for
-other combinations, including `PRED_POLICY_FACT`. Unlike the C initializers,
+explicit declarations of the same six combinations. Unlike the C initializers,
 Python constructors allocate ordinary Python objects.
 
 One `ruleset.solve()` creates one opaque session and result. Several results can remain

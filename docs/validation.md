@@ -83,7 +83,7 @@ working table cannot pass that lookup (exit 9).
 
 | Gate | Verified behavior |
 | --- | --- |
-| `test_maelys_datalog_predicate_builders` | Exact EDB/IDB/IDB-query flag mappings, static and dynamic initializers, single evaluation, unchanged registration validation; C11/C++17 compilation is also covered by the fact-builder and installed-SDK gates. |
+| `test_maelys_datalog_predicate_builders` | All six origin/query flag mappings, static and dynamic initializers, single evaluation, query permissions, query-only rejection and policy-fact input rejection; C11/C++17 compilation is also covered by the fact-builder and installed-SDK gates. Python constructor tests exercise the same origins and retain subclass/immutability checks. |
 | `test_maelys_datalog_query_builders` | Query arities 0–4, typed API parity, integer bounds, Boolean/integer distinction, unchanged output on errors versus successful absence, single evaluation, borrowed symbol initializers. |
 | `test_maelys_datalog_input_edb_alloc` | Caller-owned alignment/size, copied and shared strings, byte-for-byte atomic rejection, fixed capacities and allocation-free append/clear. |
 | `test_maelys_datalog_hot_path_alloc` | All engine units use allocator hooks: repeated reference append/solve/query/release without allocator calls, constructor allocation failures, independent sessions and failure recovery. A source-level `memset` hook checks zero reset bytes on owned native release and at most 4,096 on reusable public release, on both profiles; this is not a hardware store counter or secure-erasure guarantee. Explanations are outside the allocation guard. |

@@ -8,14 +8,22 @@
  * arguments these are valid static initializers; no allocation or copying is
  * performed. The name retains the ordinary declaration's borrowed lifetime.
  * Each argument appears once. Name/arity validation still occurs at domain
- * registration. IDB_QUERY means IDB | QUERY, not a third kind of predicate.
- * Other flag combinations remain expressible with the ordinary struct. */
+ * registration; flag combinations are checked when loading a policy's registry.
+ * Exactly one origin (EDB, IDB, POLICY_FACT), optionally QUERY.
+ * QUERY permits querying; it is not an origin, so there is no query-only
+ * declaration initializer. The C11 QUERY(...) below executes a query instead. */
 #define MAELYS_DATALOG_EDB(name, arity) \
     { (name), (arity), MAELYS_DATALOG_PREDICATE_EDB }
+#define MAELYS_DATALOG_EDB_QUERY(name, arity) \
+    { (name), (arity), MAELYS_DATALOG_PREDICATE_EDB | MAELYS_DATALOG_PREDICATE_QUERY }
 #define MAELYS_DATALOG_IDB(name, arity) \
     { (name), (arity), MAELYS_DATALOG_PREDICATE_IDB }
 #define MAELYS_DATALOG_IDB_QUERY(name, arity) \
     { (name), (arity), MAELYS_DATALOG_PREDICATE_IDB | MAELYS_DATALOG_PREDICATE_QUERY }
+#define MAELYS_DATALOG_POLICY_FACT(name, arity) \
+    { (name), (arity), MAELYS_DATALOG_PREDICATE_POLICY_FACT }
+#define MAELYS_DATALOG_POLICY_FACT_QUERY(name, arity) \
+    { (name), (arity), MAELYS_DATALOG_PREDICATE_POLICY_FACT | MAELYS_DATALOG_PREDICATE_QUERY }
 
 /* Symbol value initializer (C and C++), not an expression or a copy.
  * The argument is evaluated once. The borrowed string must remain valid until

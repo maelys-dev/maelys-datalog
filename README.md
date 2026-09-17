@@ -120,7 +120,20 @@ static const maelys_datalog_public_predicate_t predicates[] = {
 These C/C++ macros initialize ordinary declarations without allocating or
 registering anything. `IDB_QUERY` means `IDB | QUERY`: a derived predicate also
 exposed for queries. Names and arities are still validated by domain registration.
-Other flag combinations use the ordinary struct initializer.
+All six accepted combinations have an initializer:
+
+| Origin | Without public queries | With public queries |
+| --- | --- | --- |
+| Request input | `MAELYS_DATALOG_EDB` | `MAELYS_DATALOG_EDB_QUERY` |
+| Rule-derived fact | `MAELYS_DATALOG_IDB` | `MAELYS_DATALOG_IDB_QUERY` |
+| Trusted policy-source fact | `MAELYS_DATALOG_POLICY_FACT` | `MAELYS_DATALOG_POLICY_FACT_QUERY` |
+
+Every initializer takes `(name, arity)`. `QUERY` is a permission, not an origin:
+a query-only declaration is rejected when loading the policy's predicate
+registry, not by the initializer or the domain-registration call. Adding it does not allow a request to
+inject policy facts or derived facts. The ordinary struct initializer remains
+available. The existing C11 `MAELYS_DATALOG_QUERY(result, ...)` is different:
+it executes a membership query; it does not declare a predicate.
 
 The unreleased C11 fact builders, included automatically from the separate
 installed `<maelys/datalog_builders.h>`, simplify input without
