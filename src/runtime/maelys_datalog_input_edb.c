@@ -10,7 +10,7 @@ struct maelys_datalog_input_edb {
     size_t count, capacity;
     char *text;
     size_t text_used, text_capacity;
-    uint16_t *index, *ordinals, *pending;
+    uint16_t *index, *pending;
     uint8_t *generations;
     uint8_t generation;
     size_t index_slots;
@@ -18,11 +18,13 @@ struct maelys_datalog_input_edb {
     int owned;
 };
 
-/* Separate offset+1 and pending ordinal+1 arrays: neither steals a value bit.
- * A bounded undo journal restores every index byte on error.
+/* One entry: zero = empty, committed = offset+1, pending = BASE+ordinal.
+ * Disjoint ranges retain all offset bits. The journal holds overwritten entry
+ * values, not slots; reverse replay of the validated prefix recovers the slots.
  * No input pointer survives a successful append. At most half the slots fill. */
 #define INPUT_STRINGS_PER_FACT (MAELYS_DATALOG_MAX_TERMS + 1u)
-/* First measured crossover (PR #56, Linux aarch64 clang 18 -O2):
+#define INPUT_PENDING_BASE (MAELYS_DATALOG_INPUT_EDB_TEXT_BYTES + 2u)
+/* First measured crossover (PR #56, 5af38f5, Linux aarch64 clang 18 -O2):
  * distinct      16       32       64        128
  * linear us    1.083    4.459    17.146     65.292
  * indexed us   0.500    0.833     1.625      3.063
@@ -30,10 +32,9 @@ struct maelys_datalog_input_edb {
  * Minima below 10 us, medians otherwise; LARGE confirms the crossover at 16.
  * Selection depends on requested capacities, never on batch contents. */
 #define INPUT_INDEX_THRESHOLD 16u
-_Static_assert(MAELYS_DATALOG_INPUT_EDB_TEXT_BYTES <= UINT16_MAX,
-               "text offsets plus one must fit uint16_t");
-_Static_assert(MAELYS_DATALOG_MAX_EDB_FACTS * INPUT_STRINGS_PER_FACT <= UINT16_MAX / 2u,
-               "batch ordinals plus one and power-of-two table slots must fit uint16_t");
+_Static_assert(MAELYS_DATALOG_INPUT_EDB_TEXT_BYTES + 1u +
+               MAELYS_DATALOG_MAX_EDB_FACTS * INPUT_STRINGS_PER_FACT < 65536u,
+               "committed offsets and pending ordinal range must fit uint16_t");
 
 static size_t input_distinct_bound(size_t capacity, size_t text_capacity) {
     size_t positions = capacity * INPUT_STRINGS_PER_FACT;
@@ -83,7 +84,7 @@ maelys_datalog_status_t maelys_datalog_input_edb_storage_requirements(
     size_t base = offset + fact_capacity * sizeof(maelys_datalog_public_fact_t);
     size_t slots = input_index_slots(fact_capacity, text_capacity);
     size_t index_bytes = slots ?
-        (2u * slots + input_distinct_bound(fact_capacity, text_capacity)) * sizeof(uint16_t) +
+        (slots + input_distinct_bound(fact_capacity, text_capacity)) * sizeof(uint16_t) +
         slots * sizeof(uint8_t) : 0u;
     if (index_bytes > SIZE_MAX - base) return MAELYS_DATALOG_STATUS_PAYLOAD_TOO_LARGE;
     base += index_bytes;
@@ -115,8 +116,7 @@ maelys_datalog_status_t maelys_datalog_input_edb_init(
     edb->text = (char *)(edb->facts + fact_capacity);
     if (edb->index_slots) {
         edb->index = (void *)edb->text;
-        edb->ordinals = edb->index + edb->index_slots;
-        edb->pending = edb->ordinals + edb->index_slots;
+        edb->pending = edb->index + edb->index_slots;
         edb->generations = (void *)(edb->pending + input_distinct_bound(fact_capacity, text_capacity));
         edb->generation = 1u;
         edb->text = (char *)(edb->generations + edb->index_slots);
@@ -145,15 +145,15 @@ maelys_datalog_status_t maelys_datalog_input_edb_create_with_capacity(
 
 static const char *entry_text(const maelys_datalog_input_edb_t *edb, size_t slot,
                               const maelys_datalog_public_fact_t *facts) {
-    if (!edb->ordinals[slot]) return edb->text + edb->index[slot] - 1u;
-    size_t ordinal = edb->ordinals[slot] - 1u;
+    if (edb->index[slot] < INPUT_PENDING_BASE) return edb->text + edb->index[slot] - 1u;
+    size_t ordinal = edb->index[slot] - INPUT_PENDING_BASE;
     size_t fact = ordinal / INPUT_STRINGS_PER_FACT;
     size_t term = ordinal % INPUT_STRINGS_PER_FACT;
     return term ? facts[fact].terms[term - 1u].as.symbol : facts[fact].predicate;
 }
 
 static int slot_occupied(const maelys_datalog_input_edb_t *edb, size_t slot) {
-    return edb->ordinals[slot] ||
+    return edb->index[slot] >= INPUT_PENDING_BASE ||
         (edb->generations[slot] == edb->generation && edb->index[slot]);
 }
 
@@ -187,10 +187,23 @@ static size_t cached_slot(const maelys_datalog_input_edb_t *edb, const char *tex
     return slot;
 }
 
-static void discard_pending(maelys_datalog_input_edb_t *edb, size_t count) {
+/* Reverse insertion order preserves every probe chain. The ordinal encoded in
+ * a pending entry identifies its FIRST occurrence, so duplicates are skipped.
+ * Only the validated prefix (exclusive end ordinal) is read. Generations were
+ * never modified, hence restoring old entries also restores stale slots exactly. */
+static void discard_pending(maelys_datalog_input_edb_t *edb,
+                            const maelys_datalog_public_fact_t *facts,
+                            size_t end, size_t count) {
     while (count) {
-        --count;
-        edb->ordinals[edb->pending[count]] = 0u;
+        size_t ordinal = --end;
+        size_t fact = ordinal / INPUT_STRINGS_PER_FACT;
+        size_t term = ordinal % INPUT_STRINGS_PER_FACT;
+        if (term > facts[fact].arity ||
+            (term && facts[fact].terms[term - 1u].kind != MAELYS_DATALOG_VALUE_SYMBOL)) continue;
+        const char *text = term ? facts[fact].terms[term - 1u].as.symbol : facts[fact].predicate;
+        size_t slot = text_slot(edb, text, facts);
+        if (edb->index[slot] != INPUT_PENDING_BASE + ordinal) continue;
+        edb->index[slot] = edb->pending[--count];
         edb->pending[count] = 0u;
     }
 }
@@ -242,13 +255,14 @@ static maelys_datalog_status_t measure_text(
     *remaining -= size + 1u;
     if (edb->index_slots) {
         size_t ordinal = index * INPUT_STRINGS_PER_FACT + (term_index == SIZE_MAX ? 0u : term_index + 1u);
-        edb->ordinals[slot] = (uint16_t)(ordinal + 1u);
-        edb->pending[(*pending_count)++] = (uint16_t)slot;
+        edb->pending[(*pending_count)++] = edb->index[slot];
+        edb->index[slot] = (uint16_t)(INPUT_PENDING_BASE + ordinal);
     }
     return MAELYS_DATALOG_STATUS_OK;
 }
 
 static const char *stored_text(maelys_datalog_input_edb_t *edb, const char *text,
+                               const maelys_datalog_public_fact_t *facts,
                                input_lookup_t *cache) {
     if (!edb->index_slots) {
         const char *existing = find_text(edb, text);
@@ -259,7 +273,15 @@ static const char *stored_text(maelys_datalog_input_edb_t *edb, const char *text
         edb->text_used += bytes;
         return copy;
     }
-    return entry_text(edb, cached_slot(edb, text, NULL, cache), NULL);
+    size_t slot = cached_slot(edb, text, facts, cache);
+    if (edb->index[slot] < INPUT_PENDING_BASE) return entry_text(edb, slot, NULL);
+    size_t bytes = strlen(text) + 1u;
+    char *copy = edb->text + edb->text_used;
+    memcpy(copy, text, bytes);
+    edb->index[slot] = (uint16_t)(edb->text_used + 1u);
+    edb->generations[slot] = edb->generation;
+    edb->text_used += bytes;
+    return copy;
 }
 
 maelys_datalog_status_t maelys_datalog_input_edb_create(maelys_datalog_input_edb_t **out) {
@@ -293,13 +315,13 @@ maelys_datalog_status_t maelys_datalog_input_edb_add_facts(
             rc = input_error(diag, MAELYS_DATALOG_STATUS_INVALID_ARGUMENT,
                              "Fact %zu: arity %zu exceeds limit %u.", i, facts[i].arity,
                              MAELYS_DATALOG_MAX_TERMS);
-            discard_pending(edb, pending_count);
+            discard_pending(edb, facts, i * INPUT_STRINGS_PER_FACT, pending_count);
             return rc;
         }
         rc = measure_text(edb, facts, i, SIZE_MAX, facts[i].predicate, &remaining, &pending_count, &cache, &reason);
         if (rc) {
             input_error(diag, rc, "Fact %zu: predicate rejected: %s.", i, reason);
-            discard_pending(edb, pending_count);
+            discard_pending(edb, facts, i * INPUT_STRINGS_PER_FACT, pending_count);
             return rc;
         }
         for (size_t j = 0; j < facts[i].arity; ++j) {
@@ -317,38 +339,28 @@ maelys_datalog_status_t maelys_datalog_input_edb_add_facts(
             }
             if (rc) {
                 input_error(diag, rc, "Fact %zu, term %zu: %s.", i, j, reason);
-                discard_pending(edb, pending_count);
+                discard_pending(edb, facts, i * INPUT_STRINGS_PER_FACT + j + 1u, pending_count);
                 return rc;
             }
         }
     }
     /* Validation is complete. Copy each distinct string once in encounter
      * order, then publish facts. No operation from here can fail. */
-    for (size_t i = 0; i < pending_count; ++i) {
-        size_t slot = edb->pending[i];
-        const char *text = entry_text(edb, slot, facts);
-        size_t bytes = strlen(text) + 1u;
-        memcpy(edb->text + edb->text_used, text, bytes);
-        edb->index[slot] = (uint16_t)(edb->text_used + 1u);
-        edb->generations[slot] = edb->generation;
-        edb->ordinals[slot] = 0u;
-        edb->text_used += bytes;
-        edb->pending[i] = 0u;
-    }
     for (size_t i = 0; i < count; ++i) {
         maelys_datalog_public_fact_t *dest = &edb->facts[edb->count + i];
         *dest = (maelys_datalog_public_fact_t){0};
-        dest->predicate = stored_text(edb, facts[i].predicate, &cache);
+        dest->predicate = stored_text(edb, facts[i].predicate, facts, &cache);
         dest->arity = facts[i].arity;
         for (size_t j = 0; j < facts[i].arity; ++j) {
             dest->terms[j] = facts[i].terms[j];
             if (dest->terms[j].kind == MAELYS_DATALOG_VALUE_SYMBOL)
-                dest->terms[j].as.symbol = stored_text(edb, facts[i].terms[j].as.symbol, &cache);
+                dest->terms[j].as.symbol = stored_text(edb, facts[i].terms[j].as.symbol, facts, &cache);
             else if (dest->terms[j].kind == MAELYS_DATALOG_VALUE_BOOLEAN)
                 dest->terms[j].as.boolean = !!dest->terms[j].as.boolean;
         }
     }
     edb->count += count;
+    if (pending_count) memset(edb->pending, 0, pending_count * sizeof(*edb->pending));
     for (size_t i = 0; i < 2u; ++i)
         edb->recent[i] = cache.keys[i] ? (uint32_t)cache.slots[i] + 1u : 0u;
     return MAELYS_DATALOG_STATUS_OK;
@@ -381,8 +393,8 @@ maelys_datalog_status_t maelys_datalog_input_edb_clear(maelys_datalog_input_edb_
     edb->count = 0;
     edb->text_used = 0;
     edb->recent[0] = edb->recent[1] = 0u;
-    /* Failed preflight only touches ordinals/journal, not stale offsets or
-     * generations: rollback remains byte-exact even after a clear. */
+    /* Rollback restores stale offsets from the journal; generations change
+     * only on commit, so rejection remains byte-exact even after a clear. */
     if (!edb->index_slots) return MAELYS_DATALOG_STATUS_OK;
     if (edb->generation == UINT8_MAX) {
         memset(edb->generations, 0, edb->index_slots * sizeof(uint8_t));

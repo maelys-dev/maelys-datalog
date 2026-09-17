@@ -51,10 +51,14 @@ The solver benchmark includes EDB finalization, solve, query and result release.
 The input-allocation test checks colliding/wrapping hash chains and byte-for-byte
 arena restoration on rejected batches, including empty strings in one/three-byte
 text budgets. Performance acceptance is separate from these allocation gates.
-The index uses separate uint16_t committed offsets and pending ordinals (zero
-means empty), with a uint16_t slot journal bounded by
-`min(fact_capacity * 5, ceil(text_capacity / 2))`. The allocation test crosses
-offset 32768 to reject any accidental 15-bit offset encoding.
+The index uses a single uint16_t entry array: zero is empty, 1..40961 is a
+committed offset plus one, and 40962 plus a batch ordinal is pending. A static
+assertion bounds the combined ranges in both profiles. A uint16_t before-image
+journal is bounded by `min(fact_capacity * 5, ceil(text_capacity / 2))`.
+Reverse traversal of the validated batch prefix recovers each pending slot in
+reverse insertion order, restoring even stale committed entries without changing
+generations. Tests reject each field of mixed-value batches, cross offset 32768,
+and exercise the highest pending ordinal at maximum fact capacity.
 One uint8_t generation per slot makes ordinary clear independent of the table
 size. Every 255 clears the generation array is zeroed. Tests cross this wrap
 and reject batches over stale colliding slots with byte-exact restoration.
