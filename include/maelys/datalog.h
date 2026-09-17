@@ -301,6 +301,9 @@ MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_session_solve(
  * rollback journal, sized from D = min(fact_capacity * (MAX_ARITY + 1),
  * ceil(text_capacity / 2)); neither consumes text_capacity. The empty string
  * costs one byte, all other distinct strings cost at least two bytes.
+ * The internal INPUT_INDEX_THRESHOLD is S=16 possible distinct strings:
+ * D<S uses linear arena/prefix scans with no index or journal; D>=S uses
+ * indexed lookup. This regime is fixed by init's capacities, not batch data.
  * Requirements outputs are unchanged on failure; init/create outputs become
  * NULL on failure. init requires the returned alignment and at least the
  * returned size. Caller storage must remain alive, unmoved and exclusively

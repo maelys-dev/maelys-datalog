@@ -223,6 +223,49 @@ static void test_c11_batch_builders(void) {
 int main(void) {
     test_c11_fact_builders();
     test_c11_batch_builders();
+static void check_regime(size_t text_capacity, int indexed) {
+    union { max_align_t align; unsigned char bytes[8192]; } arena;
+    unsigned char snapshot[sizeof(arena.bytes)];
+    memset(arena.bytes, 0xA5, sizeof(arena.bytes));
+    maelys_datalog_input_edb_t *edb;
+    assert(!maelys_datalog_input_edb_init(arena.bytes, sizeof(arena.bytes), 8u, text_capacity, &edb));
+    assert(!!edb->index_slots == indexed);
+    assert(!!edb->index == indexed && !!edb->pending == indexed && !!edb->generations == indexed);
+    maelys_datalog_public_fact_t batch[2] = {0};
+    batch[0].predicate = "p"; batch[0].arity = 1u;
+    batch[0].terms[0].kind = MAELYS_DATALOG_VALUE_SYMBOL;
+    batch[0].terms[0].as.symbol = "p";
+    batch[1] = batch[0]; batch[1].predicate = "x";
+    for (size_t round = 0u; round < 3u; ++round) {
+        assert(!maelys_datalog_input_edb_add_facts(edb, batch, 2u, NULL));
+        assert(edb->text_used == 4u);
+        assert(edb->facts[0].predicate == edb->facts[1].terms[0].as.symbol);
+        maelys_datalog_public_fact_t bad[2] = {batch[0], batch[1]};
+        bad[0].predicate = "new";
+        bad[1].terms[0].as.symbol = NULL;
+        memcpy(snapshot, arena.bytes, sizeof(snapshot));
+        assert(maelys_datalog_input_edb_add_facts(edb, bad, 2u, NULL) != 0);
+        assert(!memcmp(snapshot, arena.bytes, sizeof(snapshot)));
+        bad[1].terms[0].as.symbol = "more-than-the-entire-linear-arena";
+        if (!indexed) {
+            assert(maelys_datalog_input_edb_add_facts(edb, bad, 2u, NULL) == MAELYS_DATALOG_STATUS_PAYLOAD_TOO_LARGE);
+            assert(!memcmp(snapshot, arena.bytes, sizeof(snapshot)));
+        }
+        assert(!maelys_datalog_input_edb_add_facts(edb, batch, 2u, NULL));
+        assert(edb->text_used == 4u && edb->count == 4u);
+        assert(!maelys_datalog_input_edb_clear(edb));
+    }
+    assert(!maelys_datalog_input_edb_free(edb));
+}
+
+int main(void) {
+    forbid_allocations = 1;
+    assert(INPUT_INDEX_THRESHOLD == 16u);
+    assert(input_index_slots(8u, 30u) == 0u); /* D=15 */
+    assert(input_index_slots(8u, 31u) != 0u); /* D=16, ceil for empty string */
+    check_regime(16u, 0);
+    check_regime(128u, 1);
+    assert(allocations == 0u && releases == 0u);
     assert(input_distinct_bound(8u, 1u) == 1u);
     assert(input_distinct_bound(8u, 3u) == 2u);
     assert(input_distinct_bound(8u, 256u) == 40u);

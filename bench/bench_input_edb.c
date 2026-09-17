@@ -88,9 +88,9 @@ int main(int argc, char **argv) {
     size_t capacity, text_capacity, bytes, alignment;
     assert(!maelys_datalog_limit_get(MAELYS_DATALOG_LIMIT_MAX_EDB_FACTS, &capacity));
     assert(!maelys_datalog_limit_get(MAELYS_DATALOG_LIMIT_INPUT_EDB_TEXT_BYTES, &text_capacity));
-    const size_t budgets[] = {128u, text_capacity, text_capacity};
-    const char *labels[] = {"128", "default", "maximum"};
-    for (size_t i = 0; i < 3; ++i) {
+    const size_t budgets[] = {16u, 128u, text_capacity, text_capacity};
+    const char *labels[] = {"16", "128", "default", "maximum"};
+    for (size_t i = 0; i < 4; ++i) {
         assert(!maelys_datalog_input_edb_storage_requirements(capacity, budgets[i], &bytes, &alignment));
         fprintf(stderr, "storage,%s,fact_capacity=%zu,text_capacity=%zu,bytes=%zu,alignment=%zu\n",
                 labels[i], capacity, budgets[i], bytes, alignment);
@@ -108,6 +108,7 @@ int main(int argc, char **argv) {
     /* The SDK consumer's small text budget must remain represented. Clear is
      * measured after every populated case, independently of append. */
     run_case("small-text", capacity, 128u, 16u, 16u, 0, 1);
+    run_case("linear-text", capacity, 16u, 4u, 2u, 0, 1);
     const size_t sizes[] = {64, 256, capacity};
     for (size_t c = 0; c < 3; ++c) for (int mode = 0; mode < 2; ++mode)
     for (int unit = 0; unit < 2; ++unit)

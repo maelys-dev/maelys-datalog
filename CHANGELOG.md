@@ -28,6 +28,9 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 - Input clear advances an 8-bit generation rather than zeroing the index;
   generation wrap alone resets its byte-per-slot generation table. Rejected
   batches preserve even stale index bytes after clear.
+- A capacity-only threshold of 16 possible distinct strings selects linear
+  lookup without an index/journal for tiny text budgets and indexed lookup
+  otherwise. Both regimes preserve atomic append and zero allocation.
 
 ### Added
 

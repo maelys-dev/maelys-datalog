@@ -58,6 +58,10 @@ offset 32768 to reject any accidental 15-bit offset encoding.
 One uint8_t generation per slot makes ordinary clear independent of the table
 size. Every 255 clears the generation array is zeroed. Tests cross this wrap
 and reject batches over stale colliding slots with byte-exact restoration.
+`INPUT_INDEX_THRESHOLD=16` selects the regime from capacities at init. Tests
+exercise D=15/16 and both the 16-byte text linear regime (D=8) and 128-byte text
+indexed regime, including cross-role deduplication, byte-exact rejection and
+reuse with allocation disabled. The SDK consumer stays at 128 text bytes.
 
 ## Installed facade and SDK
 
