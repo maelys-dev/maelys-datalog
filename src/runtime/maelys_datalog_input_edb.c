@@ -11,6 +11,8 @@ struct maelys_datalog_input_edb {
     char *text;
     size_t text_used, text_capacity;
     uint16_t *index, *ordinals, *pending;
+    uint8_t *generations;
+    uint8_t generation;
     size_t index_slots;
     uint32_t recent[2]; /* Slots + 1, never borrowed input pointers. */
     int owned;
@@ -72,6 +74,7 @@ maelys_datalog_status_t maelys_datalog_input_edb_storage_requirements(
     size_t base = offset + fact_capacity * sizeof(maelys_datalog_public_fact_t);
     size_t index_bytes = (2u * input_index_slots(fact_capacity, text_capacity) +
                          input_distinct_bound(fact_capacity, text_capacity)) * sizeof(uint16_t);
+    index_bytes += input_index_slots(fact_capacity, text_capacity) * sizeof(uint8_t);
     if (index_bytes > SIZE_MAX - base) return MAELYS_DATALOG_STATUS_PAYLOAD_TOO_LARGE;
     base += index_bytes;
     if (text_capacity > SIZE_MAX - base)
@@ -102,7 +105,9 @@ maelys_datalog_status_t maelys_datalog_input_edb_init(
     edb->index = (void *)(edb->facts + fact_capacity);
     edb->ordinals = edb->index + edb->index_slots;
     edb->pending = edb->ordinals + edb->index_slots;
-    edb->text = (char *)(edb->pending + input_distinct_bound(fact_capacity, text_capacity));
+    edb->generations = (void *)(edb->pending + input_distinct_bound(fact_capacity, text_capacity));
+    edb->generation = 1u;
+    edb->text = (char *)(edb->generations + edb->index_slots);
     memset(edb->index, 0, (size_t)(edb->text - (char *)edb->index));
     edb->text_capacity = text_capacity;
     *out = edb;
@@ -134,13 +139,18 @@ static const char *entry_text(const maelys_datalog_input_edb_t *edb, size_t slot
     return term ? facts[fact].terms[term - 1u].as.symbol : facts[fact].predicate;
 }
 
+static int slot_occupied(const maelys_datalog_input_edb_t *edb, size_t slot) {
+    return edb->ordinals[slot] ||
+        (edb->generations[slot] == edb->generation && edb->index[slot]);
+}
+
 static size_t text_slot(const maelys_datalog_input_edb_t *edb, const char *text,
                         const maelys_datalog_public_fact_t *facts) {
     uint32_t hash = UINT32_C(2166136261);
     for (const unsigned char *p = (const unsigned char *)text; *p; ++p)
         hash = (hash ^ *p) * UINT32_C(16777619);
     size_t slot = hash & (edb->index_slots - 1u);
-    while ((edb->index[slot] || edb->ordinals[slot]) && strcmp(entry_text(edb, slot, facts), text))
+    while (slot_occupied(edb, slot) && strcmp(entry_text(edb, slot, facts), text))
         slot = (slot + 1u) & (edb->index_slots - 1u);
     return slot;
 }
@@ -183,7 +193,7 @@ static maelys_datalog_status_t measure_text(
         return MAELYS_DATALOG_STATUS_PAYLOAD_TOO_LARGE;
     }
     size_t slot = cached_slot(edb, text, facts, cache);
-    if (edb->index[slot] || edb->ordinals[slot]) return MAELYS_DATALOG_STATUS_OK;
+    if (slot_occupied(edb, slot)) return MAELYS_DATALOG_STATUS_OK;
     if (size + 1u > *remaining) {
         *reason = "input EDB text capacity exhausted (including NUL terminators)";
         return MAELYS_DATALOG_STATUS_PAYLOAD_TOO_LARGE;
@@ -268,6 +278,7 @@ maelys_datalog_status_t maelys_datalog_input_edb_add_facts(
         size_t bytes = strlen(text) + 1u;
         memcpy(edb->text + edb->text_used, text, bytes);
         edb->index[slot] = (uint16_t)(edb->text_used + 1u);
+        edb->generations[slot] = edb->generation;
         edb->ordinals[slot] = 0u;
         edb->text_used += bytes;
         edb->pending[i] = 0u;
@@ -318,7 +329,12 @@ maelys_datalog_status_t maelys_datalog_input_edb_clear(maelys_datalog_input_edb_
     edb->count = 0;
     edb->text_used = 0;
     edb->recent[0] = edb->recent[1] = 0u;
-    memset(edb->index, 0, edb->index_slots * sizeof(uint16_t));
+    /* Failed preflight only touches ordinals/journal, not stale offsets or
+     * generations: rollback remains byte-exact even after a clear. */
+    if (edb->generation == UINT8_MAX) {
+        memset(edb->generations, 0, edb->index_slots * sizeof(uint8_t));
+        edb->generation = 1u;
+    } else ++edb->generation;
     return MAELYS_DATALOG_STATUS_OK;
 }
 maelys_datalog_status_t maelys_datalog_input_edb_free(maelys_datalog_input_edb_t *edb) {

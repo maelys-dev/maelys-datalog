@@ -365,6 +365,20 @@ int main(void) {
     assert(maelys_datalog_input_edb_add_fact(edb, colliding[0], &value, 1u, NULL) == 0);
     assert(edb->facts[0].predicate == edb->facts[3].predicate);
     assert(edb->facts[0].terms[0].as.symbol == edb->facts[3].terms[0].as.symbol);
+    /* Stale colliding slots and a real generation wrap: rejected batches must
+     * restore even obsolete metadata, not just the logical contents. */
+    for (size_t round = 0; round < 256u; ++round) {
+        uint8_t previous = edb->generation;
+        assert(maelys_datalog_input_edb_clear(edb) == 0);
+        assert(edb->generation == (previous == UINT8_MAX ? 1u : previous + 1u));
+        batch[1].terms[0].as.symbol = NULL;
+        memcpy(snapshot, arena.bytes, sizeof(snapshot));
+        assert(maelys_datalog_input_edb_add_facts(edb, batch, 2u, &diag) != 0);
+        assert(memcmp(snapshot, arena.bytes, sizeof(snapshot)) == 0);
+        batch[1].terms[0].as.symbol = colliding[5];
+        assert(maelys_datalog_input_edb_add_facts(edb, batch, 2u, NULL) == 0);
+        assert(edb->count == 2u && !strcmp(edb->facts[0].predicate, colliding[2]));
+    }
     assert(maelys_datalog_input_edb_free(edb) == 0);
 
     /* The committed offset must use all 16 bits, not a 15-bit payload with

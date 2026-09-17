@@ -55,6 +55,9 @@ The index uses separate uint16_t committed offsets and pending ordinals (zero
 means empty), with a uint16_t slot journal bounded by
 `min(fact_capacity * 5, ceil(text_capacity / 2))`. The allocation test crosses
 offset 32768 to reject any accidental 15-bit offset encoding.
+One uint8_t generation per slot makes ordinary clear independent of the table
+size. Every 255 clears the generation array is zeroed. Tests cross this wrap
+and reject batches over stale colliding slots with byte-exact restoration.
 
 ## Installed facade and SDK
 

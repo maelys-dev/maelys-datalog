@@ -308,7 +308,9 @@ MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_session_solve(
  * init never allocates. add_fact/add_facts/count/clear never allocate in either
  * storage mode. free releases memory only for a create-owned buffer; after free
  * the handle is invalid, but caller-owned storage can be reused/reinitialized.
- * clear resets usage without wiping bytes; it is not a secure erase.
+ * clear resets usage without wiping bytes; it is not a secure erase. Indexed
+ * buffers advance a generation in O(1), except on an 8-bit generation wrap,
+ * which clears the per-slot generation array. No worst-case O(1) guarantee.
  * create_with_capacity makes ONE allocation at construction, never grows it.
  * create reserves MAX_EDB_FACTS entries and INPUT_EDB_TEXT_BYTES of text. Query
  * both limits from the library. Text defaults to the native symbol-pool budget

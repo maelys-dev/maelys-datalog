@@ -25,6 +25,9 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 - Input index offsets, pending ordinals and journal slots use separate 16-bit
   values. Index/journal sizing is bounded by both fact and text capacities,
   including the one-byte empty string, rather than fact capacity alone.
+- Input clear advances an 8-bit generation rather than zeroing the index;
+  generation wrap alone resets its byte-per-slot generation table. Rejected
+  batches preserve even stale index bytes after clear.
 
 ### Added
 
