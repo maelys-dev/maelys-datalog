@@ -36,9 +36,26 @@ class Capability(IntFlag):
 
 @dataclass(frozen=True)
 class Predicate:
+    """Domain declaration; constructors do not register or validate a domain."""
+
     name: str
     arity: int
     flags: int
+
+    @classmethod
+    def edb(cls, name: str, arity: int) -> Predicate:
+        """Declare application-supplied facts (EDB)."""
+        return cls(name, arity, PRED_EDB)
+
+    @classmethod
+    def idb(cls, name: str, arity: int) -> Predicate:
+        """Declare derived facts (IDB), without exposing a query surface."""
+        return cls(name, arity, PRED_IDB)
+
+    @classmethod
+    def idb_query(cls, name: str, arity: int) -> Predicate:
+        """Declare derived facts that callers may query (IDB | QUERY)."""
+        return cls(name, arity, PRED_IDB | PRED_QUERY)
 
 
 @dataclass(frozen=True)

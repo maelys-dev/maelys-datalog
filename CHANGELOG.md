@@ -37,6 +37,10 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
   semantics for C11 integer expressions such as `true` and comparisons.
   Unsupported term types fail compilation; C++ keeps the ordinary typed API.
   Public API version, ABI, exported symbols and structure layouts are unchanged.
+- Python Next `Predicate.edb(name, arity)`, `Predicate.idb(name, arity)` and
+  `Predicate.idb_query(name, arity)` constructors mirror the C declaration roles.
+  They preserve the general constructor, public flags, immutability and existing
+  domain-registration validation; no native ABI or error-contract change.
 - Opaque owned `maelys_datalog_input_edb_t` with atomic copied single/batch
   additions, entry count, clear/free and `maelys_datalog_session_solve_edb()`.
   The existing array solve and legacy core EDB API remain unchanged. Input
