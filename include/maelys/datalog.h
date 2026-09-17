@@ -298,7 +298,9 @@ MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_session_solve(
  * Distinct predicate/symbol strings share one text arena, including one NUL per
  * distinct byte string. Repeated strings share storage across facts and roles.
  * The returned storage size also includes a bounded string index and a batch
- * rollback journal, sized from fact_capacity; neither consumes text_capacity.
+ * rollback journal, sized from D = min(fact_capacity * (MAX_ARITY + 1),
+ * ceil(text_capacity / 2)); neither consumes text_capacity. The empty string
+ * costs one byte, all other distinct strings cost at least two bytes.
  * Requirements outputs are unchanged on failure; init/create outputs become
  * NULL on failure. init requires the returned alignment and at least the
  * returned size. Caller storage must remain alive, unmoved and exclusively

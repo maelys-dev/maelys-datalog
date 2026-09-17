@@ -22,6 +22,9 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
   Rejected batches restore the complete arena, including colliding hash chains.
   The storage-requirements query includes index and journal memory separately
   from the text budget.
+- Input index offsets, pending ordinals and journal slots use separate 16-bit
+  values. Index/journal sizing is bounded by both fact and text capacities,
+  including the one-byte empty string, rather than fact capacity alone.
 
 ### Added
 

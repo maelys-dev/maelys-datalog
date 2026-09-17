@@ -10,25 +10,30 @@ struct maelys_datalog_input_edb {
     size_t count, capacity;
     char *text;
     size_t text_used, text_capacity;
-    uint32_t *index, *pending;
+    uint16_t *index, *ordinals, *pending;
     size_t index_slots;
     uint32_t recent[2]; /* Slots + 1, never borrowed input pointers. */
     int owned;
 };
 
-/* Entries are text offsets + 1, or temporarily a batch string ordinal with
- * its high bit set. A bounded undo journal restores every index byte on error.
+/* Separate offset+1 and pending ordinal+1 arrays: neither steals a value bit.
+ * A bounded undo journal restores every index byte on error.
  * No input pointer survives a successful append. At most half the slots fill. */
-#define INPUT_PENDING UINT32_C(0x80000000)
 #define INPUT_STRINGS_PER_FACT (MAELYS_DATALOG_MAX_TERMS + 1u)
-_Static_assert(MAELYS_DATALOG_INPUT_EDB_TEXT_BYTES < INPUT_PENDING - 1u,
-               "text offsets must fit below the pending flag");
-_Static_assert(MAELYS_DATALOG_MAX_EDB_FACTS < INPUT_PENDING / INPUT_STRINGS_PER_FACT,
-               "batch ordinals must fit below the pending flag");
+_Static_assert(MAELYS_DATALOG_INPUT_EDB_TEXT_BYTES <= UINT16_MAX,
+               "text offsets plus one must fit uint16_t");
+_Static_assert(MAELYS_DATALOG_MAX_EDB_FACTS * INPUT_STRINGS_PER_FACT <= UINT16_MAX / 2u,
+               "batch ordinals plus one and power-of-two table slots must fit uint16_t");
 
-static size_t input_index_slots(size_t capacity) {
+static size_t input_distinct_bound(size_t capacity, size_t text_capacity) {
+    size_t positions = capacity * INPUT_STRINGS_PER_FACT;
+    size_t strings = text_capacity / 2u + text_capacity % 2u;
+    return positions < strings ? positions : strings;
+}
+
+static size_t input_index_slots(size_t capacity, size_t text_capacity) {
     size_t slots = 1u;
-    while (slots < 2u * capacity * INPUT_STRINGS_PER_FACT) slots *= 2u;
+    while (slots < 2u * input_distinct_bound(capacity, text_capacity)) slots *= 2u;
     return slots;
 }
 
@@ -65,8 +70,8 @@ maelys_datalog_status_t maelys_datalog_input_edb_storage_requirements(
     if (fact_capacity > (SIZE_MAX - offset) / sizeof(maelys_datalog_public_fact_t))
         return MAELYS_DATALOG_STATUS_PAYLOAD_TOO_LARGE;
     size_t base = offset + fact_capacity * sizeof(maelys_datalog_public_fact_t);
-    size_t index_bytes = (input_index_slots(fact_capacity) +
-                         fact_capacity * INPUT_STRINGS_PER_FACT) * sizeof(uint32_t);
+    size_t index_bytes = (2u * input_index_slots(fact_capacity, text_capacity) +
+                         input_distinct_bound(fact_capacity, text_capacity)) * sizeof(uint16_t);
     if (index_bytes > SIZE_MAX - base) return MAELYS_DATALOG_STATUS_PAYLOAD_TOO_LARGE;
     base += index_bytes;
     if (text_capacity > SIZE_MAX - base)
@@ -93,11 +98,12 @@ maelys_datalog_status_t maelys_datalog_input_edb_init(
     *edb = (maelys_datalog_input_edb_t){0};
     edb->facts = (void *)((unsigned char *)storage + facts_offset());
     edb->capacity = fact_capacity;
-    edb->index_slots = input_index_slots(fact_capacity);
+    edb->index_slots = input_index_slots(fact_capacity, text_capacity);
     edb->index = (void *)(edb->facts + fact_capacity);
-    edb->pending = edb->index + edb->index_slots;
-    edb->text = (char *)(edb->pending + fact_capacity * INPUT_STRINGS_PER_FACT);
-    memset(edb->index, 0, (edb->index_slots + fact_capacity * INPUT_STRINGS_PER_FACT) * sizeof(uint32_t));
+    edb->ordinals = edb->index + edb->index_slots;
+    edb->pending = edb->ordinals + edb->index_slots;
+    edb->text = (char *)(edb->pending + input_distinct_bound(fact_capacity, text_capacity));
+    memset(edb->index, 0, (size_t)(edb->text - (char *)edb->index));
     edb->text_capacity = text_capacity;
     *out = edb;
     return MAELYS_DATALOG_STATUS_OK;
@@ -119,10 +125,10 @@ maelys_datalog_status_t maelys_datalog_input_edb_create_with_capacity(
     return MAELYS_DATALOG_STATUS_OK;
 }
 
-static const char *entry_text(const maelys_datalog_input_edb_t *edb, uint32_t entry,
+static const char *entry_text(const maelys_datalog_input_edb_t *edb, size_t slot,
                               const maelys_datalog_public_fact_t *facts) {
-    if (!(entry & INPUT_PENDING)) return edb->text + entry - 1u;
-    size_t ordinal = entry & ~INPUT_PENDING;
+    if (!edb->ordinals[slot]) return edb->text + edb->index[slot] - 1u;
+    size_t ordinal = edb->ordinals[slot] - 1u;
     size_t fact = ordinal / INPUT_STRINGS_PER_FACT;
     size_t term = ordinal % INPUT_STRINGS_PER_FACT;
     return term ? facts[fact].terms[term - 1u].as.symbol : facts[fact].predicate;
@@ -134,7 +140,7 @@ static size_t text_slot(const maelys_datalog_input_edb_t *edb, const char *text,
     for (const unsigned char *p = (const unsigned char *)text; *p; ++p)
         hash = (hash ^ *p) * UINT32_C(16777619);
     size_t slot = hash & (edb->index_slots - 1u);
-    while (edb->index[slot] && strcmp(entry_text(edb, edb->index[slot], facts), text))
+    while ((edb->index[slot] || edb->ordinals[slot]) && strcmp(entry_text(edb, slot, facts), text))
         slot = (slot + 1u) & (edb->index_slots - 1u);
     return slot;
 }
@@ -161,7 +167,7 @@ static size_t cached_slot(const maelys_datalog_input_edb_t *edb, const char *tex
 static void discard_pending(maelys_datalog_input_edb_t *edb, size_t count) {
     while (count) {
         --count;
-        edb->index[edb->pending[count]] = 0u;
+        edb->ordinals[edb->pending[count]] = 0u;
         edb->pending[count] = 0u;
     }
 }
@@ -177,21 +183,21 @@ static maelys_datalog_status_t measure_text(
         return MAELYS_DATALOG_STATUS_PAYLOAD_TOO_LARGE;
     }
     size_t slot = cached_slot(edb, text, facts, cache);
-    if (edb->index[slot]) return MAELYS_DATALOG_STATUS_OK;
+    if (edb->index[slot] || edb->ordinals[slot]) return MAELYS_DATALOG_STATUS_OK;
     if (size + 1u > *remaining) {
         *reason = "input EDB text capacity exhausted (including NUL terminators)";
         return MAELYS_DATALOG_STATUS_PAYLOAD_TOO_LARGE;
     }
     *remaining -= size + 1u;
     size_t ordinal = index * INPUT_STRINGS_PER_FACT + (term_index == SIZE_MAX ? 0u : term_index + 1u);
-    edb->index[slot] = INPUT_PENDING | (uint32_t)ordinal;
-    edb->pending[(*pending_count)++] = (uint32_t)slot;
+    edb->ordinals[slot] = (uint16_t)(ordinal + 1u);
+    edb->pending[(*pending_count)++] = (uint16_t)slot;
     return MAELYS_DATALOG_STATUS_OK;
 }
 
 static const char *stored_text(const maelys_datalog_input_edb_t *edb, const char *text,
                                input_lookup_t *cache) {
-    return entry_text(edb, edb->index[cached_slot(edb, text, NULL, cache)], NULL);
+    return entry_text(edb, cached_slot(edb, text, NULL, cache), NULL);
 }
 
 maelys_datalog_status_t maelys_datalog_input_edb_create(maelys_datalog_input_edb_t **out) {
@@ -216,7 +222,7 @@ maelys_datalog_status_t maelys_datalog_input_edb_add_facts(
     input_lookup_t cache = {0};
     for (size_t i = 0; i < 2u; ++i) if (edb->recent[i]) {
         cache.slots[i] = edb->recent[i] - 1u;
-        cache.keys[i] = entry_text(edb, edb->index[cache.slots[i]], NULL);
+        cache.keys[i] = entry_text(edb, cache.slots[i], NULL);
     }
     const char *reason = "unsupported value kind";
     maelys_datalog_status_t rc = MAELYS_DATALOG_STATUS_OK;
@@ -258,10 +264,11 @@ maelys_datalog_status_t maelys_datalog_input_edb_add_facts(
      * order, then publish facts. No operation from here can fail. */
     for (size_t i = 0; i < pending_count; ++i) {
         size_t slot = edb->pending[i];
-        const char *text = entry_text(edb, edb->index[slot], facts);
+        const char *text = entry_text(edb, slot, facts);
         size_t bytes = strlen(text) + 1u;
         memcpy(edb->text + edb->text_used, text, bytes);
-        edb->index[slot] = (uint32_t)edb->text_used + 1u;
+        edb->index[slot] = (uint16_t)(edb->text_used + 1u);
+        edb->ordinals[slot] = 0u;
         edb->text_used += bytes;
         edb->pending[i] = 0u;
     }
@@ -311,7 +318,7 @@ maelys_datalog_status_t maelys_datalog_input_edb_clear(maelys_datalog_input_edb_
     edb->count = 0;
     edb->text_used = 0;
     edb->recent[0] = edb->recent[1] = 0u;
-    memset(edb->index, 0, edb->index_slots * sizeof(uint32_t));
+    memset(edb->index, 0, edb->index_slots * sizeof(uint16_t));
     return MAELYS_DATALOG_STATUS_OK;
 }
 maelys_datalog_status_t maelys_datalog_input_edb_free(maelys_datalog_input_edb_t *edb) {

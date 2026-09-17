@@ -51,6 +51,10 @@ The solver benchmark includes EDB finalization, solve, query and result release.
 The input-allocation test checks colliding/wrapping hash chains and byte-for-byte
 arena restoration on rejected batches, including empty strings in one/three-byte
 text budgets. Performance acceptance is separate from these allocation gates.
+The index uses separate uint16_t committed offsets and pending ordinals (zero
+means empty), with a uint16_t slot journal bounded by
+`min(fact_capacity * 5, ceil(text_capacity / 2))`. The allocation test crosses
+offset 32768 to reject any accidental 15-bit offset encoding.
 
 ## Installed facade and SDK
 

@@ -223,6 +223,10 @@ static void test_c11_batch_builders(void) {
 int main(void) {
     test_c11_fact_builders();
     test_c11_batch_builders();
+    assert(input_distinct_bound(8u, 1u) == 1u);
+    assert(input_distinct_bound(8u, 3u) == 2u);
+    assert(input_distinct_bound(8u, 256u) == 40u);
+    assert(input_distinct_bound(MAELYS_DATALOG_MAX_EDB_FACTS, 128u) == 64u);
     union { max_align_t align; unsigned char bytes[8192]; } arena;
     unsigned char snapshot[sizeof(arena.bytes)];
     memset(arena.bytes, 0xA5, sizeof(arena.bytes));
@@ -362,6 +366,24 @@ int main(void) {
     assert(edb->facts[0].predicate == edb->facts[3].predicate);
     assert(edb->facts[0].terms[0].as.symbol == edb->facts[3].terms[0].as.symbol);
     assert(maelys_datalog_input_edb_free(edb) == 0);
+
+    /* The committed offset must use all 16 bits, not a 15-bit payload with
+     * a pending flag. Keep the allocator disabled even at the profile limit. */
+    static union { max_align_t align; unsigned char bytes[512000]; } full;
+    assert(maelys_datalog_input_edb_init(full.bytes, sizeof(full.bytes),
+        MAELYS_DATALOG_MAX_EDB_FACTS, MAELYS_DATALOG_INPUT_EDB_TEXT_BYTES, &edb) == 0);
+    for (size_t i = 0; i < 800u; ++i) {
+        char name[48];
+        snprintf(name, sizeof(name), "symbol-%04zu-abcdefghijklmnopqrstuvwxyz-012345678", i);
+        assert(maelys_datalog_input_edb_add_fact(edb, name, NULL, 0u, NULL) == 0);
+    }
+    assert(edb->text_used > 32768u);
+    const char *last = edb->facts[799].predicate;
+    char last_copy[48]; strcpy(last_copy, last);
+    assert(maelys_datalog_input_edb_add_fact(edb, last_copy, NULL, 0u, NULL) == 0);
+    assert(edb->facts[800].predicate == last);
+    assert(maelys_datalog_input_edb_free(edb) == 0);
+    assert(allocations == 0u && releases == 0u);
 
     /* One construction allocation, none during append/clear, one release. */
     batch[0].predicate = "p"; batch[0].arity = 1; value.as.symbol = "x";
