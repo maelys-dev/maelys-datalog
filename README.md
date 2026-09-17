@@ -27,6 +27,49 @@ The solver does not allocate heap memory while evaluating rules. A successful
 solve creates one caller-owned result object that must be released through the
 public API.
 
+## Build an explanation once
+
+The opaque facade in `<maelys/datalog.h>` supports explanations in caller-owned
+memory. Why-true describes a retained witness; Why-false performs a bounded
+diagnostic search over the solved state. Neither runs the solver again.
+
+```text
+live result
+  └─ prepare explanation once in caller storage
+       ├─ text_size: read the cached length
+       ├─ write_text: format into a caller buffer (repeatable)
+       └─ release explanation
+  └─ release result → session can serve the next request
+```
+
+1. Call `maelys_datalog_result_explanation_storage_requirements(result, kind,
+   &bytes, &alignment)`. This only reports memory requirements, not text length.
+   Supply an aligned arena of at least that size; requirements depend on the
+   live result, backend, kind and library build, not a public struct layout.
+2. Call `maelys_datalog_result_prepare_explanation(...)` with that arena and
+   a ground query. It builds an opaque `maelys_datalog_prepared_explanation_t`.
+3. Read the exact text length with `maelys_datalog_prepared_explanation_text_size`.
+   It excludes the terminating NUL. Provide at least `length + 1` bytes to
+   `maelys_datalog_prepared_explanation_write_text`. A fixed output buffer works
+   too: an insufficient buffer is rejected without partial text.
+4. Release the explanation with `maelys_datalog_prepared_explanation_release`
+   before freeing the result. Release does not free or securely erase the arena;
+   its owner may reuse it. One result can have several prepared explanations.
+
+The reference path makes **zero engine allocator calls**, including Why-false
+search scratch, after the caller has supplied the storage. It still uses bounded
+stack locals. This is not a zero-allocation claim about Python, custom filters,
+compilation or session initialization. An explanation whose search is `truncated`
+is different from an output buffer that is too small; allocating a larger text
+buffer does not increase the search bounds.
+
+[The installed public-consumer example](tests/fixtures/public_api_consumer.c)
+uses a fixed aligned arena and output buffer, checks their sizes and demonstrates
+the result lease. It is compiled and run against the installed C11/C++17 SDK.
+The existing `result_explain_true_text` / `result_explain_false_text` calls remain
+available as allocating convenience wrappers. Backend authors must migrate to
+**backend ABI 3**; the consumer facade and Datalog language versions do not change.
+
 ## Build and test
 
 Requirements: a C11 compiler, `make`, and optionally CMake 3.16 or newer.

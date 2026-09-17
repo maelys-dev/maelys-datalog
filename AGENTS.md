@@ -113,7 +113,12 @@ when it has what they name.
 - Reference sessions reserve public/native results and provenance at creation.
   Preserve zero engine allocator calls in append/solve/query/result-release;
   keep the one-live-result lease and forbid fallback allocation. Explanations
-  requested afterward may allocate bounded workspaces. Custom callbacks/backends
+  prepared in caller-owned storage must not allocate, including Why-false search
+  scratch. Only legacy direct-text convenience calls may allocate a workspace.
+  Keep backend ABI 3 storage/prepare/write callbacks coherent and compare new
+  workspace output with the legacy structured oracle, including truncation.
+  A prepared explanation leases its result; never release/reuse that result
+  until every explanation is released. Custom callbacks/backends
   do not automatically inherit the reference implementation's guarantee.
 - Intern repeated input strings rather than reserving worst-case text for every
   occurrence. Defaults derive from native symbol/registry budgets, not arbitrary

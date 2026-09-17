@@ -41,6 +41,10 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
   `Predicate.idb_query(name, arity)` constructors mirror the C declaration roles.
   They preserve the general constructor, public flags, immutability and existing
   domain-registration validation; no native ABI or error-contract change.
+- Caller-owned opaque prepared explanations: query aligned storage requirements,
+  prepare Why-true/Why-false once, get the cached text size, render repeatedly,
+  then release the result lease. The reference path includes Why-false scratch
+  and makes no engine allocator calls; all prior text/status/limit semantics remain.
 - Opaque owned `maelys_datalog_input_edb_t` with atomic copied single/batch
   additions, entry count, clear/free and `maelys_datalog_session_solve_edb()`.
   The existing array solve and legacy core EDB API remain unchanged. Input
@@ -50,8 +54,8 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
   Sessions snapshot configuration values. Capability constants and the execution
   fingerprint declaration now live in that consumer header; extension headers
   still expose them transitively. Backend descriptors and `session_create_ex()`
-  remain unchanged. Python Next no longer includes backend/IR headers or depends
-  on the backend ABI. This is additive to public API v1, not a layout change.
+  use the separate backend ABI. Python Next no longer includes backend/IR headers
+  or depends on the backend ABI. This is additive to consumer API v1.
 - Additive opaque C facade getters for loaded-library capacities
   (`maelys_datalog_limit_get`) and all distinct derived IDB facts
   (`maelys_datalog_result_derived_fact_count`). Existing public struct layouts
@@ -84,6 +88,18 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ### Changed
 
+- **Backend ABI 3:** direct `explain_true`/`explain_false` callbacks are replaced
+  by `explanation_storage_requirements`, `explanation_prepare` and
+  `explanation_write_text`. An explanation-capable backend must implement all
+  three without allocation; ABI 1/2 descriptors and options are rejected, not
+  reinterpreted. Rebuild providers against the new header and migrate callbacks.
+  The existing consumer `result_explain_*_text` functions remain available as
+  allocating convenience wrappers over the same preparation path. No change to
+  consumer API version, language version or explanation text formats. The
+  reference name/semantic ID remain `reference` / `maelys.reference.v1`; the
+  backend ABI number is not an execution-fingerprint input, so this ABI change
+  does not change reference execution fingerprints at fixed program/options/
+  profile. A third-party backend changing its semantic ID changes its fingerprint.
 - Input EDB storage is now fixed-capacity: `storage_requirements`/`init` support
   caller-owned aligned storage without allocation; `create_with_capacity` uses
   one allocation and `create` reserves profile-bounded capacity. Append,
