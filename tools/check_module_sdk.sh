@@ -23,7 +23,7 @@ unset CPATH C_INCLUDE_PATH CPLUS_INCLUDE_PATH LIBRARY_PATH
 cc="${CC:-cc}"
 cxx="${CXX:-c++}"
 flags=(-std=c11 -Wall -Wextra -Werror -I"$prefix/include")
-for header in datalog.h datalog_module.h datalog_program.h datalog_backend.h datalog_extension.h; do
+for header in datalog.h datalog_builders.h datalog_module.h datalog_program.h datalog_backend.h datalog_extension.h; do
   "$cc" "${flags[@]}" -DSDK_HEADER="\"maelys/$header\"" -fsyntax-only sdk_header.c
   "$cxx" -x c++ -std=c++17 -Wall -Wextra -Werror -I"$prefix/include" \
     -DSDK_HEADER="\"maelys/$header\"" -fsyntax-only sdk_header.c

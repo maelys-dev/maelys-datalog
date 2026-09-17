@@ -19,8 +19,8 @@ int main(void) {
     if (!require_status(maelys_datalog_limit_get(MAELYS_DATALOG_LIMIT_MAX_ARITY, &max_arity)) ||
         max_arity != MAELYS_DATALOG_PUBLIC_MAX_TERMS) return 16;
     static const maelys_datalog_public_predicate_t predicates[] = {
-        {"observed", 1u, MAELYS_DATALOG_PREDICATE_EDB},
-        {"allow", 1u, MAELYS_DATALOG_PREDICATE_IDB | MAELYS_DATALOG_PREDICATE_QUERY},
+        MAELYS_DATALOG_EDB("observed", 1),
+        MAELYS_DATALOG_IDB_QUERY("allow", 1),
     };
     /* No domain atoms and no policy constants: "alice" below exists only in
      * the solved EDB, so the symbol lookup at exit 9 passes only when the
@@ -66,8 +66,14 @@ int main(void) {
         (uintptr_t)input_storage.bytes % input_alignment) return 22;
     if (!require_status(maelys_datalog_input_edb_init(
             input_storage.bytes, sizeof(input_storage.bytes), 4u, 128u, &edb))) return 22;
+#ifdef __cplusplus
     if (!require_status(maelys_datalog_input_edb_add_fact(
             edb, fact.predicate, fact.terms, fact.arity, NULL))) return 23;
+#else
+    /* The installed C11 header must provide the convenience layer without any
+     * additional source-tree header or new library entry point. */
+    if (!require_status(MAELYS_DATALOG_ADD_FACT(edb, NULL, "observed", "alice"))) return 23;
+#endif
     if (!require_status(maelys_datalog_session_solve_edb(
             session, edb, &result, NULL))) return 6;
     if (!require_status(maelys_datalog_input_edb_free(edb))) return 24;
@@ -77,6 +83,12 @@ int main(void) {
     if (!require_status(maelys_datalog_result_derived_fact_count(result, &derived)) || derived != 1u) return 17;
     if (!require_status(maelys_datalog_result_query(
             result, "allow", fact.terms, 1u, &present)) || !present) return 7;
+    const maelys_datalog_public_value_t query[] = {MAELYS_DATALOG_SYMBOL("alice")};
+    if (!require_status(maelys_datalog_result_query(
+            result, "allow", query, 1u, &present)) || !present) return 7;
+#ifndef __cplusplus
+    if (!require_status(MAELYS_DATALOG_QUERY(result, &present, "allow", "alice")) || !present) return 7;
+#endif
     maelys_datalog_public_fact_view_t view;
     size_t count = 0u;
     if (!require_status(maelys_datalog_result_enumerate(

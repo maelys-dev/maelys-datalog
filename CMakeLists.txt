@@ -61,7 +61,7 @@ install(TARGETS maelys_datalog maelys_datalog_shared
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
-install(FILES include/maelys/datalog.h include/maelys/datalog_module.h
+install(FILES include/maelys/datalog.h include/maelys/datalog_builders.h include/maelys/datalog_module.h
     include/maelys/datalog_program.h include/maelys/datalog_backend.h include/maelys/datalog_extension.h
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/maelys)
 install(FILES LICENSE DESTINATION ${CMAKE_INSTALL_DATADIR}/maelys-datalog)
@@ -115,6 +115,19 @@ if(BUILD_TESTING)
     target_compile_options(test_bounded_sort PRIVATE -UNDEBUG)
     target_link_libraries(test_bounded_sort PRIVATE maelys_datalog)
     add_test(NAME bounded_sort_contract COMMAND test_bounded_sort)
+    add_executable(test_predicate_builders tests/test_maelys_datalog_predicate_builders.c)
+    target_compile_options(test_predicate_builders PRIVATE -UNDEBUG)
+    target_link_libraries(test_predicate_builders PRIVATE maelys_datalog)
+    add_test(NAME predicate_builders COMMAND test_predicate_builders)
+    add_executable(test_query_builders tests/test_maelys_datalog_query_builders.c)
+    target_compile_options(test_query_builders PRIVATE -UNDEBUG)
+    target_link_libraries(test_query_builders PRIVATE maelys_datalog)
+    add_test(NAME query_builders COMMAND test_query_builders)
+    # Keep the C-only CMake toolchain contract. make check and the installed
+    # SDK gate additionally exercise the C++17 header surface.
+    add_test(NAME c11_fact_builder_compilation
+        COMMAND sh ${CMAKE_CURRENT_SOURCE_DIR}/tools/check_c11_fact_builders.sh
+            ${CMAKE_C_COMPILER} --c-only)
     add_library(example_filter_module STATIC sdk/examples/filter/src/extension.c)
     target_include_directories(example_filter_module PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
     add_library(example_compiler_modules STATIC sdk/examples/frontend/src/extension.c sdk/examples/backend/src/extension.c)
