@@ -33,6 +33,10 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ### Fixed
 
+- Result release frees owned solver results without clearing them first, and
+  resets only reusable metadata instead of the entire fact/provenance storage.
+  New proof witnesses invalidate reused slots before any truncation path;
+  allocator-guard tests also bound release-time bulk reset bytes.
 - Opaque solve input diagnostics identify zero-based fact/term indices and the
   cause of predicate, arity, value and capacity failures instead of discarding
   the details as `invalid solve input`. Rejected native batches remain atomic
@@ -48,6 +52,16 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
   consume neither entries nor bytes. The default text budget is the
   native symbol pool plus registry names (40 KiB, not 5/10 MiB); repeated strings
   share storage. `INPUT_EDB_TEXT_BYTES` reports this bound through `limit_get`.
+- Opaque sessions reuse bounded scratch storage for input conversion and
+  external-backend canonical export. Reference/prepared sessions now reserve
+  native and public results at initialization: solving and result release no
+  longer allocate or free. Provenance stays preallocated; requested explanations
+  can still allocate bounded workspaces. The one-live-result lease is unchanged.
+  Hot-path libc qsort calls are replaced by a typed in-place introsort: ordered
+  input fast path, logarithmically bounded stack and worst-case heapsort fallback.
+  A whole-engine allocator-guard test disables allocation through repeated solves,
+  queries, failed transactions and result release. Custom backends/callbacks,
+  Python/CFFI allocations and libc internals are outside this guarantee.
 - `scripts/publish-channel.sh` honours `CHANNEL_DRY_RUN=1`, set by
   `maelys-release rehearse --channel` (socle 0.42.0): it takes its real path
   up to the registry's write — assembly, the tarball as a file, the registry

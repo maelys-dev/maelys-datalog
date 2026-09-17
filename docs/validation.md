@@ -10,17 +10,15 @@ not proof that tests ran; check the exit status and the suite summaries.
 make -j3
 make -j3 test
 make -j3 test BUILD_DIR=build/native-large CFLAGS='-Wall -Wextra -g -I. -Iinclude -DMAELYS_DATALOG_PROFILE_LARGE'
-make -j3 -f Makefile.asan asan
-make -j3 -f Makefile.asan asan BUILD_DIR=build/asan-large CFLAGS='-Wall -Wextra -g -I. -Iinclude -DMAELYS_DATALOG_PROFILE_LARGE'
+make -j4 -f Makefile.asan asan PROFILE=SMALL
+make -j4 -f Makefile.asan asan PROFILE=LARGE
 make bench-pipeline
 ```
 
 Both Make test inventories use `tests/test_*.c`, including the policy-set
 fingerprint suite. `asan` reruns every test even if its binary is up to date.
-The current inventory has 32 executables: the existing 622 framework cases,
-12 module cases, 11 compiler/backend cases and 27 pipeline checks (672), plus
-the context suite for atomic registration, concurrent isolation, retained
-lifetimes, named selection, invalid planner output, capacity and fingerprints.
+The executable inventory is derived from `tests/test_*.c`; report the actual
+suite summaries rather than a hardcoded historical count.
 ASan/UBSan run locally; macOS disables leak detection. The Linux CI enables
 LSan. A local macOS PASS alone is not evidence of Linux leak safety.
 
@@ -35,6 +33,20 @@ preparation and materialization calls; CMake's static/shared pipeline tests
 check the same 21 transcript goldens, two filter validations and four diagnostic
 ordering checks. The benchmark's
 CPU time is descriptive, not a throughput guarantee.
+
+The bounded-sort test compares canonical values with a libc reference for
+ordered, reverse, equal, duplicate-heavy, organ-pipe, sawtooth and random input,
+including overlapping ordered suffixes, profile capacity and an explicitly
+exhausted introsort depth budget. The whole-engine allocation test includes
+partition-sized input; performance does not replace its allocation assertions.
+
+```sh
+make -f Makefile.bench bench-all CC=clang
+```
+
+Compare the same compiler/profile on baseline and candidate, without concurrent
+builds. Establish a per-case A/A noise floor before interpreting A/B ratios.
+The solver benchmark includes EDB finalization, solve, query and result release.
 
 ## Installed facade and SDK
 
@@ -72,6 +84,8 @@ working table cannot pass that lookup (exit 9).
 | Gate | Verified behavior |
 | --- | --- |
 | `test_maelys_datalog_input_edb_alloc` | Caller-owned alignment/size, copied and shared strings, byte-for-byte atomic rejection, fixed capacities and allocation-free append/clear. |
+| `test_maelys_datalog_hot_path_alloc` | All engine units use allocator hooks: repeated reference append/solve/query/release without allocator calls, constructor allocation failures, independent sessions and failure recovery. A source-level `memset` hook checks zero reset bytes on owned native release and at most 4,096 on reusable public release, on both profiles; this is not a hardware store counter or secure-erasure guarantee. Explanations are outside the allocation guard. |
+| `test_maelys_datalog_pipeline` | Existing fingerprint/proof goldens and identical result symbol IDs under input permutation. |
 | `check_module_sdk.sh` | All eight opaque handle layouts rejected in C11/C++17; static/shared external consumers pass. |
 
 Run the sanitizer build used by CI, not only CMake's separate targets:
@@ -82,9 +96,10 @@ make -j4 -f Makefile.asan asan PROFILE=LARGE
 ```
 
 Ordinary tests share ASan objects. The input allocator test excludes the input
-implementation object it already includes. macOS runs ASan/UBSan with LSAN
-disabled; Linux also runs LSAN. The input allocator gate does not assert
-allocation freedom in the solver or libc internals.
+implementation object it already includes; the whole-engine allocator test uses
+its own guarded object set. macOS runs ASan/UBSan with LSAN disabled; Linux also
+runs LSAN. Custom callbacks/backends, Python/CFFI and libc internals are not
+covered by the reference-engine no-allocation assertion.
 
 The WASM C boundary and JavaScript wrapper live together in
 [`bindings/wasm/`](../bindings/wasm/README.md). Tests import the wrapper from

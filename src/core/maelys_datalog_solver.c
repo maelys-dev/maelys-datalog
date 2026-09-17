@@ -11,6 +11,7 @@
 #include "src/core/maelys_datalog_symbol_table.h"
 
 #include <assert.h>
+#include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -79,14 +80,13 @@ typedef enum {
 } maelys_datalog_compare_result_t;
 
 struct maelys_datalog_solve_result {
+    /* Only this metadata prefix is reset on workspace release. Payload arrays
+     * below edb_facts are overwritten/validated by the next solve, not scrubbed. */
+    int reusable;
     const maelys_datalog_ruleset_t *ruleset;
     void *release_owner;
     maelys_datalog_solve_result_release_fn release;
-    maelys_datalog_fact_t edb_facts[MAELYS_DATALOG_MAX_EDB_FACTS];
-    maelys_datalog_fact_t idb_facts[MAELYS_DATALOG_MAX_IDB_FACTS];
-    uint16_t idb_proof_index[MAELYS_DATALOG_MAX_IDB_FACTS];
     maelys_datalog_fact_set_t edb_snapshot;
-    maelys_datalog_pred_range_t edb_ranges[MAELYS_DATALOG_MAX_PREDICATES];
     maelys_datalog_fact_set_t idb_final;
     size_t facts_per_pred[MAELYS_DATALOG_MAX_PREDICATES];
     size_t stratum_idb_end[MAELYS_DATALOG_MAX_STRATA + 1u];
@@ -96,6 +96,21 @@ struct maelys_datalog_solve_result {
     size_t idb_merge_end;
     uint32_t active_stratum;
     int stratified;
+    uint16_t premise_pool_count;
+    uint32_t witness_filled_mask;
+    maelys_datalog_deny_reason_t failure_reason;
+    maelys_result_t failure_error;
+    maelys_datalog_diagnostic_t runtime_diag;
+    maelys_datalog_filter_statistics_t filter_statistics;
+    int finalized;
+    int failed;
+#ifdef MAELYS_TESTING
+    int edb_full_scan_reference;
+#endif
+    maelys_datalog_fact_t edb_facts[MAELYS_DATALOG_MAX_EDB_FACTS];
+    maelys_datalog_fact_t idb_facts[MAELYS_DATALOG_MAX_IDB_FACTS];
+    uint16_t idb_proof_index[MAELYS_DATALOG_MAX_IDB_FACTS];
+    maelys_datalog_pred_range_t edb_ranges[MAELYS_DATALOG_MAX_PREDICATES];
     maelys_datalog_proof_tree_t proof;
     /* P4-C64 — Bounded Why-true provenance, stored in parallel with the
      * historic proof tree. The proof tree layout/bytes are unchanged; this
@@ -114,19 +129,24 @@ struct maelys_datalog_solve_result {
     uint16_t node_premise_begin[MAELYS_DATALOG_MAX_PROOF_NODES];
     uint16_t node_premise_count[MAELYS_DATALOG_MAX_PROOF_NODES];
     uint8_t node_has_premises[MAELYS_DATALOG_MAX_PROOF_NODES];
-    uint16_t premise_pool_count;
     maelys_datalog_explanation_premise_t witness_slots[MAELYS_DATALOG_MAX_BODY_LITERALS];
-    uint32_t witness_filled_mask;
-    maelys_datalog_deny_reason_t failure_reason;
-    maelys_result_t failure_error;
-    maelys_datalog_diagnostic_t runtime_diag;
-    maelys_datalog_filter_statistics_t filter_statistics;
-    int finalized;
-    int failed;
-#ifdef MAELYS_TESTING
-    int edb_full_scan_reference;
-#endif
 };
+
+maelys_datalog_solve_result_t *maelys_datalog_solve_workspace_create(void) {
+    maelys_datalog_solve_result_t *result = calloc(1u, sizeof(*result));
+    if (result) result->reusable = 1;
+    return result;
+}
+void maelys_datalog_solve_workspace_destroy(maelys_datalog_solve_result_t *result) {
+    if (!result) return;
+    assert(result->reusable && !result->release && !result->ruleset);
+    free(result);
+}
+static maelys_datalog_solve_result_t *solve_result_acquire(maelys_datalog_solve_result_t *workspace) {
+    if (!workspace) return calloc(1u, sizeof(maelys_datalog_solve_result_t));
+    assert(workspace->reusable && !workspace->release && !workspace->ruleset);
+    return workspace;
+}
 
 maelys_result_t maelys_datalog_solve_result_symbol_text(
     const maelys_datalog_solve_result_t *result,
@@ -157,6 +177,7 @@ static void solve_once_init_proof_indices(maelys_datalog_solve_result_t *result)
 }
 
 static void solve_once_assert_windows(const maelys_datalog_solve_result_t *result) {
+    (void)result; /* Release builds compile the window assertions out. */
     assert(result);
     assert(result->idb_delta_begin <= result->idb_delta_end);
     assert(result->idb_delta_end <= result->idb_current_end);
@@ -1141,7 +1162,11 @@ static void witness_record_filter(
 static void witness_commit_range(maelys_datalog_solve_result_t *result,
                                  uint16_t proof_node_idx,
                                  const maelys_datalog_rule_t *rule) {
-    if (!result || !rule || proof_node_idx >= MAELYS_DATALOG_MAX_PROOF_NODES) return;
+    if (!result || proof_node_idx >= MAELYS_DATALOG_MAX_PROOF_NODES) return;
+    /* This slot may belong to a previous solve. Invalidate BEFORE any early
+     * return: an unavailable witness must never expose that old provenance. */
+    result->node_has_premises[proof_node_idx] = 0u;
+    if (!rule) return;
     const size_t body_count = rule->body_count;
     if (body_count > MAELYS_DATALOG_MAX_BODY_LITERALS) return;
     const uint32_t need_mask = (body_count == 0u)
@@ -2260,7 +2285,7 @@ static maelys_result_t solve_stratified_path(
     const maelys_datalog_edb_t *edb,
     maelys_datalog_solve_result_t **out_result,
     maelys_datalog_solve_diagnostic_t *out_diag,
-    int full_scan_reference) {
+    int full_scan_reference, maelys_datalog_solve_result_t *workspace) {
     solve_once_diag_clear(out_diag);
     if (!ruleset || !ruleset->loaded || !edb || !out_result) {
         solve_once_diag_base(out_diag,
@@ -2309,7 +2334,7 @@ static maelys_result_t solve_stratified_path(
         return MAELYS_ERR_PAYLOAD_TOO_LARGE;
     }
 
-    maelys_datalog_solve_result_t *result = calloc(1, sizeof(*result));
+    maelys_datalog_solve_result_t *result = solve_result_acquire(workspace);
     if (!result) {
         solve_once_diag_base(out_diag,
                              MAELYS_DATALOG_SOLVE_DIAG_INTERNAL_ERROR,
@@ -2531,7 +2556,7 @@ static maelys_result_t maelys_datalog_solve_once_run(
     maelys_datalog_solve_result_t **out_result,
     maelys_datalog_solve_diagnostic_t *out_diag,
     int use_static_join_order,
-    int full_scan_reference) {
+    int full_scan_reference, maelys_datalog_solve_result_t *workspace) {
     solve_once_diag_clear(out_diag);
     if (!ruleset || !ruleset->loaded || !edb || !out_result) {
         solve_once_diag_base(out_diag,
@@ -2572,7 +2597,7 @@ static maelys_result_t maelys_datalog_solve_once_run(
         return MAELYS_ERR_PAYLOAD_TOO_LARGE;
     }
 
-    maelys_datalog_solve_result_t *result = calloc(1, sizeof(*result));
+    maelys_datalog_solve_result_t *result = solve_result_acquire(workspace);
     if (!result) {
         solve_once_diag_base(out_diag,
                              MAELYS_DATALOG_SOLVE_DIAG_INTERNAL_ERROR,
@@ -2800,9 +2825,20 @@ maelys_result_t maelys_datalog_solve_once_ex(
     maelys_datalog_solve_result_t **out_result,
     maelys_datalog_solve_diagnostic_t *out_diag) {
     if (ruleset && ruleset->negation_supported) {
-        return solve_stratified_path(ruleset, edb, out_result, out_diag, 0);
+        return solve_stratified_path(ruleset, edb, out_result, out_diag, 0, NULL);
     }
-    return maelys_datalog_solve_once_run(ruleset, edb, out_result, out_diag, 1, 0);
+    return maelys_datalog_solve_once_run(ruleset, edb, out_result, out_diag, 1, 0, NULL);
+}
+
+maelys_result_t maelys_datalog_solve_reusing_workspace(
+    const maelys_datalog_ruleset_t *ruleset, const maelys_datalog_edb_t *edb,
+    maelys_datalog_solve_result_t *workspace, maelys_datalog_solve_result_t **out_result,
+    maelys_datalog_solve_diagnostic_t *diag) {
+    if (!workspace || !workspace->reusable || workspace->ruleset || workspace->release)
+        return MAELYS_ERR_INVALID_STATE;
+    if (ruleset && ruleset->negation_supported)
+        return solve_stratified_path(ruleset, edb, out_result, diag, 0, workspace);
+    return maelys_datalog_solve_once_run(ruleset, edb, out_result, diag, 1, 0, workspace);
 }
 
 maelys_result_t maelys_datalog_solve_once(const maelys_datalog_ruleset_t *ruleset,
@@ -2826,7 +2862,7 @@ maelys_result_t maelys_datalog_test_solve_once_legacy_order(
     const maelys_datalog_edb_t *edb,
     maelys_datalog_solve_result_t **out_result,
     maelys_datalog_solve_diagnostic_t *out_diag) {
-    return maelys_datalog_solve_once_run(ruleset, edb, out_result, out_diag, 0, 0);
+    return maelys_datalog_solve_once_run(ruleset, edb, out_result, out_diag, 0, 0, NULL);
 }
 
 maelys_result_t maelys_datalog_test_solve_once_full_scan(
@@ -2835,9 +2871,9 @@ maelys_result_t maelys_datalog_test_solve_once_full_scan(
     maelys_datalog_solve_result_t **out_result,
     maelys_datalog_solve_diagnostic_t *out_diag) {
     if (ruleset && ruleset->negation_supported) {
-        return solve_stratified_path(ruleset, edb, out_result, out_diag, 1);
+        return solve_stratified_path(ruleset, edb, out_result, out_diag, 1, NULL);
     }
-    return maelys_datalog_solve_once_run(ruleset, edb, out_result, out_diag, 1, 1);
+    return maelys_datalog_solve_once_run(ruleset, edb, out_result, out_diag, 1, 1, NULL);
 }
 
 maelys_result_t maelys_datalog_test_solve_once_legacy_full_scan(
@@ -2845,7 +2881,7 @@ maelys_result_t maelys_datalog_test_solve_once_legacy_full_scan(
     const maelys_datalog_edb_t *edb,
     maelys_datalog_solve_result_t **out_result,
     maelys_datalog_solve_diagnostic_t *out_diag) {
-    return maelys_datalog_solve_once_run(ruleset, edb, out_result, out_diag, 0, 1);
+    return maelys_datalog_solve_once_run(ruleset, edb, out_result, out_diag, 0, 1, NULL);
 }
 
 maelys_result_t maelys_datalog_test_solve_result_idb_facts(
@@ -3252,11 +3288,21 @@ maelys_result_t maelys_datalog_solve_result_enumerate_predicate_facts(
 
 void maelys_datalog_solve_result_free(maelys_datalog_solve_result_t *result) {
     if (!result) return;
+    int reusable = result->reusable;
     if (result->release) {
         result->release(result->release_owner, result);
     }
-    memset(result, 0, sizeof(*result));
-    free(result);
+    if (!reusable) {
+        free(result);
+        return;
+    }
+    /* No secure-erasure promise. Clang can eliminate a memset before free on
+     * the owned path; sharing it with a reusable path made that large write
+     * observable on BOTH paths. Reset only metadata for the reusable case.
+     * Proof init, EDB range construction and IDB-index init run at next solve;
+     * witness_commit_range invalidates each new provenance slot before use. */
+    memset(result, 0, offsetof(maelys_datalog_solve_result_t, edb_facts));
+    result->reusable = 1;
 }
 
 void maelys_datalog_solve_result_set_release(

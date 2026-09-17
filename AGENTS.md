@@ -110,12 +110,29 @@ when it has what they name.
   must never be represented as a zero-allocation binding.
 - Test the allocation contract, not just functional results: allocator counters,
   disabled-allocator execution, capacity boundaries, atomic failure and reuse.
+- Reference sessions reserve public/native results and provenance at creation.
+  Preserve zero engine allocator calls in append/solve/query/result-release;
+  keep the one-live-result lease and forbid fallback allocation. Explanations
+  requested afterward may allocate bounded workspaces. Custom callbacks/backends
+  do not automatically inherit the reference implementation's guarantee.
 - Intern repeated input strings rather than reserving worst-case text for every
   occurrence. Defaults derive from native symbol/registry budgets, not arbitrary
   MiB multipliers. Preserve canonical result IDs regardless of insertion order.
+- Do not use libc qsort on the hot path: it may allocate. Use the bounded
+  in-place sort and maintain the all-engine allocation-guard test.
 - Never claim the whole engine is zero-malloc based on an input-buffer test.
   Session/results, compilation, backend and explanation allocations must be
   audited separately. Keep the public header and docs/validation.md accurate.
+- Hot-path changes require same-compiler/profile A/A noise floors and alternating
+  A/B passes without concurrent builds. Allocation tests do not establish speed.
+  Include sorted/reverse/duplicate/adversarial inputs and canonical IDs.
+- Treat release-time writes as a hot-path cost, not just allocations. Clang on
+  Linux can eliminate a memset immediately before free as a dead store; adding
+  a reusable branch can make the same bulk write live on both paths and cause a
+  regression. Free owned results before any reset. Reset only reusable metadata,
+  initialize payload validity before reuse, and test release reset bytes. Never
+  claim secure erasure from ordinary memset; an explicit erasure contract would
+  require a non-elidable primitive and its own measurements.
 
 ## Manual benchmark evidence
 

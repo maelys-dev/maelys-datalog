@@ -40,21 +40,25 @@ typedef struct {
 
 /* Prepare an isolated, immutable ruleset authority. The source ruleset may be
  * released or mutated after this function returns: the session owns its
- * snapshot. A lowercase 64-hex ruleset fingerprint is mandatory. */
+ * snapshot and a reusable solve-result workspace. A lowercase 64-hex ruleset
+ * fingerprint is mandatory. All engine-owned solve storage is reserved here. */
 maelys_result_t maelys_datalog_prepared_session_create(
     const maelys_datalog_ruleset_t *ruleset,
     maelys_datalog_prepared_session_t **out_session);
 
 /* Destroy a session. Destruction is refused while a solve result produced by
  * this session remains alive. The ordinary maelys_datalog_solve_result_free()
- * function releases that lease; no special result destructor is required. */
+ * function releases that lease without freeing the reserved workspace; no
+ * special result destructor is required. Destruction frees the workspace. */
 maelys_result_t maelys_datalog_prepared_session_destroy(
     maelys_datalog_prepared_session_t *session);
 
 /* Solve a complete EDB against the prepared ruleset. This first implementation
  * intentionally performs a full solve. It canonicalizes all open runtime
  * symbols lexically before materializing and sorting the EDB, making the result
- * independent of input order. Only one result may be alive per session. */
+ * independent of input order. Only one result may be alive per session. The
+ * native reference solve and release do not allocate; on-demand explanations
+ * and application-supplied callbacks are separate from this guarantee. */
 maelys_result_t maelys_datalog_prepared_session_solve(
     maelys_datalog_prepared_session_t *session,
     const maelys_datalog_input_fact_t *facts,

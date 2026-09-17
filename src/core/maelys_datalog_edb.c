@@ -2,6 +2,7 @@
 
 #include "src/core/maelys_datalog_predicate_registry.h"
 #include "src/core/maelys_datalog_symbol_table.h"
+#include "src/core/maelys_datalog_sort_internal.h"
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -55,10 +56,7 @@ int maelys_datalog_fact_cmp(const maelys_datalog_fact_t *a,
     return 0;
 }
 
-static int qsort_fact_cmp(const void *lhs, const void *rhs) {
-    return maelys_datalog_fact_cmp((const maelys_datalog_fact_t *)lhs,
-                                   (const maelys_datalog_fact_t *)rhs);
-}
+MAELYS_DEFINE_SORT(sort_facts, maelys_datalog_fact_t, maelys_datalog_fact_cmp)
 
 void maelys_datalog_fact_set_init(maelys_datalog_fact_set_t *set,
                                   maelys_datalog_fact_t *facts,
@@ -75,7 +73,7 @@ maelys_result_t maelys_datalog_fact_set_sort(maelys_datalog_fact_set_t *set) {
         return MAELYS_ERR_INVALID_ARGUMENT;
     }
     if (set->count > 1 && !set->sorted) {
-        qsort(set->facts, set->count, sizeof(set->facts[0]), qsort_fact_cmp);
+        sort_facts(set->facts, set->count);
     }
     set->sorted = 1;
     return MAELYS_OK;
