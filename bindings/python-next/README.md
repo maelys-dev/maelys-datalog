@@ -9,11 +9,10 @@ The generated CFFI extension includes only public `<maelys/datalog.h>` and links
 `src/core/` include. The package exercises the opaque facade's domain → policy →
 session → facts → solve → query path, including additive public limit/count
 getters introduced alongside this experiment. Build it with the native library
-from this branch; the previously released API v1 library lacks those getters,
-the opaque session configuration and input EDB APIs, and the newly declared
-caller-owned explanation functions. These five explanation functions are
-native-only CFFI declarations for now: the Python conveniences still use the
-existing direct-text path. Their implementation changes in a follow-up PR.
+from a matching development checkout including caller-owned prepared explanations;
+older libraries lacking these entry points cannot build this updated binding.
+The Python signatures stay compatible; this is not binary compatibility with an
+older native library.
 
 The facade now owns the capability constants, opaque `session_config` handle
 and execution fingerprint accessor. `Ruleset.prepare()` creates a temporary
@@ -48,6 +47,23 @@ To test the LARGE profile, configure a separate CMake directory with
 run with `MAELYS_DATALOG_EXPECT_PROFILE=large`. For SMALL use
 `MAELYS_DATALOG_EXPECT_PROFILE=small`; this verifies the library actually loaded,
 not merely the headers used at compile time.
+
+`--engine-dir` is a development-only build option, not a runtime setting or a
+package installation interface. The normal build above uses this checkout.
+When the native changes and Python changes are in separate development worktrees,
+select the **same engine checkout** for the public header and its library:
+
+```sh
+python bindings/python-next/build_cffi.py \
+  --engine-dir /absolute/engine-checkout --build-dir build/cmake-small
+MAELYS_DATALOG_ENGINE_DIR=/absolute/engine-checkout \
+MAELYS_DATALOG_EXPECT_PROFILE=small PYTHONPATH=bindings/python-next \
+  python -m unittest discover -s bindings/python-next/tests -v
+```
+
+With `--engine-dir`, a relative `--build-dir` is relative to that checkout.
+The test variable selects its header for the public-surface coverage check; it
+does not change which library Python loads. Rebuild CFFI when switching builds.
 
 CI sets `MAELYS_DATALOG_REQUIRE_PARITY=1`: a missing legacy extension fails
 instead of skipping. It builds/tests legacy SMALL, then Python-next SMALL,
@@ -238,8 +254,10 @@ result, but does not release that lease either. `ruleset.solve(edb)` remains a
 convenience that creates a new session per call; use `prepare()` for reuse.
 
 Python itself and CFFI still allocate objects and temporary conversion arrays.
-Policy/session initialization, on-demand Why-true/Why-false explanations, custom
-backends and callbacks have separate allocation behavior. This is **not** a
+Policy/session initialization, custom backends and callbacks have separate
+allocation behavior. Explanations use a Python-owned CFFI workspace and text
+buffer, with no reference-engine heap allocation during preparation or writing.
+This is **not** a
 zero-malloc Python binding or a guarantee about allocations inside libc.
 For native callers requiring a completely allocation-free input lifecycle,
 `maelys_datalog_input_edb_storage_requirements()` plus `maelys_datalog_input_edb_init()`
@@ -337,8 +355,35 @@ native storage or release a result lease.
 ## Explanations and full diagnostics
 
 `result.explain_true(predicate, terms)` and `result.explain_false(predicate,
-terms)` use count-then-render and return the native UTF-8 document unchanged.
-They read retained state, never solve again. Why-false retains its
+terms)` return the native UTF-8 document unchanged. Their public signatures and
+error behavior are unchanged, but they no longer call the legacy direct-text
+function twice. Each call follows this sequence:
+
+```text
+live result
+  → query workspace size/alignment
+  → allocate aligned Python-owned storage
+  → prepare ONE explanation (temporarily leases the result)
+  → read cached text size → allocate text buffer → write text
+  → copy UTF-8 text into a Python str
+  → release explanation in finally → return independent str
+```
+
+The workspace and output buffer serve different purposes: the former retains
+the bounded explanation, the latter receives its formatted text. Text size
+excludes the terminating NUL; the binding reserves one extra byte. The workspace
+owner stays alive through native release. If text sizing, allocation, writing or
+decoding fails, `finally` still releases the handle, allowing the result to close
+and its session to be reused. A failed preparation publishes no handle to release.
+
+The reference backend does not allocate on this prepared native path. Python and
+CFFI still allocate the workspace, conversion objects and returned string. There
+is no cross-call explanation cache: two Python calls prepare two explanations.
+Neither call reruns the solver. Native C callers can instead reuse their own
+aligned arena and perform multiple writes from one prepared handle. Python keeps
+that lower-level lifecycle internal, so existing callers need no extra `close()`.
+
+Why-false retains its
 `MAELYS-DATALOG-WHY-FALSE-v1` status: `complete`, `truncated`, or `not-applicable`.
 Truncated output is not proof of non-derivability. The reference bounds are 128
 candidate rules, 4,096 substitutions per rule, depth 10 and 16 diagnostics;

@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import os
 import re
 from pathlib import Path
 import tempfile
@@ -182,16 +183,18 @@ class FacadeTest(unittest.TestCase):
             "result_enumerate": "SolveResult.enumerate_raw",
             "result_derived_fact_count": "SolveResult.derived_fact_count",
             "result_symbol_text": "SolveResult.resolve_term",
-            "result_explain_true_text": "SolveResult.explain_true",
-            "result_explain_false_text": "SolveResult.explain_false",
-            "result_explanation_storage_requirements": "Native only; Python convenience in a follow-up PR",
-            "result_prepare_explanation": "Native only; Python convenience in a follow-up PR",
-            "prepared_explanation_text_size": "Native only; Python convenience in a follow-up PR",
-            "prepared_explanation_write_text": "Native only; Python convenience in a follow-up PR",
-            "prepared_explanation_release": "Native only; Python convenience in a follow-up PR",
+            "result_explain_true_text": "CFFI legacy direct-text alternative",
+            "result_explain_false_text": "CFFI legacy direct-text alternative",
+            "result_explanation_storage_requirements": "SolveResult explanation workspace",
+            "result_prepare_explanation": "SolveResult.explain_true/explain_false once",
+            "prepared_explanation_text_size": "SolveResult cached text size",
+            "prepared_explanation_write_text": "SolveResult text copy",
+            "prepared_explanation_release": "SolveResult finally releases result lease",
             "result_free": "SolveResult.close",
         }
-        header = Path(__file__).resolve().parents[3] / "include/maelys/datalog.h"
+        engine_dir = Path(os.environ.get("MAELYS_DATALOG_ENGINE_DIR",
+                                        Path(__file__).resolve().parents[3]))
+        header = engine_dir / "include/maelys/datalog.h"
         exports = set(re.findall(r"MAELYS_DATALOG_API\s+[^;]+?\b(maelys_datalog_\w+)\s*\(",
                                  header.read_text(encoding="utf-8")))
         self.assertEqual(exports, {"maelys_datalog_" + name for name in coverage})
