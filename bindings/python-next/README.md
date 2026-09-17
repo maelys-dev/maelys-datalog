@@ -63,16 +63,16 @@ yet have package or release integration.
 ## Example
 
 ```python
-from maelys_datalog_next import Engine, Predicate, PRED_EDB, PRED_IDB, PRED_QUERY
+from maelys_datalog_next import Engine, Predicate
 
 predicates = [
-    Predicate("user", 1, PRED_EDB),
-    Predicate("owns", 2, PRED_EDB),
-    Predicate("delegated", 2, PRED_EDB),
-    Predicate("blocked", 1, PRED_EDB),
-    Predicate("can_read", 2, PRED_IDB),
-    Predicate("has_any_document", 1, PRED_IDB | PRED_QUERY),
-    Predicate("allow", 2, PRED_IDB | PRED_QUERY),
+    Predicate.edb("user", 1),
+    Predicate.edb("owns", 2),
+    Predicate.edb("delegated", 2),
+    Predicate.edb("blocked", 1),
+    Predicate.idb("can_read", 2),
+    Predicate.idb_query("has_any_document", 1),
+    Predicate.idb_query("allow", 2),
 ]
 policy = """
 can_read(User, Doc) :-
@@ -101,6 +101,21 @@ with Engine() as engine:
     print(result.contains_fact("allow", ["mallory", "roadmap.pdf"])) # False
     print(result.derived_fact_count()) # 6: 2 can_read + 2 has_any_document + 2 allow
 ```
+
+The declaration constructors match the unreleased C convenience initializers:
+
+| C declaration | Python declaration | Flags |
+| --- | --- | --- |
+| `MAELYS_DATALOG_EDB(name, arity)` | `Predicate.edb(name, arity)` | `EDB` |
+| `MAELYS_DATALOG_IDB(name, arity)` | `Predicate.idb(name, arity)` | `IDB` |
+| `MAELYS_DATALOG_IDB_QUERY(name, arity)` | `Predicate.idb_query(name, arity)` | `IDB \| QUERY` |
+
+They construct immutable `Predicate` values; they do not register or validate a
+domain. `Engine.register_domain()` retains its existing validation and error
+behavior. `QUERY` is an additional flag, not a third category of facts.
+`Predicate(name, arity, flags)` and all `PRED_*` constants remain available for
+other combinations, including `PRED_POLICY_FACT`. Unlike the C initializers,
+Python constructors allocate ordinary Python objects.
 
 One `ruleset.solve()` creates one opaque session and result. Several results can remain
 open together because they do not share a session. `Engine.close()` closes
