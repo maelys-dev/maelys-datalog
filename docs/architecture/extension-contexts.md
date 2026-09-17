@@ -5,7 +5,9 @@ and testing. They intentionally keep distinct typed callbacks: lowering syntax,
 executing a program, selecting joins and evaluating filters are not the same job.
 
 Include `maelys/datalog_extension.h`. It adds envelope ABI v1 without changing
-program ABI, backend ABI v2 or module ABI. Existing public entrypoints remain
+program or module ABI. Backend descriptors now use ABI v3 (caller-owned
+explanations); packages carrying older backend descriptors must rebuild and
+migrate their callbacks. Existing consumer entrypoints remain
 available. Internal/legacy ruleset POD consumers must rebuild; use opaque handles
 for new integrations.
 

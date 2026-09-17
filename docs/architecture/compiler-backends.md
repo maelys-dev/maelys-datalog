@@ -83,10 +83,26 @@ Avoid callbacks that change precedence or inject arbitrary grammar productions.
 
 ## Backend contract
 
-Include `maelys/datalog_backend.h`. Backend ABI **v2** adds `explain_false`;
-v1 descriptors are rejected and must be rebuilt. Populate a descriptor with
-`prepare`, `solve`, `destroy_result`, `destroy`, and optional `explain_true` /
-`explain_false` callbacks with their corresponding capability bits. Names are at most
+Include `maelys/datalog_backend.h`. Backend ABI **v3** replaces the two direct-text
+explanation callbacks with caller-owned preparation. ABI v1/v2 descriptors and
+session options are rejected; rebuild providers against the current header.
+Populate `prepare`, `solve`, `destroy_result`, `destroy`. If either EXPLAIN
+capability is advertised, also provide all three callbacks:
+
+| Callback | Responsibility |
+| --- | --- |
+| `explanation_storage_requirements` | Report bytes and alignment for this result/kind, without extracting anything. |
+| `explanation_prepare` | Extract once into supplied storage, including bounded scratch; return exact text length excluding NUL. |
+| `explanation_write_text` | Format the retained structure; do not search, extract or solve again. |
+
+These callbacks may use bounded stack locals but must not allocate, acquire
+resources or retain query-string pointers. Storage holds data and references to
+the leased result only, so no backend destruction callback is necessary. Failed
+preparation publishes no handle; caller storage may have changed. Required
+alignment is a power of two no greater than `alignof(max_align_t)`. The host
+validates requirements, guards callback reentry and caches the returned text size.
+Backends without explanation capabilities leave these callbacks NULL. There is
+no fallback to another backend. Names are at most
 63 bytes; semantic IDs at most 127. Names use lowercase letters/digits/underscore
 and start with a letter. Semantic IDs also allow uppercase, dots and hyphens.
 Use matching headers, ABI version, struct size and target architecture.
@@ -141,12 +157,16 @@ time; callbacks must not reenter the engine except program accessors/output APIs
 
 Queries honor QUERY flags and manifest whitelists. Query sees policy facts, EDB
 and IDB; enumeration retains the existing derived-IDB-only behavior. Why-true
-requires an advertised callback and must inspect retained state, not solve again.
-Its buffer/required-size contract matches `maelys_datalog_result_explain_true_text`
-in `datalog.h`. Backend capabilities are promises, not sandbox-enforced proofs.
+requires its advertised capability and must inspect retained state, not solve again.
+Consumer preparation leases the result until the prepared explanation is released;
+result destruction refuses while any such lease is live. The consumer's size getter
+does not traverse the proof. The old `maelys_datalog_result_explain_*_text` functions
+remain allocating convenience wrappers around this same preparation path. Calling
+one twice still prepares twice: use the new handle to avoid that work.
+Backend capabilities are promises, not sandbox-enforced proofs.
 
 `maelys_datalog_result_explain_false_text` has the same read-only contract. The
-reference delegates to existing `maelys_datalog_explain_absent_solved_fact` with
+reference uses the caller-owned variant of the structured Why-false explorer with
 128 candidate rules, 4,096 substitutions per rule, depth 10 and 16 diagnostics.
 Its separate `MAELYS-DATALOG-WHY-FALSE-v1` text is part of the public contract.
 It includes query, status, named limit hits (`none` or a comma-separated subset
@@ -158,7 +178,7 @@ maps `A`–`Z` to 0–25 and anonymous variables to 26 and above, so the text ne
 depends on a frontend's surface names. A present query reports `not-applicable`;
 an absent query reports `complete` or `truncated`. A bounded diagnostic is not an
 exhaustive proof of non-derivability. The bounds are fixed by the reference in
-backend ABI v2; letting the caller tune them means passing session options to
+backend ABI v3; letting the caller tune them means passing session options to
 `prepare`, which is a later ABI revision. Unknown query symbols return NOT_FOUND
 without mutating vocabulary. No source grammar or existing Why-true text changes.
 
@@ -208,6 +228,14 @@ required capabilities, resolved work limit and SMALL/LARGE profile. Neither
 fingerprint includes the runtime EDB; result caches must bind input identity too.
 Neither attests machine code. Bump semantic IDs when behavior or work accounting
 changes, and use artifact provenance separately.
+
+The backend ABI version is validated for binary compatibility, but is not hashed
+into execution identity. The ABI 3 preparation/storage change keeps the reference
+name `reference` and semantic ID `maelys.reference.v1`: at fixed program, required
+capabilities, work limit and size profile, execution fingerprints therefore stay
+unchanged. The existing pipeline goldens cover this identity together with both
+explanation formats. Migrating a third-party provider with a new semantic ID
+changes its execution fingerprint even when it solves the same program.
 
 The new dispatch API is native C. Existing low-level, Python and stock WASM/JS
 entrypoints continue using the reference solver; no new language-binding backend

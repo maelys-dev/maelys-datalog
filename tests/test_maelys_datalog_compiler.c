@@ -586,6 +586,7 @@ static maelys_datalog_backend_t fake_backend(void) {
                                   bad_emit,
                                   NULL,
                                   NULL,
+                                  NULL,
                                   fake_destroy_result,
                                   fake_destroy};
     return b;
@@ -729,7 +730,7 @@ static int why_false_backend_contract(void) {
     maelys_datalog_policy_t *policy;
     OK(load("allow(X) :- seed(X), extra(X).", NULL, &policy, NULL));
     maelys_datalog_backend_t backend = *maelys_datalog_backend_reference();
-    CHECK(backend.abi_version == 2 && (backend.capabilities & MAELYS_DATALOG_CAP_EXPLAIN_FALSE));
+    CHECK(backend.abi_version == 3 && (backend.capabilities & MAELYS_DATALOG_CAP_EXPLAIN_FALSE));
     backend.solve = counted_reference_solve;
     maelys_datalog_session_options_t o = options(&backend);
     o.required_capabilities = MAELYS_DATALOG_CAP_EXPLAIN_FALSE;
@@ -786,12 +787,12 @@ static int why_false_backend_contract(void) {
     CHECK(maelys_datalog_session_create_ex(policy, 0, &o, &session) ==
           MAELYS_DATALOG_STATUS_UNSUPPORTED);
     backend = *maelys_datalog_backend_reference();
-    backend.explain_false = NULL;
+    backend.explanation_prepare = NULL;
     o = options(&backend);
     CHECK(maelys_datalog_session_create_ex(policy, 0, &o, &session) ==
           MAELYS_DATALOG_STATUS_INVALID_ARGUMENT);
     backend = *maelys_datalog_backend_reference();
-    backend.abi_version = 1;
+    backend.abi_version = 2;
     CHECK(maelys_datalog_session_create_ex(policy, 0, &o, &session) ==
           MAELYS_DATALOG_STATUS_INVALID_ARGUMENT);
     OK(maelys_datalog_policy_free(policy));

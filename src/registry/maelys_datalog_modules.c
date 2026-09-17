@@ -180,8 +180,8 @@ int maelys_datalog_backend_descriptor_valid(const maelys_datalog_backend_t *d) {
            d->struct_size == sizeof(*d) && valid_identity(d->name, d->semantic_id) && d->prepare &&
            d->solve && d->destroy && d->destroy_result &&
            !(d->capabilities & ~MAELYS_DATALOG_CAP_ALL) &&
-           (!(d->capabilities & MAELYS_DATALOG_CAP_EXPLAIN_TRUE) || d->explain_true) &&
-           (!(d->capabilities & MAELYS_DATALOG_CAP_EXPLAIN_FALSE) || d->explain_false);
+           (!(d->capabilities & (MAELYS_DATALOG_CAP_EXPLAIN_TRUE | MAELYS_DATALOG_CAP_EXPLAIN_FALSE)) ||
+            (d->explanation_storage_requirements && d->explanation_prepare && d->explanation_write_text));
 }
 static int filter_descriptor_valid(const maelys_datalog_filter_module_t *d) {
     return d && d->abi_version == MAELYS_DATALOG_MODULE_ABI_VERSION &&
