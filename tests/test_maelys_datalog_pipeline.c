@@ -51,8 +51,10 @@ static void hash_text(maelys_sha256_ctx_t *hash, const char *text) {
 /* SHA-256 of exact NUL-delimited authority/program/execution fingerprints and
  * why-true/why-false text, including a second solve with reversed inputs.
  * Captured on the pre-refactor tree (PR #4 merge b55f3d6) with only the
- * final WHY-FALSE-v1 formatter applied, so they still hold the single-pass
- * pipeline to the legacy identities and proof texts (SMALL and LARGE).
+ * final WHY-FALSE-v1 formatter applied. For Why-false we assert the new v2
+ * envelope separately, then project ONLY that envelope to the historical one
+ * before hashing. Thus these unchanged goldens continue to prove identical
+ * fingerprints and all body bytes, not just equivalent answers, on both profiles.
  * `expected` covers the implicit, inline and explicit built-in descriptor;
  * `expected_wrapped` covers a copied descriptor that wraps the standard
  * lowering, which carries the extended identity like any other frontend. */
@@ -181,7 +183,17 @@ static void probe_case(size_t index, const char *source, int loader) {
             char *text = malloc(size + 1);
             assert(text);
             assert(!explain(result, "allow", &value, 1, text, size + 1, &size));
-            hash_text(&hash, text);
+            if (absent) {
+                static const char prefix[] = "MAELYS-DATALOG-v2\ndocument=why-false\n";
+                static const char historical[] = "MAELYS-DATALOG-WHY-FALSE-v1\n";
+                assert(size == strlen(text));
+                assert(!strncmp(text, prefix, sizeof(prefix) - 1));
+                maelys_sha256_update(&hash, (const unsigned char *)historical,
+                                     sizeof(historical) - 1);
+                hash_text(&hash, text + sizeof(prefix) - 1);
+            } else {
+                hash_text(&hash, text);
+            }
             free(text);
         }
         assert(!maelys_datalog_result_free(result));

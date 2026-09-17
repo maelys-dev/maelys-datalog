@@ -50,7 +50,8 @@ Its code components are **MIT**, because an implementer copies them into a
 parser generator or a test suite, and Creative Commons licenses are not meant
 for software:
 
-- the ABNF grammars `source-language.abnf` and `why-true-text.abnf`, which
+- the ABNF grammars `source-language.abnf`, `why-true-text.abnf` and
+  `why-false-text.abnf`, which
   carry the identifier in a `;` comment;
 - the `.dl` corpus under `examples/` and `invalid/`, which carries none: the
   conformance runner reads the first line of each fixture for its `EXPECT:`

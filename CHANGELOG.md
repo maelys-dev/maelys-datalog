@@ -53,7 +53,8 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 - Caller-owned opaque prepared explanations: query aligned storage requirements,
   prepare Why-true/Why-false once, get the cached text size, render repeatedly,
   then release the result lease. The reference path includes Why-false scratch
-  and makes no engine allocator calls; all prior text/status/limit semantics remain.
+  and makes no engine allocator calls; prior status, limit and payload semantics
+  remain. The independent Why-false envelope migration is listed below.
 - Opaque owned `maelys_datalog_input_edb_t` with atomic copied single/batch
   additions, entry count, clear/free and `maelys_datalog_session_solve_edb()`.
   The existing array solve and legacy core EDB API remain unchanged. Input
@@ -97,14 +98,22 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ### Changed
 
+- **Text serialization break:** Why-false now starts with `MAELYS-DATALOG-v2`
+  and `document=why-false`, replacing `MAELYS-DATALOG-WHY-FALSE-v1`.
+  Consumers must dispatch using the document discriminator, not just the version
+  line. All following bytes and statuses are unchanged; Why-true output is
+  byte-identical. No source-language, C ABI, backend identity, policy/program/
+  execution fingerprint or query-result change. Python-next returns the new
+  native document unchanged. No legacy-output mode is provided.
 - **Backend ABI 3:** direct `explain_true`/`explain_false` callbacks are replaced
   by `explanation_storage_requirements`, `explanation_prepare` and
   `explanation_write_text`. An explanation-capable backend must implement all
   three without allocation; ABI 1/2 descriptors and options are rejected, not
   reinterpreted. Rebuild providers against the new header and migrate callbacks.
   The existing consumer `result_explain_*_text` functions remain available as
-  allocating convenience wrappers over the same preparation path. No change to
-  consumer API version, language version or explanation text formats. The
+  allocating convenience wrappers over the same preparation path. This ABI
+  change leaves the consumer API version, language version and text formats
+  unchanged; the separate Why-false envelope migration is described above. The
   reference name/semantic ID remain `reference` / `maelys.reference.v1`; the
   backend ABI number is not an execution-fingerprint input, so this ABI change
   does not change reference execution fingerprints at fixed program/options/

@@ -109,3 +109,26 @@ expanded before solving and never appears as an explanation operator.
 FILTER premises retain their lexical body index and expose public name,
 semantic identity, ground value, and source pattern. These rules bind the
 source and output surfaces to the same global v2.
+
+## Why-false document
+
+The same version line is followed by `document=why-false`, then `status`,
+`query`, `summary`, a limit/counter line and zero or more diagnostic blocks,
+in that order. `not-applicable` means the query fact is present; `complete`
+means the bounded search completed without a reported limit hit; `truncated`
+means a limit prevented completing that search. Neither is a new membership
+decision. The query is ground, but obstacle patterns may contain `?N` variables.
+`N` is a rule-local IR variable id, also used in `binding=N`; it is not a source
+variable name. `or` has already been expanded into ordinary rules.
+
+Limit names are emitted once each in bit order: `candidate-rules`,
+`substitutions`, `depth`, `diagnostics`, `filter-cost`, or `none` if no bit is set.
+Diagnostics and supports are indexed from zero. Within a diagnostic, bindings
+are emitted in ascending variable-id order, then supports, then one obstacle.
+The obstacle's kind determines its payload: a pattern, a typed comparison,
+or filter identity/value/pattern. A summary may be `no-candidate-rule` or `none`.
+
+Byte escaping, typed values, LF termination and the C buffer contract are the
+same as Why-true. Semantic truncation is distinct from a short output buffer:
+the latter reports `PAYLOAD_TOO_LARGE`, gives the exact required length excluding
+NUL and emits no partial document (only an initial NUL if capacity is nonzero).

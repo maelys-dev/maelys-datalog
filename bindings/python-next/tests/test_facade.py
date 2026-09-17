@@ -281,12 +281,14 @@ class FacadeTest(unittest.TestCase):
         with rules.solve(inputs(rules, ("seed", ["alice"]), ("seed", ["bob"]),
                                 ("blocked", ["bob"]))) as result:
             before = result.enumerate_predicate_facts("allow", 1)
-            self.assertIn("status=complete", result.explain_true("allow", ["alice"]))
+            self.assertTrue(result.explain_true("allow", ["alice"]).startswith(
+                "MAELYS-DATALOG-v2\ndocument=why-true\nstatus=complete\n"))
             text = result.explain_false("allow", ["bob"])
-            self.assertIn("MAELYS-DATALOG-WHY-FALSE-v1", text)
-            self.assertIn("status=complete", text)
+            self.assertTrue(text.startswith(
+                "MAELYS-DATALOG-v2\ndocument=why-false\nstatus=complete\n"))
             self.assertIn("negative-contradicted", text)
-            self.assertIn("status=not-applicable", result.explain_false("allow", ["alice"]))
+            self.assertTrue(result.explain_false("allow", ["alice"]).startswith(
+                "MAELYS-DATALOG-v2\ndocument=why-false\nstatus=not-applicable\n"))
             self.assertEqual(result.explain_false("allow", ["bob"]), text)
             for method in (result.explain_true, result.explain_false):
                 with self.assertRaises(MaelysDatalogError) as failure:
@@ -298,7 +300,8 @@ class FacadeTest(unittest.TestCase):
         rules = self.policy("allow(X) :- seed(X), extra(X).\n" * 17)
         with rules.solve(inputs(rules, ("seed", ["alice"]))) as result:
             text = result.explain_false("allow", ["alice"])
-            self.assertIn("status=truncated", text)
+            self.assertTrue(text.startswith(
+                "MAELYS-DATALOG-v2\ndocument=why-false\nstatus=truncated\n"))
             self.assertIn("limit-hits=diagnostics", text)
 
     def test_filters_are_ground_only_and_patterns_are_not_atoms(self):
