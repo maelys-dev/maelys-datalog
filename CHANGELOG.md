@@ -5,7 +5,11 @@ All notable changes to Maelys Datalog are documented in this file.
 The project follows [Semantic Versioning](https://semver.org/) and uses the
 format described by [Keep a Changelog](https://keepachangelog.com/).
 
-## [Unreleased]
+## 0.4.1 — 2026-09-19
+
+Additive release: consumer API v1 and backend ABI 3 are unchanged. It adds a
+one-call, allocation-free explanation path, a per-session storage bound for
+the reference backend, and an aligned storage declaration.
 
 ### Added
 
