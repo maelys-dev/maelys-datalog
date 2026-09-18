@@ -198,6 +198,13 @@ int maelys_datalog_result_symbol_text(
     const maelys_datalog_result_t *result, uint32_t symbol_id,
     const char **out_text, size_t *out_length);
 int maelys_datalog_result_free(maelys_datalog_result_t *result);
+int maelys_datalog_session_explanation_storage_bound(
+    const maelys_datalog_session_t *, maelys_datalog_explanation_kind_t,
+    size_t *, size_t *);
+int maelys_datalog_result_explain_text_in(
+    maelys_datalog_result_t *, maelys_datalog_explanation_kind_t,
+    const char *, const maelys_datalog_public_value_t *, size_t,
+    void *, size_t, char *, size_t, size_t *);
 int maelys_datalog_result_explanation_storage_requirements(
     const maelys_datalog_result_t *, maelys_datalog_explanation_kind_t,
     size_t *, size_t *);

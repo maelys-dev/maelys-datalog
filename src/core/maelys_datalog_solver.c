@@ -3424,6 +3424,22 @@ typedef struct {
     why_false_candidate_t candidates[];
 } why_false_workspace_t;
 
+static maelys_result_t why_false_workspace_size(size_t n, size_t *bytes, size_t *alignment) {
+    if (n > (SIZE_MAX - sizeof(why_false_workspace_t)) / sizeof(why_false_candidate_t))
+        return MAELYS_ERR_PAYLOAD_TOO_LARGE;
+    *bytes = sizeof(why_false_workspace_t) + n * sizeof(why_false_candidate_t);
+    *alignment = _Alignof(why_false_workspace_t);
+    return MAELYS_OK;
+}
+
+maelys_result_t maelys_datalog_why_false_storage_bound(size_t *bytes, size_t *alignment) {
+    if (!bytes || !alignment) return MAELYS_ERR_INVALID_ARGUMENT;
+    /* The same size calculation as the per-result path, at its validated caps. */
+    const size_t n = (size_t)MAELYS_DATALOG_MAX_RULE_FACTS +
+        MAELYS_DATALOG_MAX_EDB_FACTS + MAELYS_DATALOG_MAX_IDB_FACTS;
+    return why_false_workspace_size(n, bytes, alignment);
+}
+
 maelys_result_t maelys_datalog_why_false_storage_requirements(
     const maelys_datalog_solve_result_t *result, size_t *bytes, size_t *alignment) {
     if (!result || !bytes || !alignment) return MAELYS_ERR_INVALID_ARGUMENT;
@@ -3433,11 +3449,7 @@ maelys_result_t maelys_datalog_why_false_storage_requirements(
         result->idb_final.count > MAELYS_DATALOG_MAX_IDB_FACTS)
         return MAELYS_ERR_INVALID_STATE;
     size_t n = result->ruleset->fact_count + result->edb_snapshot.count + result->idb_final.count;
-    if (n > (SIZE_MAX - sizeof(why_false_workspace_t)) / sizeof(why_false_candidate_t))
-        return MAELYS_ERR_PAYLOAD_TOO_LARGE;
-    *bytes = sizeof(why_false_workspace_t) + n * sizeof(why_false_candidate_t);
-    *alignment = _Alignof(why_false_workspace_t);
-    return MAELYS_OK;
+    return why_false_workspace_size(n, bytes, alignment);
 }
 const maelys_datalog_why_false_explanation_t *maelys_datalog_why_false_workspace_view(
     const void *storage) {

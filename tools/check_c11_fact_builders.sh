@@ -5,7 +5,7 @@ root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 compiler=${1:-${CC:-cc}}
 cxx=${2:-${CXX:-c++}}
 scratch=$(mktemp -d "${TMPDIR:-/tmp}/maelys-fact-builders.XXXXXX")
-trap 'rm -f "$scratch/diagnostic"; rmdir "$scratch"' EXIT
+trap 'rm -f "$scratch/diagnostic" "$scratch/storage"; rmdir "$scratch"' EXIT
 trap 'exit 1' HUP INT TERM
 fixture="$root/tests/fixtures/c11_fact_builders.c"
 for builder in TEST_FACT TEST_QUERY TEST_BATCH; do
@@ -31,3 +31,24 @@ if [ "$cxx" != --c-only ]; then
     echo "C++17 fact-builder header compatibility PASS"
 fi
 echo "C11 single/batch/query builders: strict C11 consumers and fifteen rejected inputs PASS"
+for language in c c++; do
+    test_compiler=$compiler; standard=c11
+    if [ "$language" = c++ ]; then
+        [ "$cxx" != --c-only ] || continue
+        test_compiler=$cxx; standard=c++17
+    fi
+    "$test_compiler" -x "$language" -std="$standard" -Wall -Wextra -Werror -Wvla \
+        -pedantic-errors -I"$root/include" "$root/tests/fixtures/explanation_storage.c" -o "$scratch/storage"
+    "$scratch/storage"
+    for rejected in RUNTIME ZERO NEGATIVE FLOAT; do
+        if "$test_compiler" -x "$language" -std="$standard" -Wall -Wextra -Werror -Wvla \
+            -pedantic-errors -I"$root/include" -D"REJECT_$rejected" -fsyntax-only \
+            "$root/tests/fixtures/explanation_storage.c" >"$scratch/diagnostic" 2>&1; then
+            echo "error: $standard storage accepted $rejected" >&2; exit 1
+        fi
+        if ! grep -E 'error:|fatal error:' "$scratch/diagnostic" >/dev/null; then
+            cat "$scratch/diagnostic" >&2; exit 1
+        fi
+    done
+    echo "$standard explanation storage: alignment, static/local arrays and rejected non-constant/invalid capacities PASS"
+done

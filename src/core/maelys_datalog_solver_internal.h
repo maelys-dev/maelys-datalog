@@ -8,6 +8,7 @@
  * scratch. No allocation; out borrows storage until it is reused. */
 maelys_result_t maelys_datalog_why_false_storage_requirements(
     const maelys_datalog_solve_result_t *, size_t *bytes, size_t *alignment);
+maelys_result_t maelys_datalog_why_false_storage_bound(size_t *bytes, size_t *alignment);
 maelys_result_t maelys_datalog_explain_absent_in_workspace(
     const maelys_datalog_solve_result_t *, const maelys_datalog_fact_t *,
     const maelys_datalog_why_false_limits_t *, void *storage, size_t bytes,

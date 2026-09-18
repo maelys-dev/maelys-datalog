@@ -11,6 +11,7 @@ cmake --install "$build" --prefix "$prefix"
 cp "$root/tests/fixtures/public_api_consumer.c" "$scratch/"
 cp "$root/tests/fixtures/sdk_header.c" "$scratch/"
 cp "$root/tests/fixtures/opaque_handle.c" "$scratch/"
+cp "$root/tests/fixtures/explanation_storage.c" "$scratch/"
 cp "$root/tests/test_maelys_datalog_modules.c" "$scratch/"
 cp "$root/tests/test_maelys_datalog_compiler.c" "$scratch/"
 cp "$root/tests/test_maelys_datalog_context.c" "$scratch/"
@@ -28,6 +29,12 @@ for header in datalog.h datalog_builders.h datalog_module.h datalog_program.h da
   "$cxx" -x c++ -std=c++17 -Wall -Wextra -Werror -I"$prefix/include" \
     -DSDK_HEADER="\"maelys/$header\"" -fsyntax-only sdk_header.c
 done
+"$cc" "${flags[@]}" -Wvla -pedantic-errors explanation_storage.c -o storage-c
+./storage-c
+"$cxx" -x c++ -std=c++17 -Wall -Wextra -Werror -Wvla -pedantic-errors \
+  -I"$prefix/include" explanation_storage.c -o storage-cpp
+./storage-cpp
+echo 'installed SDK explanation storage: C11/C++17 static/local aligned arrays PASS'
 for handle in policy session result session_config input_edb prepared_explanation program program_builder context; do
   for language in c c++; do
     compiler="$cc"; standard=c11

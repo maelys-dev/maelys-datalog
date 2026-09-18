@@ -3,6 +3,7 @@
 #include "src/public/maelys_datalog_values_internal.h"
 #include "src/compiler/maelys_datalog_program_internal.h"
 #include "src/core/maelys_datalog_prepared_session_internal.h"
+#include "src/core/maelys_datalog_solver_internal.h"
 #include "src/core/maelys_datalog_filter.h"
 #include "src/core/maelys_datalog_query_internal.h"
 #include "common/maelys_sha256.h"
@@ -86,6 +87,7 @@ struct maelys_datalog_session {
     uint64_t work_limit;
     int busy;
     int borrows_inputs; /* The reference solves the materialized EDB directly. */
+    int reference_backend; /* Selected canonical descriptor, not a claimed name. */
     /* These phases never overlap: import finishes before canonical export.
      * Reuse bounded session storage rather than allocating per solve. */
     union {
@@ -256,6 +258,7 @@ maelys_datalog_session_create_ex(const maelys_datalog_policy_t *policy, size_t i
     s->program.ruleset = &s->inputs->prepared;
     s->program.prepared_inputs = s->inputs;
     s->backend = *b;
+    s->reference_backend = b == maelys_datalog_backend_reference();
     s->borrows_inputs = b->solve == maelys_datalog_backend_reference()->solve;
     memcpy(s->name, b->name, strlen(b->name) + 1u);
     memcpy(s->semantic_id, b->semantic_id, strlen(b->semantic_id) + 1u);
@@ -543,6 +546,27 @@ maelys_datalog_status_t maelys_datalog_result_symbol_text(const maelys_datalog_r
     *length = symbols->entries[id - 1u].len;
     return MAELYS_DATALOG_STATUS_OK;
 }
+maelys_datalog_status_t maelys_datalog_session_explanation_storage_bound(
+    const maelys_datalog_session_t *s, maelys_datalog_explanation_kind_t kind,
+    size_t *bytes, size_t *alignment) {
+    if (!s || !bytes || !alignment ||
+        (kind != MAELYS_DATALOG_EXPLAIN_TRUE && kind != MAELYS_DATALOG_EXPLAIN_FALSE))
+        return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
+    if (s->busy) return MAELYS_DATALOG_STATUS_INVALID_STATE;
+    if (!s->reference_backend) return MAELYS_DATALOG_STATUS_UNSUPPORTED;
+    size_t n = sizeof(maelys_datalog_explanation_t), a = _Alignof(maelys_datalog_explanation_t);
+    if (kind == MAELYS_DATALOG_EXPLAIN_FALSE) {
+        maelys_result_t rc = maelys_datalog_why_false_storage_bound(&n, &a);
+        if (rc) return (maelys_datalog_status_t)rc;
+    }
+    if (!a || (a & (a - 1u)) || a > EXPLANATION_ALIGNMENT ||
+        n > SIZE_MAX - EXPLANATION_HEADER_BYTES)
+        return MAELYS_DATALOG_STATUS_INVALID_STATE;
+    *bytes = EXPLANATION_HEADER_BYTES + n;
+    *alignment = EXPLANATION_ALIGNMENT;
+    return MAELYS_DATALOG_STATUS_OK;
+}
+
 static maelys_datalog_status_t explanation_available(
     const maelys_datalog_result_t *result, maelys_datalog_explanation_kind_t kind) {
     if (!result || !result->owner ||
@@ -670,6 +694,24 @@ maelys_datalog_status_t maelys_datalog_prepared_explanation_release(
     memset(p, 0, sizeof(*p));
     return MAELYS_DATALOG_STATUS_OK;
 }
+maelys_datalog_status_t maelys_datalog_result_explain_text_in(
+    maelys_datalog_result_t *result, maelys_datalog_explanation_kind_t kind,
+    const char *predicate, const maelys_datalog_public_value_t *terms, size_t arity,
+    void *storage, size_t storage_bytes, char *text, size_t capacity, size_t *required) {
+    if (!text || !required || !storage ||
+        capacity > UINTPTR_MAX - (uintptr_t)text ||
+        explanation_overlap(text, capacity, storage, storage_bytes))
+        return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
+    maelys_datalog_prepared_explanation_t *p = NULL;
+    maelys_datalog_status_t rc = maelys_datalog_result_prepare_explanation(
+        result, kind, predicate, terms, arity, storage, storage_bytes, &p);
+    if (rc) return rc;
+    rc = maelys_datalog_prepared_explanation_text_size(p, required);
+    if (!rc) rc = maelys_datalog_prepared_explanation_write_text(p, text, capacity);
+    maelys_datalog_status_t released = maelys_datalog_prepared_explanation_release(p);
+    return rc ? rc : released;
+}
+
 static maelys_datalog_status_t result_explain_text(const maelys_datalog_result_t *result,
     const char *predicate, const maelys_datalog_public_value_t *terms, size_t arity,
     char *text, size_t capacity, size_t *required, int why_false) {

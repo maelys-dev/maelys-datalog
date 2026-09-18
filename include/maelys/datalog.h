@@ -438,6 +438,44 @@ typedef enum {
     MAELYS_DATALOG_EXPLAIN_FALSE = 2
 } maelys_datalog_explanation_kind_t;
 
+/* Reference backend only: a per-kind upper bound for every result of this
+ * library's build profile, including the opaque handle and alignment padding.
+ * Available before solving; independent of request facts. Other backends
+ * (including copied/wrapped reference descriptors) return UNSUPPORTED: ABI 3
+ * provides only per-result requirements. This is caller-storage size, not a
+ * bound on text length or total stack usage. Alignment <= alignof(max_align_t).
+ * Errors leave outputs unchanged; NULL outputs/invalid kind -> INVALID_ARGUMENT,
+ * callback reentry -> INVALID_STATE. No allocation or result lease is acquired.
+ */
+MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_session_explanation_storage_bound(
+    const maelys_datalog_session_t *session, maelys_datalog_explanation_kind_t kind,
+    size_t *out_bytes, size_t *out_alignment);
+
+/* One-shot caller-owned explanation: prepare, measure, write, release. The
+ * reference makes no engine allocator calls; custom filters/backends retain
+ * their own contract. No explanation handle survives, even on write failure.
+ * Storage has the same exclusive/aligned lifetime and non-overlap requirements
+ * as prepare_explanation below. out_text and out_required must be non-NULL;
+ * there is no NULL-text size-query mode. Scalar outputs must not alias storage
+ * or text. Preparation may modify storage even on failure.
+ *
+ * Once preparation succeeds, out_required receives text length excluding NUL.
+ * A short TEXT buffer returns PAYLOAD_TOO_LARGE, with out_required populated
+ * and out_text[0] = NUL if capacity > 0 (no partial text). Insufficient STORAGE
+ * also returns PAYLOAD_TOO_LARGE, but leaves out_required unchanged: nothing
+ * has been prepared. Other pre-prepare errors leave output parameters unchanged.
+ * A retry prepares again. Retain a prepared handle instead when growing a text
+ * buffer without rebuilding, or writing repeatedly. Document status=truncated
+ * describes bounded exploration, NOT PAYLOAD_TOO_LARGE; a larger text buffer
+ * does not remove exploration limits. Backend write failures follow write_text's
+ * output contract below; their text must not be consumed.
+ */
+MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_result_explain_text_in(
+    maelys_datalog_result_t *result, maelys_datalog_explanation_kind_t kind,
+    const char *predicate, const maelys_datalog_public_value_t *terms, size_t arity,
+    void *storage, size_t storage_bytes, char *out_text, size_t capacity,
+    size_t *out_required);
+
 /* Prepare once, then measure/render the retained explanation without searching
  * again. These functions never re-solve. Unlike the allocating *_explain_*_text
  * convenience calls above, the reference implementation makes NO allocator

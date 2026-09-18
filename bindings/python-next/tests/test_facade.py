@@ -186,6 +186,8 @@ class FacadeTest(unittest.TestCase):
             "result_explain_true_text": "CFFI legacy direct-text alternative",
             "result_explain_false_text": "CFFI legacy direct-text alternative",
             "result_explanation_storage_requirements": "SolveResult explanation workspace",
+            "session_explanation_storage_bound": "Native only: reference session storage bound",
+            "result_explain_text_in": "Native only: caller-owned one-shot alternative",
             "result_prepare_explanation": "SolveResult.explain_true/explain_false once",
             "prepared_explanation_text_size": "SolveResult cached text size",
             "prepared_explanation_write_text": "SolveResult text copy",
