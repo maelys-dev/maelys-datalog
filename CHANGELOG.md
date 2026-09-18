@@ -46,6 +46,10 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
   `Predicate.idb_query(name, arity)` constructors mirror the C declaration roles.
   They preserve the general constructor, public flags, immutability and existing
   domain-registration validation; no native ABI or error-contract change.
+- Python Next explanation conveniences prepare native evidence once in aligned
+  CFFI-owned storage, then read its size, write text and release the result lease
+  even on output failure. Existing Python signatures and text formats remain
+  unchanged; building requires the matching prepared-explanation facade.
 - Caller-owned opaque prepared explanations: query aligned storage requirements,
   prepare Why-true/Why-false once, get the cached text size, render repeatedly,
   then release the result lease. The reference path includes Why-false scratch

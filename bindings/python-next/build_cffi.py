@@ -16,7 +16,10 @@ ROOT = Path(__file__).resolve().parents[2]
 PACKAGE = Path(__file__).resolve().parent / "maelys_datalog_next"
 
 
-def build(native_build_dir: Path) -> None:
+def build(native_build_dir: Path, engine_dir: Path = ROOT) -> None:
+    header = engine_dir / "include/maelys/datalog.h"
+    if not header.is_file():
+        raise SystemExit(f"Missing public facade header: {header}")
     suffix = ".dylib" if platform.system() == "Darwin" else ".so"
     library_name = "libmaelys_datalog_shared" + suffix
     library = native_build_dir / library_name
@@ -220,7 +223,7 @@ int maelys_datalog_result_explain_false_text(
     builder.set_source(
         "maelys_datalog_next._maelys_cffi",
         "#include <maelys/datalog.h>",
-        include_dirs=[str(ROOT / "include")],
+        include_dirs=[str(engine_dir / "include")],
         library_dirs=[str(PACKAGE)],
         libraries=["maelys_datalog_shared"],
         extra_link_args=[rpath],
@@ -236,10 +239,17 @@ int maelys_datalog_result_explain_false_text(
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
+        "--engine-dir",
+        type=Path,
+        default=ROOT,
+        help="Development only: engine source checkout providing the header matching --build-dir",
+    )
+    parser.add_argument(
         "--build-dir",
         default="build/python-next",
         help="CMake build directory containing libmaelys_datalog_shared",
     )
     args = parser.parse_args()
     selected = Path(args.build_dir)
-    build((selected if selected.is_absolute() else ROOT / selected).resolve())
+    engine_dir = args.engine_dir.resolve()
+    build((selected if selected.is_absolute() else engine_dir / selected).resolve(), engine_dir)

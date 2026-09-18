@@ -649,8 +649,8 @@ class SolveResult:
         return self._session.execution_fingerprint
 
     def explain_true(self, predicate: str, terms: Sequence[object]) -> str:
-        """Render retained Why-true evidence; never re-run the solver."""
-        return self._explain(lib.maelys_datalog_result_explain_true_text, predicate, terms)
+        """Prepare Why-true once, copy its text, then release its result lease."""
+        return self._explain(lib.MAELYS_DATALOG_EXPLAIN_TRUE, predicate, terms)
 
     def explain_false(self, predicate: str, terms: Sequence[object]) -> str:
         """Return bounded Why-false text, including its completeness status.
@@ -658,9 +658,9 @@ class SolveResult:
         Truncated output is not a proof of non-derivability. Unknown symbols
         and missing backend capabilities are native errors, not false answers.
         """
-        return self._explain(lib.maelys_datalog_result_explain_false_text, predicate, terms)
+        return self._explain(lib.MAELYS_DATALOG_EXPLAIN_FALSE, predicate, terms)
 
-    def _explain(self, operation, predicate: str, terms: Sequence[object]) -> str:
+    def _explain(self, kind, predicate: str, terms: Sequence[object]) -> str:
         self._require_open()
         name = _name(predicate, "predicate")
         normalized = _terms(terms)
@@ -668,14 +668,38 @@ class SolveResult:
         keepers: list[object] = []
         for index, term in enumerate(normalized):
             _fill_value(values[index], term, keepers)
-        required = ffi.new("size_t *")
-        _check(operation(self._result, name, values, len(normalized), ffi.NULL, 0, required),
-               "measure explanation")
-        capacity = int(required[0]) + 1  # Native required length excludes NUL.
-        text = ffi.new("char[]", capacity)
-        _check(operation(self._result, name, values, len(normalized), text, capacity, required),
-               "render explanation")
-        return bytes(ffi.buffer(text, required[0])).decode("utf-8")
+        storage_bytes = ffi.new("size_t *")
+        alignment = ffi.new("size_t *")
+        _check(lib.maelys_datalog_result_explanation_storage_requirements(
+            self._result, kind, storage_bytes, alignment), "size explanation workspace")
+        size, align = int(storage_bytes[0]), int(alignment[0])
+        if size <= 0 or align <= 0 or align & (align - 1):
+            raise RuntimeError("Native explanation workspace has invalid size or alignment")
+        # Keep the owning cdata alive until release; an aligned cast does not own
+        # this allocation. No native heap fallback is used by prepare/write.
+        storage_owner = ffi.new("unsigned char[]", size + align - 1)
+        address = int(ffi.cast("uintptr_t", storage_owner))
+        storage = ffi.cast("void *", (address + align - 1) & ~(align - 1))
+        prepared = ffi.new("maelys_datalog_prepared_explanation_t **")
+        try:
+            _check(lib.maelys_datalog_result_prepare_explanation(
+                self._result, kind, name, values, len(normalized),
+                storage, size, prepared), "prepare explanation")
+            required = ffi.new("size_t *")
+            _check(lib.maelys_datalog_prepared_explanation_text_size(prepared[0], required),
+                   "read explanation text size")
+            capacity = int(required[0]) + 1  # Native required length excludes NUL.
+            text = ffi.new("char[]", capacity)
+            _check(lib.maelys_datalog_prepared_explanation_write_text(prepared[0], text, capacity),
+                   "render prepared explanation")
+            return bytes(ffi.buffer(text, required[0])).decode("utf-8")
+        finally:
+            if prepared[0] != ffi.NULL:
+                _check(lib.maelys_datalog_prepared_explanation_release(prepared[0]),
+                       "release explanation")
+            # An explicit use/release also keeps the original allocation alive
+            # on Python implementations that can collect dead locals early.
+            ffi.release(storage_owner)
 
     def contains_fact(self, predicate: str, terms: Sequence[object]) -> bool:
         self._require_open()
