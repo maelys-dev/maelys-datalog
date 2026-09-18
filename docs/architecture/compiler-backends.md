@@ -187,6 +187,12 @@ Malformed frontend IR has a dedicated public load diagnostic code,
 `MAELYS_DATALOG_DIAG_MALFORMED_PROGRAM`. Existing diagnostic values are preserved;
 the code is appended. Parser syntax diagnostics keep their original codes.
 
+## Prochain ABI
+
+ABI 4: accept earlier descriptor `struct_size` values; appended absent fields are NULL.
+First optional field: `explanation_storage_bound`; add a named backend registry accessible through the facade.
+Group this debt with the next backend ABI break, never release it alone; not implemented in ABI 3.
+
 ## Budgets and shared filters
 
 `backend_charge` is cooperative. Charge before bounded units of work; work units

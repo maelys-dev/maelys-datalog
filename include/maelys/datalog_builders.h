@@ -3,6 +3,25 @@
 
 #include <maelys/datalog.h>
 
+/* Aligned byte storage, C11/C++17. bytes must be a positive integer constant:
+ * never a VLA, no allocation, no prepare/release hidden inside this declaration.
+ * For a static array, choose an application constant and check it against
+ * session_explanation_storage_bound at startup; the SDK supplies no compile-time
+ * bound. Alternatively reserve aligned space at startup inside memory already
+ * owned by the application, using that runtime bound (not this array macro).
+ * Storage is reusable after an explanation is released or explain_text_in ends.
+ * For static duration, declare the array at file scope.
+ */
+#if defined(__cplusplus)
+#define MAELYS_DATALOG_EXPLANATION_STORAGE(name, bytes) \
+    alignas(max_align_t) unsigned char name[(bytes)]; \
+    static_assert((bytes) > 0, "explanation storage needs a positive integer constant")
+#elif defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L
+#define MAELYS_DATALOG_EXPLANATION_STORAGE(name, bytes) \
+    _Alignas(max_align_t) unsigned char name[(bytes)]; \
+    _Static_assert((bytes) > 0, "explanation storage needs a positive integer constant")
+#endif
+
 /* Predicate declaration initializers (C and C++), not registration calls.
  * Use inside an array or to initialize one public_predicate_t. With constant
  * arguments these are valid static initializers; no allocation or copying is

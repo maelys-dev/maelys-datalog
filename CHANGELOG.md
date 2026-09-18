@@ -5,6 +5,27 @@ All notable changes to Maelys Datalog are documented in this file.
 The project follows [Semantic Versioning](https://semver.org/) and uses the
 format described by [Keep a Changelog](https://keepachangelog.com/).
 
+## [Unreleased]
+
+### Added
+
+- `maelys_datalog_result_explain_text_in` prepares, sizes, writes and releases
+  an explanation in caller-owned storage, with no engine allocation on the
+  reference path and no surviving handle, including after a write failure.
+  Insufficient preparation storage leaves `out_required` unchanged; a short
+  text buffer reports its required length excluding NUL and clears its first
+  byte when capacity is nonzero. Document `status=truncated` is distinct from
+  `PAYLOAD_TOO_LARGE`: increasing the text buffer does not lift search limits.
+  Retrying prepares again; retained prepared handles remain the repeated-write path.
+- `maelys_datalog_session_explanation_storage_bound` reports a per-kind upper
+  bound including handle/alignment overhead for every reference result of the
+  loaded profile. Non-reference backends return `UNSUPPORTED`; backend ABI 3
+  and consumer API v1 are unchanged.
+- `MAELYS_DATALOG_EXPLANATION_STORAGE(name, bytes)` declares max-aligned byte
+  storage in C11/C++17 with a positive integer constant capacity, never a VLA.
+  Static application budgets must be checked against the runtime session bound;
+  no compile-time SDK bound or hidden allocation is provided.
+
 ## 0.4.0 — 2026-09-18
 
 Two public contracts change in this release, both listed under Changed below:

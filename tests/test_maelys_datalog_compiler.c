@@ -79,6 +79,13 @@ static int frontend_and_backend_cross_product(void) {
         for (size_t j = 0; j < 2; ++j) {
             maelys_datalog_session_options_t o = options(backends[j]);
             OK(maelys_datalog_session_create_ex(policy, 0u, &o, &sessions[j]));
+            for (int k = 1; k <= 2; ++k) {
+                size_t bound = 123, alignment = 456;
+                maelys_datalog_status_t rc = maelys_datalog_session_explanation_storage_bound(
+                    sessions[j], (maelys_datalog_explanation_kind_t)k, &bound, &alignment);
+                if (j == 0) { CHECK(rc == MAELYS_DATALOG_STATUS_OK && bound > 0 && alignment > 0); }
+                else { CHECK(rc == MAELYS_DATALOG_STATUS_UNSUPPORTED && bound == 123 && alignment == 456); }
+            }
         }
         OK(maelys_datalog_policy_free(policy));
         for (size_t j = 0; j < 2; ++j) {

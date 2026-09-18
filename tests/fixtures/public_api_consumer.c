@@ -8,6 +8,9 @@
 #include <stdlib.h>
 #include <string.h>
 
+/* Application-owned static budget, checked against the library at startup. */
+MAELYS_DATALOG_EXPLANATION_STORAGE(explanation_storage, 1024u * 1024u);
+
 static int require_status(maelys_datalog_status_t status) {
     if (status == MAELYS_DATALOG_STATUS_OK) return 1;
     fprintf(stderr, "public API error: %s\n", maelys_datalog_status_name(status));
@@ -44,6 +47,12 @@ int main(void) {
     if (!require_status(maelys_datalog_session_config_set_required_capabilities(
             config, MAELYS_DATALOG_CAP_EXPLAIN_TRUE | MAELYS_DATALOG_CAP_EXPLAIN_FALSE))) return 19;
     if (!require_status(maelys_datalog_session_create_configured(policy, 0u, config, &session))) return 4;
+    for (int k = 1; k <= 2; ++k) {
+        size_t bound = 0, alignment = 0;
+        if (!require_status(maelys_datalog_session_explanation_storage_bound(session,
+                (maelys_datalog_explanation_kind_t)k, &bound, &alignment))) return 34;
+        if (bound > sizeof(explanation_storage) || (uintptr_t)explanation_storage % alignment) return 35;
+    }
     if (!require_status(maelys_datalog_session_config_free(config))) return 20;
     if (!require_status(maelys_datalog_session_execution_fingerprint(session, fingerprint)) ||
         strlen(fingerprint) != 64u) return 21;
@@ -126,6 +135,12 @@ int main(void) {
     if (!strstr(rendered, "document=why-true")) return 31;
     if (maelys_datalog_result_free(result) != MAELYS_DATALOG_STATUS_INVALID_STATE) return 32;
     if (!require_status(maelys_datalog_prepared_explanation_release(prepared))) return 33;
+    for (int k = 1; k <= 2; ++k) {
+        if (!require_status(maelys_datalog_result_explain_text_in(result,
+                (maelys_datalog_explanation_kind_t)k, "allow", fact.terms, 1u,
+                explanation_storage, sizeof(explanation_storage), rendered, sizeof(rendered), &required))) return 36;
+        if (strlen(rendered) != required) return 37;
+    }
     if (!require_status(maelys_datalog_result_free(result))) return 14;
     if (!require_status(maelys_datalog_session_free(session))) return 15;
     puts("public-api-consumer: PASS");
