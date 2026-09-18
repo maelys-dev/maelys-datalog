@@ -5,7 +5,12 @@ All notable changes to Maelys Datalog are documented in this file.
 The project follows [Semantic Versioning](https://semver.org/) and uses the
 format described by [Keep a Changelog](https://keepachangelog.com/).
 
-## [Unreleased]
+## 0.4.0 — 2026-09-18
+
+Two public contracts change in this release, both listed under Changed below:
+the backend ABI moves to 3, and Why-false text now starts with the shared
+`MAELYS-DATALOG-v2` envelope instead of `MAELYS-DATALOG-WHY-FALSE-v1`. The
+consumer C API stays at version 1 and only grows.
 
 ### Tooling
 
