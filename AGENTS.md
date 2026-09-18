@@ -98,6 +98,14 @@ when it has what they name.
   release's write token runs.
 <!-- maelys-release:end -->
 
+## Feature work isolation
+
+- Start each new feature on a change-named branch in its own worktree. A branch
+  names the history; a worktree supplies an independent checkout of that branch.
+- Inspect existing worktrees first. Do not reuse another task's dirty checkout,
+  modify `main` directly, or combine unrelated features on one branch. State the
+  base explicitly when a feature depends on an unmerged change.
+
 ## Memory-allocation contract
 
 - Prefer caller-owned, aligned storage and explicit bounded capacities for new

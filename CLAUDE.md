@@ -97,3 +97,10 @@ when it has what they name.
   public one anyone can open a pull request. `linux-x86_64` is also where the
   release's write token runs.
 <!-- maelys-release:end -->
+
+## Feature work isolation
+
+Follow the repository's `AGENTS.md` for feature and memory contracts. Start each
+new feature on a change-named branch in a dedicated worktree, inspect existing
+worktrees first, and do not modify `main` or another task's checkout. State any
+dependency on an unmerged branch explicitly.

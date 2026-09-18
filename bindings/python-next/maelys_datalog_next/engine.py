@@ -48,6 +48,11 @@ class Predicate:
         return cls(name, arity, PRED_EDB)
 
     @classmethod
+    def edb_query(cls, name: str, arity: int) -> Predicate:
+        """Declare application-supplied facts that callers may query."""
+        return cls(name, arity, PRED_EDB | PRED_QUERY)
+
+    @classmethod
     def idb(cls, name: str, arity: int) -> Predicate:
         """Declare derived facts (IDB), without exposing a query surface."""
         return cls(name, arity, PRED_IDB)
@@ -56,6 +61,16 @@ class Predicate:
     def idb_query(cls, name: str, arity: int) -> Predicate:
         """Declare derived facts that callers may query (IDB | QUERY)."""
         return cls(name, arity, PRED_IDB | PRED_QUERY)
+
+    @classmethod
+    def policy_fact(cls, name: str, arity: int) -> Predicate:
+        """Declare facts supplied by trusted policy source, not request inputs."""
+        return cls(name, arity, PRED_POLICY_FACT)
+
+    @classmethod
+    def policy_fact_query(cls, name: str, arity: int) -> Predicate:
+        """Declare policy-source facts that callers may query."""
+        return cls(name, arity, PRED_POLICY_FACT | PRED_QUERY)
 
 
 @dataclass(frozen=True)

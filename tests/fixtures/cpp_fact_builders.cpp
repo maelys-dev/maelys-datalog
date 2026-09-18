@@ -19,12 +19,20 @@ constexpr maelys_datalog_public_predicate_t cpp_declarations[] = {
     MAELYS_DATALOG_EDB("seed", 1),
     MAELYS_DATALOG_IDB("hidden", 1),
     MAELYS_DATALOG_IDB_QUERY("allow", 1),
+    MAELYS_DATALOG_EDB_QUERY("observed", 1),
+    MAELYS_DATALOG_POLICY_FACT("fixed", 1),
+    MAELYS_DATALOG_POLICY_FACT_QUERY("trusted", 1),
 };
 static_assert(cpp_declarations[0].arity == 1, "preserve arity");
 static_assert(cpp_declarations[0].flags == MAELYS_DATALOG_PREDICATE_EDB, "EDB");
 static_assert(cpp_declarations[1].flags == MAELYS_DATALOG_PREDICATE_IDB, "IDB");
 static_assert(cpp_declarations[2].flags ==
     (MAELYS_DATALOG_PREDICATE_IDB | MAELYS_DATALOG_PREDICATE_QUERY), "IDB query");
+static_assert(cpp_declarations[3].flags ==
+    (MAELYS_DATALOG_PREDICATE_EDB | MAELYS_DATALOG_PREDICATE_QUERY), "EDB query");
+static_assert(cpp_declarations[4].flags == MAELYS_DATALOG_PREDICATE_POLICY_FACT, "policy fact");
+static_assert(cpp_declarations[5].flags ==
+    (MAELYS_DATALOG_PREDICATE_POLICY_FACT | MAELYS_DATALOG_PREDICATE_QUERY), "policy fact query");
 maelys_datalog_status_t cpp_consumer(maelys_datalog_input_edb_t *edb) {
     maelys_datalog_public_value_t value = MAELYS_DATALOG_SYMBOL("alice");
     return maelys_datalog_input_edb_add_fact(edb, "user", &value, 1u, nullptr);

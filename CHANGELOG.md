@@ -18,6 +18,11 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 
+- Complete the C/C++ predicate initializer family with `EDB_QUERY`,
+  `POLICY_FACT` and `POLICY_FACT_QUERY` (all prefixed `MAELYS_DATALOG_`),
+  mirrored by Python-next `Predicate.edb_query()`, `policy_fact()` and
+  `policy_fact_query()`. Query permission never replaces the explicit origin.
+  No new native symbol, allocation, layout or ABI change.
 - C11 `MAELYS_DATALOG_FACT` and `MAELYS_DATALOG_ADD_FACTS` batch conveniences:
   checked term conversions, exactly-once argument evaluation, automatic
   temporary storage and one atomic native batch call. Range diagnostics
