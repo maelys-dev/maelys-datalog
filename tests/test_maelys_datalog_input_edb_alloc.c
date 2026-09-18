@@ -220,9 +220,6 @@ static void test_c11_batch_builders(void) {
     puts("C11 batch builders: arities 0..4, exactly-once arguments, copied strings, indexed diagnostics, atomic capacity/type rejection, no allocations");
 }
 
-int main(void) {
-    test_c11_fact_builders();
-    test_c11_batch_builders();
 static void check_regime(size_t text_capacity, int indexed) {
     union { max_align_t align; unsigned char bytes[8192]; } arena;
     unsigned char snapshot[sizeof(arena.bytes)];
@@ -296,6 +293,8 @@ static void check_rollback_prefixes(void) {
 }
 
 int main(void) {
+    test_c11_fact_builders();
+    test_c11_batch_builders();
     forbid_allocations = 1;
     assert(INPUT_INDEX_THRESHOLD == 16u);
     assert(input_index_slots(8u, 30u) == 0u); /* D=15 */
