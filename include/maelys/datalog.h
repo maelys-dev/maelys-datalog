@@ -297,6 +297,13 @@ MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_session_solve(
  * fact_capacity must be 1..MAX_EDB_FACTS; text_capacity is 0..INPUT_EDB_TEXT_BYTES.
  * Distinct predicate/symbol strings share one text arena, including one NUL per
  * distinct byte string. Repeated strings share storage across facts and roles.
+ * The returned storage size also includes a bounded string index and a batch
+ * rollback journal, sized from D = min(fact_capacity * (MAX_ARITY + 1),
+ * ceil(text_capacity / 2)); neither consumes text_capacity. The empty string
+ * costs one byte, all other distinct strings cost at least two bytes.
+ * The internal INPUT_INDEX_THRESHOLD is S=16 possible distinct strings:
+ * D<S uses linear arena/prefix scans with no index or journal; D>=S uses
+ * indexed lookup. This regime is fixed by init's capacities, not batch data.
  * Requirements outputs are unchanged on failure; init/create outputs become
  * NULL on failure. init requires the returned alignment and at least the
  * returned size. Caller storage must remain alive, unmoved and exclusively
@@ -304,7 +311,9 @@ MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_session_solve(
  * init never allocates. add_fact/add_facts/count/clear never allocate in either
  * storage mode. free releases memory only for a create-owned buffer; after free
  * the handle is invalid, but caller-owned storage can be reused/reinitialized.
- * clear resets usage without wiping bytes; it is not a secure erase.
+ * clear resets usage without wiping bytes; it is not a secure erase. Indexed
+ * buffers advance a generation in O(1), except on an 8-bit generation wrap,
+ * which clears the per-slot generation array. No worst-case O(1) guarantee.
  * create_with_capacity makes ONE allocation at construction, never grows it.
  * create reserves MAX_EDB_FACTS entries and INPUT_EDB_TEXT_BYTES of text. Query
  * both limits from the library. Text defaults to the native symbol-pool budget
@@ -313,8 +322,9 @@ MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_session_solve(
  *
  * add_fact/add_facts copy predicate names and symbol bytes before returning;
  * integer/boolean values are copied by value (nonzero booleans become 1).
- * Each append validates the entire batch before writing; failures consume no
- * entries or text bytes. Inputs must remain unchanged until return and must
+ * Each append validates the entire batch before publishing facts or text;
+ * failures restore the internal index and leave the entire arena unchanged.
+ * Inputs must remain unchanged until return and must
  * not alias EDB storage. Empty batches are OK. There is no heap fallback.
  * MAX_EDB_FACTS bounds entries BEFORE deduplication; MAX_STRING_BYTES bounds
  * each predicate name and symbol, excluding NUL; MAX_ARITY bounds each fact.

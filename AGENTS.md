@@ -111,8 +111,9 @@ when it has what they name.
 - Prefer caller-owned, aligned storage and explicit bounded capacities for new
   runtime APIs. Opaque handles do not justify mandatory heap allocation.
 - Do not add per-fact, per-term, or grow-on-demand allocations to input paths.
-  Validate a whole batch before mutation; capacity exhaustion must fail without
-  partial insertion or silent heap fallback.
+  Validate a whole batch before publishing facts or text; internal preflight
+  bookkeeping must roll back byte-for-byte on rejection. Capacity exhaustion
+  must fail without partial insertion or heap fallback.
 - An allocating convenience constructor must state its allocation count and
   capacity policy separately from the caller-owned path. Python/CFFI allocations
   must never be represented as a zero-allocation binding.
@@ -139,6 +140,7 @@ when it has what they name.
 - Hot-path changes require same-compiler/profile A/A noise floors and alternating
   A/B passes without concurrent builds. Allocation tests do not establish speed.
   Include sorted/reverse/duplicate/adversarial inputs and canonical IDs.
+  Test collisions, rollback and memory budgets before optimizing.
 - Treat release-time writes as a hot-path cost, not just allocations. Clang on
   Linux can eliminate a memset immediately before free as a dead store; adding
   a reusable branch can make the same bulk write live on both paths and cause a

@@ -88,16 +88,16 @@ int main(int argc, char **argv) {
     size_t capacity, text_capacity, bytes, alignment;
     assert(!maelys_datalog_limit_get(MAELYS_DATALOG_LIMIT_MAX_EDB_FACTS, &capacity));
     assert(!maelys_datalog_limit_get(MAELYS_DATALOG_LIMIT_INPUT_EDB_TEXT_BYTES, &text_capacity));
-    const size_t budgets[] = {128u, text_capacity, text_capacity};
-    const char *labels[] = {"128", "default", "maximum"};
-    for (size_t i = 0; i < 3; ++i) {
+    const size_t budgets[] = {16u, 128u, text_capacity, text_capacity};
+    const char *labels[] = {"16", "128", "default", "maximum"};
+    for (size_t i = 0; i < 4; ++i) {
         assert(!maelys_datalog_input_edb_storage_requirements(capacity, budgets[i], &bytes, &alignment));
         fprintf(stderr, "storage,%s,fact_capacity=%zu,text_capacity=%zu,bytes=%zu,alignment=%zu\n",
                 labels[i], capacity, budgets[i], bytes, alignment);
     }
     for (size_t i = 0; i < NAMES; ++i) snprintf(names[i], sizeof(names[i]), "v%04zu", i);
-    const size_t distinct[] = {64, 128, 256, 512, 1024};
-    for (size_t i = 0; i < 5; ++i) for (int unit = 0; unit < 2; ++unit) {
+    const size_t distinct[] = {16, 32, 64, 128, 256, 512, 1024};
+    for (size_t i = 0; i < sizeof(distinct) / sizeof(distinct[0]); ++i) for (int unit = 0; unit < 2; ++unit) {
         size_t n = distinct[i], facts = (n + 4u) / 5u;
         /* Five string positions/fact. Possible distinct count is rounded up
          * by at most four: a capacity-based threshold, not a default-size
@@ -105,6 +105,10 @@ int main(int argc, char **argv) {
         assert(facts <= capacity && n * 6u <= text_capacity);
         run_case("crossover", facts, n * 6u, facts, n, unit, 1);
     }
+    /* The SDK consumer's small text budget must remain represented. Clear is
+     * measured after every populated case, independently of append. */
+    run_case("small-text", capacity, 128u, 16u, 16u, 0, 1);
+    run_case("linear-text", capacity, 16u, 4u, 2u, 0, 1);
     const size_t sizes[] = {64, 256, capacity};
     for (size_t c = 0; c < 3; ++c) for (int mode = 0; mode < 2; ++mode)
     for (int unit = 0; unit < 2; ++unit)

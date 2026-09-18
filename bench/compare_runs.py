@@ -151,7 +151,7 @@ def report(directory):
           "in *.samples.csv. Setup, reporting and clear are outside append timing. "
           "Crossover cases pack five string positions per fact, so the capacity "
           "bound is at most four above the distinct-string count. Repetitive controls "
-          "retain default capacity. Budget summaries (128/default/maximum text bytes) "
+          "retain default capacity. Budget summaries (16/128/default/maximum text bytes) "
           "are in commands.log; default and maximum currently coincide.")
 
 

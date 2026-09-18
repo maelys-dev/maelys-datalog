@@ -16,6 +16,24 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
   noise floors, explicit indeterminate results and raw run artifacts. This adds
   no PR check and does not change runtime behavior.
 
+### Performance
+
+- Input EDB string lookup uses a preallocated index and bounded undo journal.
+  Rejected batches restore the complete arena, including colliding hash chains.
+  The storage-requirements query includes index and journal memory separately
+  from the text budget.
+- Input index entries use one 16-bit disjoint-range encoding for committed
+  offsets and pending ordinals, with a 16-bit before-image journal. Index/journal
+  sizing is bounded by both fact and text capacities, including the one-byte
+  empty string, rather than fact capacity alone. Default index/journal/generation
+  storage is 58 KiB SMALL / 116 KiB LARGE, below the original 84 / 168 KiB.
+- Input clear advances an 8-bit generation rather than zeroing the index;
+  generation wrap alone resets its byte-per-slot generation table. Rejected
+  batches preserve even stale index bytes after clear.
+- A capacity-only threshold of 16 possible distinct strings selects linear
+  lookup without an index/journal for tiny text budgets and indexed lookup
+  otherwise. Both regimes preserve atomic append and zero allocation.
+
 ### Added
 
 - Complete the C/C++ predicate initializer family with `EDB_QUERY`,

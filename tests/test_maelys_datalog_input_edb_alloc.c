@@ -220,9 +220,93 @@ static void test_c11_batch_builders(void) {
     puts("C11 batch builders: arities 0..4, exactly-once arguments, copied strings, indexed diagnostics, atomic capacity/type rejection, no allocations");
 }
 
+static void check_regime(size_t text_capacity, int indexed) {
+    union { max_align_t align; unsigned char bytes[8192]; } arena;
+    unsigned char snapshot[sizeof(arena.bytes)];
+    memset(arena.bytes, 0xA5, sizeof(arena.bytes));
+    maelys_datalog_input_edb_t *edb;
+    assert(!maelys_datalog_input_edb_init(arena.bytes, sizeof(arena.bytes), 8u, text_capacity, &edb));
+    assert(!!edb->index_slots == indexed);
+    assert(!!edb->index == indexed && !!edb->pending == indexed && !!edb->generations == indexed);
+    maelys_datalog_public_fact_t batch[2] = {0};
+    batch[0].predicate = "p"; batch[0].arity = 1u;
+    batch[0].terms[0].kind = MAELYS_DATALOG_VALUE_SYMBOL;
+    batch[0].terms[0].as.symbol = "p";
+    batch[1] = batch[0]; batch[1].predicate = "x";
+    for (size_t round = 0u; round < 3u; ++round) {
+        assert(!maelys_datalog_input_edb_add_facts(edb, batch, 2u, NULL));
+        assert(edb->text_used == 4u);
+        assert(edb->facts[0].predicate == edb->facts[1].terms[0].as.symbol);
+        maelys_datalog_public_fact_t bad[2] = {batch[0], batch[1]};
+        bad[0].predicate = "new";
+        bad[1].terms[0].as.symbol = NULL;
+        memcpy(snapshot, arena.bytes, sizeof(snapshot));
+        assert(maelys_datalog_input_edb_add_facts(edb, bad, 2u, NULL) != 0);
+        assert(!memcmp(snapshot, arena.bytes, sizeof(snapshot)));
+        bad[1].terms[0].as.symbol = "more-than-the-entire-linear-arena";
+        if (!indexed) {
+            assert(maelys_datalog_input_edb_add_facts(edb, bad, 2u, NULL) == MAELYS_DATALOG_STATUS_PAYLOAD_TOO_LARGE);
+            assert(!memcmp(snapshot, arena.bytes, sizeof(snapshot)));
+        }
+        assert(!maelys_datalog_input_edb_add_facts(edb, batch, 2u, NULL));
+        assert(edb->text_used == 4u && edb->count == 4u);
+        assert(!maelys_datalog_input_edb_clear(edb));
+    }
+    assert(!maelys_datalog_input_edb_free(edb));
+}
+
+static void check_rollback_prefixes(void) {
+    union { max_align_t align; unsigned char bytes[8192]; } arena;
+    unsigned char snapshot[sizeof(arena.bytes)];
+    memset(arena.bytes, 0xA5, sizeof(arena.bytes));
+    maelys_datalog_input_edb_t *edb;
+    assert(!maelys_datalog_input_edb_init(arena.bytes, sizeof(arena.bytes), 16u, 512u, &edb));
+    maelys_datalog_public_fact_t batch[8] = {0}, bad[8];
+    const char *names[] = {"a", "b", "c", "d", "e", "f", "g", "h"};
+    for (size_t i = 0; i < 8u; ++i) {
+        batch[i].predicate = names[i]; batch[i].arity = 4u;
+        batch[i].terms[0].kind = MAELYS_DATALOG_VALUE_SYMBOL;
+        batch[i].terms[0].as.symbol = names[(i + 1u) % 8u];
+        batch[i].terms[1].kind = MAELYS_DATALOG_VALUE_INTEGER;
+        batch[i].terms[1].as.integer = 17;
+        batch[i].terms[2].kind = MAELYS_DATALOG_VALUE_BOOLEAN;
+        batch[i].terms[2].as.boolean = 1;
+        batch[i].terms[3].kind = MAELYS_DATALOG_VALUE_SYMBOL;
+        batch[i].terms[3].as.symbol = "shared";
+    }
+    for (size_t round = 0; round < 3u; ++round) {
+        assert(!maelys_datalog_input_edb_add_fact(edb, "kept", NULL, 0u, NULL));
+        for (size_t i = 0; i < 8u; ++i) for (size_t field = 0; field < 6u; ++field) {
+            memcpy(bad, batch, sizeof(bad));
+            if (!field) bad[i].predicate = NULL;
+            else if (field == 5u) bad[i].arity = MAELYS_DATALOG_MAX_TERMS + 1u;
+            else bad[i].terms[field - 1u].kind = (maelys_datalog_value_kind_t)99;
+            memcpy(snapshot, arena.bytes, sizeof(snapshot));
+            assert(maelys_datalog_input_edb_add_facts(edb, bad, 8u, NULL) != 0);
+            assert(!memcmp(snapshot, arena.bytes, sizeof(snapshot)));
+        }
+        assert(!maelys_datalog_input_edb_add_facts(edb, batch, 8u, NULL));
+        assert(edb->facts[1].terms[0].as.symbol == edb->facts[2].predicate);
+        assert(!maelys_datalog_input_edb_clear(edb));
+    }
+    assert(!maelys_datalog_input_edb_free(edb));
+}
+
 int main(void) {
     test_c11_fact_builders();
     test_c11_batch_builders();
+    forbid_allocations = 1;
+    assert(INPUT_INDEX_THRESHOLD == 16u);
+    assert(input_index_slots(8u, 30u) == 0u); /* D=15 */
+    assert(input_index_slots(8u, 31u) != 0u); /* D=16, ceil for empty string */
+    check_regime(16u, 0);
+    check_regime(128u, 1);
+    check_rollback_prefixes();
+    assert(allocations == 0u && releases == 0u);
+    assert(input_distinct_bound(8u, 1u) == 1u);
+    assert(input_distinct_bound(8u, 3u) == 2u);
+    assert(input_distinct_bound(8u, 256u) == 40u);
+    assert(input_distinct_bound(MAELYS_DATALOG_MAX_EDB_FACTS, 128u) == 64u);
     union { max_align_t align; unsigned char bytes[8192]; } arena;
     unsigned char snapshot[sizeof(arena.bytes)];
     memset(arena.bytes, 0xA5, sizeof(arena.bytes));
@@ -242,6 +326,8 @@ int main(void) {
     assert(maelys_datalog_input_edb_init(NULL, bytes, 8u, 256u, &edb) != 0 && !edb);
     assert(memcmp(snapshot, arena.bytes, sizeof(snapshot)) == 0);
     assert(maelys_datalog_input_edb_init(arena.bytes, bytes, 8u, 256u, &edb) == 0);
+    assert(bytes == facts_offset() + 8u * sizeof(maelys_datalog_public_fact_t) +
+        3u * edb->index_slots + 2u * input_distinct_bound(8u, 256u) + 256u);
     char predicate[] = "seen", symbol[] = "alice";
     maelys_datalog_public_value_t value = {.kind = MAELYS_DATALOG_VALUE_SYMBOL, .as.symbol = symbol};
     assert(maelys_datalog_input_edb_add_fact(edb, predicate, &value, 1u, NULL) == 0);
@@ -297,6 +383,46 @@ int main(void) {
     assert(maelys_datalog_input_edb_free(edb) == 0);
     assert(allocations == 0u && releases == 0u);
 
+    /* The empty byte string costs one byte. With three text bytes, two
+     * distinct strings fit: a text_capacity/2 bound would undercount them.
+     * Predicate/domain semantics remain the solver's responsibility. */
+    assert(maelys_datalog_input_edb_init(arena.bytes, sizeof(arena.bytes), 2u, 1u, &edb) == 0);
+    assert(maelys_datalog_input_edb_add_fact(edb, "", NULL, 0u, NULL) == 0);
+    assert(edb->text_used == 1u);
+    assert(maelys_datalog_input_edb_free(edb) == 0);
+    assert(maelys_datalog_input_edb_init(arena.bytes, sizeof(arena.bytes), 2u, 3u, &edb) == 0);
+    value.as.symbol = "";
+    assert(maelys_datalog_input_edb_add_fact(edb, "p", &value, 1u, NULL) == 0);
+    assert(edb->text_used == 3u);
+    memcpy(snapshot, arena.bytes, sizeof(snapshot));
+    value.as.symbol = "q";
+    assert(maelys_datalog_input_edb_add_fact(edb, "p", &value, 1u, &diag) != 0);
+    assert(memcmp(snapshot, arena.bytes, sizeof(snapshot)) == 0);
+    assert(maelys_datalog_input_edb_free(edb) == 0);
+    assert(allocations == 0u && releases == 0u);
+    value.as.symbol = "x";
+
+    /* Exactly D=16 strings in 31 bytes: empty plus fifteen one-byte names.
+     * This is indexed, fills its entire D-entry journal and its text arena. */
+    assert(!maelys_datalog_input_edb_init(arena.bytes, sizeof(arena.bytes), 8u, 31u, &edb));
+    char tiny_names[16][2] = {{0}};
+    maelys_datalog_public_fact_t tiny_batch[4] = {0};
+    for (size_t i = 1u; i < 16u; ++i) tiny_names[i][0] = (char)('a' + i - 1u);
+    for (size_t i = 0u; i < 4u; ++i) {
+        tiny_batch[i].predicate = tiny_names[4u * i];
+        tiny_batch[i].arity = 3u;
+        for (size_t j = 0u; j < 3u; ++j) {
+            tiny_batch[i].terms[j].kind = MAELYS_DATALOG_VALUE_SYMBOL;
+            tiny_batch[i].terms[j].as.symbol = tiny_names[4u * i + j + 1u];
+        }
+    }
+    assert(!maelys_datalog_input_edb_add_facts(edb, tiny_batch, 4u, NULL));
+    assert(edb->text_used == 31u && edb->index_slots == 32u);
+    memcpy(snapshot, arena.bytes, sizeof(snapshot));
+    assert(maelys_datalog_input_edb_add_fact(edb, "z", NULL, 0u, NULL) != 0);
+    assert(!memcmp(snapshot, arena.bytes, sizeof(snapshot)));
+    assert(!maelys_datalog_input_edb_free(edb));
+
     /* Cross-fact, cross-role and intra-batch strings share one copy. Repeated
      * strings consume no bytes even when the pool is already exactly full. */
     assert(maelys_datalog_input_edb_init(arena.bytes, sizeof(arena.bytes), 8u, 4u, &edb) == 0);
@@ -309,7 +435,98 @@ int main(void) {
     assert(edb->text_used == 4u);
     assert(maelys_datalog_input_edb_free(edb) == 0);
 
+    /* Deliberate hash collisions, including rollback in the middle of an
+     * existing probe chain. Every arena byte (index and journal included)
+     * must be restored, and surviving entries must remain discoverable. */
+    assert(maelys_datalog_input_edb_init(arena.bytes, sizeof(arena.bytes), 8u, 256u, &edb) == 0);
+    char colliding[7][24];
+    size_t found = 0u;
+    for (size_t candidate = 0; found < 7u; ++candidate) {
+        char name[24]; snprintf(name, sizeof(name), "collision-%zu", candidate);
+        /* Empty index: text_slot returns the initial bucket. */
+        if (text_slot(edb, name, NULL) == edb->index_slots - 1u)
+            strcpy(colliding[found++], name);
+    }
+    value.as.symbol = colliding[1];
+    assert(maelys_datalog_input_edb_add_fact(edb, colliding[0], &value, 1u, NULL) == 0);
+    batch[0].predicate = colliding[2]; batch[0].arity = 1;
+    batch[0].terms[0] = value; batch[0].terms[0].as.symbol = colliding[3];
+    batch[1] = batch[0]; batch[1].predicate = colliding[4];
+    batch[1].terms[0].as.symbol = NULL;
+    memcpy(snapshot, arena.bytes, sizeof(snapshot));
+    assert(maelys_datalog_input_edb_add_facts(edb, batch, 2u, &diag) != 0);
+    assert(memcmp(snapshot, arena.bytes, sizeof(snapshot)) == 0);
+    batch[1].arity = MAELYS_DATALOG_MAX_TERMS + 1u;
+    assert(maelys_datalog_input_edb_add_facts(edb, batch, 2u, &diag) != 0);
+    assert(memcmp(snapshot, arena.bytes, sizeof(snapshot)) == 0);
+    batch[1].arity = 1u; batch[1].terms[0].as.symbol = colliding[5];
+    assert(maelys_datalog_input_edb_add_facts(edb, batch, 2u, &diag) == 0);
+    assert(!strcmp(edb->facts[0].predicate, colliding[0]));
+    assert(!strcmp(edb->facts[1].predicate, colliding[2]));
+    assert(!strcmp(edb->facts[2].terms[0].as.symbol, colliding[5]));
+    value.as.symbol = colliding[1];
+    assert(maelys_datalog_input_edb_add_fact(edb, colliding[0], &value, 1u, NULL) == 0);
+    assert(edb->facts[0].predicate == edb->facts[3].predicate);
+    assert(edb->facts[0].terms[0].as.symbol == edb->facts[3].terms[0].as.symbol);
+    /* Stale colliding slots and a real generation wrap: rejected batches must
+     * restore even obsolete metadata, not just the logical contents. */
+    for (size_t round = 0; round < 256u; ++round) {
+        uint8_t previous = edb->generation;
+        assert(maelys_datalog_input_edb_clear(edb) == 0);
+        assert(edb->generation == (previous == UINT8_MAX ? 1u : previous + 1u));
+        batch[1].terms[0].as.symbol = NULL;
+        memcpy(snapshot, arena.bytes, sizeof(snapshot));
+        assert(maelys_datalog_input_edb_add_facts(edb, batch, 2u, &diag) != 0);
+        assert(memcmp(snapshot, arena.bytes, sizeof(snapshot)) == 0);
+        batch[1].terms[0].as.symbol = colliding[5];
+        assert(maelys_datalog_input_edb_add_facts(edb, batch, 2u, NULL) == 0);
+        assert(edb->count == 2u && !strcmp(edb->facts[0].predicate, colliding[2]));
+    }
+    assert(maelys_datalog_input_edb_free(edb) == 0);
+
+    /* The committed offset must use all 16 bits, not a 15-bit payload with
+     * a pending flag. Keep the allocator disabled even at the profile limit. */
+    static union { max_align_t align; unsigned char bytes[512000]; } full;
+    assert(maelys_datalog_input_edb_init(full.bytes, sizeof(full.bytes),
+        MAELYS_DATALOG_MAX_EDB_FACTS, MAELYS_DATALOG_INPUT_EDB_TEXT_BYTES, &edb) == 0);
+    size_t default_bound = input_distinct_bound(MAELYS_DATALOG_MAX_EDB_FACTS, MAELYS_DATALOG_INPUT_EDB_TEXT_BYTES);
+    size_t table_bytes = 3u * edb->index_slots + 2u * default_bound;
+    assert(table_bytes == (MAELYS_DATALOG_MAX_EDB_FACTS == 1024u ? 58u : 116u) * 1024u);
+    assert(table_bytes < (edb->index_slots + MAELYS_DATALOG_MAX_EDB_FACTS * INPUT_STRINGS_PER_FACT) * sizeof(uint32_t));
+    for (size_t i = 0; i < 800u; ++i) {
+        char name[48];
+        snprintf(name, sizeof(name), "symbol-%04zu-abcdefghijklmnopqrstuvwxyz-012345678", i);
+        assert(maelys_datalog_input_edb_add_fact(edb, name, NULL, 0u, NULL) == 0);
+    }
+    assert(edb->text_used > 32768u);
+    const char *last = edb->facts[799].predicate;
+    char last_copy[48]; strcpy(last_copy, last);
+    assert(maelys_datalog_input_edb_add_fact(edb, last_copy, NULL, 0u, NULL) == 0);
+    assert(edb->facts[800].predicate == last);
+    assert(!maelys_datalog_input_edb_clear(edb));
+    /* Highest pending ordinal in a maximum-sized batch, not merely a small
+     * ordinal in a default-sized buffer. A failed preflight must undo stale
+     * committed entries before the successful retry. */
+    static maelys_datalog_public_fact_t maximum[MAELYS_DATALOG_MAX_EDB_FACTS];
+    for (size_t i = 0u; i < MAELYS_DATALOG_MAX_EDB_FACTS; ++i) maximum[i].predicate = "p";
+    maelys_datalog_public_fact_t *tail = &maximum[MAELYS_DATALOG_MAX_EDB_FACTS - 1u];
+    tail->arity = MAELYS_DATALOG_MAX_TERMS;
+    for (size_t j = 0u; j < tail->arity; ++j) tail->terms[j].kind = MAELYS_DATALOG_VALUE_INTEGER;
+    tail->terms[tail->arity - 1u].kind = MAELYS_DATALOG_VALUE_SYMBOL;
+    tail->terms[tail->arity - 1u].as.symbol = NULL;
+    static unsigned char full_snapshot[sizeof(full.bytes)];
+    memcpy(full_snapshot, full.bytes, sizeof(full.bytes));
+    assert(maelys_datalog_input_edb_add_facts(edb, maximum, MAELYS_DATALOG_MAX_EDB_FACTS, NULL) != 0);
+    assert(!memcmp(full_snapshot, full.bytes, sizeof(full.bytes)));
+    tail->terms[tail->arity - 1u].as.symbol = "last-ordinal";
+    assert(!maelys_datalog_input_edb_add_facts(edb, maximum, MAELYS_DATALOG_MAX_EDB_FACTS, NULL));
+    assert(!strcmp(edb->facts[MAELYS_DATALOG_MAX_EDB_FACTS - 1u].terms[tail->arity - 1u].as.symbol, "last-ordinal"));
+    assert(maelys_datalog_input_edb_free(edb) == 0);
+    assert(allocations == 0u && releases == 0u);
+
     /* One construction allocation, none during append/clear, one release. */
+    batch[0].predicate = "p"; batch[0].arity = 1; value.as.symbol = "x";
+    batch[0].terms[0] = value; batch[1] = batch[0];
     assert(maelys_datalog_input_edb_create_with_capacity(2u, 32u, &edb) == MAELYS_DATALOG_STATUS_INTERNAL && !edb);
     assert(allocations == 1u);
     forbid_allocations = 0;
