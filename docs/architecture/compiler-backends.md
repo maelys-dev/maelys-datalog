@@ -168,7 +168,8 @@ Backend capabilities are promises, not sandbox-enforced proofs.
 `maelys_datalog_result_explain_false_text` has the same read-only contract. The
 reference uses the caller-owned variant of the structured Why-false explorer with
 128 candidate rules, 4,096 substitutions per rule, depth 10 and 16 diagnostics.
-Its separate `MAELYS-DATALOG-WHY-FALSE-v1` text is part of the public contract.
+Its `MAELYS-DATALOG-v2` text with the second line `document=why-false` is
+part of the public contract, sharing the envelope of `document=why-true`.
 It includes query, status, named limit hits (`none` or a comma-separated subset
 of `candidate-rules`, `substitutions`, `depth`, `diagnostics`, `filter-cost`),
 counters, substitutions, supports and obstacles (including filter semantic

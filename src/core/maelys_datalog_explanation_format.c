@@ -687,7 +687,7 @@ static void wr_why_false_limits(fmt_writer_t *w, unsigned hits) {
 }
 static void emit_why_false_text(const maelys_datalog_ruleset_t *r,
                                 const maelys_datalog_why_false_explanation_t *e, fmt_writer_t *w) {
-    WR_LIT(w, "MAELYS-DATALOG-WHY-FALSE-v1\nstatus=");
+    WR_LIT(w, "MAELYS-DATALOG-v2\ndocument=why-false\nstatus=");
     if (e->status == MAELYS_DATALOG_WHY_FALSE_STATUS_NOT_APPLICABLE)
         WR_LIT(w, "not-applicable");
     else if (e->status == MAELYS_DATALOG_WHY_FALSE_STATUS_TRUNCATED)

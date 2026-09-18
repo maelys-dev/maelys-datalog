@@ -394,8 +394,10 @@ MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_result_explain_true_te
     char *out_text,
     size_t out_capacity,
     size_t *out_required);
-/* Why-false uses the same buffer contract. The MAELYS-DATALOG-WHY-FALSE-v1
- * text is part of this contract: a status line (complete, truncated, or
+/* Why-false uses the same buffer contract. Text starts with MAELYS-DATALOG-v2
+ * then document=why-false on its own line. This serialization contract replaces
+ * the historical MAELYS-DATALOG-WHY-FALSE-v1 header without a C ABI change.
+ * It continues with a status line (complete, truncated, or
  * not-applicable when the fact is present), named limit hits (`none` or a
  * comma-separated subset of candidate-rules, substitutions, depth, diagnostics,
  * filter-cost), counters, then per-diagnostic bindings, supports and one

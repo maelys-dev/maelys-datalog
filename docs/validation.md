@@ -34,6 +34,16 @@ check the same 21 transcript goldens, two filter validations and four diagnostic
 ordering checks. The benchmark's
 CPU time is descriptive, not a throughput guarantee.
 
+For the Why-false envelope migration, the pipeline asserts the exact new header
+then projects only that header to the historical one before hashing. Unchanged
+goldens therefore still detect any changed authority/program/execution
+fingerprint or payload byte. `test_maelys_datalog_language_spec` separately
+compares all three Why-false states byte-for-byte and sweeps every undersized
+buffer. Its shared-envelope test compares both formatters' version lines and
+checks their distinct `document=why-true` / `document=why-false` discriminators.
+Python-next tests the discriminator for complete, truncated and
+not-applicable output from actual solves, not constructed formatter fixtures.
+
 The bounded-sort test compares canonical values with a libc reference for
 ordered, reverse, equal, duplicate-heavy, organ-pipe, sawtooth and random input,
 including overlapping ordered suffixes, profile capacity and an explicitly

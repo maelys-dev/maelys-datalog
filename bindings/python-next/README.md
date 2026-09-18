@@ -390,8 +390,13 @@ Neither call reruns the solver. Native C callers can instead reuse their own
 aligned arena and perform multiple writes from one prepared handle. Python keeps
 that lower-level lifecycle internal, so existing callers need no extra `close()`.
 
-Why-false retains its
-`MAELYS-DATALOG-WHY-FALSE-v1` status: `complete`, `truncated`, or `not-applicable`.
+Both documents start with `MAELYS-DATALOG-v2`, followed by `document=why-true`
+or `document=why-false`. Dispatch readers on the second line; the first line
+alone no longer means Why-true. Why-false keeps its statuses: `complete`,
+`truncated`, or `not-applicable`. This replaces its historical
+`MAELYS-DATALOG-WHY-FALSE-v1` header; there is no compatibility-output switch.
+Python returns the native text and does not parse the old header. Why-true
+output is unchanged and may also be truncated.
 Truncated output is not proof of non-derivability. The reference bounds are 128
 candidate rules, 4,096 substitutions per rule, depth 10 and 16 diagnostics;
 filter work is bounded too. Limits are not caller-tunable. Text may contain

@@ -60,7 +60,7 @@ maelys_result_t maelys_datalog_format_explanation_text(
     size_t out_capacity,
     size_t *out_required);
 
-/* MAELYS-DATALOG-WHY-FALSE-v1 text, part of the public explain-false contract
+/* MAELYS-DATALOG-v2 / document=why-false text, part of the public explain-false contract
  * documented in maelys/datalog.h. Same atomic buffer contract as above;
  * presentation only, preserving bounded diagnostic status and named limits. */
 maelys_result_t maelys_datalog_format_why_false_text(
