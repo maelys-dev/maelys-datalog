@@ -70,7 +70,7 @@ class PreparedExplanationTest(unittest.TestCase):
         outputs = []
         for method, person, header in [
             (result.explain_true, "alice", "MAELYS-DATALOG-v2\ndocument=why-true"),
-            (result.explain_false, "mallory", "MAELYS-DATALOG-WHY-FALSE-v1"),
+            (result.explain_false, "mallory", "MAELYS-DATALOG-v2\ndocument=why-false"),
         ]:
             spy = NativeSpy()
             with patch.object(binding, "lib", spy):
