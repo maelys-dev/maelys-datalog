@@ -39,15 +39,23 @@ mkdir "$workspace/A" "$workspace/B"
 git -C "$repo" archive "$base" | tar -x -C "$workspace/A"
 git -C "$repo" archive "$candidate" | tar -x -C "$workspace/B"
 python3 "$driver/bench/compare_runs.py" metadata "$output" "$base" "$candidate" "$repo"
+explanations=0
+if grep -q 'maelys_datalog_session_config_set_explanation_workspace(' "$workspace/B/include/maelys/datalog.h"; then
+  explanations=1
+fi
+printf '%s\n' "$explanations" > "$output/explanations-enabled.txt"
 unset MAKEFLAGS MFLAGS
 # No build runs beside a measurement. Each engine object is compiled once
 # per revision/profile, reused by the solver and public-input harnesses.
 for role in A B; do
   revision=$base
   if test "$role" = B; then revision=$candidate; fi
+  build_explanations=0
+  if test "$role" = B; then build_explanations=$explanations; fi
   for profile in SMALL LARGE; do
     make -j1 -C "$workspace/$role" -f "$driver/bench/Makefile.compare" \
-      DRIVER="$driver" OUT="$workspace/bin-$role-$profile" REVISION="$revision" PROFILE="$profile"
+      DRIVER="$driver" OUT="$workspace/bin-$role-$profile" REVISION="$revision" PROFILE="$profile" \
+      EXPLANATIONS="$build_explanations"
   done
 done
 run_pass() {
@@ -57,16 +65,30 @@ run_pass() {
   "$workspace/bin-$role-$profile/input" \
     "$output/$profile-input-$name.csv" "$output/$profile-input-$name.samples.csv"
 }
+run_explanations() {
+  local profile=$1 mode=$2 name=$3
+  if test "$explanations" = 1; then
+    "$workspace/bin-B-$profile/explanations" "$mode" \
+      "$output/$profile-explanations-$name.csv" "$output/$profile-explanations-$name.samples.csv"
+  fi
+}
 # Finish BOTH A/A pairs for BOTH profiles before the first A/B measurement.
 for profile in SMALL LARGE; do
   for pass in 1 2 3 4; do run_pass "$profile" A "aa-$pass"; done
+  for pass in 1 2 3 4; do run_explanations "$profile" legacy "aa-$pass"; done
 done
 for profile in SMALL LARGE; do
   for pass in 1 2; do
     run_pass "$profile" A "ab-A$pass"
     run_pass "$profile" B "ab-B$pass"
   done
+  for pass in 1 2; do
+    run_explanations "$profile" legacy "ab-A$pass"
+    run_explanations "$profile" workspace "ab-B$pass"
+  done
 done
 python3 "$driver/bench/compare_runs.py" "$output" > "$output/comparison.incomplete.md"
 mv "$output/comparison.incomplete.md" "$output/comparison.md"
+python3 "$driver/bench/compare_explanations.py" "$output" > "$output/explanations.incomplete.md"
+mv "$output/explanations.incomplete.md" "$output/explanations.md"
 # Deliberately no git writes, PR comments, release, or bench/results files.

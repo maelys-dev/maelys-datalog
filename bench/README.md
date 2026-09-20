@@ -40,7 +40,8 @@ as a workaround. See [GitHub's dispatch contract](https://docs.github.com/en/act
 
 1. Archive base/head; retain the exact compiler, flags, SHA and harness hashes.
 2. Compile each revision/profile once with clang `-O2`, SMALL and LARGE.
-   Each engine object is shared between solver and input executables.
+   Each engine object is shared between solver, input and (when available on
+   the candidate) explanation executables.
    All four sequential builds finish before any measurement begins.
 3. For each profile, run A1/A2 and A3/A4: two independent A/A pairs.
    Finish all A/A measurements in both profiles before starting A/B.
@@ -90,6 +91,8 @@ The run uploads `bench-comparison-RUN_ID-ATTEMPT`, retained for 30 days:
 
 - solver CSV/JSON for all eight passes per profile;
 - input summary CSV and `*.samples.csv` with all measured samples;
+- explanation summary/raw CSV for eight passes per profile when the candidate
+  has the session workspace API, plus `explanations.md` (an explicit skip otherwise);
 - `comparison.md`, `metadata.json` and `commands.log`.
 
 Partial artifacts are retained on failure, but an incomplete data set cannot
@@ -113,6 +116,39 @@ The orchestration test uses synthetic executables to verify exactly four
 sequential builds, all A/A before A/B, A/B/A/B ordering and refusal of malformed
 refs or existing output. Synthetic timings and local Docker smoke runs are not
 hosted-runner performance evidence.
+
+### Session explanation workspace (candidate only)
+
+When `head` exposes `session_config_set_explanation_workspace`, the same run
+also compares the **same candidate binary** with two session configurations:
+A leaves explanations unconfigured; B reserves TRUE and FALSE at creation.
+This is separate from the solver/input comparison of two revisions. Both
+profiles compile before any timing, sharing the candidate engine objects.
+Two legacy/legacy A/A pairs in each profile finish before any A/B measurement;
+then legacy/workspace/legacy/workspace run sequentially with the same compiler
+and flags. The report uses the same per-metric floors as the revision report.
+
+The fixed six-case matrix covers Why-true and Why-false over a small policy
+with negation, each with a fresh result, alternating symbol queries, and a
+repeated query. Fresh-result solve/release is outside timing and clears the
+cache. Alternation forces misses; repeated queries measure a cache warmed by
+50 iterations. Each of the 301 samples times **measure + write** through the
+existing direct-text functions, including their status checks and clock
+overhead. Output buffers are preallocated. Compilation, session construction,
+solve, result release, output comparison and reporting are outside timing.
+
+Before timing, both modes must produce byte-identical, complete texts with the
+expected truth values. Every timed output is checked against that legacy oracle
+after timing. Text digests, workspace bytes, mode, profile, revision, compiler
+and flags travel with every summary row; disagreement or an incomplete matrix
+refuses a final report. `workspace_bytes` is only the extra configured storage
+(maximum of TRUE/FALSE bounds), not total memory or the legacy path's temporary
+allocations. This probe neither measures end-to-end latency nor establishes an
+allocation guarantee, and does not generalize to large/truncated explanations.
+
+Raw samples, summaries and `explanations.md` stay in the workflow artifact.
+Use the existing workflow with `head=v0.5.0` (or a later revision) to exercise
+this path; older heads retain solver/input coverage and an explicit skip.
 
 ## Historical single-revision harness
 
