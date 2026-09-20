@@ -189,25 +189,39 @@ the code is appended. Parser syntax diagnostics keep their original codes.
 
 ## Prochain ABI
 
+0.5.0 was released on 2026-09-20 with opt-in session explanation workspaces;
+consumer API v1 and backend ABI 3 remain unchanged.
+
 Backend ABI 4 ships as one break, together with the first non-reference backend
 (the incremental one), never alone. Its content, decided on 2026-09-20:
 
-- The descriptor becomes append-only: the registry accepts the `struct_size` of
-  ABI 4 or of an earlier known ABI, and reads absent trailing fields as `NULL`.
+- The descriptor becomes append-only starting at ABI 4: the registry accepts
+  known ABI 4 prefixes and reads absent trailing fields as `NULL`. Earlier ABI
+  layouts require explicit adapters or rejection, never a blind prefix copy.
+  Registration must define descriptor-array stride and normalize bounded reads
+  into the host layout; `struct_size` alone does not make array traversal safe.
   After that, an optional callback never forces a renumbering; only a change of
   meaning does.
 - `explanation_storage_bound(state, kind, out_bytes, out_alignment)`, optional:
   the per-kind upper bound that 0.4.1 gives for the reference only.
 - `solve_delta(state, added, removed, ...)`, optional, with an `INCREMENTAL`
-  capability bit: a backend that retains state between solves says so.
+  capability bit: a backend that retains state between solves says so. Before
+  freezing the signature, specify initialization, duplicate/conflicting updates,
+  atomic commit and failure recovery, including capacity and work exhaustion.
 - Capability bits for `AGGREGATES` (planned language feature) and a `WORK_LIMIT`
   actually honoured by the reference.
 - A named backend registry reachable from the opaque facade, so Python-next and
-  the WASM binding can select a backend by name.
+  the WASM binding can select a backend by name. C context registration and
+  selection already exist; the remaining work is coherent binding exposure.
 
-Invariants that do not move: one live result per session, symbol-ID stability,
-the reference identity `maelys.reference.v1`, results as snapshots. Not
-implemented in ABI 3.
+Invariants that do not move: one live result per session, canonical public IDs
+for the same input and stable IDs during a result's lifetime, the reference
+identity `maelys.reference.v1`, results as snapshots. IDs may change between
+solves; persistent backend state needs its own bounded symbol identity and a
+mapping to each published snapshot, without retaining borrowed input strings.
+These ABI 4 additions are not implemented in ABI 3. The aggregate capability
+also requires a specified compiled-program representation and compatible
+accessors; a capability bit alone does not convey aggregate syntax.
 
 ## Budgets and shared filters
 
