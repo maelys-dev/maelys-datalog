@@ -189,9 +189,25 @@ the code is appended. Parser syntax diagnostics keep their original codes.
 
 ## Prochain ABI
 
-ABI 4: accept earlier descriptor `struct_size` values; appended absent fields are NULL.
-First optional field: `explanation_storage_bound`; add a named backend registry accessible through the facade.
-Group this debt with the next backend ABI break, never release it alone; not implemented in ABI 3.
+Backend ABI 4 ships as one break, together with the first non-reference backend
+(the incremental one), never alone. Its content, decided on 2026-09-20:
+
+- The descriptor becomes append-only: the registry accepts the `struct_size` of
+  ABI 4 or of an earlier known ABI, and reads absent trailing fields as `NULL`.
+  After that, an optional callback never forces a renumbering; only a change of
+  meaning does.
+- `explanation_storage_bound(state, kind, out_bytes, out_alignment)`, optional:
+  the per-kind upper bound that 0.4.1 gives for the reference only.
+- `solve_delta(state, added, removed, ...)`, optional, with an `INCREMENTAL`
+  capability bit: a backend that retains state between solves says so.
+- Capability bits for `AGGREGATES` (planned language feature) and a `WORK_LIMIT`
+  actually honoured by the reference.
+- A named backend registry reachable from the opaque facade, so Python-next and
+  the WASM binding can select a backend by name.
+
+Invariants that do not move: one live result per session, symbol-ID stability,
+the reference identity `maelys.reference.v1`, results as snapshots. Not
+implemented in ABI 3.
 
 ## Budgets and shared filters
 
