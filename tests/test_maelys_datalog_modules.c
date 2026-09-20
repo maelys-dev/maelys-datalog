@@ -73,6 +73,26 @@ static maelys_datalog_status_t error_evaluate(const unsigned char *v, size_t vn,
     *out = 0;
     return MAELYS_DATALOG_STATUS_INTERNAL;
 }
+static maelys_datalog_status_t storage_validate(const unsigned char *p, size_t n) {
+    (void)p;
+    (void)n;
+    return MAELYS_DATALOG_STATUS_STORAGE_TOO_SMALL;
+}
+static maelys_datalog_status_t storage_cost(size_t v, size_t p, size_t *out) {
+    (void)v;
+    (void)p;
+    (void)out;
+    return MAELYS_DATALOG_STATUS_STORAGE_TOO_SMALL;
+}
+static maelys_datalog_status_t storage_evaluate(const unsigned char *v, size_t vn,
+                                                const unsigned char *p, size_t pn, int *out) {
+    (void)v;
+    (void)vn;
+    (void)p;
+    (void)pn;
+    (void)out;
+    return MAELYS_DATALOG_STATUS_STORAGE_TOO_SMALL;
+}
 static maelys_datalog_status_t must_not_run(const unsigned char *v, size_t vn,
                                             const unsigned char *p, size_t pn, int *out) {
     (void)v;
@@ -251,6 +271,23 @@ static int boolean(void) {
 static int failure(void) {
     return failing_filter(unit_cost, error_evaluate, MAELYS_DATALOG_STATUS_INTERNAL);
 }
+static int filter_storage_validation(void) {
+    maelys_datalog_filter_module_t m = filter_module();
+    m.validate_pattern = storage_validate;
+    OK(maelys_datalog_register_filter_module(&m));
+    OK(domain());
+    maelys_datalog_policy_t *policy = NULL;
+    CHECK(load("allow(X) :- ref(X), custom(X, \"x\").", &policy) ==
+          MAELYS_DATALOG_STATUS_STORAGE_TOO_SMALL);
+    CHECK(policy == NULL);
+    return 0;
+}
+static int filter_storage_cost(void) {
+    return failing_filter(storage_cost, must_not_run, MAELYS_DATALOG_STATUS_STORAGE_TOO_SMALL);
+}
+static int filter_storage_evaluation(void) {
+    return failing_filter(unit_cost, storage_evaluate, MAELYS_DATALOG_STATUS_STORAGE_TOO_SMALL);
+}
 
 static maelys_datalog_status_t choose_last(const maelys_datalog_join_candidate_t *c, size_t n,
                                            size_t *out) {
@@ -277,6 +314,13 @@ static maelys_datalog_status_t choose_error(const maelys_datalog_join_candidate_
     (void)n;
     (void)out;
     return MAELYS_DATALOG_STATUS_INTERNAL;
+}
+static maelys_datalog_status_t choose_storage_error(const maelys_datalog_join_candidate_t *c,
+                                                  size_t n, size_t *out) {
+    (void)c;
+    (void)n;
+    (void)out;
+    return MAELYS_DATALOG_STATUS_STORAGE_TOO_SMALL;
 }
 static int planner_case(maelys_datalog_join_choose_fn choose, maelys_datalog_status_t expected) {
     const maelys_datalog_planner_module_t module = {1u, sizeof(maelys_datalog_planner_module_t),
@@ -319,6 +363,9 @@ static int planner_invalid(void) {
 }
 static int planner_error(void) {
     return planner_case(choose_error, MAELYS_DATALOG_STATUS_INTERNAL);
+}
+static int planner_storage_error(void) {
+    return planner_case(choose_storage_error, MAELYS_DATALOG_STATUS_STORAGE_TOO_SMALL);
 }
 
 static int hash_child(int variant, int fd) {
@@ -420,9 +467,13 @@ int main(void) {
         {"zero_cost_rejected", zero_budget},
         {"invalid_boolean_rejected", boolean},
         {"error_is_not_nonmatch", failure},
+        {"filter_storage_validation_propagation", filter_storage_validation},
+        {"filter_storage_cost_propagation", filter_storage_cost},
+        {"filter_storage_evaluation_propagation", filter_storage_evaluation},
         {"planner_binding_safety", planner_valid},
         {"planner_invalid_choice", planner_invalid},
         {"planner_error_propagation", planner_error},
+        {"planner_storage_error_propagation", planner_storage_error},
         {"semantic_fingerprints_across_processes", fingerprints},
     };
     int failed = 0;

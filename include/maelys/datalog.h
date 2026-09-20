@@ -93,7 +93,8 @@ typedef enum {
     MAELYS_DATALOG_STATUS_FORBIDDEN = -10,
     MAELYS_DATALOG_STATUS_RATE_LIMITED = -11,
     MAELYS_DATALOG_STATUS_PAYLOAD_TOO_LARGE = -12,
-    MAELYS_DATALOG_STATUS_INVALID_STATE = -13
+    MAELYS_DATALOG_STATUS_INVALID_STATE = -13,
+    MAELYS_DATALOG_STATUS_STORAGE_TOO_SMALL = -14
 } maelys_datalog_status_t;
 
 typedef enum {
@@ -251,6 +252,26 @@ MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_session_config_set_wor
     maelys_datalog_session_config_t *config, uint64_t work_limit);
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_session_config_get_work_limit(
     const maelys_datalog_session_config_t *config, uint64_t *out_work_limit);
+/* Opt-in reference explanation workspace. kinds is a mask of EXPLAIN_TRUE and
+ * EXPLAIN_FALSE (not capability bits). workspace(0) disables it; defaults reserve
+ * nothing. Each setter replaces both the previous mask and storage mode, without
+ * mutation on invalid arguments. workspace reserves one additional allocation
+ * at session creation, of max(per-kind storage bound), never per explanation.
+ * storage borrows a max_align_t-aligned, exclusive, immovable range until session
+ * destruction; it must not overlap engine objects, inputs or output text. Its
+ * size is checked against the same bound at creation (STORAGE_TOO_SMALL); live
+ * session workspace ranges may not overlap (INVALID_STATE). Reusing a config
+ * with borrowed storage cannot create a second live session using that range.
+ * Config destruction does not release borrowed storage. No fallback allocation.
+ * ABI 3 has no bound for custom backends: this mode supports only the canonical
+ * reference backend, not copied/wrapped descriptors. Other backends are not
+ * configurable through session_create_configured. Custom filter callbacks keep
+ * their own allocation contract. The mask/storage choice changes no fingerprint.
+ * Neither mode reserves output text or makes the session thread-safe. */
+MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_session_config_set_explanation_workspace(
+    maelys_datalog_session_config_t *config, unsigned kinds);
+MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_session_config_set_explanation_storage(
+    maelys_datalog_session_config_t *config, unsigned kinds, void *storage, size_t bytes);
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_session_config_free(
     maelys_datalog_session_config_t *config);
 /* Selects the reference backend explicitly, never a fallback. NULL config is
@@ -395,7 +416,20 @@ MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_result_symbol_text(
  * PAYLOAD_TOO_LARGE and exact required size; when capacity > 0 only text[0] is
  * set to NUL. Missing backend capability returns UNSUPPORTED, outputs untouched.
  * A query symbol absent from the session vocabulary returns NOT_FOUND without
- * interning it. Text may include sensitive policy/input values. */
+ * interning it. Text may include sensitive policy/input values.
+ * Without a configured workspace, each call allocates and prepares as before.
+ * With a workspace, direct-text calls make no reference-engine allocator calls:
+ * a one-entry cache retains preparation across measure/write/retry for the same
+ * result generation, kind, predicate, arity and typed term values (not pointers).
+ * Another valid direct-text explanation request replaces it; invalid requests
+ * leave it alone, failed preparation leaves it empty. Ordinary queries and
+ * explicitly caller-owned prepared explanations do not evict it. Short output
+ * retains the cache. Kinds outside the configured mask return UNSUPPORTED,
+ * never an allocating fallback. result_free automatically releases the internal
+ * cache; externally prepared explanations still have to be released explicitly.
+ * Output text remains caller-owned; text and out_required must not overlap each
+ * other or the session workspace. Formatting still costs work; cache hits avoid
+ * exploration, not text rendering. */
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_result_explain_true_text(
     const maelys_datalog_result_t *result,
     const char *predicate,
@@ -462,7 +496,7 @@ MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_session_explanation_st
  * Once preparation succeeds, out_required receives text length excluding NUL.
  * A short TEXT buffer returns PAYLOAD_TOO_LARGE, with out_required populated
  * and out_text[0] = NUL if capacity > 0 (no partial text). Insufficient STORAGE
- * also returns PAYLOAD_TOO_LARGE, but leaves out_required unchanged: nothing
+ * returns STORAGE_TOO_SMALL, but leaves out_required unchanged: nothing
  * has been prepared. Other pre-prepare errors leave output parameters unchanged.
  * A retry prepares again. Retain a prepared handle instead when growing a text
  * buffer without rebuilding, or writing repeatedly. Document status=truncated
@@ -495,7 +529,7 @@ MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_result_explain_text_in
  *
  * Errors leave scalar/handle output parameters unchanged; failed preparation may modify the
  * supplied storage but acquires no lease. Missing capabilities -> UNSUPPORTED;
- * invalid alignment -> INVALID_ARGUMENT; insufficient storage -> PAYLOAD_TOO_LARGE.
+ * invalid alignment -> INVALID_ARGUMENT; insufficient storage -> STORAGE_TOO_SMALL.
  * The text/status/limits match the convenience calls (a bounded/truncated
  * explanation is distinct from a too-small text buffer).
  */

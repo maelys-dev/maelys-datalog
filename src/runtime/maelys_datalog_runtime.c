@@ -11,11 +11,19 @@
 #include <stdio.h>
 #include <stdarg.h>
 #include <string.h>
+#include <stdatomic.h>
 
 struct maelys_datalog_session_config {
     uint64_t required_capabilities;
     uint64_t work_limit;
+    unsigned explanation_kinds;
+    void *explanation_storage;
+    size_t explanation_bytes;
 };
+
+static maelys_datalog_status_t configure_explanation_workspace(
+    maelys_datalog_session_t *, const maelys_datalog_session_config_t *);
+static void destroy_explanation_workspace(maelys_datalog_session_t *);
 
 maelys_datalog_status_t maelys_datalog_session_config_create(
     maelys_datalog_session_config_t **out) {
@@ -53,6 +61,27 @@ maelys_datalog_status_t maelys_datalog_session_config_free(
     free(config);
     return MAELYS_DATALOG_STATUS_OK;
 }
+maelys_datalog_status_t maelys_datalog_session_config_set_explanation_workspace(
+    maelys_datalog_session_config_t *config, unsigned kinds) {
+    if (!config || (kinds & ~(unsigned)(MAELYS_DATALOG_EXPLAIN_TRUE | MAELYS_DATALOG_EXPLAIN_FALSE)))
+        return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
+    config->explanation_kinds = kinds;
+    config->explanation_storage = NULL;
+    config->explanation_bytes = 0;
+    return MAELYS_DATALOG_STATUS_OK;
+}
+maelys_datalog_status_t maelys_datalog_session_config_set_explanation_storage(
+    maelys_datalog_session_config_t *config, unsigned kinds, void *storage, size_t bytes) {
+    if (!config || !kinds ||
+        (kinds & ~(unsigned)(MAELYS_DATALOG_EXPLAIN_TRUE | MAELYS_DATALOG_EXPLAIN_FALSE)) ||
+        !storage || (uintptr_t)storage % _Alignof(max_align_t) ||
+        bytes > UINTPTR_MAX - (uintptr_t)storage)
+        return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
+    config->explanation_kinds = kinds;
+    config->explanation_storage = storage;
+    config->explanation_bytes = bytes;
+    return MAELYS_DATALOG_STATUS_OK;
+}
 maelys_datalog_status_t maelys_datalog_session_create_configured(
     const maelys_datalog_policy_t *policy, size_t index,
     const maelys_datalog_session_config_t *config, maelys_datalog_session_t **out) {
@@ -64,7 +93,15 @@ maelys_datalog_status_t maelys_datalog_session_create_configured(
         .required_capabilities = config->required_capabilities,
         .work_limit = config->work_limit,
     };
-    return maelys_datalog_session_create_ex(policy, index, &options, out);
+    maelys_datalog_status_t rc = maelys_datalog_session_create_ex(policy, index, &options, out);
+    if (!rc) {
+        rc = configure_explanation_workspace(*out, config);
+        if (rc) {
+            (void)maelys_datalog_session_free(*out);
+            *out = NULL;
+        }
+    }
+    return rc;
 }
 
 struct maelys_datalog_result {
@@ -88,6 +125,14 @@ struct maelys_datalog_session {
     int busy;
     int borrows_inputs; /* The reference solves the materialized EDB directly. */
     int reference_backend; /* Selected canonical descriptor, not a claimed name. */
+    unsigned explanation_kinds;
+    void *explanation_storage;
+    size_t explanation_bytes;
+    int owns_explanation_storage;
+    maelys_datalog_session_t *workspace_next;
+    uint64_t result_generation, explanation_generation;
+    maelys_datalog_prepared_explanation_t *explanation_cache;
+    maelys_datalog_fact_t explanation_query; /* Result-scoped canonical values. */
     /* These phases never overlap: import finishes before canonical export.
      * Reuse bounded session storage rather than allocating per solve. */
     union {
@@ -329,6 +374,7 @@ maelys_datalog_status_t maelys_datalog_session_free(maelys_datalog_session_t *s)
     s->busy = 1;
     s->backend.destroy(s->state);
     maelys_datalog_prepared_session_destroy(s->inputs);
+    destroy_explanation_workspace(s);
     memset(s, 0, sizeof(*s));
     free(s);
     return MAELYS_DATALOG_STATUS_OK;
@@ -445,6 +491,7 @@ maelys_datalog_status_t maelys_datalog_session_solve(maelys_datalog_session_t *s
         return status;
     }
     s->busy = 0;
+    ++s->result_generation; /* Cache is cleared on release, including at wrap. */
     s->active = result;
     *out = result;
     return MAELYS_DATALOG_STATUS_OK;
@@ -603,6 +650,67 @@ static int explanation_overlap(const void *a, size_t an, const void *b, size_t b
     uintptr_t x = (uintptr_t)a, y = (uintptr_t)b;
     return x <= y ? y - x < an : x - y < bn;
 }
+
+/* Workspace ownership is checked only at creation/destruction, not on the hot
+ * path. The intrusive registry allocates nothing. Separate sessions may be
+ * created concurrently; no callback or allocator runs while holding the lock. */
+static atomic_flag workspace_lock = ATOMIC_FLAG_INIT;
+static maelys_datalog_session_t *workspaces;
+static void lock_workspaces(void) {
+    while (atomic_flag_test_and_set_explicit(&workspace_lock, memory_order_acquire)) {}
+}
+static void unlock_workspaces(void) {
+    atomic_flag_clear_explicit(&workspace_lock, memory_order_release);
+}
+static maelys_datalog_status_t configure_explanation_workspace(
+    maelys_datalog_session_t *s, const maelys_datalog_session_config_t *config) {
+    if (!config->explanation_kinds) return MAELYS_DATALOG_STATUS_OK;
+    if (!s->reference_backend) return MAELYS_DATALOG_STATUS_UNSUPPORTED;
+    size_t bound = 0;
+    for (unsigned k = MAELYS_DATALOG_EXPLAIN_TRUE; k <= MAELYS_DATALOG_EXPLAIN_FALSE; k <<= 1) {
+        if (!(config->explanation_kinds & k)) continue;
+        uint64_t capability = k == MAELYS_DATALOG_EXPLAIN_TRUE
+            ? MAELYS_DATALOG_CAP_EXPLAIN_TRUE : MAELYS_DATALOG_CAP_EXPLAIN_FALSE;
+        if (!(s->backend.capabilities & capability)) return MAELYS_DATALOG_STATUS_UNSUPPORTED;
+        size_t bytes, alignment;
+        maelys_datalog_status_t rc = maelys_datalog_session_explanation_storage_bound(
+            s, (maelys_datalog_explanation_kind_t)k, &bytes, &alignment);
+        if (rc) return rc;
+        if (bytes > bound) bound = bytes;
+    }
+    void *storage = config->explanation_storage;
+    size_t bytes = storage ? config->explanation_bytes : bound;
+    if (bytes < bound) return MAELYS_DATALOG_STATUS_STORAGE_TOO_SMALL;
+    if (!storage) {
+        storage = malloc(bytes);
+        if (!storage) return MAELYS_DATALOG_STATUS_INTERNAL;
+    }
+    lock_workspaces();
+    for (maelys_datalog_session_t *p = workspaces; p; p = p->workspace_next) {
+        if (explanation_overlap(storage, bytes, p->explanation_storage, p->explanation_bytes)) {
+            unlock_workspaces();
+            if (!config->explanation_storage) free(storage);
+            return MAELYS_DATALOG_STATUS_INVALID_STATE;
+        }
+    }
+    s->explanation_storage = storage;
+    s->explanation_bytes = bytes;
+    s->owns_explanation_storage = !config->explanation_storage;
+    s->explanation_kinds = config->explanation_kinds;
+    s->workspace_next = workspaces;
+    workspaces = s;
+    unlock_workspaces();
+    return MAELYS_DATALOG_STATUS_OK;
+}
+static void destroy_explanation_workspace(maelys_datalog_session_t *s) {
+    if (!s->explanation_storage) return;
+    lock_workspaces();
+    maelys_datalog_session_t **link = &workspaces;
+    while (*link != s) link = &(*link)->workspace_next;
+    *link = s->workspace_next;
+    unlock_workspaces();
+    if (s->owns_explanation_storage) free(s->explanation_storage);
+}
 maelys_datalog_status_t maelys_datalog_result_prepare_explanation(
     maelys_datalog_result_t *result, maelys_datalog_explanation_kind_t kind,
     const char *predicate, const maelys_datalog_public_value_t *terms, size_t arity,
@@ -625,7 +733,7 @@ maelys_datalog_status_t maelys_datalog_result_prepare_explanation(
     size_t needed_bytes, alignment;
     rc = maelys_datalog_result_explanation_storage_requirements(result, kind, &needed_bytes, &alignment);
     if (rc) return rc;
-    if (bytes < needed_bytes) return MAELYS_DATALOG_STATUS_PAYLOAD_TOO_LARGE;
+    if (bytes < needed_bytes) return MAELYS_DATALOG_STATUS_STORAGE_TOO_SMALL;
     for (maelys_datalog_prepared_explanation_t *p = result->explanations; p; p = p->next)
         if (explanation_overlap(storage, bytes, p, p->storage_bytes))
             return MAELYS_DATALOG_STATUS_INVALID_STATE;
@@ -712,6 +820,48 @@ maelys_datalog_status_t maelys_datalog_result_explain_text_in(
     return rc ? rc : released;
 }
 
+static void clear_explanation_cache(maelys_datalog_session_t *s) {
+    if (s->explanation_cache) {
+        (void)maelys_datalog_prepared_explanation_release(s->explanation_cache);
+        s->explanation_cache = NULL;
+    }
+}
+static maelys_datalog_status_t cached_explain_text(maelys_datalog_result_t *result,
+    maelys_datalog_explanation_kind_t kind, const char *predicate,
+    const maelys_datalog_public_value_t *terms, size_t arity,
+    char *text, size_t capacity, size_t *required) {
+    maelys_datalog_session_t *s = result->owner;
+    if (!(s->explanation_kinds & (unsigned)kind)) return MAELYS_DATALOG_STATUS_UNSUPPORTED;
+    /* A borrowed workspace is also visible to its owner. Reject output aliases
+     * before touching the cache: even a size query must not overwrite its handle. */
+    if (explanation_overlap(required, sizeof(*required), s->explanation_storage, s->explanation_bytes) ||
+        (text && (capacity > UINTPTR_MAX - (uintptr_t)text ||
+                  explanation_overlap(text, capacity, s->explanation_storage, s->explanation_bytes) ||
+                  explanation_overlap(required, sizeof(*required), text, capacity))))
+        return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
+    maelys_datalog_fact_t query = {0};
+    maelys_datalog_status_t rc = query_predicate(result, predicate, arity, &query.predicate_id);
+    if (rc) return rc;
+    query.arity = (uint8_t)arity;
+    int found = 0;
+    rc = maelys_datalog_resolve_public_terms(&s->inputs->working.symbols,
+        terms, arity, query.terms, &found, 0);
+    if (rc) return rc;
+    if (!found) return MAELYS_DATALOG_STATUS_NOT_FOUND;
+    if (!s->explanation_cache || s->explanation_generation != s->result_generation ||
+        s->explanation_cache->kind != kind ||
+        !maelys_datalog_fact_equals(&query, &s->explanation_query)) {
+        clear_explanation_cache(s);
+        rc = maelys_datalog_result_prepare_explanation(result, kind, predicate, terms, arity,
+            s->explanation_storage, s->explanation_bytes, &s->explanation_cache);
+        if (rc) return rc;
+        s->explanation_query = query;
+        s->explanation_generation = s->result_generation;
+    }
+    *required = s->explanation_cache->text_size;
+    return text ? maelys_datalog_prepared_explanation_write_text(s->explanation_cache, text, capacity)
+                : MAELYS_DATALOG_STATUS_OK;
+}
 static maelys_datalog_status_t result_explain_text(const maelys_datalog_result_t *result,
     const char *predicate, const maelys_datalog_public_value_t *terms, size_t arity,
     char *text, size_t capacity, size_t *required, int why_false) {
@@ -720,6 +870,11 @@ static maelys_datalog_status_t result_explain_text(const maelys_datalog_result_t
     maelys_datalog_status_t rc = query_predicate(result, predicate, arity, &pid);
     if (rc) return rc;
     maelys_datalog_explanation_kind_t kind = why_false ? MAELYS_DATALOG_EXPLAIN_FALSE : MAELYS_DATALOG_EXPLAIN_TRUE;
+    rc = explanation_available(result, kind);
+    if (rc) return rc;
+    if (result->owner->explanation_kinds)
+        return cached_explain_text((maelys_datalog_result_t *)result, kind,
+                                  predicate, terms, arity, text, capacity, required);
     size_t bytes, alignment;
     rc = maelys_datalog_result_explanation_storage_requirements(result, kind, &bytes, &alignment);
     if (rc) return rc;
@@ -754,8 +909,11 @@ maelys_datalog_status_t maelys_datalog_result_free(maelys_datalog_result_t *resu
     if (!result || !result->owner)
         return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
     maelys_datalog_session_t *s = result->owner;
-    if (s->busy || s->active != result || result->explanations)
+    if (s->busy || s->active != result)
         return MAELYS_DATALOG_STATUS_INVALID_STATE;
+    for (maelys_datalog_prepared_explanation_t *p = result->explanations; p; p = p->next)
+        if (p != s->explanation_cache) return MAELYS_DATALOG_STATUS_INVALID_STATE;
+    clear_explanation_cache(s);
     s->busy = 1;
     s->backend.destroy_result(s->state, result->state);
     s->active = NULL;

@@ -34,6 +34,13 @@ class Capability(IntFlag):
     EXPLAIN_FALSE = int(lib.MAELYS_DATALOG_CAP_EXPLAIN_FALSE)
 
 
+class ExplanationKind(IntFlag):
+    """Opt-in reusable workspace kinds, distinct from backend capability bits."""
+
+    TRUE = int(lib.MAELYS_DATALOG_EXPLAIN_TRUE)
+    FALSE = int(lib.MAELYS_DATALOG_EXPLAIN_FALSE)
+
+
 @dataclass(frozen=True)
 class Predicate:
     """Domain declaration; constructors do not register or validate a domain."""
@@ -343,7 +350,7 @@ class Ruleset:
         return Edb(self, fact_capacity=fact_capacity, text_capacity=text_capacity)
 
     def prepare(self, policy_index: int = 0, *, required_capabilities: int = 0,
-                work_limit: int = 0) -> Session:
+                work_limit: int = 0, explanations: ExplanationKind | int = 0) -> Session:
         """Prepare reusable native state for one policy (no incremental solving)."""
         self._require_open()
         if isinstance(policy_index, bool) or not isinstance(policy_index, int):
@@ -355,6 +362,10 @@ class Ruleset:
                 raise TypeError(f"{name} must be an int")
             if not 0 <= value < (1 << 64):
                 raise ValueError(f"{name} must fit uint64")
+        if isinstance(explanations, bool) or not isinstance(explanations, int):
+            raise TypeError("explanations must be an ExplanationKind mask")
+        if explanations < 0 or explanations & ~int(ExplanationKind.TRUE | ExplanationKind.FALSE):
+            raise ValueError("explanations must contain only ExplanationKind.TRUE/FALSE")
         config = ffi.new("maelys_datalog_session_config_t **")
         _check(lib.maelys_datalog_session_config_create(config), "create session configuration")
         out = ffi.new("maelys_datalog_session_t **")
@@ -363,20 +374,23 @@ class Ruleset:
                 config[0], required_capabilities), "set required capabilities")
             _check(lib.maelys_datalog_session_config_set_work_limit(
                 config[0], work_limit), "set work limit")
+            _check(lib.maelys_datalog_session_config_set_explanation_workspace(
+                config[0], int(explanations)), "set explanation workspace")
             _check(lib.maelys_datalog_session_create_configured(
                 self._policy, policy_index, config[0], out), "create session")
         finally:
             # Native session creation snapshots values, retaining no config handle.
             lib.maelys_datalog_session_config_free(config[0])
-        session = Session(self, out[0])
+        session = Session(self, out[0], explanations=explanations)
         self._sessions.append(session)
         return session
 
     def solve(self, edb: Edb, *, policy_index: int = 0,
-              required_capabilities: int = 0, work_limit: int = 0) -> SolveResult:
+              required_capabilities: int = 0, work_limit: int = 0,
+              explanations: ExplanationKind | int = 0) -> SolveResult:
         """Convenience solve with a private session owned by the returned result."""
         session = self.prepare(policy_index, required_capabilities=required_capabilities,
-                               work_limit=work_limit)
+                               work_limit=work_limit, explanations=explanations)
         try:
             result = session.solve(edb)
         except BaseException:
@@ -411,11 +425,12 @@ class Ruleset:
 class Session:
     """Single-threaded prepared state with at most one live result lease."""
 
-    def __init__(self, ruleset: Ruleset, session) -> None:
+    def __init__(self, ruleset: Ruleset, session, *, explanations: ExplanationKind | int = 0) -> None:
         self.ruleset = ruleset
         self._session = session
         self._closed = False
         self._active: SolveResult | None = None
+        self._explanations = ExplanationKind(explanations)
 
     def __del__(self) -> None:
         if not getattr(self, "_closed", True):
@@ -668,6 +683,19 @@ class SolveResult:
         keepers: list[object] = []
         for index, term in enumerate(normalized):
             _fill_value(values[index], term, keepers)
+        if self._session._explanations:
+            # Both calls address the same native one-entry cache. No CFFI arena
+            # per explanation; conversion, output and Python strings still allocate.
+            explain = (lib.maelys_datalog_result_explain_true_text
+                       if kind == lib.MAELYS_DATALOG_EXPLAIN_TRUE
+                       else lib.maelys_datalog_result_explain_false_text)
+            required = ffi.new("size_t *")
+            _check(explain(self._result, name, values, len(normalized),
+                           ffi.NULL, 0, required), "prepare cached explanation")
+            text = ffi.new("char[]", int(required[0]) + 1)
+            _check(explain(self._result, name, values, len(normalized),
+                           text, int(required[0]) + 1, required), "render cached explanation")
+            return bytes(ffi.buffer(text, required[0])).decode("utf-8")
         storage_bytes = ffi.new("size_t *")
         alignment = ffi.new("size_t *")
         _check(lib.maelys_datalog_result_explanation_storage_requirements(

@@ -20,7 +20,8 @@ configuration, sets its requirements, calls `session_create_configured()` and
 frees the configuration in a `finally` block. The native session copies its
 values; it does not borrow that temporary handle. No backend descriptor,
 `struct_size`, backend ABI number or public IR declaration is needed by Python.
-The Python method signatures and behavior are unchanged. Native extension
+The existing Python calls remain valid; `explanations=` is an optional addition.
+Native extension
 authors keep `datalog_backend.h` and `session_create_ex()` for custom backends.
 
 ## Build
@@ -262,8 +263,10 @@ convenience that creates a new session per call; use `prepare()` for reuse.
 
 Python itself and CFFI still allocate objects and temporary conversion arrays.
 Policy/session initialization, custom backends and callbacks have separate
-allocation behavior. Explanations use a Python-owned CFFI workspace and text
-buffer, with no reference-engine heap allocation during preparation or writing.
+allocation behavior. By default, explanations use a Python-owned CFFI workspace
+and text buffer, with no reference-engine heap allocation during preparation or
+writing. The optional `prepare(explanations=...)` mode reserves that workspace
+once in the native session instead; Python still allocates the text buffer.
 This is **not** a
 zero-malloc Python binding or a guarantee about allocations inside libc.
 For native callers requiring a completely allocation-free input lifecycle,
@@ -361,10 +364,40 @@ native storage or release a result lease.
 
 ## Explanations and full diagnostics
 
+### Optional reusable workspace (unreleased)
+
+```python
+from maelys_datalog_next import ExplanationKind
+
+with ruleset.prepare(explanations=ExplanationKind.TRUE | ExplanationKind.FALSE) as session:
+    with session.solve(edb) as result:
+        print(result.explain_true("allow", ["alice", "roadmap.pdf"]))
+        print(result.explain_false("allow", ["mallory", "roadmap.pdf"]))
+```
+
+No workspace is reserved by default. This option reserves one native allocation
+at session creation, bounded by the maximum of the selected kinds' storage
+bounds. Each `explain_*` then measures and writes through the native session
+cache: one preparation, no new CFFI exploration arena and no reference-engine
+allocator calls on either call. Python/CFFI still allocate argument conversions,
+output buffers and strings. The old default already prepared once without native
+engine allocation; the improvement is reusing its workspace, not removing a
+second exploration from that old Python path.
+
+The one-entry cache survives matching repeated calls and ordinary membership
+queries; changing kind/predicate/typed values replaces it. A result close clears
+it automatically, including after a text-allocation/write/decode exception.
+Returned strings remain independent. Unselected kinds raise native `UNSUPPORTED`,
+not an allocating fallback. Session confinement and explicit context management
+are unchanged. `ruleset.solve(edb, explanations=...)` forwards the same option,
+but only an explicitly reused session amortizes its creation across requests.
+
+### Default prepared path
+
 `result.explain_true(predicate, terms)` and `result.explain_false(predicate,
-terms)` return the native UTF-8 document unchanged. Their public signatures and
-error behavior are unchanged, but they no longer call the legacy direct-text
-function twice. Each call follows this sequence:
+terms)` return the native UTF-8 document unchanged. Their public signatures
+are unchanged. Without the opt-in, they do not call the legacy
+direct-text function twice. Each call follows this sequence:
 
 ```text
 live result
@@ -385,7 +418,7 @@ and its session to be reused. A failed preparation publishes no handle to releas
 
 The reference backend does not allocate on this prepared native path. Python and
 CFFI still allocate the workspace, conversion objects and returned string. There
-is no cross-call explanation cache: two Python calls prepare two explanations.
+is no cross-call explanation cache on this default path: two Python calls prepare two explanations.
 Neither call reruns the solver. Native C callers can instead reuse their own
 aligned arena and perform multiple writes from one prepared handle. Python keeps
 that lower-level lifecycle internal, so existing callers need no extra `close()`.

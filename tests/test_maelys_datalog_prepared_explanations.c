@@ -45,6 +45,16 @@ static maelys_datalog_public_value_t symbol(const char *s) {
     maelys_datalog_public_value_t v = {.kind = MAELYS_DATALOG_VALUE_SYMBOL, .as.symbol = s};
     return v;
 }
+static maelys_datalog_session_t *cached_session(maelys_datalog_policy_t *policy) {
+    maelys_datalog_session_config_t *config;
+    maelys_datalog_session_t *session;
+    OK(maelys_datalog_session_config_create(&config));
+    OK(maelys_datalog_session_config_set_explanation_workspace(config,
+        MAELYS_DATALOG_EXPLAIN_TRUE | MAELYS_DATALOG_EXPLAIN_FALSE));
+    OK(maelys_datalog_session_create_configured(policy, 0, config, &session));
+    OK(maelys_datalog_session_config_free(config));
+    return session;
+}
 static void bounded_case(const char *source, const char *expected_status) {
     maelys_datalog_policy_t *policy;
     maelys_datalog_session_t *session;
@@ -69,7 +79,14 @@ static void bounded_case(const char *source, const char *expected_status) {
     char expected[32768], text[32768];
     OK(maelys_datalog_result_explain_false_text(result, "allow", &alice, 1, expected, sizeof(expected), &required));
     assert(strstr(expected, expected_status));
+    maelys_datalog_session_t *cached = cached_session(policy);
+    maelys_datalog_result_t *cached_result;
+    OK(maelys_datalog_session_solve_edb(cached, edb, &cached_result, NULL));
     forbidden = 1;
+    OK(maelys_datalog_result_explain_false_text(cached_result, "allow", &alice, 1, NULL, 0, &required));
+    OK(maelys_datalog_result_explain_false_text(cached_result, "allow", &alice, 1, text, sizeof(text), &required));
+    assert(!strcmp(text, expected));
+    OK(maelys_datalog_result_free(cached_result));
     maelys_datalog_prepared_explanation_t *p;
     OK(maelys_datalog_result_prepare_explanation(result, MAELYS_DATALOG_EXPLAIN_FALSE,
         "allow", &alice, 1, storage, bytes, &p));
@@ -82,6 +99,7 @@ static void bounded_case(const char *source, const char *expected_status) {
     OK(maelys_datalog_result_free(result));
     assert(attempts == 0 && frees == 0);
     forbidden = 0;
+    OK(maelys_datalog_session_free(cached));
     free(storage);
     OK(maelys_datalog_input_edb_free(edb));
     OK(maelys_datalog_session_free(session));
@@ -132,7 +150,7 @@ static void reference_conveniences(maelys_datalog_policy_t *policy) {
         required = 123;
         text[0] = 'X';
         assert(maelys_datalog_result_explain_text_in(result, kind, "allow", query, 1,
-            storage, bytes - 1, text, sizeof(text), &required) == MAELYS_DATALOG_STATUS_PAYLOAD_TOO_LARGE);
+            storage, bytes - 1, text, sizeof(text), &required) == MAELYS_DATALOG_STATUS_STORAGE_TOO_SMALL);
         assert(required == 123 && text[0] == 'X');
         assert(maelys_datalog_result_explain_text_in(result, kind, "allow", query, 1,
             (char *)storage + 1, bounds[i] - 1, text, sizeof(text), &required) == MAELYS_DATALOG_STATUS_INVALID_ARGUMENT);
@@ -186,6 +204,9 @@ static void truncated_true_bound(void) {
         OK(maelys_datalog_input_edb_add_fact(edb, "edge", terms, 2, NULL));
     }
     OK(maelys_datalog_session_solve_edb(session, edb, &result, NULL));
+    maelys_datalog_session_t *cached = cached_session(policy);
+    maelys_datalog_result_t *cached_result;
+    OK(maelys_datalog_session_solve_edb(cached, edb, &cached_result, NULL));
     maelys_datalog_public_value_t query[] = {symbol("n0"), symbol("n8")};
     int present;
     OK(maelys_datalog_result_query(result, "path", query, 2, &present));
@@ -203,11 +224,20 @@ static void truncated_true_bound(void) {
             storage, bound, text, sizeof(text), &length));
         assert(length == strlen(text));
         assert(strstr(text, i == 1 ? "status=truncated" : "status=not-applicable"));
+        char cached_text[1024];
+        if (i == 1) {
+            OK(maelys_datalog_result_explain_true_text(cached_result, "path", query, 2, cached_text, sizeof(cached_text), &length));
+        } else {
+            OK(maelys_datalog_result_explain_false_text(cached_result, "path", query, 2, cached_text, sizeof(cached_text), &length));
+        }
+        assert(!strcmp(text, cached_text));
         assert(attempts == 0 && frees == 0);
         forbidden = 0;
         free(storage);
     }
     OK(maelys_datalog_result_free(result));
+    OK(maelys_datalog_result_free(cached_result));
+    OK(maelys_datalog_session_free(cached));
     OK(maelys_datalog_input_edb_free(edb));
     OK(maelys_datalog_session_free(session));
     OK(maelys_datalog_policy_free(policy));
@@ -272,7 +302,7 @@ int main(void) {
         maelys_datalog_explanation_kind_t kind = (maelys_datalog_explanation_kind_t)(i + 1);
         const maelys_datalog_public_value_t *value = i ? &bob : &alice;
         sentinel = (void *)(uintptr_t)1;
-        assert(maelys_datalog_result_prepare_explanation(result, kind, "allow", value, 1, storage[i], bytes[i] - 1, &sentinel) == MAELYS_DATALOG_STATUS_PAYLOAD_TOO_LARGE);
+        assert(maelys_datalog_result_prepare_explanation(result, kind, "allow", value, 1, storage[i], bytes[i] - 1, &sentinel) == MAELYS_DATALOG_STATUS_STORAGE_TOO_SMALL);
         assert(sentinel == (void *)(uintptr_t)1);
         assert(maelys_datalog_result_prepare_explanation(result, kind, "allow", value, 1, (char *)storage[i] + 1, bytes[i] - 1, &sentinel) == MAELYS_DATALOG_STATUS_INVALID_ARGUMENT);
         assert(maelys_datalog_result_prepare_explanation(result, kind, "allow", &missing, 1, storage[i], bytes[i], &sentinel) == MAELYS_DATALOG_STATUS_NOT_FOUND);

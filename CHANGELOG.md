@@ -5,6 +5,38 @@ All notable changes to Maelys Datalog are documented in this file.
 The project follows [Semantic Versioning](https://semver.org/) and uses the
 format described by [Keep a Changelog](https://keepachangelog.com/).
 
+## [Unreleased]
+
+### Added
+
+- Opt-in reference-session explanation workspaces, reserved once at creation
+  through `session_config_set_explanation_workspace`, or borrowed through
+  `session_config_set_explanation_storage`. TRUE/FALSE share the maximum of
+  their profile bounds. No default workspace, growth or allocation fallback;
+  overlapping live session storage is rejected. Consumer API v1 and backend
+  descriptor ABI 3 remain unchanged.
+- Existing direct-text explanation calls reuse a one-entry prepared cache when
+  a workspace is enabled: one exploration for measure/write/retry, no reference
+  engine allocator calls after session creation. Keys use result generation,
+  kind, predicate and typed values, not string addresses. Result release clears
+  the internal cache; explicit prepared handles retain their existing lease.
+- Python-next `ExplanationKind` and the optional `explanations=` parameter on
+  `Ruleset.prepare/solve` use the session cache without changing `explain_true`
+  or `explain_false`. The default stays the existing prepared path. Python/CFFI
+  still allocate conversion objects, output text and Python strings; configured
+  calls no longer allocate a per-call CFFI exploration workspace.
+
+### Changed
+
+- Explanation preparation storage exhaustion now returns the appended public
+  `STORAGE_TOO_SMALL` status (-14), including configured session creation,
+  `prepare_explanation` and `explain_text_in`. Existing status numbers and ABI
+  layouts are unchanged, but consumers matching `PAYLOAD_TOO_LARGE` for this
+  case or using exhaustive status switches must update. Text-buffer exhaustion
+  still returns `PAYLOAD_TOO_LARGE`; bounded document `status=truncated` remains
+  a separate successful outcome. `status_name` and callback validation recognize
+  the new code. This is an observable error-contract change, not just an addition.
+
 ## 0.4.1 — 2026-09-19
 
 Additive release: consumer API v1 and backend ABI 3 are unchanged. It adds a

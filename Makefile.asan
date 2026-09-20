@@ -88,6 +88,11 @@ $(BUILD_DIR)/test_maelys_datalog_hot_path_alloc $(BUILD_DIR)/test_maelys_datalog
 	$(CC) $(ASAN_CFLAGS) -UNDEBUG $(ASAN_GUARD_OBJS) $< -o $@
 	$(if $(filter 1,$(ASAN_RUN_ON_BUILD)),$(ASAN_ENV) ./$@,@:)
 
+# The test includes the runtime to instrument the canonical reference session.
+$(BUILD_DIR)/test_maelys_datalog_session_explanations: tests/test_maelys_datalog_session_explanations.c $(filter-out $(BUILD_DIR)/guard-obj/src/runtime/maelys_datalog_runtime.o,$(ASAN_GUARD_OBJS)) $(ASAN_HEADERS) tests/fixtures/allocation_guard.h src/runtime/maelys_datalog_runtime.c | $(BUILD_DIR)
+	$(CC) $(ASAN_CFLAGS) -UNDEBUG $(filter-out $(BUILD_DIR)/guard-obj/src/runtime/maelys_datalog_runtime.o,$(ASAN_GUARD_OBJS)) $< -o $@
+	$(if $(filter 1,$(ASAN_RUN_ON_BUILD)),$(ASAN_ENV) ./$@,@:)
+
 $(BUILD_DIR)/%: tests/%.c $(ASAN_OBJS) $(ASAN_HEADERS) | $(BUILD_DIR)
 	$(CC) $(ASAN_CFLAGS) -I. $(ASAN_OBJS) $(ASAN_EXTRA_SRCS) $< -o $@
 	$(if $(filter 1,$(ASAN_RUN_ON_BUILD)),$(ASAN_ENV) ./$@,@:)

@@ -129,6 +129,15 @@ when it has what they name.
   A prepared explanation leases its result; never release/reuse that result
   until every explanation is released. Custom callbacks/backends
   do not automatically inherit the reference implementation's guarantee.
+- Session explanation workspaces are explicit opt-ins; never reserve one by
+  default or fall back to allocation for an unreserved kind. Keep result-cache
+  keys value-based and generation-scoped. Internal cached explanations are
+  released with the result; externally prepared handles still block release.
+  Test measure-only close, short-output retry, invalidation, borrowed-range
+  exclusivity and allocator failures. Python's configured path reuses storage
+  but its conversions, text buffers and strings still allocate. Backend ABI 3
+  and existing fingerprints are unchanged; new error statuses require callback
+  validation, CFFI, docs and exhaustive-switch migration notes together.
 - Intern repeated input strings rather than reserving worst-case text for every
   occurrence. Defaults derive from native symbol/registry budgets, not arbitrary
   MiB multipliers. Preserve canonical result IDs regardless of insertion order.

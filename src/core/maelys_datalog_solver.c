@@ -1420,7 +1420,7 @@ static maelys_result_t module_choose_literal(
     size_t chosen = SIZE_MAX;
     const maelys_datalog_status_t status = planner->choose(candidates, count, &chosen);
     if (status != MAELYS_DATALOG_STATUS_OK) {
-        return status < MAELYS_DATALOG_STATUS_OK && status >= MAELYS_DATALOG_STATUS_INVALID_STATE
+        return status < MAELYS_DATALOG_STATUS_OK && status >= MAELYS_DATALOG_STATUS_STORAGE_TOO_SMALL
             ? (maelys_result_t)status : MAELYS_ERR_INTERNAL;
     }
     if (chosen >= count) return MAELYS_ERR_INVALID_STATE;

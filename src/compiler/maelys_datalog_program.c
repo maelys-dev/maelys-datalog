@@ -46,7 +46,7 @@ _Static_assert((int)MAELYS_DATALOG_IR_EXPR_MUL == (int)MAELYS_DATALOG_ARITH_EXPR
                "IR enum IR_EXPR_MUL");
 
 maelys_datalog_status_t maelys_datalog_callback_status(maelys_datalog_status_t s) {
-    return s <= MAELYS_DATALOG_STATUS_OK && s >= MAELYS_DATALOG_STATUS_INVALID_STATE
+    return s <= MAELYS_DATALOG_STATUS_OK && s >= MAELYS_DATALOG_STATUS_STORAGE_TOO_SMALL
                ? s
                : MAELYS_DATALOG_STATUS_INTERNAL;
 }

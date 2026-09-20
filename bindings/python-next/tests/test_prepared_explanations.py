@@ -3,7 +3,7 @@
 import unittest
 from unittest.mock import patch
 
-from maelys_datalog_next import Engine, MaelysDatalogError, Predicate, PRED_EDB, PRED_IDB, PRED_QUERY
+from maelys_datalog_next import Engine, ExplanationKind, MaelysDatalogError, Predicate, PRED_EDB, PRED_IDB, PRED_QUERY
 from maelys_datalog_next import engine as binding
 
 
@@ -64,6 +64,98 @@ class PreparedExplanationTest(unittest.TestCase):
         self.edb.add_facts([("seed", ["alice"]), ("seed", ["mallory"]),
                             ("blocked", ["mallory"])])
         self.session = self.rules.prepare()
+
+    def test_session_workspace_uses_cached_text_without_a_per_call_arena(self):
+        with self.session.solve(self.edb) as result:
+            expected = (result.explain_true("allow", ["alice"]), result.explain_false("allow", ["mallory"]))
+        native, real_ffi = binding.lib, binding.ffi
+        calls, allocations = [], []
+
+        class DirectSpy:
+            def __getattr__(self, name):
+                operation = getattr(native, name)
+                if "explain" not in name and "explanation" not in name:
+                    return operation
+                if name not in (PREFIX + "result_explain_true_text", PREFIX + "result_explain_false_text"):
+                    raise AssertionError("Configured Python should reuse the session workspace")
+                def call(*args):
+                    calls.append(name)
+                    return operation(*args)
+                return call
+
+        class FfiSpy:
+            def __getattr__(self, name):
+                return getattr(real_ffi, name)
+            def new(self, declaration, *args):
+                allocations.append(declaration)
+                return real_ffi.new(declaration, *args)
+
+        with self.rules.prepare(explanations=ExplanationKind.TRUE | ExplanationKind.FALSE) as session:
+            self.assertEqual(session.execution_fingerprint, self.session.execution_fingerprint)
+            for _ in range(2):
+                with session.solve(self.edb) as result:
+                    with patch.object(binding, "lib", DirectSpy()), patch.object(binding, "ffi", FfiSpy()):
+                        for i in range(40):
+                            text = (result.explain_false("allow", ["mallory"]) if i % 2
+                                    else result.explain_true("allow", ["alice"]))
+                            self.assertEqual(text, expected[i % 2])
+        self.assertEqual(len(calls), 160)  # two calls per explanation; C counts preparation
+        self.assertNotIn("unsigned char[]", allocations)
+        self.assertIn("char[]", allocations)  # output/Python allocations are not hidden
+
+    def test_workspace_option_validation_and_unreserved_kind(self):
+        for invalid, error in ((True, TypeError), ("true", TypeError), (-1, ValueError), (4, ValueError)):
+            with self.subTest(value=invalid), self.assertRaises(error):
+                self.rules.prepare(explanations=invalid)
+        with self.rules.prepare(explanations=ExplanationKind.TRUE) as session:
+            with session.solve(self.edb) as result:
+                self.assertIn("document=why-true", result.explain_true("allow", ["alice"]))
+                with self.assertRaises(MaelysDatalogError):
+                    result.explain_false("allow", ["mallory"])
+        # The one-shot Ruleset convenience forwards the opt-in, without changing defaults.
+        with self.rules.solve(self.edb, explanations=ExplanationKind.FALSE) as result:
+            self.assertIn("document=why-false", result.explain_false("allow", ["mallory"]))
+
+    def test_cached_output_failures_do_not_leak_a_result_lease(self):
+        native, real_ffi = binding.lib, binding.ffi
+        class FailingOutput:
+            def __getattr__(self, name):
+                return getattr(real_ffi, name)
+            def new(self, declaration, *args):
+                if declaration == "char[]" and args and isinstance(args[0], int):
+                    raise MemoryError("injected cached output failure")
+                return real_ffi.new(declaration, *args)
+        class FailingWrite:
+            def __getattr__(self, name):
+                operation = getattr(native, name)
+                if name != PREFIX + "result_explain_true_text":
+                    return operation
+                def call(*args):
+                    if args[4] != real_ffi.NULL:
+                        return -7  # IO after a successful native measure/cache fill
+                    return operation(*args)
+                return call
+        class InvalidUTF8:
+            def __getattr__(self, name):
+                operation = getattr(native, name)
+                if name != PREFIX + "result_explain_true_text":
+                    return operation
+                def call(*args):
+                    rc = operation(*args)
+                    if rc == 0 and args[4] != real_ffi.NULL:
+                        args[4][0] = b"\xff"
+                    return rc
+                return call
+        with self.rules.prepare(explanations=ExplanationKind.TRUE) as session:
+            for target, replacement, error in (("ffi", FailingOutput(), MemoryError),
+                                                ("lib", FailingWrite(), MaelysDatalogError),
+                                                ("lib", InvalidUTF8(), UnicodeDecodeError)):
+                with session.solve(self.edb) as result:
+                    with patch.object(binding, target, replacement), self.assertRaises(error):
+                        result.explain_true("allow", ["alice"])
+                # Context close must release the cache even if Python never rendered it.
+            with session.solve(self.edb) as result:
+                self.assertIn("document=why-true", result.explain_true("allow", ["alice"]))
 
     def test_each_kind_prepares_once_and_returns_independent_text(self):
         result = self.session.solve(self.edb)
