@@ -7,6 +7,12 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Tooling
+
+- Adopt maelys-release v0.60.0 for CI and release workflows. The three retired
+  compatibility check aliases disappear; all 16 required checks retain their
+  current names and branch protection is unchanged.
+
 ## 0.5.0 — 2026-09-20
 
 ### Added
