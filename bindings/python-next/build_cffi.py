@@ -83,11 +83,14 @@ typedef enum {
     MAELYS_DATALOG_EXPLAIN_FALSE = 2
 } maelys_datalog_explanation_kind_t;
 #define MAELYS_DATALOG_STATUS_PAYLOAD_TOO_LARGE ...
+#define MAELYS_DATALOG_STATUS_STORAGE_TOO_SMALL ...
 int maelys_datalog_session_config_create(maelys_datalog_session_config_t **);
 int maelys_datalog_session_config_set_required_capabilities(maelys_datalog_session_config_t *, uint64_t);
 int maelys_datalog_session_config_get_required_capabilities(const maelys_datalog_session_config_t *, uint64_t *);
 int maelys_datalog_session_config_set_work_limit(maelys_datalog_session_config_t *, uint64_t);
 int maelys_datalog_session_config_get_work_limit(const maelys_datalog_session_config_t *, uint64_t *);
+int maelys_datalog_session_config_set_explanation_workspace(maelys_datalog_session_config_t *, unsigned);
+int maelys_datalog_session_config_set_explanation_storage(maelys_datalog_session_config_t *, unsigned, void *, size_t);
 int maelys_datalog_session_config_free(maelys_datalog_session_config_t *);
 int maelys_datalog_session_create_configured(
     const maelys_datalog_policy_t *, size_t,

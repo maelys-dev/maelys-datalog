@@ -29,6 +29,52 @@ public API.
 
 ## Build an explanation once
 
+### Reuse a session workspace (unreleased)
+
+Opt in when creating a reference session; ordinary sessions reserve no explanation
+workspace. Both kinds share one allocation, sized to the larger profile bound.
+The existing text functions then prepare once for measure/write/retry of the
+same query, with **zero reference-engine allocator calls after session creation**.
+The caller still owns the output text buffer. This does not claim zero Python,
+custom-filter, compilation or initialization allocations, or zero rendering cost.
+
+```c
+maelys_datalog_session_config_t *config = NULL;
+maelys_datalog_session_t *session = NULL;
+maelys_datalog_status_t rc = maelys_datalog_session_config_create(&config);
+if (rc != MAELYS_DATALOG_STATUS_OK) return rc;
+rc = maelys_datalog_session_config_set_explanation_workspace(
+    config, MAELYS_DATALOG_EXPLAIN_TRUE | MAELYS_DATALOG_EXPLAIN_FALSE);
+if (rc == MAELYS_DATALOG_STATUS_OK)
+    rc = maelys_datalog_session_create_configured(policy, 0, config, &session);
+maelys_datalog_session_config_free(config);
+if (rc != MAELYS_DATALOG_STATUS_OK) return rc;
+/* Solve, then use result_explain_true_text / result_explain_false_text as before.
+ * result_free also releases the internal cache; session_free releases its space. */
+```
+
+Applications can instead use `session_config_set_explanation_storage(config,
+kinds, storage, bytes)`: the application keeps aligned memory alive and exclusive
+until the session is freed. It may use the per-kind session bound introduced in
+0.4.1 to budget that memory, taking the maximum for both kinds. Too little space
+returns `STORAGE_TOO_SMALL` at creation; overlapping live session ranges return
+`INVALID_STATE`. There is no allocating fallback and no automatic secure erasure.
+The copied config does not extend the application's buffer lifetime. Set workspace
+mask zero to disable the option; setters replace the previous mode and mask.
+
+The cache compares result generation, kind, predicate, arity and typed values;
+query strings are not retained. Another valid direct-text explanation replaces
+it. Membership queries, explicit prepared handles and a too-small output buffer
+do not evict it. Invalid requests preserve it; failed preparation leaves it empty.
+Only selected kinds use the convenience path; unselected kinds return
+`UNSUPPORTED`. A result release discards its cache even if only the size was
+requested. Caller-owned prepared handles must still be released first. Session
+use remains single-threaded; the option changes neither fingerprint nor proof text.
+ABI 3 has no custom-backend upper-bound callback: only the canonical reference
+backend supports this mode, not a copied descriptor.
+
+### Explicit caller-owned prepared handles
+
 The opaque facade in `<maelys/datalog.h>` supports explanations in caller-owned
 memory. Why-true describes a retained witness; Why-false performs a bounded
 diagnostic search over the solved state. Neither runs the solver again.
@@ -67,7 +113,7 @@ buffer does not increase the search bounds.
 uses a fixed aligned arena and output buffer, checks their sizes and demonstrates
 the result lease. It is compiled and run against the installed C11/C++17 SDK.
 The existing `result_explain_true_text` / `result_explain_false_text` calls remain
-available as allocating convenience wrappers. Backend authors must migrate to
+allocating convenience wrappers when no session workspace is configured. Backend authors must migrate to
 **backend ABI 3**; the consumer facade and Datalog language versions do not change.
 
 ## Build and test

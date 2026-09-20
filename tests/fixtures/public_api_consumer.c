@@ -46,6 +46,8 @@ int main(void) {
     if (!require_status(maelys_datalog_session_config_create(&config))) return 18;
     if (!require_status(maelys_datalog_session_config_set_required_capabilities(
             config, MAELYS_DATALOG_CAP_EXPLAIN_TRUE | MAELYS_DATALOG_CAP_EXPLAIN_FALSE))) return 19;
+    if (!require_status(maelys_datalog_session_config_set_explanation_workspace(
+            config, MAELYS_DATALOG_EXPLAIN_TRUE | MAELYS_DATALOG_EXPLAIN_FALSE))) return 38;
     if (!require_status(maelys_datalog_session_create_configured(policy, 0u, config, &session))) return 4;
     for (int k = 1; k <= 2; ++k) {
         size_t bound = 0, alignment = 0;
@@ -53,6 +55,19 @@ int main(void) {
                 (maelys_datalog_explanation_kind_t)k, &bound, &alignment))) return 34;
         if (bound > sizeof(explanation_storage) || (uintptr_t)explanation_storage % alignment) return 35;
     }
+    /* Exercise the borrowed mode and new status from the installed SDK too.
+     * Release this temporary session before reusing its storage below. */
+    maelys_datalog_session_t *borrowed = NULL;
+    if (!require_status(maelys_datalog_session_config_set_explanation_storage(
+            config, MAELYS_DATALOG_EXPLAIN_TRUE | MAELYS_DATALOG_EXPLAIN_FALSE,
+            explanation_storage, 0u))) return 39;
+    if (maelys_datalog_session_create_configured(policy, 0u, config, &borrowed) !=
+            MAELYS_DATALOG_STATUS_STORAGE_TOO_SMALL || borrowed != NULL) return 40;
+    if (!require_status(maelys_datalog_session_config_set_explanation_storage(
+            config, MAELYS_DATALOG_EXPLAIN_TRUE | MAELYS_DATALOG_EXPLAIN_FALSE,
+            explanation_storage, sizeof(explanation_storage)))) return 41;
+    if (!require_status(maelys_datalog_session_create_configured(policy, 0u, config, &borrowed))) return 42;
+    if (!require_status(maelys_datalog_session_free(borrowed))) return 43;
     if (!require_status(maelys_datalog_session_config_free(config))) return 20;
     if (!require_status(maelys_datalog_session_execution_fingerprint(session, fingerprint)) ||
         strlen(fingerprint) != 64u) return 21;

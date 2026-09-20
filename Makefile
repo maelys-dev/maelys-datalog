@@ -61,6 +61,9 @@ $(BUILD_DIR)/tests/test_maelys_datalog_input_edb_alloc: tests/test_maelys_datalo
 $(BUILD_DIR)/tests/test_maelys_datalog_hot_path_alloc $(BUILD_DIR)/tests/test_maelys_datalog_prepared_explanations: $(BUILD_DIR)/tests/%: tests/%.c tests/fixtures/allocation_guard.h $(SRCS) $(ENGINE_HEADERS) | $(BUILD_DIR)/tests
 	$(CC) $(TEST_CFLAGS) -UNDEBUG -include tests/fixtures/allocation_guard.h $(SRCS) $< -o $@
 
+$(BUILD_DIR)/tests/test_maelys_datalog_session_explanations: tests/test_maelys_datalog_session_explanations.c tests/fixtures/allocation_guard.h $(SRCS) $(ENGINE_HEADERS) | $(BUILD_DIR)/tests
+	$(CC) $(TEST_CFLAGS) -UNDEBUG -include tests/fixtures/allocation_guard.h $(filter-out src/runtime/maelys_datalog_runtime.c,$(SRCS)) $< -o $@
+
 .PHONY: bench-pipeline
 bench-pipeline: $(BUILD_DIR)/tests/test_maelys_datalog_pipeline
 	./$(BUILD_DIR)/tests/test_maelys_datalog_pipeline --bench

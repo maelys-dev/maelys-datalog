@@ -2,7 +2,7 @@
 #include "src/core/maelys_datalog_filter.h"
 
 static maelys_result_t callback_status(maelys_datalog_status_t status) {
-    if (status > MAELYS_DATALOG_STATUS_OK || status < MAELYS_DATALOG_STATUS_INVALID_STATE)
+    if (status > MAELYS_DATALOG_STATUS_OK || status < MAELYS_DATALOG_STATUS_STORAGE_TOO_SMALL)
         return MAELYS_ERR_INTERNAL;
     return (maelys_result_t)status;
 }

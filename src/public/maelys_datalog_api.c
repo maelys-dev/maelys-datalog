@@ -85,6 +85,7 @@ const char *maelys_datalog_status_name(maelys_datalog_status_t status) {
         case MAELYS_DATALOG_STATUS_RATE_LIMITED: return "rate_limited";
         case MAELYS_DATALOG_STATUS_PAYLOAD_TOO_LARGE: return "payload_too_large";
         case MAELYS_DATALOG_STATUS_INVALID_STATE: return "invalid_state";
+        case MAELYS_DATALOG_STATUS_STORAGE_TOO_SMALL: return "storage_too_small";
         default: return "unknown";
     }
 }

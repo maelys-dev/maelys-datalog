@@ -77,7 +77,7 @@ jobs:
           python -m pip install cffi setuptools pytest
           bash tools/check_python_binding.sh "$PWD/build/cmake" python small
 
-      - name: Test Python-next SMALL including legacy parity (28 tests)
+      - name: Test Python-next SMALL including legacy parity
         env:
           MAELYS_DATALOG_EXPECT_PROFILE: small
           MAELYS_DATALOG_REQUIRE_PARITY: '1'
@@ -94,7 +94,7 @@ jobs:
           bash tools/check_module_sdk.sh "$PWD/build/cmake-large"
           bash tools/check_python_binding.sh "$PWD/build/cmake-large" python large
 
-      - name: Test Python-next LARGE including legacy parity (28 tests)
+      - name: Test Python-next LARGE including legacy parity
         env:
           MAELYS_DATALOG_EXPECT_PROFILE: large
           MAELYS_DATALOG_REQUIRE_PARITY: '1'
