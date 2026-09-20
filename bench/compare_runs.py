@@ -167,7 +167,8 @@ def metadata(output, base, head, repo):
         "input_source_blobs": {"base": a, "head": b},
         "input_implementation_identical": a == b,
         "harness_sha256": {name: hashlib.sha256((root / name).read_bytes()).hexdigest()
-                           for name in ("bench_datalog.c", "bench_input_edb.c", "compare_runs.py", "compare_revisions.sh", "Makefile.compare")},
+                           for name in ("bench_datalog.c", "bench_input_edb.c", "bench_explanations.c",
+                                        "compare_runs.py", "compare_explanations.py", "compare_revisions.sh", "Makefile.compare")},
     }
     (Path(output) / "metadata.json").write_text(json.dumps(payload, indent=2) + "\n")
 

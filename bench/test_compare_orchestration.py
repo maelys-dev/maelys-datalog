@@ -13,10 +13,11 @@ ROOT = Path(__file__).resolve().parents[1]
 PAYLOAD = r'''#!/usr/bin/env python3
 import csv, json, os, sys
 from pathlib import Path
-target = Path(sys.argv[1])
-meta = json.loads((target.parent / "metadata.json").read_text())
 binary = Path(sys.argv[0])
 kind = binary.name
+mode = sys.argv.pop(1) if kind == "explanations" else None
+target = Path(sys.argv[1])
+meta = json.loads((target.parent / "metadata.json").read_text())
 profile = binary.parent.name.rsplit("-", 1)[1]
 role = binary.parent.name.split("-")[1]
 with open(os.environ["BENCH_TEST_TRACE"], "a") as trace:
@@ -26,31 +27,47 @@ if kind == "solver":
                samples=1000, min_us=1, median_us=2, p95_us=3,
                commit=meta["base" if role == "A" else "head"],
                compiler="synthetic", cflags="-O2", opt_level="-O2")
-else:
+elif kind == "input":
     row = dict(scenario="crossover", capacity=13, entries=13, distinct_strings=64,
                mode="batch", text_capacity=384, reserved_bytes=1024, samples=301,
                min_us=1, median_us=2, p95_us=3,
                clear_min_us=.01, clear_median_us=.02, clear_p95_us=.03)
+else:
+    row = dict(scenario="fresh-result", kind="true", mode=mode, samples=301,
+               min_us=1, median_us=2, p95_us=3, workspace_bytes=1024 if mode == "workspace" else 0,
+               text_digest="0123456789abcdef", commit=meta["head"], profile=profile,
+               compiler="synthetic", cflags="-O2", opt_level="-O2")
+rows = ([dict(row, scenario=s, kind=k) for s in ("fresh-result", "alternating-query", "cache-hit")
+         for k in ("true", "false")] if kind == "explanations" else [row])
 with target.open("w", newline="") as stream:
     writer = csv.DictWriter(stream, list(row))
     writer.writeheader()
-    writer.writerow(row)
+    writer.writerows(rows)
 Path(sys.argv[2]).write_text("{}" if kind == "solver" else "synthetic samples\n")
 '''
 
 
 class OrchestrationTest(unittest.TestCase):
     def test_compile_once_and_all_aa_before_ab(self):
+        for enabled in (False, True):
+            with self.subTest(explanations=enabled):
+                self.exercise(enabled)
+
+    def exercise(self, enabled):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             repo = root / "repo"
             (repo / "bench").mkdir(parents=True)
-            for name in ("compare_revisions.sh", "compare_runs.py", "Makefile.compare", "bench_input_edb.c"):
+            for name in ("compare_revisions.sh", "compare_runs.py", "compare_explanations.py",
+                         "Makefile.compare", "bench_input_edb.c", "bench_explanations.c"):
                 shutil.copy2(ROOT / "bench" / name, repo / "bench" / name)
             (repo / "bench/bench_datalog.c").write_text("synthetic harness\n")
             source = repo / "src/runtime/maelys_datalog_input_edb.c"
             source.parent.mkdir(parents=True)
             source.write_text("linear fixture\n")
+            header = repo / "include/maelys/datalog.h"
+            header.parent.mkdir(parents=True)
+            header.write_text("old API\n")
             def git(*args):
                 return subprocess.check_output(["git", "-C", str(repo), *args], text=True).strip()
             git("init", "-q", "-b", "main")
@@ -60,6 +77,8 @@ class OrchestrationTest(unittest.TestCase):
             git("-c", "commit.gpgsign=false", "commit", "-qm", "baseline fixture")
             base = git("rev-parse", "HEAD")
             source.write_text("indexed fixture\n")
+            if enabled:
+                header.write_text("maelys_datalog_session_config_set_explanation_workspace(\n")
             git("add", ".")
             git("-c", "commit.gpgsign=false", "commit", "-qm", "candidate fixture")
             head = git("rev-parse", "HEAD")
@@ -80,6 +99,9 @@ for argument in "$@"; do case "$argument" in OUT=*) output=${argument#OUT=} ;; e
 mkdir -p "$output"
 cp "$BENCH_TEST_PAYLOAD" "$output/solver"
 cp "$BENCH_TEST_PAYLOAD" "$output/input"
+for argument in "$@"; do
+  if test "$argument" = EXPLANATIONS=1; then cp "$BENCH_TEST_PAYLOAD" "$output/explanations"; fi
+done
 ''',
             }
             for name, body in scripts.items():
@@ -97,14 +119,24 @@ cp "$BENCH_TEST_PAYLOAD" "$output/input"
             lines = trace.read_text().splitlines()
             self.assertEqual(sum(line.startswith("make ") for line in lines), 4)
             self.assertTrue(all(line.startswith("make -j1 ") for line in lines[:4]))
-            self.assertEqual(len(lines), 36)
+            count = 52 if enabled else 36
+            self.assertEqual(len(lines), count)
             measurements = lines[4:]
-            self.assertTrue(all("-aa-" in line for line in measurements[:16]))
-            self.assertTrue(all("-ab-" in line for line in measurements[16:]))
+            aa_count = 24 if enabled else 16
+            self.assertTrue(all("-aa-" in line for line in measurements[:aa_count]))
+            self.assertTrue(all("-ab-" in line for line in measurements[aa_count:]))
             for profile in ("SMALL", "LARGE"):
                 actual = [line.split()[-1].split("-ab-")[-1] for line in measurements
                           if line.startswith(f"solver {profile} ") and "-ab-" in line]
                 self.assertEqual(actual, ["A1", "B1", "A2", "B2"])
+                if enabled:
+                    actual = [line.split()[-1].split("-ab-")[-1] for line in measurements
+                              if line.startswith(f"explanations {profile} ") and "-ab-" in line]
+                    self.assertEqual(actual, ["A1", "B1", "A2", "B2"])
+            if enabled:
+                self.assertTrue(all("EXPLANATIONS=0" in line for line in lines[:2]))
+                self.assertTrue(all("EXPLANATIONS=1" in line for line in lines[2:4]))
+            self.assertIn("workspace" if enabled else "Skipped", (output / "explanations.md").read_text())
             self.assertEqual(json.loads((output / "metadata.json").read_text())["head"], head)
             self.assertIn("indéterminé", (output / "comparison.md").read_text())
             self.assertFalse((repo / "bench/results").exists())
@@ -112,7 +144,7 @@ cp "$BENCH_TEST_PAYLOAD" "$output/input"
             again = subprocess.run(["bash", str(repo / "bench/compare_revisions.sh"),
                                     base, head, str(output)], env=environment, capture_output=True)
             self.assertNotEqual(again.returncode, 0)
-            self.assertEqual(len(trace.read_text().splitlines()), 36)
+            self.assertEqual(len(trace.read_text().splitlines()), count)
             # Input is a Git name, never shell code or a Git option.
             marker = root / "injection"
             for ref in ("--help", f"$(touch {marker})"):

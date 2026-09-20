@@ -17,6 +17,9 @@ empty :=
 space := $(empty) $(empty)
 .PHONY: all
 all: $(OUT)/solver $(OUT)/input
+ifeq ($(EXPLANATIONS),1)
+all: $(OUT)/explanations
+endif
 $(OUT)/obj/%.o: %.c
 	@mkdir -p $(dir $@)
 	$(CC) $(FLAGS) -c $< -o $@
@@ -24,3 +27,5 @@ $(OUT)/solver: $(OBJECTS) $(DRIVER)/bench/bench_datalog.c
 	$(CC) $(FLAGS) $(DEFS) $(DRIVER)/bench/bench_datalog.c $(OBJECTS) -o $@
 $(OUT)/input: $(OBJECTS) $(DRIVER)/bench/bench_input_edb.c
 	$(CC) $(FLAGS) $(DRIVER)/bench/bench_input_edb.c $(OBJECTS) -o $@
+$(OUT)/explanations: $(OBJECTS) $(DRIVER)/bench/bench_explanations.c
+	$(CC) $(FLAGS) $(DEFS) $(DRIVER)/bench/bench_explanations.c $(OBJECTS) -o $@
