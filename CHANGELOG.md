@@ -7,6 +7,8 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## 0.5.0 — 2026-09-20
+
 ### Added
 
 - Opt-in reference-session explanation workspaces, reserved once at creation
