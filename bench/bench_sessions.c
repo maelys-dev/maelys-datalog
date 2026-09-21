@@ -86,9 +86,11 @@ int main(int argc, char **argv) {
     maelys_datalog_public_predicate_t predicates[PREDS + 1];
     for (unsigned i = 0; i < PREDS; ++i) {
         snprintf(names[i], sizeof(names[i]), "p%02u", i);
-        predicates[i] = (maelys_datalog_public_predicate_t)MAELYS_DATALOG_EDB_QUERY(names[i], 1);
+        predicates[i] = (maelys_datalog_public_predicate_t){names[i], 1,
+            MAELYS_DATALOG_PREDICATE_EDB | MAELYS_DATALOG_PREDICATE_QUERY};
     }
-    predicates[PREDS] = (maelys_datalog_public_predicate_t)MAELYS_DATALOG_IDB_QUERY("out", 1);
+    predicates[PREDS] = (maelys_datalog_public_predicate_t){"out", 1,
+        MAELYS_DATALOG_PREDICATE_IDB | MAELYS_DATALOG_PREDICATE_QUERY};
     const maelys_datalog_public_domain_t domain = {"session_bench", predicates, PREDS + 1, NULL, 0};
     OK(maelys_datalog_domain_register(&domain));
     const char *sources[] = {"out(X) :- p00(X), p31(X).", "out(X) :- p00(X)."};
