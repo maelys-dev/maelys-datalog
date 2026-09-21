@@ -75,16 +75,40 @@ match across revisions and sorted/reverse/permuted inputs. The two policies are
 The second is a common-cost control, not a direct materialization timer:
 subtracting it from the first does not isolate derivation time.
 
-There are 120 cases per profile/pass: two policies, integer/symbol values, five
+There are 200 cases per profile/pass: two policies, integer/symbol values, five
 orders (sorted, reverse, permuted, identical duplicates, and values spaced by
-4096), and six entry counts (8, 64, 128, 256, 402 and the runtime global EDB
-bound). Distinct facts occupy the minimum number of predicates that respects
+4096), and ten entry counts (8, 16, 31, 32, 33, 64, 128, 256, 402 and the runtime
+global EDB bound). Distinct facts occupy the minimum number of predicates that respects
 the runtime per-predicate limit. Strided values are adversarial low-bit inputs,
 not forced hash collisions; the native unit test supplies forced collisions.
 The same 50 warmups, 301 samples, two A/A pairs and A B A B protocol applies.
 `sessions.md` reports every case with its own noise floor; these simple policies
 do not establish gains for recursion or aggregates. Session storage/allocation
 claims come from the native contracts, not timing or process RSS.
+
+### Optional instruction and layout diagnosis
+
+Set the manual workflow's `diagnostic_original` input to an earlier candidate
+SHA to compare baseline A, that candidate B and revised head C before the full
+matrix. `diagnose_solver_layout.sh BASE ORIGINAL HEAD NEW_ABSOLUTE_OUTPUT`
+also runs this diagnostic directly on native Linux x86_64 with Clang and
+Valgrind installed. It deliberately selects only `solver_size_pure` LARGE/2048;
+this is separate from the full comparison's unfiltered inventory.
+
+The driver includes the unchanged historical fixture/payload. It counts only
+finalize/solve/query/release under Callgrind, twice per binary, and times outside
+Valgrind. All builds precede timing. Four predeclared layouts link identical
+objects with 0/16/64/256 unreachable text bytes before the EDB object; symbol
+maps verify the displacement. Two A/A pairs per unpadded revision precede two
+interleaved rounds of every layout (500 warmups, 1000 samples). All variants,
+raw samples, instruction profiles, function annotations, disassembly and hashes
+are retained under `bench-diagnostic/` in the run artifact. The complete matrix
+is under `bench-comparison/` when both directories are uploaded.
+
+Equal Ir alone does not prove a layout cause or equal cycle/cache cost. The
+additional diagnostic driver changes layout relative to the historical binary;
+interpret the full rerun separately. No automatic acceptance or merge follows
+from the generated `diagnostic.md` report.
 
 ### Input index crossover and memory
 
@@ -113,7 +137,7 @@ The run uploads `bench-comparison-RUN_ID-ATTEMPT`, retained for 30 days:
 
 - solver CSV/JSON for all eight passes per profile;
 - input summary CSV and `*.samples.csv` with all measured samples;
-- public-session summary/raw CSV and `sessions.md`, with all 120 cases per pass;
+- public-session summary/raw CSV and `sessions.md`, with all 200 cases per pass;
 - explanation summary/raw CSV for eight passes per profile when the candidate
   has the session workspace API, plus `explanations.md` (an explicit skip otherwise);
 - `comparison.md`, `metadata.json` and `commands.log`.
