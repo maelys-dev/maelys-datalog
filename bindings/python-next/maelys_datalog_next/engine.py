@@ -33,6 +33,9 @@ class Capability(IntFlag):
     WORK_LIMIT = int(lib.MAELYS_DATALOG_CAP_WORK_LIMIT)
     EXPLAIN_FALSE = int(lib.MAELYS_DATALOG_CAP_EXPLAIN_FALSE)
     AGGREGATES = int(lib.MAELYS_DATALOG_CAP_AGGREGATES)
+    MIN = int(lib.MAELYS_DATALOG_CAP_MIN)
+    MAX = int(lib.MAELYS_DATALOG_CAP_MAX)
+    SUM = int(lib.MAELYS_DATALOG_CAP_SUM)
 
 
 class ExplanationKind(IntFlag):

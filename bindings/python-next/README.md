@@ -507,3 +507,14 @@ This remains experimental, not a drop-in replacement for `maelys_datalog`:
 - True incremental inference is not provided by the current engine API.
 
 The old binding and its documentation remain separate and unchanged.
+
+## Numeric aggregates (unreleased)
+
+`min(V,event(_,G,V),N)`, `max(...)` and `sum(...)` use the same syntax and
+scope as count. The separate capabilities are `Capability.MIN`, `.MAX`, `.SUM`;
+`.AGGREGATES` still means count only. Numeric projections must be integers in
+0..2147483647. Empty extrema produce no tuple; empty sums produce zero. Sum
+adds once per distinct complete source fact, so different event IDs with equal
+values each contribute. A matching non-integer or overflow rejects the solve
+with `INVALID_FIELD`. These are snapshot operators; see the
+[aggregate contract](../../docs/specifications/maelys-datalog-v2/aggregates.md).

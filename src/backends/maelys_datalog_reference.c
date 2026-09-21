@@ -117,6 +117,9 @@ const maelys_datalog_backend_t *maelys_datalog_backend_reference(void) {
                                                      "maelys.reference.v1",
                                                      MAELYS_DATALOG_CAP_LANGUAGE |
                                                          MAELYS_DATALOG_CAP_AGGREGATES |
+                                                         MAELYS_DATALOG_CAP_MIN |
+                                                         MAELYS_DATALOG_CAP_MAX |
+                                                         MAELYS_DATALOG_CAP_SUM |
                                                          MAELYS_DATALOG_CAP_EXPLAIN_TRUE |
                                                          MAELYS_DATALOG_CAP_EXPLAIN_FALSE,
                                                      prepare,

@@ -1,5 +1,5 @@
 <!-- SPDX-License-Identifier: CC-BY-4.0 -->
-# Stratified distinct count
+# Stratified aggregates
 
 `count(Projected, predicate(Terms), Result)` is a contextual body literal.
 It counts distinct typed values of `Projected` in the matching facts of a
@@ -75,7 +75,7 @@ deletion. Full recomputation is the conformance oracle for that maintenance.
 ## Extension compatibility
 
 `AGGREGATES` promises this stratified distinct-count contract. Future operators
-such as `min`, `max` or `sum` require separate capability/version negotiation;
+require separate capability/version negotiation;
 they must not silently expand the promise made by existing providers.
 Backends without `AGGREGATES` reject
 aggregate programs before preparation. The public IR adds a count kind using
@@ -111,3 +111,75 @@ search contract; they do not claim exhaustive proof of absence.
 Planner SDK v1 callbacks continue to see only the existing literal kinds. The
 core schedules a ready count itself before asking the planner for the next
 ordinary literal. The planner cannot bypass binding or stratification checks.
+
+## Integer extrema and sum (unreleased)
+
+`min(V, source(...), N)`, `max(V, source(...), N)` and
+`sum(V, source(...), N)` use exactly the same contextual syntax, local projection,
+positive-bound grouping keys and strict stratification as `count`. Ordinary
+predicates named `min`, `max` and `sum` remain legal. Their results use the
+existing nonnegative integer domain, 0..2147483647 inclusive. There is no
+floating-point, signed-integer, symbol ordering or boolean coercion.
+
+| Operator | Matching source | Bound group with no matches |
+| --- | --- | --- |
+| `count` | Distinct typed projected values | Integer zero |
+| `min` | Least projected integer | Literal fails; no result tuple |
+| `max` | Greatest projected integer | Literal fails; no result tuple |
+| `sum` | Projected integer from each distinct **complete source fact** | Integer zero |
+
+Only matched source facts are type-checked. A matching non-integer for a numeric
+operator, or a sum above 2147483647, aborts the solve with `INVALID_FIELD` and no
+published result. A later valid snapshot may reuse the session. These errors do
+not mean an empty group or a failed output comparison. Aggregates are evaluated
+when reached by the rule evaluator; they are not a global column-type validator.
+
+Two facts `sample(1,"api",10)` and `sample(2,"api",10)` contribute 20 to
+`sum(V,sample(_,"api",V),N)`. Repeating the first complete fact contributes
+nothing more. Different derivations of one IDB fact and repeated policy-fact
+clauses likewise contribute only once. This is relation-set semantics, not a
+bag of derivations and not `sum(distinct V)`. Retain event IDs in an auxiliary
+relation if distinct occurrences must survive projection. To deliberately sum
+distinct values, first derive a relation containing only the group and value.
+
+```datalog
+minimum(G, N) :- service(G), min(V, sample(_, G, V), N).
+maximum(G, N) :- service(G), max(V, sample(_, G, V), N).
+total(G, N) :- service(G), sum(V, sample(_, G, V), N).
+```
+
+Absent groups are never invented. Global `min`/`max` over an empty source also
+fail; global `sum` returns zero. A prebound result is a typed equality constraint,
+including when several operators share that result variable. An empty extremum
+fails even if its output is unbound; it never fabricates a sentinel value.
+
+The reference evaluator scans each source once for extrema, `O(S)`. Sum sorts
+bounded pointers to matching complete facts and deduplicates them before checked
+addition, `O(S + M log M)`. Numeric evaluation reserves at most
+`max(MAX_RULE_FACTS, MAX_FACTS_PER_PRED)` fact pointers on its stack (1 KiB SMALL /
+2 KiB LARGE on 64-bit targets); its frame returns before rule recursion. There
+are no new ruleset/result fields, persistent indexes, per-group caches or engine
+allocator calls. Each reached aggregate still repeats its scan; these operators
+do not provide streaming or incremental maintenance.
+
+The independent public capabilities are `CAP_MIN`, `CAP_MAX`, `CAP_SUM` (bits
+9, 10, 11), also exposed as Python-next `Capability.MIN`, `.MAX`, `.SUM`.
+`CAP_AGGREGATES` continues to promise **only count**; `CAP_LANGUAGE` is unchanged.
+A provider missing any required operator is rejected before preparation, even
+if it supports count. `CAP_ALL` includes all known bits and becomes 4095.
+
+Public IR adds `IR_MIN=6`, `IR_MAX=7`, `IR_SUM=8` using the same active fields as
+`IR_COUNT`; descriptor layouts and program ABI 1/backend ABI 3 remain unchanged.
+Native literal/premise enums append the corresponding alternatives. The historical
+`as.count` premise member stores all four aggregates without changing union size.
+Consumers with exhaustive switches must handle or explicitly reject the new kinds.
+Existing programs retain their normalized identities and explanation bytes.
+
+Why-true uses `kind=min`, `kind=max`, `kind=sum` with the same frozen-snapshot
+pattern, projection, value and `parent=-` contract as count. Why-false reports
+`min-mismatch`, `max-mismatch`, `sum-mismatch` for a different bound output, or
+`min-empty`/`max-empty` with projection and pattern but no observed/expected pair.
+Native obstacle kinds append values 7..11 in that order. These alternatives also
+work with caller-owned or configured explanation storage and preserve leases,
+short-output retry and bounded-search behavior. They extend the existing text
+formats additively; a reader must accept or explicitly reject unknown alternatives.

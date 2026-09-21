@@ -145,8 +145,15 @@ typedef enum {
     MAELYS_DATALOG_LITERAL_COMPARISON = 2,
     MAELYS_DATALOG_LITERAL_NEGATED_ATOM = 3,
     MAELYS_DATALOG_LITERAL_FILTER = 4,
-    MAELYS_DATALOG_LITERAL_COUNT = 5
+    MAELYS_DATALOG_LITERAL_COUNT = 5,
+    MAELYS_DATALOG_LITERAL_MIN = 6,
+    MAELYS_DATALOG_LITERAL_MAX = 7,
+    MAELYS_DATALOG_LITERAL_SUM = 8
 } maelys_datalog_literal_kind_t;
+
+static inline int maelys_datalog_literal_is_aggregate(unsigned kind) {
+    return kind >= MAELYS_DATALOG_LITERAL_COUNT && kind <= MAELYS_DATALOG_LITERAL_SUM;
+}
 
 typedef enum {
     MAELYS_DATALOG_FILTER_STARTS_WITH = 1,
@@ -281,8 +288,16 @@ typedef enum {
     MAELYS_DATALOG_EXPLANATION_PREMISE_NEGATED_ABSENCE = 2,
     MAELYS_DATALOG_EXPLANATION_PREMISE_COMPARISON_TRUE = 3,
     MAELYS_DATALOG_EXPLANATION_PREMISE_FILTER_TRUE = 4,
-    MAELYS_DATALOG_EXPLANATION_PREMISE_COUNT = 5
+    MAELYS_DATALOG_EXPLANATION_PREMISE_COUNT = 5,
+    MAELYS_DATALOG_EXPLANATION_PREMISE_MIN = 6,
+    MAELYS_DATALOG_EXPLANATION_PREMISE_MAX = 7,
+    MAELYS_DATALOG_EXPLANATION_PREMISE_SUM = 8
 } maelys_datalog_explanation_premise_kind_t;
+
+static inline int maelys_datalog_premise_is_aggregate(unsigned kind) {
+    return kind >= MAELYS_DATALOG_EXPLANATION_PREMISE_COUNT &&
+           kind <= MAELYS_DATALOG_EXPLANATION_PREMISE_SUM;
+}
 
 typedef enum {
     MAELYS_DATALOG_EXPLANATION_ORIGIN_POLICY_FACT = 1,
@@ -319,7 +334,8 @@ typedef struct {
         maelys_datalog_fact_t fact;
         struct {
             /* Same size/alignment as a fact; use its header padding for the
-             * aggregate metadata, keeping every existing premise layout. */
+             * aggregate metadata, keeping every existing premise layout.
+             * COUNT/MIN/MAX/SUM all use this historically named member. */
             maelys_datalog_predicate_id_t predicate_id;
             uint8_t arity;
             uint8_t projected_variable;
@@ -407,7 +423,12 @@ typedef enum {
     MAELYS_DATALOG_WHY_FALSE_OBSTACLE_COMPARISON_FALSE = 3,
     MAELYS_DATALOG_WHY_FALSE_OBSTACLE_RECURSIVE_NO_BASE_SUPPORT = 4,
     MAELYS_DATALOG_WHY_FALSE_OBSTACLE_FILTER_FALSE = 5,
-    MAELYS_DATALOG_WHY_FALSE_OBSTACLE_COUNT_MISMATCH = 6
+    MAELYS_DATALOG_WHY_FALSE_OBSTACLE_COUNT_MISMATCH = 6,
+    MAELYS_DATALOG_WHY_FALSE_OBSTACLE_MIN_MISMATCH = 7,
+    MAELYS_DATALOG_WHY_FALSE_OBSTACLE_MAX_MISMATCH = 8,
+    MAELYS_DATALOG_WHY_FALSE_OBSTACLE_SUM_MISMATCH = 9,
+    MAELYS_DATALOG_WHY_FALSE_OBSTACLE_MIN_EMPTY = 10,
+    MAELYS_DATALOG_WHY_FALSE_OBSTACLE_MAX_EMPTY = 11
 } maelys_datalog_why_false_obstacle_kind_t;
 
 typedef enum {

@@ -17,6 +17,7 @@ native library or compiled to WebAssembly.
 - deterministic semi-naive fixed-point evaluation;
 - stratified negation with negative-cycle rejection;
 - stratified distinct `count` with explicit grouping and empty-group zero (0.6.0);
+- integer `min`, `max` and checked `sum`, using the same grouping syntax (unreleased);
 - bounded memory profiles with stack-owned solver working state;
 - static join planning and reproducible results;
 - SHA-256 ruleset and complete policy-set identity, diagnostics, and decision

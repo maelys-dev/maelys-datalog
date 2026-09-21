@@ -639,8 +639,13 @@ static maelys_result_t parse_filter_literal(
     return MAELYS_OK;
 }
 
-static int token_starts_count(const parser_t *p) {
-    if (p->tok.len != 5u || memcmp(p->tok.text, "count", 5u)) return 0;
+static int token_starts_aggregate(const parser_t *p) {
+    int kind;
+    if (p->tok.len == 5u && !memcmp(p->tok.text, "count", 5u)) kind = MAELYS_DATALOG_LITERAL_COUNT;
+    else if (p->tok.len == 3u && !memcmp(p->tok.text, "min", 3u)) kind = MAELYS_DATALOG_LITERAL_MIN;
+    else if (p->tok.len == 3u && !memcmp(p->tok.text, "max", 3u)) kind = MAELYS_DATALOG_LITERAL_MAX;
+    else if (p->tok.len == 3u && !memcmp(p->tok.text, "sum", 3u)) kind = MAELYS_DATALOG_LITERAL_SUM;
+    else return 0;
     maelys_datalog_lexer_t probe = p->lexer;
     maelys_datalog_token_t token;
     probe.diag = NULL;
@@ -651,11 +656,11 @@ static int token_starts_count(const parser_t *p) {
     for (size_t i = 0; i < sizeof(kinds) / sizeof(kinds[0]); ++i)
         if (maelys_datalog_lexer_next(&probe, &token) != MAELYS_OK || token.kind != kinds[i])
             return 0;
-    return 1;
+    return kind;
 }
 
-static maelys_result_t parse_count_literal(parser_t *p, maelys_datalog_literal_t *lit) {
-    maelys_result_t rc = next(p); /* count */
+static maelys_result_t parse_aggregate_literal(parser_t *p, maelys_datalog_literal_t *lit, int kind) {
+    maelys_result_t rc = next(p); /* aggregate name */
     if (rc != MAELYS_OK) return rc;
     rc = next(p); /* '(' */
     if (rc != MAELYS_OK) return rc;
@@ -673,11 +678,11 @@ static maelys_result_t parse_count_literal(parser_t *p, maelys_datalog_literal_t
     rc = parse_term(p, &lit->rhs, MAELYS_DATALOG_TERM_CTX_COMPARISON, NULL);
     if (rc != MAELYS_OK) return rc;
     if (p->tok.kind != MAELYS_DATALOG_TOKEN_RPAREN) goto syntax;
-    lit->kind = MAELYS_DATALOG_LITERAL_COUNT;
+    lit->kind = (uint8_t)kind;
     return next(p);
 syntax:
     parser_diag(p, MAELYS_DATALOG_DIAG_LEXER_INVALID_TOKEN,
-                "invalid count literal", "use count(Variable, predicate(...), ResultVariable)");
+                "invalid aggregate literal", "use count/min/max/sum(Variable, predicate(...), ResultVariable)");
     return MAELYS_ERR_INVALID_FIELD;
 }
 
@@ -723,7 +728,8 @@ static maelys_result_t parse_literal(parser_t *p,
         return MAELYS_OK;
     }
     if (p->tok.kind == MAELYS_DATALOG_TOKEN_PREDICATE) {
-        if (token_starts_count(p)) return parse_count_literal(p, lit);
+        int aggregate = token_starts_aggregate(p);
+        if (aggregate) return parse_aggregate_literal(p, lit, aggregate);
         char name[64];
         if (p->tok.len < sizeof(name)) {
             memcpy(name, p->tok.text, p->tok.len);
@@ -825,7 +831,7 @@ static maelys_result_t normalize_anonymous_variables(parser_t *p,
         maelys_datalog_literal_t *literal = &rule->body[i];
         if (literal->kind != MAELYS_DATALOG_LITERAL_ATOM &&
             literal->kind != MAELYS_DATALOG_LITERAL_NEGATED_ATOM &&
-            literal->kind != MAELYS_DATALOG_LITERAL_COUNT) {
+            !maelys_datalog_literal_is_aggregate(literal->kind)) {
             continue;
         }
         for (size_t t = 0; t < literal->atom.arity; t++) {

@@ -7,6 +7,24 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+
+- Public stratified integer `min`, `max` and `sum`, with the same contextual
+  syntax and variable scope as `count`. Empty extrema fail; empty sums are zero.
+  Sum includes each distinct complete source fact once, preserving separate
+  events of equal value. Matching non-integers and sums above 2147483647 fail
+  atomically with `INVALID_FIELD`. Existing bounded storage and session leases
+  remain in force; no engine allocations are added to snapshot evaluation.
+- Independently negotiated `CAP_MIN`, `CAP_MAX`, `CAP_SUM` and public IR kinds
+  `IR_MIN=6`, `IR_MAX=7`, `IR_SUM=8`. Python-next exposes matching capabilities.
+  `CAP_AGGREGATES` remains count-only; `CAP_LANGUAGE` and ABI layouts are unchanged.
+  `CAP_ALL` becomes 4095. Providers must handle or reject new enum alternatives.
+- Snapshot explanations append `min`/`max`/`sum` premises, corresponding mismatch
+  obstacles and `min-empty`/`max-empty` obstacles. Native premise kinds append
+  6..8 and obstacle kinds 7..11; exhaustive-switch consumers need updating.
+  Existing programs' identities, explanation bytes and native struct layouts
+  remain unchanged. This additive language feature requires a minor release.
+
 ## 0.6.0 — 2026-09-21
 
 An additive language, IR and explanation extension.

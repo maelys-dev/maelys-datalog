@@ -228,6 +228,12 @@ static void wr_premise_kind(fmt_writer_t *w, uint8_t kind) {
     case (uint8_t)MAELYS_DATALOG_EXPLANATION_PREMISE_COMPARISON_TRUE:
         WR_LIT(w, "comparison-true");
         break;
+    case (uint8_t)MAELYS_DATALOG_EXPLANATION_PREMISE_MIN:
+        WR_LIT(w, "min"); break;
+    case (uint8_t)MAELYS_DATALOG_EXPLANATION_PREMISE_MAX:
+        WR_LIT(w, "max"); break;
+    case (uint8_t)MAELYS_DATALOG_EXPLANATION_PREMISE_SUM:
+        WR_LIT(w, "sum"); break;
     case (uint8_t)MAELYS_DATALOG_EXPLANATION_PREMISE_COUNT:
         WR_LIT(w, "count");
         break;
@@ -338,7 +344,7 @@ static void emit_explanation_text(const maelys_datalog_ruleset_t *ruleset,
                 wr_cmp_op(w, premise->op);
                 WR_LIT(w, " rhs=");
                 wr_term(w, ruleset, &premise->as.comparison.rhs);
-            } else if (premise->kind == MAELYS_DATALOG_EXPLANATION_PREMISE_COUNT) {
+            } else if (maelys_datalog_premise_is_aggregate(premise->kind)) {
                 WR_LIT(w, " pattern=");
                 maelys_datalog_fact_t pattern = count_premise_pattern(premise);
                 wr_fact(w, ruleset, &pattern);
@@ -493,6 +499,9 @@ static maelys_result_t validate_premise(const maelys_datalog_ruleset_t *ruleset,
         if (lhs_rc != MAELYS_OK) return lhs_rc;
         return validate_term(ruleset, &premise->as.comparison.rhs);
     }
+    case MAELYS_DATALOG_EXPLANATION_PREMISE_MIN:
+    case MAELYS_DATALOG_EXPLANATION_PREMISE_MAX:
+    case MAELYS_DATALOG_EXPLANATION_PREMISE_SUM:
     case MAELYS_DATALOG_EXPLANATION_PREMISE_COUNT: {
         const maelys_datalog_fact_t stored_pattern = count_premise_pattern(premise);
         const maelys_datalog_fact_t *pattern = &stored_pattern;
@@ -646,6 +655,16 @@ static const char *why_false_obstacle_name(unsigned kind) {
         return "recursive-no-base-support";
     case MAELYS_DATALOG_WHY_FALSE_OBSTACLE_FILTER_FALSE:
         return "filter-false";
+    case MAELYS_DATALOG_WHY_FALSE_OBSTACLE_MIN_MISMATCH:
+        return "min-mismatch";
+    case MAELYS_DATALOG_WHY_FALSE_OBSTACLE_MAX_MISMATCH:
+        return "max-mismatch";
+    case MAELYS_DATALOG_WHY_FALSE_OBSTACLE_SUM_MISMATCH:
+        return "sum-mismatch";
+    case MAELYS_DATALOG_WHY_FALSE_OBSTACLE_MIN_EMPTY:
+        return "min-empty";
+    case MAELYS_DATALOG_WHY_FALSE_OBSTACLE_MAX_EMPTY:
+        return "max-empty";
     case MAELYS_DATALOG_WHY_FALSE_OBSTACLE_COUNT_MISMATCH:
         return "count-mismatch";
     default:
@@ -681,10 +700,21 @@ static maelys_result_t validate_why_false(const maelys_datalog_ruleset_t *r,
             if (!origin_is_store(d->supports[s].origin) || validate_fact(r, &d->supports[s].fact) ||
                 d->supports[s].body_index >= r->rules[d->rule_id - 1u].body_count)
                 return MAELYS_ERR_INVALID_FIELD;
-        if (o->kind == MAELYS_DATALOG_WHY_FALSE_OBSTACLE_COUNT_MISMATCH &&
-            (o->lhs.kind != MAELYS_DATALOG_TERM_INT || o->lhs.as.integer < 0 ||
-             o->lhs.as.integer > MAELYS_DATALOG_MAX_INT || validate_term(r, &o->rhs) ||
-             r->rules[d->rule_id - 1u].body[o->body_index].kind != MAELYS_DATALOG_LITERAL_COUNT))
+        unsigned aggregate_kind = 0;
+        int empty = 0;
+        switch (o->kind) {
+        case MAELYS_DATALOG_WHY_FALSE_OBSTACLE_COUNT_MISMATCH: aggregate_kind = MAELYS_DATALOG_LITERAL_COUNT; break;
+        case MAELYS_DATALOG_WHY_FALSE_OBSTACLE_MIN_MISMATCH: aggregate_kind = MAELYS_DATALOG_LITERAL_MIN; break;
+        case MAELYS_DATALOG_WHY_FALSE_OBSTACLE_MAX_MISMATCH: aggregate_kind = MAELYS_DATALOG_LITERAL_MAX; break;
+        case MAELYS_DATALOG_WHY_FALSE_OBSTACLE_SUM_MISMATCH: aggregate_kind = MAELYS_DATALOG_LITERAL_SUM; break;
+        case MAELYS_DATALOG_WHY_FALSE_OBSTACLE_MIN_EMPTY: aggregate_kind = MAELYS_DATALOG_LITERAL_MIN; empty = 1; break;
+        case MAELYS_DATALOG_WHY_FALSE_OBSTACLE_MAX_EMPTY: aggregate_kind = MAELYS_DATALOG_LITERAL_MAX; empty = 1; break;
+        default: break;
+        }
+        if (aggregate_kind &&
+            (r->rules[d->rule_id - 1u].body[o->body_index].kind != aggregate_kind ||
+             (!empty && (o->lhs.kind != MAELYS_DATALOG_TERM_INT || o->lhs.as.integer < 0 ||
+              o->lhs.as.integer > MAELYS_DATALOG_MAX_INT || validate_term(r, &o->rhs)))))
             return MAELYS_ERR_INVALID_FIELD;
         if (o->kind == MAELYS_DATALOG_WHY_FALSE_OBSTACLE_COMPARISON_FALSE) {
             if (o->op < MAELYS_DATALOG_CMP_EQ || o->op > MAELYS_DATALOG_CMP_GTE ||
@@ -831,11 +861,17 @@ static void emit_why_false_text(const maelys_datalog_ruleset_t *r,
             WR_LIT(w, " pattern=");
             wr_quoted(w, r->filter_pattern_pool + p->pattern_offset, p->pattern_length);
         } else {
-            if (o->kind == MAELYS_DATALOG_WHY_FALSE_OBSTACLE_COUNT_MISMATCH) {
+            if (o->kind == MAELYS_DATALOG_WHY_FALSE_OBSTACLE_COUNT_MISMATCH ||
+                o->kind == MAELYS_DATALOG_WHY_FALSE_OBSTACLE_MIN_MISMATCH ||
+                o->kind == MAELYS_DATALOG_WHY_FALSE_OBSTACLE_MAX_MISMATCH ||
+                o->kind == MAELYS_DATALOG_WHY_FALSE_OBSTACLE_SUM_MISMATCH) {
                 WR_LIT(w, " observed=");
                 wr_term(w, r, &o->lhs);
                 WR_LIT(w, " expected=");
                 wr_term(w, r, &o->rhs);
+            }
+            if (o->kind >= MAELYS_DATALOG_WHY_FALSE_OBSTACLE_COUNT_MISMATCH &&
+                o->kind <= MAELYS_DATALOG_WHY_FALSE_OBSTACLE_MAX_EMPTY) {
                 WR_LIT(w, " projected=?");
                 wr_u64(w, r->rules[d->rule_id - 1u].body[o->body_index].lhs.as.variable);
             }

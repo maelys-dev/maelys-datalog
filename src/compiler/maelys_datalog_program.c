@@ -26,6 +26,9 @@ _Static_assert((int)MAELYS_DATALOG_IR_COMPARISON == (int)MAELYS_DATALOG_LITERAL_
                "IR enum IR_COMPARISON");
 _Static_assert((int)MAELYS_DATALOG_IR_NEGATION == (int)MAELYS_DATALOG_LITERAL_NEGATED_ATOM,
                "IR enum IR_NEGATION");
+_Static_assert((int)MAELYS_DATALOG_IR_MIN == (int)MAELYS_DATALOG_LITERAL_MIN, "IR enum IR_MIN");
+_Static_assert((int)MAELYS_DATALOG_IR_MAX == (int)MAELYS_DATALOG_LITERAL_MAX, "IR enum IR_MAX");
+_Static_assert((int)MAELYS_DATALOG_IR_SUM == (int)MAELYS_DATALOG_LITERAL_SUM, "IR enum IR_SUM");
 _Static_assert((int)MAELYS_DATALOG_IR_COUNT == (int)MAELYS_DATALOG_LITERAL_COUNT, "IR enum IR_COUNT");
 _Static_assert((int)MAELYS_DATALOG_IR_FILTER == (int)MAELYS_DATALOG_LITERAL_FILTER,
                "IR enum IR_FILTER");
@@ -159,8 +162,10 @@ maelys_datalog_status_t maelys_datalog_program_info(const maelys_datalog_program
                 caps |= MAELYS_DATALOG_CAP_ARITHMETIC;
             if (l->kind == MAELYS_DATALOG_LITERAL_FILTER)
                 caps |= MAELYS_DATALOG_CAP_FILTERS;
-            if (l->kind == MAELYS_DATALOG_LITERAL_COUNT)
-                caps |= MAELYS_DATALOG_CAP_AGGREGATES;
+            if (l->kind == MAELYS_DATALOG_LITERAL_COUNT) caps |= MAELYS_DATALOG_CAP_AGGREGATES;
+            else if (l->kind == MAELYS_DATALOG_LITERAL_MIN) caps |= MAELYS_DATALOG_CAP_MIN;
+            else if (l->kind == MAELYS_DATALOG_LITERAL_MAX) caps |= MAELYS_DATALOG_CAP_MAX;
+            else if (l->kind == MAELYS_DATALOG_LITERAL_SUM) caps |= MAELYS_DATALOG_CAP_SUM;
         }
     *out = (maelys_datalog_program_info_t){MAELYS_DATALOG_PROGRAM_ABI_VERSION,
                                            r->policy_id,
@@ -278,7 +283,7 @@ maelys_result_t maelys_datalog_compute_program_fingerprint(const maelys_datalog_
             if (l->kind == MAELYS_DATALOG_LITERAL_ATOM ||
                 l->kind == MAELYS_DATALOG_LITERAL_NEGATED_ATOM)
                 hash_atom(&h, r, &l->atom);
-            else if (l->kind == MAELYS_DATALOG_LITERAL_COUNT) {
+            else if (maelys_datalog_literal_is_aggregate(l->kind)) {
                 hash_atom(&h, r, &l->atom);
                 hash_term(&h, r, &l->lhs);
                 hash_term(&h, r, &l->rhs);
@@ -374,7 +379,7 @@ maelys_datalog_status_t maelys_datalog_program_rule(const maelys_datalog_program
         if (a->kind == MAELYS_DATALOG_LITERAL_ATOM ||
             a->kind == MAELYS_DATALOG_LITERAL_NEGATED_ATOM)
             rc = export_atom(r, &a->atom, &b->atom);
-        else if (a->kind == MAELYS_DATALOG_LITERAL_COUNT) {
+        else if (maelys_datalog_literal_is_aggregate(a->kind)) {
             rc = export_atom(r, &a->atom, &b->atom);
             if (rc == MAELYS_OK) rc = export_term(r, &a->lhs, &b->lhs);
             if (rc == MAELYS_OK) rc = export_term(r, &a->rhs, &b->rhs);
@@ -531,7 +536,7 @@ maelys_datalog_status_t maelys_datalog_program_add_rule(maelys_datalog_program_b
         l->lhs_expr_root = l->rhs_expr_root = UINT8_MAX;
         if (a->kind == MAELYS_DATALOG_IR_ATOM || a->kind == MAELYS_DATALOG_IR_NEGATION)
             rc = import_atom(r, &a->atom, &l->atom, 1);
-        else if (a->kind == MAELYS_DATALOG_IR_COUNT) {
+        else if (maelys_datalog_literal_is_aggregate(a->kind)) {
             rc = import_atom(r, &a->atom, &l->atom, 1);
             if (rc == MAELYS_OK) rc = import_term(r, &a->lhs, &l->lhs, 1);
             if (rc == MAELYS_OK) rc = import_term(r, &a->rhs, &l->rhs, 1);

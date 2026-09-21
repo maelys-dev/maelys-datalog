@@ -10,7 +10,7 @@ capacity, and canonical-order constraints.
   arity must exist. EDB and POLICY_FACT predicates are forbidden in rule heads.
 - A direct fact must use a POLICY_FACT predicate and be ground.
 - Head variables, comparison variables, arithmetic variables, and variables in
-  `not(...)` must be bound by positive body atoms or count outputs. Count inputs
+  `not(...)` must be bound by positive body atoms or aggregate outputs. Aggregate inputs
   have their own local scope; see [aggregates](aggregates.md).
 - `starts_with(Value, Pattern)`, `ends_with(Value, Pattern)`, and
   `contains(Value, Pattern)` are contextual FILTER body literals only when the
