@@ -122,7 +122,7 @@ with Engine() as engine:
     print(result.derived_fact_count()) # 6: 2 can_read + 2 has_any_document + 2 allow
 ```
 
-The declaration constructors match the unreleased C convenience initializers:
+The declaration constructors match the C convenience initializers added in 0.4.0:
 
 | C declaration | Python declaration | Flags |
 | --- | --- | --- |
@@ -364,7 +364,7 @@ native storage or release a result lease.
 
 ## Explanations and full diagnostics
 
-### Optional reusable workspace (unreleased)
+### Optional reusable workspace (0.5.0)
 
 ```python
 from maelys_datalog_next import ExplanationKind
@@ -448,7 +448,7 @@ native status. `.diagnostic` is an immutable `Diagnostic` containing `source`,
 operation status. APIs without a diagnostic output leave that object empty.
 The convenient `.message` and `.hint` remain available. Do not parse prose.
 
-## Stratified count (unreleased)
+## Stratified count (0.6.0)
 
 The reference backend supports `count(I, event(I,G,_), N)` in rule bodies,
 with `G` bound by an ordinary positive atom. It counts distinct typed `I`
