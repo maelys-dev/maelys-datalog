@@ -15,7 +15,7 @@
 enum { SAMPLES = 301, WARMUP = 50, PREDS = 32 };
 static char names[PREDS][12];
 static const char *orders[] = {"sorted", "reverse", "permuted", "duplicate", "strided"};
-static const char *sizes[] = {"8", "64", "128", "256", "402", "maximum"};
+static const char *sizes[] = {"8", "16", "31", "32", "33", "64", "128", "256", "402", "maximum"};
 static double now_us(void) {
     struct timespec t; assert(!clock_gettime(CLOCK_MONOTONIC, &t));
     return t.tv_sec * 1e6 + t.tv_nsec / 1e3;
@@ -107,8 +107,8 @@ int main(int argc, char **argv) {
     fprintf(summary, "policy,order,values,size,entries,edb_limit,samples,min_us,median_us,p95_us,result_digest,commit,profile,compiler,cflags,opt_level\n");
     fprintf(raw, "policy,order,values,size,sample,elapsed_us\n");
     for (unsigned kind = 0; kind < 2; ++kind) for (unsigned order = 0; order < 5; ++order)
-    for (unsigned size = 0; size < 6; ++size) {
-        size_t entries = size == 5 ? edb_limit : (size_t)strtoul(sizes[size], NULL, 10);
+    for (unsigned size = 0; size < sizeof(sizes) / sizeof(sizes[0]); ++size) {
+        size_t entries = !strcmp(sizes[size], "maximum") ? edb_limit : (size_t)strtoul(sizes[size], NULL, 10);
         size_t lanes = (entries + cap - 1) / cap;
         for (size_t i = 0; i <= cap; ++i)
             snprintf(texts[i], sizeof(texts[i]), "value-%08zu", i * (order == 4 ? 4096u : 1u));

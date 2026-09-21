@@ -12,7 +12,7 @@ from compare_runs import METRICS, PASSES, compare, display
 KEY = ("policy", "order", "values", "size")
 CASES = {(p, o, v, s) for p in ("inert", "derive")
          for o in ("sorted", "reverse", "permuted", "duplicate", "strided")
-         for v in ("integer", "symbol") for s in ("8", "64", "128", "256", "402", "maximum")}
+         for v in ("integer", "symbol") for s in ("8", "16", "31", "32", "33", "64", "128", "256", "402", "maximum")}
 
 
 def load(path, profile, commit):

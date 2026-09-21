@@ -51,33 +51,75 @@ static void native_parity(void) {
         for (unsigned j = 0; j < 2; ++j) OK(maelys_datalog_edb_finalize(&edbs[j]));
         assert(!memcmp(pools[0], pools[1], sizeof(pools[0])));
     }
-    reset();
-    /* Same numeric payload in different kinds, unused bytes intentionally dirty. */
-    const maelys_datalog_term_kind_t kinds[] = {MAELYS_DATALOG_TERM_SYMBOL, MAELYS_DATALOG_TERM_INT,
-                                               MAELYS_DATALOG_TERM_BOOL, MAELYS_DATALOG_TERM_VAR};
-    for (unsigned k = 0; k < 4; ++k) {
-        maelys_datalog_term_t t;
-        memset(&t, 0xa5, sizeof(t));
-        t.kind = kinds[k];
-        if (k == 0) t.as.symbol = 1;
-        if (k == 1) t.as.integer = 1;
-        if (k == 2) t.as.boolean = 1;
-        if (k == 3) t.as.variable = 1;
-        OK(insert(names[0], &t, 1));
-        memset(&t, 0, sizeof(t)); t.kind = kinds[k];
-        if (k == 0) t.as.symbol = 1;
-        if (k == 1) t.as.integer = 1;
-        if (k == 2) t.as.boolean = 1;
-        if (k == 3) t.as.variable = 1;
-        OK(insert(names[0], &t, 1));
-        assert(edbs[1].fact_count == k + 1u);
+    for (unsigned indexed = 0; indexed < 2; ++indexed) {
+        reset();
+        const size_t prefix = indexed ? MAELYS_DATALOG_EDB_INSERT_SCAN_LIMIT : 0;
+        for (size_t i = 0; i < prefix; ++i) {
+            maelys_datalog_term_t t = {.kind=MAELYS_DATALOG_TERM_INT, .as.integer=(long long)i};
+            OK(insert(names[1], &t, 1));
+        }
+        /* Same numeric payload in different kinds, unused bytes intentionally dirty. */
+        const maelys_datalog_term_kind_t kinds[] = {MAELYS_DATALOG_TERM_SYMBOL, MAELYS_DATALOG_TERM_INT,
+                                                   MAELYS_DATALOG_TERM_BOOL, MAELYS_DATALOG_TERM_VAR};
+        for (unsigned k = 0; k < 4; ++k) {
+            maelys_datalog_term_t t;
+            memset(&t, 0xa5, sizeof(t));
+            t.kind = kinds[k];
+            if (k == 0) t.as.symbol = 1;
+            if (k == 1) t.as.integer = 1;
+            if (k == 2) t.as.boolean = 1;
+            if (k == 3) t.as.variable = 1;
+            OK(insert(names[0], &t, 1));
+            memset(&t, 0, sizeof(t)); t.kind = kinds[k];
+            if (k == 0) t.as.symbol = 1;
+            if (k == 1) t.as.integer = 1;
+            if (k == 2) t.as.boolean = 1;
+            if (k == 3) t.as.variable = 1;
+            OK(insert(names[0], &t, 1));
+            assert(edbs[1].fact_count == prefix + k + 1u);
+        }
+        maelys_datalog_term_t pair[2] = {{.kind=MAELYS_DATALOG_TERM_INT, .as.integer=-1},
+                                        {.kind=MAELYS_DATALOG_TERM_INT, .as.integer=1}};
+        OK(insert("pair", pair, 2));
+        pair[1].as.integer = -1; OK(insert("pair", pair, 2));
+        assert(edbs[1].fact_count == prefix + 6);
+        assert(insert("pair", pair, 1) == MAELYS_ERR_INVALID_FIELD);
     }
-    maelys_datalog_term_t pair[2] = {{.kind=MAELYS_DATALOG_TERM_INT, .as.integer=-1},
-                                    {.kind=MAELYS_DATALOG_TERM_INT, .as.integer=1}};
-    OK(insert("pair", pair, 2));
-    pair[1].as.integer = -1; OK(insert("pair", pair, 2));
-    assert(edbs[1].fact_count == 6);
-    assert(insert("pair", pair, 1) == MAELYS_ERR_INVALID_FIELD);
+}
+
+static void activation_boundary(void) {
+    reset();
+    const maelys_datalog_edb_insert_index_t empty = {0};
+    const size_t limit = MAELYS_DATALOG_EDB_INSERT_SCAN_LIMIT;
+    for (size_t i = 0; i < limit; ++i) {
+        maelys_datalog_term_t t = {.kind=MAELYS_DATALOG_TERM_INT, .as.integer=(long long)i};
+        OK(insert(names[0], &t, 1));
+        assert(!memcmp(&empty, &index_state, sizeof(empty)));
+        t.as.integer = 0; /* Includes nonconsecutive duplicates at 31 and 32. */
+        OK(insert(names[0], &t, 1));
+        assert(edbs[1].fact_count == i + 1u);
+        assert(!memcmp(&empty, &index_state, sizeof(empty)));
+    }
+    maelys_datalog_term_t t = {.kind=MAELYS_DATALOG_TERM_INT, .as.integer=(long long)limit};
+    assert(insert("missing", &t, 1) == MAELYS_ERR_INVALID_FIELD);
+    for (unsigned i = 0; i < 2; ++i) edbs[i].fact_capacity = limit;
+    assert(insert(names[0], &t, 1) == MAELYS_ERR_PAYLOAD_TOO_LARGE);
+    assert(!memcmp(&empty, &index_state, sizeof(empty)));
+    for (unsigned i = 0; i < 2; ++i) edbs[i].fact_capacity = MAELYS_DATALOG_MAX_EDB_FACTS;
+    OK(insert(names[0], &t, 1));
+    size_t occupied = 0;
+    for (size_t i = 0; i < MAELYS_DATALOG_EDB_INSERT_SLOTS; ++i)
+        occupied += index_state.slots[i] != 0;
+    assert(occupied == limit + 1u);
+    for (size_t i = 0; i <= limit; ++i) {
+        t.as.integer = (long long)i;
+        OK(insert(names[0], &t, 1));
+        assert(edbs[1].fact_count == limit + 1u); /* Backfill finds every old fact. */
+    }
+    /* A fresh construction on reused storage must start in scan mode again. */
+    reset();
+    OK(insert(names[0], &t, 1));
+    assert(!memcmp(&empty, &index_state, sizeof(empty)));
 }
 
 static void collisions(void) {
@@ -88,7 +130,7 @@ static void collisions(void) {
     fact.terms[0].kind = MAELYS_DATALOG_TERM_INT;
     size_t found = 0;
     long long first = -1;
-    for (long long v = 0; found < 24; ++v) {
+    for (long long v = 0; found < 40; ++v) {
         assert(v < 1000000);
         fact.terms[0].as.integer = v;
         if (maelys_datalog_test_edb_insert_bucket(&fact) != MAELYS_DATALOG_EDB_INSERT_SLOTS - 1u) continue;
@@ -99,7 +141,7 @@ static void collisions(void) {
         assert(edbs[1].fact_count == found);
     }
     /* This deliberately wraps a chain across the end of the table. */
-    assert(index_state.slots[0] && index_state.slots[22]);
+    assert(index_state.slots[0] && index_state.slots[38]);
     /* A nonconsecutive duplicate must traverse the index, not the last fact. */
     fact.terms[0].as.integer = first;
     OK(insert(names[0], fact.terms, 1));
@@ -168,7 +210,7 @@ int main(void) {
     OK(maelys_datalog_predicate_registry_freeze(&rules.registry));
     const char *source = "out(X) :- p0(X), p1(X).";
     OK(maelys_datalog_parse_ruleset(&rules, source, strlen(source)));
-    native_parity(); collisions(); transaction_rollback();
+    native_parity(); activation_boundary(); collisions(); transaction_rollback();
     printf("materialization: legacy parity, capacity precedence, collisions, byte-exact rollback; session=%zu index=%zu bytes\n",
            sizeof(maelys_datalog_prepared_session_t), sizeof(index_state));
     return 0;

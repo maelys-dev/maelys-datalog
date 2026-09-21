@@ -10,7 +10,8 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 ### Performance
 
 - Native session input materialization uses a bounded fact index instead of
-  scanning all previously inserted facts for every duplicate check. The index
+  scanning all previously inserted facts for every duplicate check above 32
+  distinct facts. Smaller sets retain the scan; fact 33 backfills the index. The index
   reuses symbol-sort scratch after interning: no session-size increase, new
   allocation, public layout or ABI change. Capacity checks still precede
   deduplication, and final sorting preserves canonical result identities.
@@ -21,6 +22,8 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
   inert and deriving policies, both profiles, integer/symbol values, input
   permutations, duplicates and strided values up to the global EDB bound.
   Full result checks and A/A noise floors precede any performance conclusion.
+  Optional Callgrind and neutral-link-layout diagnostics isolate the historical
+  LARGE/2048 solve payload; generated evidence remains in run artifacts.
 
 - Adopt maelys-release v0.60.0 for CI and release workflows. The three retired
   compatibility check aliases disappear; all 16 required checks retain their

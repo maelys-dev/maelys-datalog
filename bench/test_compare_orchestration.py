@@ -47,7 +47,7 @@ rows = ([dict(row, scenario=s, kind=k) for s in ("fresh-result", "alternating-qu
 if kind == "sessions":
     rows = [dict(row, policy=p, order=o, values=v, size=s, entries=2048 if s == "maximum" else int(s))
             for p in ("inert", "derive") for o in ("sorted", "reverse", "permuted", "duplicate", "strided")
-            for v in ("integer", "symbol") for s in ("8", "64", "128", "256", "402", "maximum")]
+            for v in ("integer", "symbol") for s in ("8", "16", "31", "32", "33", "64", "128", "256", "402", "maximum")]
 with target.open("w", newline="") as stream:
     writer = csv.DictWriter(stream, list(row))
     writer.writeheader()

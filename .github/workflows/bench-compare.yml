@@ -12,6 +12,12 @@ on:
         required: true
         type: string
 
+      diagnostic_original:
+        description: Optional original candidate SHA for LARGE/2048 Callgrind and layout diagnosis
+        required: false
+        default: ''
+        type: string
+
 permissions:
   contents: read
 
@@ -27,6 +33,20 @@ jobs:
           persist-credentials: false
       - name: Check comparison tooling
         run: python3 -m unittest discover -s bench -p 'test_compare*.py'
+      - name: Prepare optional diagnostic tool
+        if: inputs.diagnostic_original != ''
+        run: |
+          if ! command -v valgrind >/dev/null; then
+            sudo apt-get update
+            sudo apt-get install -y valgrind
+          fi
+      - name: Diagnose instructions and binary layout
+        if: inputs.diagnostic_original != ''
+        env:
+          BASE_REF: ${{ inputs.base }}
+          ORIGINAL_REF: ${{ inputs.diagnostic_original }}
+          HEAD_REF: ${{ inputs.head }}
+        run: bash bench/diagnose_solver_layout.sh "$BASE_REF" "$ORIGINAL_REF" "$HEAD_REF" "$RUNNER_TEMP/bench-diagnostic"
       - name: Compare immutable revisions
         env:
           BASE_REF: ${{ inputs.base }}
@@ -37,6 +57,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: bench-comparison-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/bench-comparison/
+          path: |
+            ${{ runner.temp }}/bench-comparison/
+            ${{ runner.temp }}/bench-diagnostic/
           if-no-files-found: warn
           retention-days: 30
