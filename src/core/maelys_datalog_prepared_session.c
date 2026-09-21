@@ -176,8 +176,8 @@ static maelys_result_t materialize_input_fact(
                 return MAELYS_ERR_INVALID_FIELD;
         }
     }
-    return maelys_datalog_edb_add_fact(
-        &session->edb, input->predicate, terms, input->arity);
+    return maelys_datalog_edb_add_fact_indexed(
+        &session->edb, input->predicate, terms, input->arity, &session->fact_index);
 }
 
 static maelys_result_t reset_transaction_state(
@@ -329,6 +329,7 @@ maelys_result_t maelys_datalog_prepared_session_materialize_inputs_diagnosed(
     rc = collect_input_symbols(session, facts, fact_count, &symbol_count, message, message_capacity);
     if (rc != MAELYS_OK) return reject_transaction(session, rc);
     rc = intern_input_symbols(session, symbol_count, facts, fact_count, message, message_capacity);
+    /* Drop borrowed pointers and initialize the overlapping insertion index. */
     memset(session->symbol_inputs, 0, sizeof(session->symbol_inputs));
     if (rc != MAELYS_OK) return reject_transaction(session, rc);
     for (size_t i = 0u; i < fact_count; i++) {

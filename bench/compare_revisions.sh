@@ -64,6 +64,8 @@ run_pass() {
     "$output/$profile-solver-$name.csv" "$output/$profile-solver-$name.json"
   "$workspace/bin-$role-$profile/input" \
     "$output/$profile-input-$name.csv" "$output/$profile-input-$name.samples.csv"
+  "$workspace/bin-$role-$profile/sessions" \
+    "$output/$profile-sessions-$name.csv" "$output/$profile-sessions-$name.samples.csv"
 }
 run_explanations() {
   local profile=$1 mode=$2 name=$3
@@ -91,4 +93,6 @@ python3 "$driver/bench/compare_runs.py" "$output" > "$output/comparison.incomple
 mv "$output/comparison.incomplete.md" "$output/comparison.md"
 python3 "$driver/bench/compare_explanations.py" "$output" > "$output/explanations.incomplete.md"
 mv "$output/explanations.incomplete.md" "$output/explanations.md"
+python3 "$driver/bench/compare_sessions.py" "$output" > "$output/sessions.incomplete.md"
+mv "$output/sessions.incomplete.md" "$output/sessions.md"
 # Deliberately no git writes, PR comments, release, or bench/results files.

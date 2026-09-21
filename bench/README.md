@@ -40,12 +40,12 @@ as a workaround. See [GitHub's dispatch contract](https://docs.github.com/en/act
 
 1. Archive base/head; retain the exact compiler, flags, SHA and harness hashes.
 2. Compile each revision/profile once with clang `-O2`, SMALL and LARGE.
-   Each engine object is shared between solver, input and (when available on
+   Each engine object is shared between solver, input, public-session and (when available on
    the candidate) explanation executables.
    All four sequential builds finish before any measurement begins.
 3. For each profile, run A1/A2 and A3/A4: two independent A/A pairs.
    Finish all A/A measurements in both profiles before starting A/B.
-4. Run A B A B in each profile, without rebuilding. Both solver and input
+4. Run A B A B in each profile, without rebuilding. Solver, input and public-session probes
    run sequentially in every pass. No priority/affinity tuning or case filtering.
 5. Compare every case against its observed A/A floor. Under 10 microseconds
    (baseline median of A/A medians), retain the minimum of pass minima.
@@ -63,6 +63,28 @@ If hosted-runner noise is larger than the effect being investigated, the report
 says a dedicated machine is needed. Do not reinterpret a noisy run, change its
 statistic, cherry-pick cases, or set an automatic threshold from inconclusive
 measurements. There is no global geometric-mean acceptance shortcut.
+
+### Public session materialization workload
+
+`bench_sessions.c` uses only the facade, obtaining capacities through `limit_get`.
+It times `session_solve_edb` with prebuilt input and a reused session. Compilation,
+append, result enumeration/checks and release are outside timing. Every result
+is checked through EDB membership/boundary absence and IDB enumeration; digests include symbol IDs and must
+match across revisions and sorted/reverse/permuted inputs. The two policies are
+`out(X) :- p00(X).` and `out(X) :- p00(X), p31(X).`, with `p31` always empty.
+The second is a common-cost control, not a direct materialization timer:
+subtracting it from the first does not isolate derivation time.
+
+There are 120 cases per profile/pass: two policies, integer/symbol values, five
+orders (sorted, reverse, permuted, identical duplicates, and values spaced by
+4096), and six entry counts (8, 64, 128, 256, 402 and the runtime global EDB
+bound). Distinct facts occupy the minimum number of predicates that respects
+the runtime per-predicate limit. Strided values are adversarial low-bit inputs,
+not forced hash collisions; the native unit test supplies forced collisions.
+The same 50 warmups, 301 samples, two A/A pairs and A B A B protocol applies.
+`sessions.md` reports every case with its own noise floor; these simple policies
+do not establish gains for recursion or aggregates. Session storage/allocation
+claims come from the native contracts, not timing or process RSS.
 
 ### Input index crossover and memory
 
@@ -91,6 +113,7 @@ The run uploads `bench-comparison-RUN_ID-ATTEMPT`, retained for 30 days:
 
 - solver CSV/JSON for all eight passes per profile;
 - input summary CSV and `*.samples.csv` with all measured samples;
+- public-session summary/raw CSV and `sessions.md`, with all 120 cases per pass;
 - explanation summary/raw CSV for eight passes per profile when the candidate
   has the session workspace API, plus `explanations.md` (an explicit skip otherwise);
 - `comparison.md`, `metadata.json` and `commands.log`.

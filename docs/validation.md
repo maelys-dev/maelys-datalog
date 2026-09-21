@@ -58,6 +58,18 @@ Compare the same compiler/profile on baseline and candidate, without concurrent
 builds. Establish a per-case A/A noise floor before interpreting A/B ratios.
 The solver benchmark includes EDB finalization, solve, query and result release.
 
+The native materialization test compares indexed insertion with the historical
+scan through the full EDB capacity, typed values and colliding/wrapping chains.
+Capacity checks retain their ordering: a duplicate at a full predicate is still
+rejected. Session failures restore symbols, facts, counts and scratch byte for
+byte; the all-engine allocation guard also fills the per-predicate bound,
+rejects a duplicate and reuses the session with allocation disabled.
+The transient uint16_t fact index occupies 4 KiB SMALL / 8 KiB LARGE inside the
+existing symbol-pointer scratch union. It adds no session memory or allocations;
+finalization invalidates its offsets. Hash collisions still require full fact
+equality and can degrade to a bounded linear probe; there is no worst-case
+constant-time claim. The legacy direct EDB construction API retains its scan.
+
 The input-allocation test checks colliding/wrapping hash chains and byte-for-byte
 arena restoration on rejected batches, including empty strings in one/three-byte
 text budgets. Performance acceptance is separate from these allocation gates.

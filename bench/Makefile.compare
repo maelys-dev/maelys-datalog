@@ -16,7 +16,7 @@ DEFS = -DBENCH_COMMIT=\"$(REVISION)\" -DBENCH_DIRTY=\"false\" -DBENCH_COMPILER=\
 empty :=
 space := $(empty) $(empty)
 .PHONY: all
-all: $(OUT)/solver $(OUT)/input
+all: $(OUT)/solver $(OUT)/input $(OUT)/sessions
 ifeq ($(EXPLANATIONS),1)
 all: $(OUT)/explanations
 endif
@@ -29,3 +29,6 @@ $(OUT)/input: $(OBJECTS) $(DRIVER)/bench/bench_input_edb.c
 	$(CC) $(FLAGS) $(DRIVER)/bench/bench_input_edb.c $(OBJECTS) -o $@
 $(OUT)/explanations: $(OBJECTS) $(DRIVER)/bench/bench_explanations.c
 	$(CC) $(FLAGS) $(DEFS) $(DRIVER)/bench/bench_explanations.c $(OBJECTS) -o $@
+
+$(OUT)/sessions: $(OBJECTS) $(DRIVER)/bench/bench_sessions.c
+	$(CC) $(FLAGS) $(DEFS) $(DRIVER)/bench/bench_sessions.c $(OBJECTS) -o $@

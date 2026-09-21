@@ -1,4 +1,5 @@
 #include "src/core/maelys_datalog_edb.h"
+#include "src/core/maelys_datalog_edb_internal.h"
 
 #include "src/core/maelys_datalog_predicate_registry.h"
 #include "src/core/maelys_datalog_symbol_table.h"
@@ -231,10 +232,43 @@ int maelys_datalog_edb_contains(const maelys_datalog_edb_t *edb,
     return maelys_datalog_fact_set_contains(&edb->fact_set, fact);
 }
 
-maelys_result_t maelys_datalog_edb_add_fact(maelys_datalog_edb_t *edb,
+/* Hash logical fields, never union padding or unused terms. Final avalanche
+ * spreads consecutive integer and symbol IDs across the bounded table. */
+static size_t insert_bucket(const maelys_datalog_fact_t *fact) {
+    uint64_t hash = fact->predicate_id;
+    hash = (hash ^ fact->arity) * UINT64_C(1099511628211);
+    for (size_t i = 0; i < fact->arity; ++i) {
+        const maelys_datalog_term_t *term = &fact->terms[i];
+        uint64_t value = 0;
+        switch (term->kind) {
+            case MAELYS_DATALOG_TERM_SYMBOL: value = term->as.symbol; break;
+            case MAELYS_DATALOG_TERM_INT: value = (uint64_t)term->as.integer; break;
+            case MAELYS_DATALOG_TERM_BOOL: value = (uint64_t)term->as.boolean; break;
+            case MAELYS_DATALOG_TERM_VAR: value = term->as.variable; break;
+            default: break; /* Same equality as term_cmp for unknown kinds. */
+        }
+        hash = (hash ^ (uint64_t)term->kind) * UINT64_C(1099511628211);
+        hash = (hash ^ value) * UINT64_C(1099511628211);
+    }
+    hash ^= hash >> 30;
+    hash *= UINT64_C(0xbf58476d1ce4e5b9);
+    hash ^= hash >> 27;
+    hash *= UINT64_C(0x94d049bb133111eb);
+    hash ^= hash >> 31;
+    return (size_t)(hash % MAELYS_DATALOG_EDB_INSERT_SLOTS);
+}
+
+#ifdef MAELYS_TESTING
+size_t maelys_datalog_test_edb_insert_bucket(const maelys_datalog_fact_t *fact) {
+    return insert_bucket(fact);
+}
+#endif
+
+static maelys_result_t add_fact(maelys_datalog_edb_t *edb,
                                             const char *predicate,
                                             const maelys_datalog_term_t *terms,
-                                            size_t arity) {
+                                            size_t arity,
+                                            maelys_datalog_edb_insert_index_t *index) {
     if (!edb || !predicate || (!terms && arity > 0) || arity > MAELYS_DATALOG_MAX_ARITY) {
         return MAELYS_ERR_INVALID_ARGUMENT;
     }
@@ -261,12 +295,42 @@ maelys_result_t maelys_datalog_edb_add_fact(maelys_datalog_edb_t *edb,
     fact.predicate_id = pid;
     fact.arity = (uint8_t)arity;
     for (size_t i = 0; i < arity; i++) fact.terms[i] = terms[i];
-    if (maelys_datalog_edb_contains(edb, &fact)) return MAELYS_OK;
+    size_t slot = 0;
+    if (index) {
+        /* Consecutive duplicates already have an exact candidate. Avoid
+         * hashing them; the capacity/error checks above still apply first. */
+        if (edb->fact_count &&
+            maelys_datalog_fact_equals(&edb->facts[edb->fact_count - 1u], &fact)) return MAELYS_OK;
+        slot = insert_bucket(&fact);
+        size_t probes = 0;
+        while (index->slots[slot]) {
+            size_t offset = (size_t)index->slots[slot] - 1u;
+            if (offset >= edb->fact_count) return MAELYS_ERR_INTERNAL;
+            if (maelys_datalog_fact_equals(&edb->facts[offset], &fact)) return MAELYS_OK;
+            if (++probes == MAELYS_DATALOG_EDB_INSERT_SLOTS) return MAELYS_ERR_INTERNAL;
+            slot = (slot + 1u) % MAELYS_DATALOG_EDB_INSERT_SLOTS;
+        }
+    } else if (maelys_datalog_edb_contains(edb, &fact)) {
+        return MAELYS_OK;
+    }
     edb->facts[edb->fact_count++] = fact;
     edb->fact_set.count = edb->fact_count;
     edb->fact_set.sorted = 0;
     edb->facts_per_pred[pid]++;
+    if (index) index->slots[slot] = (uint16_t)edb->fact_count;
     return MAELYS_OK;
+}
+
+maelys_result_t maelys_datalog_edb_add_fact(maelys_datalog_edb_t *edb,
+    const char *predicate, const maelys_datalog_term_t *terms, size_t arity) {
+    return add_fact(edb, predicate, terms, arity, NULL);
+}
+
+maelys_result_t maelys_datalog_edb_add_fact_indexed(maelys_datalog_edb_t *edb,
+    const char *predicate, const maelys_datalog_term_t *terms, size_t arity,
+    maelys_datalog_edb_insert_index_t *index) {
+    if (!index) return MAELYS_ERR_INVALID_ARGUMENT;
+    return add_fact(edb, predicate, terms, arity, index);
 }
 
 static maelys_result_t validate_edb_symbol_target(maelys_datalog_edb_t *edb,
