@@ -111,7 +111,7 @@ int main(void) {
         strlen(filter_source), &filter_policy, &diag) == 0);
     assert(maelys_datalog_session_create(filter_policy, 0, &filtered) == 0);
     maelys_datalog_input_edb_t *edb = NULL;
-    assert(maelys_datalog_input_edb_create_with_capacity(64u, 4096u, &edb) == 0);
+    assert(maelys_datalog_input_edb_create_with_capacity(MAELYS_DATALOG_MAX_FACTS_PER_PRED + 1u, 4096u, &edb) == 0);
     maelys_datalog_result_t *result = NULL, *other = NULL;
     char names[32][16];
     strcpy(names[0], "alpha"); strcpy(names[31], "zeta");
@@ -153,6 +153,23 @@ int main(void) {
         assert(maelys_datalog_result_derived_fact_count(result, &derived) == 0 && derived == 0u);
         release_bounded(result);
     }
+    /* Fill the native per-predicate capacity with the allocator disabled.
+     * A subsequent duplicate still fails before dedup; rejection is reusable. */
+    assert(maelys_datalog_input_edb_clear(edb) == 0);
+    for (size_t i = 0; i < MAELYS_DATALOG_MAX_FACTS_PER_PRED; ++i) {
+        maelys_datalog_public_value_t v = {.kind=MAELYS_DATALOG_VALUE_INTEGER, .as.integer=(int64_t)i};
+        assert(maelys_datalog_input_edb_add_fact(edb, "seed", &v, 1u, NULL) == 0);
+    }
+    assert(maelys_datalog_session_solve_edb(session, edb, &result, &diag) == 0);
+    release_bounded(result);
+    maelys_datalog_public_value_t duplicate = {.kind=MAELYS_DATALOG_VALUE_INTEGER, .as.integer=0};
+    assert(maelys_datalog_input_edb_add_fact(edb, "seed", &duplicate, 1u, NULL) == 0);
+    assert(maelys_datalog_session_solve_edb(session, edb, &result, &diag) ==
+           MAELYS_DATALOG_STATUS_PAYLOAD_TOO_LARGE && result == NULL);
+    assert(strstr(diag.message, "per-predicate"));
+    assert(maelys_datalog_input_edb_clear(edb) == 0);
+    assert(maelys_datalog_session_solve_edb(session, edb, &result, &diag) == 0);
+    release_bounded(result);
     /* Fail inside the solver (not just during input validation), then reuse the
      * same native result workspace. No result is published on filter errors. */
     maelys_datalog_public_value_t integer = {.kind=MAELYS_DATALOG_VALUE_INTEGER, .as.integer=7};

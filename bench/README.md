@@ -40,12 +40,12 @@ as a workaround. See [GitHub's dispatch contract](https://docs.github.com/en/act
 
 1. Archive base/head; retain the exact compiler, flags, SHA and harness hashes.
 2. Compile each revision/profile once with clang `-O2`, SMALL and LARGE.
-   Each engine object is shared between solver, input and (when available on
+   Each engine object is shared between solver, input, public-session and (when available on
    the candidate) explanation executables.
    All four sequential builds finish before any measurement begins.
 3. For each profile, run A1/A2 and A3/A4: two independent A/A pairs.
    Finish all A/A measurements in both profiles before starting A/B.
-4. Run A B A B in each profile, without rebuilding. Both solver and input
+4. Run A B A B in each profile, without rebuilding. Solver, input and public-session probes
    run sequentially in every pass. No priority/affinity tuning or case filtering.
 5. Compare every case against its observed A/A floor. Under 10 microseconds
    (baseline median of A/A medians), retain the minimum of pass minima.
@@ -59,10 +59,72 @@ confidence interval. Any A/B effect at or below this symmetric floor is
 visible. Zero-duration clear samples are marked indeterminate by clock
 resolution, never interpreted as infinite speedup.
 
-If hosted-runner noise is larger than the effect being investigated, the report
-says a dedicated machine is needed. Do not reinterpret a noisy run, change its
-statistic, cherry-pick cases, or set an automatic threshold from inconclusive
+A/A measures repeatability of one binary; it does not bound systematic placement
+bias between different binaries. An above-floor observation alone does not
+establish an algorithmic cause. The #77 control observed 9.94% and 22.77% shifts
+on a single solver fixture: neither value is a universal tolerance or upper
+bound. Distinguish placement from runner variance before requesting hardware.
+Keep every pass and statistic; do not select an index threshold from inconclusive
 measurements. There is no global geometric-mean acceptance shortcut.
+
+### Public session materialization workload
+
+`bench_sessions.c` uses only the facade, obtaining capacities through `limit_get`.
+It times `session_solve_edb` with prebuilt input and a reused session. Compilation,
+append, result enumeration/checks and release are outside timing. Every result
+is checked through EDB membership/boundary absence and IDB enumeration; digests include symbol IDs and must
+match across revisions and sorted/reverse/permuted inputs. The two policies are
+`out(X) :- p00(X).` and `out(X) :- p00(X), p31(X).`, with `p31` always empty.
+The second is a common-cost control, not a direct materialization timer:
+subtracting it from the first does not isolate derivation time.
+
+There are 200 cases per profile/pass: two policies, integer/symbol values, five
+orders (sorted, reverse, permuted, identical duplicates, and values spaced by
+4096), and ten entry counts (8, 16, 31, 32, 33, 64, 128, 256, 402 and the runtime
+global EDB bound). Distinct facts occupy the minimum number of predicates that respects
+the runtime per-predicate limit. Strided values are adversarial low-bit inputs,
+not forced hash collisions; the native unit test supplies forced collisions.
+The same 50 warmups, 301 samples, two A/A pairs and A B A B protocol applies.
+`sessions.md` reports every case with its own noise floor; these simple policies
+do not establish gains for recursion or aggregates. Session storage/allocation
+claims come from the native contracts, not timing or process RSS.
+
+### Optional instruction and layout diagnosis
+
+Set the manual workflow's `diagnostic_original` input to an earlier candidate
+SHA to compare baseline A, that candidate B and revised head C before the full
+matrix. `diagnose_solver_layout.sh BASE ORIGINAL HEAD NEW_ABSOLUTE_OUTPUT`
+also runs this diagnostic directly on native Linux x86_64 with Clang and
+Valgrind installed. It deliberately selects only `solver_size_pure` LARGE/2048;
+this is separate from the full comparison's unfiltered inventory.
+
+The driver includes the unchanged historical fixture/payload. It counts only
+finalize/solve/query/release under Callgrind, twice per binary, and times outside
+Valgrind. All builds precede timing. Four predeclared layouts link identical
+objects with 0/16/64/256 unreachable text bytes before the EDB object; symbol
+maps verify the displacement. Two A/A pairs per unpadded revision precede two
+interleaved rounds of every layout (500 warmups, 1000 samples). All variants,
+raw samples, instruction profiles, function annotations, disassembly and hashes
+are retained under `bench-diagnostic/` in the run artifact. The complete matrix
+is under `bench-comparison/` when both directories are uploaded.
+
+Equal Ir alone does not prove a layout cause or equal cycle/cache cost. The
+additional diagnostic driver changes layout relative to the historical binary;
+interpret the full rerun separately. No automatic acceptance or merge follows
+from the generated `diagnostic.md` report.
+
+The optional `session_diagnostics` workflow input adds a separate count-mode
+build of the session harness, using the same engine objects, before any timing.
+After the complete matrix, `diagnose_sessions.py` lists every slower session row
+by amplitude, preserving its A/A floor. It counts only distinct cases with a
+slower metric above the named 9.94% reference from the earlier solver control.
+This prioritizes diagnostics; it does not erase smaller effects or calibrate
+sessions from a different workload. Each selected case has 50 warmups followed
+by one counted `solve_edb`, twice per revision; setup, clocks, oracle and release
+stay outside collection. The unchanged oracle digest must match the timed run.
+The separate mode changes layout and prior case history and produces no timings.
+`sessions-diagnostic.md` and `session-counts/` retain the complete selection,
+profiles, exclusive function differences, hashes and checked outputs as artifacts.
 
 ### Input index crossover and memory
 
@@ -91,6 +153,7 @@ The run uploads `bench-comparison-RUN_ID-ATTEMPT`, retained for 30 days:
 
 - solver CSV/JSON for all eight passes per profile;
 - input summary CSV and `*.samples.csv` with all measured samples;
+- public-session summary/raw CSV and `sessions.md`, with all 200 cases per pass;
 - explanation summary/raw CSV for eight passes per profile when the candidate
   has the session workspace API, plus `explanations.md` (an explicit skip otherwise);
 - `comparison.md`, `metadata.json` and `commands.log`.

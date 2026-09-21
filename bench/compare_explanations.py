@@ -59,7 +59,8 @@ def report(directory):
     print("Below 10 µs (median of A/A medians), use minima; otherwise report medians and p95s "
           "with separate A/A floors. p95 aggregation is a median of pass p95s, not a pooled percentile. "
           "Observed floors are not confidence intervals. Sub-floor effects are indéterminé; "
-          "unresolved hosted-runner effects require a dedicated machine if a decision depends on them.\n")
+          "they do not bound systematic differences between configurations or binaries. "
+          "Distinguish placement from runner variance before requesting dedicated hardware.\n")
     total = indeterminate = 0
     for profile in ("SMALL", "LARGE"):
         runs = {p: load(directory / f"{profile}-explanations-{p}.csv",

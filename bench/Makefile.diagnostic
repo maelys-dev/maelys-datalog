@@ -1,0 +1,15 @@
+# SPDX-License-Identifier: MPL-2.0
+include $(DRIVER)/bench/Makefile.compare
+PADS = 0 16 64 256
+diagnostic: $(foreach pad,$(PADS),$(OUT)/diagnostic-$(pad))
+$(OUT)/diagnostic.o: $(DRIVER)/bench/bench_solver_diagnostic.c $(DRIVER)/bench/bench_datalog.c
+	@mkdir -p $(dir $@)
+	$(CC) $(FLAGS) $(DEFS) -c $< -o $@
+# x86_64 ELF only. This unreachable text changes placement, never execution.
+$(OUT)/padding-%.o:
+	@mkdir -p $(dir $@)
+	printf '.text\n.balign 16\n.space %s, 0x90\n.section .note.GNU-stack,"",@progbits\n' '$*' | $(CC) -x assembler -c -o $@ -
+$(OUT)/diagnostic-%: $(OUT)/diagnostic.o $(OBJECTS) $(OUT)/padding-%.o
+	$(CC) $(FLAGS) $(OUT)/diagnostic.o $(foreach obj,$(OBJECTS),$(if $(filter %/src/core/maelys_datalog_edb.o,$(obj)),$(OUT)/padding-$*.o) $(obj)) -o $@
+.SECONDARY:
+.PHONY: diagnostic

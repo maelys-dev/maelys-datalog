@@ -3,6 +3,7 @@
 #define MAELYS_DATALOG_PREPARED_SESSION_INTERNAL_H
 
 #include "src/core/maelys_datalog_edb.h"
+#include "src/core/maelys_datalog_edb_internal.h"
 #include "src/core/maelys_datalog_prepared_session.h"
 
 #define MAELYS_DATALOG_MAX_INPUT_SYMBOLS \
@@ -13,10 +14,19 @@ struct maelys_datalog_prepared_session {
     maelys_datalog_ruleset_t working;
     maelys_datalog_fact_t fact_pool[MAELYS_DATALOG_MAX_EDB_FACTS];
     maelys_datalog_edb_t edb;
-    const char *symbol_inputs[MAELYS_DATALOG_MAX_INPUT_SYMBOLS];
+    /* The pointer sort finishes before native facts are inserted. Reuse its
+     * storage without increasing session size or changing any public layout. */
+    union {
+        const char *symbol_inputs[MAELYS_DATALOG_MAX_INPUT_SYMBOLS];
+        maelys_datalog_edb_insert_index_t fact_index;
+    };
     maelys_datalog_solve_result_t *active_result;
     maelys_datalog_solve_result_t *result_workspace;
 };
+
+_Static_assert(sizeof(maelys_datalog_edb_insert_index_t) <=
+                   sizeof(((maelys_datalog_prepared_session_t *)0)->symbol_inputs),
+               "fact index must fit existing session scratch storage");
 
 void maelys_datalog_prepared_session_result_released(
     void *owner,

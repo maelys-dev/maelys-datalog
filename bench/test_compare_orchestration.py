@@ -32,6 +32,11 @@ elif kind == "input":
                mode="batch", text_capacity=384, reserved_bytes=1024, samples=301,
                min_us=1, median_us=2, p95_us=3,
                clear_min_us=.01, clear_median_us=.02, clear_p95_us=.03)
+elif kind == "sessions":
+    row = dict(policy="inert", order="sorted", values="integer", size="8", entries=8, edb_limit=2048,
+               samples=301, min_us=1, median_us=2, p95_us=3, result_digest="0123456789abcdef",
+               commit=meta["base" if role == "A" else "head"], profile=profile,
+               compiler="synthetic", cflags="-O2", opt_level="-O2")
 else:
     row = dict(scenario="fresh-result", kind="true", mode=mode, samples=301,
                min_us=1, median_us=2, p95_us=3, workspace_bytes=1024 if mode == "workspace" else 0,
@@ -39,6 +44,10 @@ else:
                compiler="synthetic", cflags="-O2", opt_level="-O2")
 rows = ([dict(row, scenario=s, kind=k) for s in ("fresh-result", "alternating-query", "cache-hit")
          for k in ("true", "false")] if kind == "explanations" else [row])
+if kind == "sessions":
+    rows = [dict(row, policy=p, order=o, values=v, size=s, entries=2048 if s == "maximum" else int(s))
+            for p in ("inert", "derive") for o in ("sorted", "reverse", "permuted", "duplicate", "strided")
+            for v in ("integer", "symbol") for s in ("8", "16", "31", "32", "33", "64", "128", "256", "402", "maximum")]
 with target.open("w", newline="") as stream:
     writer = csv.DictWriter(stream, list(row))
     writer.writeheader()
@@ -59,7 +68,8 @@ class OrchestrationTest(unittest.TestCase):
             repo = root / "repo"
             (repo / "bench").mkdir(parents=True)
             for name in ("compare_revisions.sh", "compare_runs.py", "compare_explanations.py",
-                         "Makefile.compare", "bench_input_edb.c", "bench_explanations.c"):
+                         "Makefile.compare", "bench_input_edb.c", "bench_explanations.c",
+                         "bench_sessions.c", "compare_sessions.py", "diagnose_sessions.py", "report_solver_layout.py"):
                 shutil.copy2(ROOT / "bench" / name, repo / "bench" / name)
             (repo / "bench/bench_datalog.c").write_text("synthetic harness\n")
             source = repo / "src/runtime/maelys_datalog_input_edb.c"
@@ -99,6 +109,7 @@ for argument in "$@"; do case "$argument" in OUT=*) output=${argument#OUT=} ;; e
 mkdir -p "$output"
 cp "$BENCH_TEST_PAYLOAD" "$output/solver"
 cp "$BENCH_TEST_PAYLOAD" "$output/input"
+cp "$BENCH_TEST_PAYLOAD" "$output/sessions"
 for argument in "$@"; do
   if test "$argument" = EXPLANATIONS=1; then cp "$BENCH_TEST_PAYLOAD" "$output/explanations"; fi
 done
@@ -119,10 +130,10 @@ done
             lines = trace.read_text().splitlines()
             self.assertEqual(sum(line.startswith("make ") for line in lines), 4)
             self.assertTrue(all(line.startswith("make -j1 ") for line in lines[:4]))
-            count = 52 if enabled else 36
+            count = 68 if enabled else 52
             self.assertEqual(len(lines), count)
             measurements = lines[4:]
-            aa_count = 24 if enabled else 16
+            aa_count = 32 if enabled else 24
             self.assertTrue(all("-aa-" in line for line in measurements[:aa_count]))
             self.assertTrue(all("-ab-" in line for line in measurements[aa_count:]))
             for profile in ("SMALL", "LARGE"):
@@ -133,6 +144,10 @@ done
                     actual = [line.split()[-1].split("-ab-")[-1] for line in measurements
                               if line.startswith(f"explanations {profile} ") and "-ab-" in line]
                     self.assertEqual(actual, ["A1", "B1", "A2", "B2"])
+                actual = [line.split()[-1].split("-ab-")[-1] for line in measurements
+                          if line.startswith(f"sessions {profile} ") and "-ab-" in line]
+                self.assertEqual(actual, ["A1", "B1", "A2", "B2"])
+            self.assertIn("indéterminé", (output / "sessions.md").read_text())
             if enabled:
                 self.assertTrue(all("EXPLANATIONS=0" in line for line in lines[:2]))
                 self.assertTrue(all("EXPLANATIONS=1" in line for line in lines[2:4]))

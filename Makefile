@@ -27,6 +27,8 @@ WASM_TEST_HEADERS = bindings/wasm/maelys_datalog_wasm.h
 TEST_SRCS = $(wildcard tests/test_*.c)
 TEST_BINS = $(TEST_SRCS:tests/%.c=$(BUILD_DIR)/tests/%)
 TEST_CFLAGS = $(CFLAGS) -DMAELYS_TESTING
+
+$(BUILD_DIR)/tests/test_maelys_datalog_materialization: TEST_CFLAGS += -UNDEBUG
 ENGINE_HEADERS = $(wildcard include/maelys/*.h src/core/*.h src/compiler/*.h src/public/*.h src/registry/*.h modules/standard/*.h)
 
 $(OBJ_DIR)/%.o: %.c $(ENGINE_HEADERS)

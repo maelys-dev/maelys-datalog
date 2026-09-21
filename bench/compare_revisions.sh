@@ -45,6 +45,9 @@ if grep -q 'maelys_datalog_session_config_set_explanation_workspace(' "$workspac
 fi
 printf '%s\n' "$explanations" > "$output/explanations-enabled.txt"
 unset MAKEFLAGS MFLAGS
+session_diagnostics=${SESSION_DIAGNOSTICS:-0}
+case "$session_diagnostics" in 0|1) ;; *) echo 'SESSION_DIAGNOSTICS must be 0 or 1' >&2; exit 2;; esac
+printf '%s\n' "$session_diagnostics" > "$output/session-diagnostics-enabled.txt"
 # No build runs beside a measurement. Each engine object is compiled once
 # per revision/profile, reused by the solver and public-input harnesses.
 for role in A B; do
@@ -55,7 +58,7 @@ for role in A B; do
   for profile in SMALL LARGE; do
     make -j1 -C "$workspace/$role" -f "$driver/bench/Makefile.compare" \
       DRIVER="$driver" OUT="$workspace/bin-$role-$profile" REVISION="$revision" PROFILE="$profile" \
-      EXPLANATIONS="$build_explanations"
+      EXPLANATIONS="$build_explanations" SESSION_DIAGNOSTICS="$session_diagnostics"
   done
 done
 run_pass() {
@@ -64,6 +67,8 @@ run_pass() {
     "$output/$profile-solver-$name.csv" "$output/$profile-solver-$name.json"
   "$workspace/bin-$role-$profile/input" \
     "$output/$profile-input-$name.csv" "$output/$profile-input-$name.samples.csv"
+  "$workspace/bin-$role-$profile/sessions" \
+    "$output/$profile-sessions-$name.csv" "$output/$profile-sessions-$name.samples.csv"
 }
 run_explanations() {
   local profile=$1 mode=$2 name=$3
@@ -91,4 +96,10 @@ python3 "$driver/bench/compare_runs.py" "$output" > "$output/comparison.incomple
 mv "$output/comparison.incomplete.md" "$output/comparison.md"
 python3 "$driver/bench/compare_explanations.py" "$output" > "$output/explanations.incomplete.md"
 mv "$output/explanations.incomplete.md" "$output/explanations.md"
+python3 "$driver/bench/compare_sessions.py" "$output" > "$output/sessions.incomplete.md"
+mv "$output/sessions.incomplete.md" "$output/sessions.md"
+if test "$session_diagnostics" = 1; then
+  python3 "$driver/bench/diagnose_sessions.py" "$output" "$workspace" > "$output/sessions-diagnostic.incomplete.md"
+  mv "$output/sessions-diagnostic.incomplete.md" "$output/sessions-diagnostic.md"
+fi
 # Deliberately no git writes, PR comments, release, or bench/results files.

@@ -1,4 +1,5 @@
 #include "src/core/maelys_datalog_edb.h"
+#include "src/core/maelys_datalog_edb_internal.h"
 
 #include "src/core/maelys_datalog_predicate_registry.h"
 #include "src/core/maelys_datalog_symbol_table.h"
@@ -231,10 +232,11 @@ int maelys_datalog_edb_contains(const maelys_datalog_edb_t *edb,
     return maelys_datalog_fact_set_contains(&edb->fact_set, fact);
 }
 
-maelys_result_t maelys_datalog_edb_add_fact(maelys_datalog_edb_t *edb,
-                                            const char *predicate,
-                                            const maelys_datalog_term_t *terms,
-                                            size_t arity) {
+/* Shared validation preserves the historical error/capacity precedence.
+ * The two insertion paths deliberately do not share an index-aware body. */
+static inline maelys_result_t validate_fact(maelys_datalog_edb_t *edb,
+    const char *predicate, const maelys_datalog_term_t *terms, size_t arity,
+    maelys_datalog_fact_t *fact) {
     if (!edb || !predicate || (!terms && arity > 0) || arity > MAELYS_DATALOG_MAX_ARITY) {
         return MAELYS_ERR_INVALID_ARGUMENT;
     }
@@ -256,16 +258,100 @@ maelys_result_t maelys_datalog_edb_add_fact(maelys_datalog_edb_t *edb,
         return MAELYS_ERR_PAYLOAD_TOO_LARGE;
     }
     if (edb->facts_per_pred[pid] >= MAELYS_DATALOG_MAX_FACTS_PER_PRED) return MAELYS_ERR_PAYLOAD_TOO_LARGE;
+    memset(fact, 0, sizeof(*fact));
+    fact->predicate_id = pid;
+    fact->arity = (uint8_t)arity;
+    for (size_t i = 0; i < arity; i++) fact->terms[i] = terms[i];
+    return MAELYS_OK;
+
+}
+
+maelys_result_t maelys_datalog_edb_add_fact(maelys_datalog_edb_t *edb,
+    const char *predicate, const maelys_datalog_term_t *terms, size_t arity) {
     maelys_datalog_fact_t fact;
-    memset(&fact, 0, sizeof(fact));
-    fact.predicate_id = pid;
-    fact.arity = (uint8_t)arity;
-    for (size_t i = 0; i < arity; i++) fact.terms[i] = terms[i];
+    maelys_result_t rc = validate_fact(edb, predicate, terms, arity, &fact);
+    if (rc != MAELYS_OK) return rc;
     if (maelys_datalog_edb_contains(edb, &fact)) return MAELYS_OK;
     edb->facts[edb->fact_count++] = fact;
     edb->fact_set.count = edb->fact_count;
     edb->fact_set.sorted = 0;
-    edb->facts_per_pred[pid]++;
+    edb->facts_per_pred[fact.predicate_id]++;
+    return MAELYS_OK;
+}
+
+/* Hash logical fields, never union padding or unused terms. Final avalanche
+ * spreads consecutive integer and symbol IDs across the bounded table. */
+static size_t insert_bucket(const maelys_datalog_fact_t *fact) {
+    uint64_t hash = fact->predicate_id;
+    hash = (hash ^ fact->arity) * UINT64_C(1099511628211);
+    for (size_t i = 0; i < fact->arity; ++i) {
+        const maelys_datalog_term_t *term = &fact->terms[i];
+        uint64_t value = 0;
+        switch (term->kind) {
+            case MAELYS_DATALOG_TERM_SYMBOL: value = term->as.symbol; break;
+            case MAELYS_DATALOG_TERM_INT: value = (uint64_t)term->as.integer; break;
+            case MAELYS_DATALOG_TERM_BOOL: value = (uint64_t)term->as.boolean; break;
+            case MAELYS_DATALOG_TERM_VAR: value = term->as.variable; break;
+            default: break; /* Same equality as term_cmp for unknown kinds. */
+        }
+        hash = (hash ^ (uint64_t)term->kind) * UINT64_C(1099511628211);
+        hash = (hash ^ value) * UINT64_C(1099511628211);
+    }
+    hash ^= hash >> 30;
+    hash *= UINT64_C(0xbf58476d1ce4e5b9);
+    hash ^= hash >> 27;
+    hash *= UINT64_C(0x94d049bb133111eb);
+    hash ^= hash >> 31;
+    return (size_t)(hash % MAELYS_DATALOG_EDB_INSERT_SLOTS);
+}
+
+#ifdef MAELYS_TESTING
+size_t maelys_datalog_test_edb_insert_bucket(const maelys_datalog_fact_t *fact) {
+    return insert_bucket(fact);
+}
+#endif
+
+maelys_result_t maelys_datalog_edb_add_fact_indexed(maelys_datalog_edb_t *edb,
+    const char *predicate, const maelys_datalog_term_t *terms, size_t arity,
+    maelys_datalog_edb_insert_index_t *index) {
+    if (!index) return MAELYS_ERR_INVALID_ARGUMENT;
+    maelys_datalog_fact_t fact;
+    maelys_result_t rc = validate_fact(edb, predicate, terms, arity, &fact);
+    if (rc != MAELYS_OK) return rc;
+    size_t slot = 0;
+    if (edb->fact_count <= MAELYS_DATALOG_EDB_INSERT_SCAN_LIMIT) {
+        if (maelys_datalog_edb_contains(edb, &fact)) return MAELYS_OK;
+    } else {
+        /* Only the indexed path needs a last-fact shortcut to avoid hashing.
+         * The scan above already checks every candidate. Capacity validation
+         * still precedes both duplicate checks. */
+        if (maelys_datalog_fact_equals(&edb->facts[edb->fact_count - 1u], &fact)) return MAELYS_OK;
+        slot = insert_bucket(&fact);
+        size_t probes = 0;
+        while (index->slots[slot]) {
+            size_t offset = (size_t)index->slots[slot] - 1u;
+            if (offset >= edb->fact_count) return MAELYS_ERR_INTERNAL;
+            if (maelys_datalog_fact_equals(&edb->facts[offset], &fact)) return MAELYS_OK;
+            if (++probes == MAELYS_DATALOG_EDB_INSERT_SLOTS) return MAELYS_ERR_INTERNAL;
+            slot = (slot + 1u) % MAELYS_DATALOG_EDB_INSERT_SLOTS;
+        }
+    }
+    edb->facts[edb->fact_count++] = fact;
+    edb->fact_set.count = edb->fact_count;
+    edb->fact_set.sorted = 0;
+    edb->facts_per_pred[fact.predicate_id]++;
+    if (edb->fact_count == MAELYS_DATALOG_EDB_INSERT_SCAN_LIMIT + 1u) {
+        /* The first 32 distinct facts never touch the table. On fact 33,
+         * backfill once, after every operation that can reject the input.
+         * An empty table with twice the maximum fact count cannot fill. */
+        for (size_t i = 0; i < edb->fact_count; ++i) {
+            slot = insert_bucket(&edb->facts[i]);
+            while (index->slots[slot]) slot = (slot + 1u) % MAELYS_DATALOG_EDB_INSERT_SLOTS;
+            index->slots[slot] = (uint16_t)(i + 1u);
+        }
+    } else if (edb->fact_count > MAELYS_DATALOG_EDB_INSERT_SCAN_LIMIT) {
+        index->slots[slot] = (uint16_t)edb->fact_count;
+    }
     return MAELYS_OK;
 }
 
