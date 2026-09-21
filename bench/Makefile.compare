@@ -17,6 +17,9 @@ empty :=
 space := $(empty) $(empty)
 .PHONY: all
 all: $(OUT)/solver $(OUT)/input $(OUT)/sessions
+ifeq ($(SESSION_DIAGNOSTICS),1)
+all: $(OUT)/sessions-counts
+endif
 ifeq ($(EXPLANATIONS),1)
 all: $(OUT)/explanations
 endif
@@ -32,3 +35,6 @@ $(OUT)/explanations: $(OBJECTS) $(DRIVER)/bench/bench_explanations.c
 
 $(OUT)/sessions: $(OBJECTS) $(DRIVER)/bench/bench_sessions.c
 	$(CC) $(FLAGS) $(DEFS) $(DRIVER)/bench/bench_sessions.c $(OBJECTS) -o $@
+
+$(OUT)/sessions-counts: $(OBJECTS) $(DRIVER)/bench/bench_sessions.c
+	$(CC) $(FLAGS) $(DEFS) -DMAELYS_BENCH_COUNT $(DRIVER)/bench/bench_sessions.c $(OBJECTS) -o $@

@@ -62,7 +62,9 @@ The native materialization test compares indexed insertion with the historical
 scan through the full EDB capacity, typed values and colliding/wrapping chains.
 The 31/32/33 boundary tests cover duplicates, rejected activation, complete
 backfill and storage reuse. Up to 32 distinct facts keep the scan; fact 33
-activates the index. This fixed policy is not a measured universal crossover.
+activates the index. The last-fact shortcut runs only after activation, avoiding
+an extra comparison on each distinct insertion in scan mode. This fixed policy
+is not a measured universal crossover.
 Capacity checks retain their ordering: a duplicate at a full predicate is still
 rejected. Session failures restore symbols, facts, counts and scratch byte for
 byte; the all-engine allocation guard also fills the per-predicate bound,

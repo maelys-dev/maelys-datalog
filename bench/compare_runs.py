@@ -83,9 +83,10 @@ def report(directory):
           "interval. Below 10 µs (median of A/A medians), use the minimum of pass "
           "minima. Otherwise report the median of pass medians AND the median of "
           "pass p95s, with separate noise floors. The latter is not a pooled p95.\n")
-    print("A sub-floor effect is **indéterminé**, never zero or a win. If hosted-runner "
-          "noise masks the effect sought, use a dedicated machine; do not reinterpret "
-          "the statistic, discard cases, or tune the threshold from this run.\n")
+    print("A sub-floor effect is **indéterminé**, never zero or a win. An A/A floor describes "
+          "one binary, not systematic placement effects between binaries. Above-floor timing "
+          "differences alone do not establish an algorithmic cause. Distinguish placement "
+          "from runner variance before requesting hardware; preserve every case and statistic.\n")
     if metadata["input_implementation_identical"]:
         print("**Input implementations are byte-identical. This run cannot establish "
               "a linear/indexed crossover or choose S.**\n")
@@ -168,7 +169,7 @@ def metadata(output, base, head, repo):
         "input_implementation_identical": a == b,
         "harness_sha256": {name: hashlib.sha256((root / name).read_bytes()).hexdigest()
                            for name in ("bench_datalog.c", "bench_input_edb.c", "bench_explanations.c", "bench_sessions.c",
-                                        "compare_sessions.py",
+                                        "compare_sessions.py", "diagnose_sessions.py", "report_solver_layout.py",
                                         "compare_runs.py", "compare_explanations.py", "compare_revisions.sh", "Makefile.compare")},
     }
     (Path(output) / "metadata.json").write_text(json.dumps(payload, indent=2) + "\n")

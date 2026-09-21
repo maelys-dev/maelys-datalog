@@ -59,9 +59,12 @@ confidence interval. Any A/B effect at or below this symmetric floor is
 visible. Zero-duration clear samples are marked indeterminate by clock
 resolution, never interpreted as infinite speedup.
 
-If hosted-runner noise is larger than the effect being investigated, the report
-says a dedicated machine is needed. Do not reinterpret a noisy run, change its
-statistic, cherry-pick cases, or set an automatic threshold from inconclusive
+A/A measures repeatability of one binary; it does not bound systematic placement
+bias between different binaries. An above-floor observation alone does not
+establish an algorithmic cause. The #77 control observed 9.94% and 22.77% shifts
+on a single solver fixture: neither value is a universal tolerance or upper
+bound. Distinguish placement from runner variance before requesting hardware.
+Keep every pass and statistic; do not select an index threshold from inconclusive
 measurements. There is no global geometric-mean acceptance shortcut.
 
 ### Public session materialization workload
@@ -109,6 +112,19 @@ Equal Ir alone does not prove a layout cause or equal cycle/cache cost. The
 additional diagnostic driver changes layout relative to the historical binary;
 interpret the full rerun separately. No automatic acceptance or merge follows
 from the generated `diagnostic.md` report.
+
+The optional `session_diagnostics` workflow input adds a separate count-mode
+build of the session harness, using the same engine objects, before any timing.
+After the complete matrix, `diagnose_sessions.py` lists every slower session row
+by amplitude, preserving its A/A floor. It counts only distinct cases with a
+slower metric above the named 9.94% reference from the earlier solver control.
+This prioritizes diagnostics; it does not erase smaller effects or calibrate
+sessions from a different workload. Each selected case has 50 warmups followed
+by one counted `solve_edb`, twice per revision; setup, clocks, oracle and release
+stay outside collection. The unchanged oracle digest must match the timed run.
+The separate mode changes layout and prior case history and produces no timings.
+`sessions-diagnostic.md` and `session-counts/` retain the complete selection,
+profiles, exclusive function differences, hashes and checked outputs as artifacts.
 
 ### Input index crossover and memory
 

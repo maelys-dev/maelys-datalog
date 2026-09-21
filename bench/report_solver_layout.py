@@ -34,7 +34,7 @@ def instructions(path):
     return int(values[0])
 
 
-def functions(path):
+def functions(path, exclude_insertion=True):
     costs = {}
     for line in path.read_text().splitlines():
         match = re.match(r"^\s*([\d,]+)\s+\([\d. ]+%\)\s+(\S+):(\S+)", line)
@@ -44,7 +44,7 @@ def functions(path):
     if not costs:
         raise ValueError(f"missing function costs: {path}")
     for name in ("maelys_datalog_edb_add_fact", "maelys_datalog_edb_add_runtime_symbol_fact"):
-        if costs.get(name, 0):
+        if exclude_insertion and costs.get(name, 0):
             raise ValueError(f"preparation leaked into count: {path}/{name}")
     return costs
 

@@ -17,6 +17,11 @@ on:
         required: false
         default: ''
         type: string
+      session_diagnostics:
+        description: Count only residual session slowdowns above the named 9.94% triage reference
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -34,7 +39,7 @@ jobs:
       - name: Check comparison tooling
         run: python3 -m unittest discover -s bench -p 'test_compare*.py'
       - name: Prepare optional diagnostic tool
-        if: inputs.diagnostic_original != ''
+        if: inputs.diagnostic_original != '' || inputs.session_diagnostics
         run: |
           if ! command -v valgrind >/dev/null; then
             sudo apt-get update
@@ -51,6 +56,7 @@ jobs:
         env:
           BASE_REF: ${{ inputs.base }}
           HEAD_REF: ${{ inputs.head }}
+          SESSION_DIAGNOSTICS: ${{ inputs.session_diagnostics && '1' || '0' }}
         run: bash bench/compare_revisions.sh "$BASE_REF" "$HEAD_REF" "$RUNNER_TEMP/bench-comparison"
       - name: Upload measurements and report (including partial failed runs)
         if: always()

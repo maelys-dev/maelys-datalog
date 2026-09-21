@@ -318,14 +318,14 @@ maelys_result_t maelys_datalog_edb_add_fact_indexed(maelys_datalog_edb_t *edb,
     maelys_datalog_fact_t fact;
     maelys_result_t rc = validate_fact(edb, predicate, terms, arity, &fact);
     if (rc != MAELYS_OK) return rc;
-    /* Repeated last facts need neither a scan nor a hash. Capacity checks
-     * still precede this shortcut, including at the activation boundary. */
-    if (edb->fact_count &&
-        maelys_datalog_fact_equals(&edb->facts[edb->fact_count - 1u], &fact)) return MAELYS_OK;
     size_t slot = 0;
     if (edb->fact_count <= MAELYS_DATALOG_EDB_INSERT_SCAN_LIMIT) {
         if (maelys_datalog_edb_contains(edb, &fact)) return MAELYS_OK;
     } else {
+        /* Only the indexed path needs a last-fact shortcut to avoid hashing.
+         * The scan above already checks every candidate. Capacity validation
+         * still precedes both duplicate checks. */
+        if (maelys_datalog_fact_equals(&edb->facts[edb->fact_count - 1u], &fact)) return MAELYS_OK;
         slot = insert_bucket(&fact);
         size_t probes = 0;
         while (index->slots[slot]) {

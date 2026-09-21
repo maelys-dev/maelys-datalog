@@ -168,8 +168,36 @@ when it has what they name.
   builds, priority/affinity tuning or undisclosed case selection.
 - Below 10 microseconds use minima; otherwise retain median and p95 with their
   own A/A floors. Below-floor differences are indeterminate, not zero or wins.
-  An unresolved hosted-runner effect calls for a dedicated machine, not a new
-  interpretation. Never select an index threshold from inconclusive timings.
+  An A/A floor describes repeatability of one binary; it does not bound
+  systematic placement effects between different binaries. Above-floor timing
+  differences are observations, not by themselves algorithmic attribution.
+  Never select an index threshold from inconclusive timings.
+- When attribution matters, count executed instructions in the timed region
+  (excluding preparation, clocks and checks) and compare per-function counts,
+  not only totals. Callgrind Ir is a software instruction count, not a hardware
+  retired-instruction counter. Equal counts do not establish equal cycle,
+  cache, branch-prediction or memory costs.
+- Control placement by linking the same compiled objects with predeclared
+  amounts of unreachable text padding; verify symbol displacement and preserve
+  binary/harness hashes, disassembly, checked outputs and every variant. Finish
+  all builds before timing. Run two A/A pairs per unperturbed revision before
+  two interleaved rounds of every layout; measure time outside instrumentation
+  and repeat scoped instruction counts in separate processes. A separate
+  diagnostic driver also changes layout: interpret its timings separately
+  from the complete benchmark, which it does not replace.
+- The [#77 diagnostic](https://github.com/maelys-dev/maelys-datalog/actions/runs/35579107425)
+  measured 9.94% and 22.77% median shifts on one LARGE/2048 solver fixture under
+  16 bytes of neutral padding with identical instruction counts. These are
+  observations for those binaries, not a universal 10% tolerance or upper bound
+  for other cases. An amplitude band based on a named control may prioritize
+  further diagnostics; it must not erase smaller signals, change their A/A
+  classifications or establish the cause of larger ones. Preserve both views.
+- Separate placement sensitivity from unresolved runner variance before
+  requesting dedicated hardware. A dedicated machine can improve repeatability
+  but does not remove systematic binary-layout effects; it is not a prerequisite
+  for scoped instruction counts or neutral-placement controls. If attribution
+  remains unresolved, state that limit rather than discarding passes or changing
+  the interpretation of the statistic.
 - Upload raw CSV and the comparison report as run artifacts only. Never commit
   generated results or add automatic PR comments. Distinguish synthetic tooling
   tests/local Docker smoke from actual hosted-runner performance measurements.

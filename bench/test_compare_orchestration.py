@@ -69,7 +69,7 @@ class OrchestrationTest(unittest.TestCase):
             (repo / "bench").mkdir(parents=True)
             for name in ("compare_revisions.sh", "compare_runs.py", "compare_explanations.py",
                          "Makefile.compare", "bench_input_edb.c", "bench_explanations.c",
-                         "bench_sessions.c", "compare_sessions.py"):
+                         "bench_sessions.c", "compare_sessions.py", "diagnose_sessions.py", "report_solver_layout.py"):
                 shutil.copy2(ROOT / "bench" / name, repo / "bench" / name)
             (repo / "bench/bench_datalog.c").write_text("synthetic harness\n")
             source = repo / "src/runtime/maelys_datalog_input_edb.c"
