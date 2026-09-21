@@ -177,7 +177,19 @@ when it has what they name.
   not only totals. Callgrind Ir is a software instruction count, not a hardware
   retired-instruction counter. Equal counts do not establish equal cycle,
   cache, branch-prediction or memory costs.
-- Control placement by linking the same compiled objects with predeclared
+- Distinguish code placement from data layout. Unreachable text padding
+  perturbs instruction addresses; it does not control struct member offsets,
+  array stride or object alignment. For a data-layout hypothesis, preserve
+  sizeof/alignof/offsetof evidence for each revision and, when claiming cache-line
+  alignment, observe the actual base/member addresses in the measured fixture.
+  An offset divisible by a cache-line size does not establish absolute alignment.
+  Compare the baseline, original and revised layout on the same run with checked
+  outputs and instruction evidence when attribution matters. Moving a field may
+  also change code generation, enclosing-object layout and allocation size;
+  restoration of old member offsets alone does not isolate a cache mechanism.
+  A vanished or below-floor gap supports only that case/run, not zero overhead
+  for every program. Keep timing classifications and attribution separate.
+- Control code placement by linking the same compiled objects with predeclared
   amounts of unreachable text padding; verify symbol displacement and preserve
   binary/harness hashes, disassembly, checked outputs and every variant. Finish
   all builds before timing. Run two A/A pairs per unperturbed revision before

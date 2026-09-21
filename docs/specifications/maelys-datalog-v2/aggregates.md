@@ -49,6 +49,23 @@ variable, stratum and result capacities remain effective. Capacity errors
 fail the solve without publishing a partial result. Results remain immutable
 snapshots with the existing one-live-result lease.
 
+Each reached aggregate literal scans a source slice and sorts its matching
+projected values. For `E` evaluations, cost is the sum of
+`O(S_i + M_i log M_i)`, where `S_i` is the number of candidate facts scanned and
+`M_i` the matching facts before projection deduplication. There is no per-group
+cache: multiple body bindings or fixed-point iterations can revisit one group.
+The simple one-evaluation-per-group case therefore costs a source scan and a
+sort per group; several aggregates over the same relation repeat that work.
+EDB scans use a predicate slice; IDB scans cover the frozen stratum (or the final
+IDB snapshot for Why-false), and policy-fact scans cover the policy-fact store.
+The per-predicate bound limits runtime/IDB matches, not the whole stratum scan;
+raw policy matches have the separate rule-fact bound.
+
+Projection scratch is 2 KiB SMALL / 4 KiB LARGE with 16-byte native terms. Its
+lifetime ends before recursive rule traversal continues; it is not retained
+as recursive state. These sizes describe this buffer, not total solver stack
+usage. Future aggregates must account for repeated scans and sorting explicitly.
+
 This feature initially recomputes each supplied snapshot. It introduces no
 stream, window, delta API or incremental backend. A later update that changes
 `error_count("api", 1)` to `error_count("api", 2)` must retract the former

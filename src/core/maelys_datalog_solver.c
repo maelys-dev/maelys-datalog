@@ -1819,8 +1819,12 @@ _Static_assert(MAELYS_DATALOG_MAX_RULE_FACTS <= MAELYS_DATALOG_MAX_INT &&
                "count and its compact explanation must represent every source value");
 MAELYS_DEFINE_SORT(sort_count_values, maelys_datalog_term_t, maelys_datalog_term_cmp)
 
-/* One bounded projection buffer, released before continuing the rule. Works
- * on frozen solve strata and on the final immutable snapshot for Why-false. */
+/* Projection scratch: 2 KiB SMALL / 4 KiB LARGE with 16-byte native terms.
+ * Its lifetime ends on return, before the caller recurses to the next literal;
+ * it is not retained in recursive rule state. Other solver frames still exist.
+ * Each evaluation scans its source slice and sorts matching projected values;
+ * repeated bindings/iterations do not share a per-group cache. Works on frozen
+ * solve strata and on the final immutable snapshot for Why-false. */
 static maelys_result_t evaluate_count(
     const maelys_datalog_solve_result_t *result,
     const maelys_datalog_literal_t *literal, const solve_once_bindings_t *bindings,

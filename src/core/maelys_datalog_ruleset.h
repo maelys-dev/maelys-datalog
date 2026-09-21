@@ -30,7 +30,6 @@ typedef struct {
     int positive_recursion_supported;
     int negation_supported;
     int negation_recursion_supported;
-    int aggregates_supported;
     uint32_t strata[MAELYS_DATALOG_MAX_PREDICATES];
     uint32_t max_stratum;
     int strata_assigned;
@@ -53,6 +52,8 @@ typedef struct {
     size_t filter_program_count;
     unsigned char filter_pattern_pool[MAELYS_DATALOG_FILTER_PATTERN_POOL_BYTES];
     size_t filter_pattern_pool_used;
+    /* Keep existing hot-field offsets when adding optional language state. */
+    int aggregates_supported;
 } maelys_datalog_ruleset_t;
 
 maelys_result_t maelys_datalog_ruleset_init(maelys_datalog_ruleset_t *ruleset,

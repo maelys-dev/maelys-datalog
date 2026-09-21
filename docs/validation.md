@@ -80,8 +80,9 @@ facts appended through the unindexed entry.
 
 The manual benchmark's optional `diagnostic_original` input compares a baseline,
 the original candidate and the revised head on native Linux x86_64. It reuses
-the historical `solver_size_pure` LARGE/2048 fixture and payload in a separate
-driver. Callgrind collection surrounds only the payload after eight warmups:
+the historical `solver_size_pure` fixture and payload in a separate driver;
+`diagnostic_size` predeclares LARGE/1024 or LARGE/2048 (the default).
+Callgrind collection surrounds only the payload after eight warmups:
 finalization, solve, query and result release; preparation is excluded. Two
 processes per revision/layout check repeatability. Ir counts executed software
 instructions, not hardware retired instructions or elapsed cycles.
@@ -99,6 +100,15 @@ with unchanged instruction work demonstrates sensitivity for that case/run.
 See the [Callgrind manual](https://valgrind.org/docs/manual/cl-manual.html) and
 [Mytkowicz et al., ASPLOS 2009](https://sape.inf.usi.ch/publications/asplos09.html).
 No generated measurement is committed and no diagnostic authorizes a merge.
+
+Code placement and data layout need separate controls. Text padding does not
+vary member offsets or object alignment. The diagnostic's layout snapshots
+record native sizes/alignments, all existing ruleset offsets and actual fixture
+addresses modulo 64 (an explicit diagnostic reference, not a portable cache-line
+size guarantee). A divisible member offset does not establish absolute alignment.
+Compare baseline/original/revised layouts in one run; changed field accesses can
+also alter generated code. Restoring offsets or losing one above-floor timing gap
+does not prove a universal zero-cost extension or establish a cache mechanism.
 
 The input-allocation test checks colliding/wrapping hash chains and byte-for-byte
 arena restoration on rejected batches, including empty strings in one/three-byte
