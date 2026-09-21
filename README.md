@@ -16,7 +16,7 @@ native library or compiled to WebAssembly.
 
 - deterministic semi-naive fixed-point evaluation;
 - stratified negation with negative-cycle rejection;
-- stratified distinct `count` with explicit grouping and empty-group zero (unreleased);
+- stratified distinct `count` with explicit grouping and empty-group zero (0.6.0);
 - bounded memory profiles with stack-owned solver working state;
 - static join planning and reproducible results;
 - SHA-256 ruleset and complete policy-set identity, diagnostics, and decision
@@ -28,7 +28,7 @@ The solver does not allocate heap memory while evaluating rules. A successful
 solve creates one caller-owned result object that must be released through the
 public API.
 
-## Count values per group (unreleased)
+## Count values per group (0.6.0)
 
 Register the ordinary predicates in your domain, then use the same language
 through C, Python or WebAssembly:
@@ -48,7 +48,7 @@ binding, capability negotiation and explanation semantics.
 
 ## Build an explanation once
 
-### Reuse a session workspace (unreleased)
+### Reuse a session workspace (0.5.0)
 
 Opt in when creating a reference session; ordinary sessions reserve no explanation
 workspace. Both kinds share one allocation, sized to the larger profile bound.
@@ -200,7 +200,7 @@ inject policy facts or derived facts. The ordinary struct initializer remains
 available. The existing C11 `MAELYS_DATALOG_QUERY(result, ...)` is different:
 it executes a membership query; it does not declare a predicate.
 
-The unreleased C11 fact builders, included automatically from the separate
+The C11 fact builders introduced in 0.4.0, included automatically from the separate
 installed `<maelys/datalog_builders.h>`, simplify input without
 changing the ABI. Given a successfully initialized `edb` and a diagnostic:
 
@@ -260,8 +260,8 @@ rc = maelys_datalog_result_query(result, "allow", terms, 2u, &present);
 ```
 
 `MAELYS_DATALOG_SYMBOL` is an initializer, not an expression. It borrows its
-string without copying or allocating. These conveniences are additive and
-unreleased; existing typed declarations and functions are not deprecated.
+string without copying or allocating. These conveniences were added in 0.4.0;
+existing typed declarations and functions are not deprecated.
 
 `maelys_datalog_policy_set_fingerprint()` returns a stable SHA-256 identity for
 the exact executable bundle: ordered canonical rulesets, their domains and the

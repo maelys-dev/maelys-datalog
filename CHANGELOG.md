@@ -7,7 +7,9 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
-Planned release: **0.6.0**, an additive language, IR and explanation extension.
+## 0.6.0 — 2026-09-21
+
+An additive language, IR and explanation extension.
 Consumer API v1, backend ABI 3 and program ABI 1 layouts remain unchanged.
 
 ### Added

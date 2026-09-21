@@ -51,7 +51,7 @@ document=why-true
 
 All following semantic bytes retain the accepted v1 contract.
 
-The unreleased Why-false harmonization replaces its historical
+The Why-false harmonization in 0.4.0 replaces its historical
 `MAELYS-DATALOG-WHY-FALSE-v1` first line with exactly:
 
 ```text
