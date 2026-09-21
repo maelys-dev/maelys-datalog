@@ -1,0 +1,3 @@
+% EXPECT: OK
+deny(G,N) :- user(G), count(I,edge(G,I),N).
+allow(N) :- count(I,edge(I,_),N).

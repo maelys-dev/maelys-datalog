@@ -3,7 +3,8 @@
 program = ignored *(clause ignored)
 clause = atom ignored (dot / (neck ignored body dot))
 body = body-item *(comma body-item)
-body-item = or-group / negated-atom / comparison / filter / atom
+body-item = or-group / negated-atom / comparison / count-aggregate / filter / atom
+count-aggregate = %s"count" lparen variable comma atom comma variable rparen
 or-group = atom 1*(ignored %s"or" ignored atom)
 negated-atom = %s"not" ignored lparen atom rparen
 comparison = comparison-operand ignored comparator ignored comparison-operand

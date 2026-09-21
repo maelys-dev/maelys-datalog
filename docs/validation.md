@@ -119,6 +119,33 @@ exercise D=15/16 and both the 16-byte text linear regime (D=8) and 128-byte text
 indexed regime, including cross-role deduplication, byte-exact rejection and
 reuse with allocation disabled. The SDK consumer stays at 128 text bytes.
 
+## Stratified count
+
+`test_maelys_datalog_count` runs in both native profiles and sanitizers; CMake
+registers it as `stratified_count`. It covers typed distinct projection, explicit
+empty groups, global and policy-fact counts, positive recursive sources,
+negation, multiple aggregates, scope/stratification rejections, custom frontend
+round trips and malformed IR, old planner callbacks, and rejection of a backend
+without aggregate capability before its prepare callback. A host-side oracle
+checks 100 successive snapshots against integer sets after source filtering.
+Capacity rejection and session reuse never publish partial results. Explanation
+checks cover order independence, short-output retries and count mismatches.
+
+The whole-engine allocator guard solves and explains count snapshots with the
+allocator disabled and a configured explanation workspace. The bounded
+projection buffer contains `max(MAX_RULE_FACTS, MAX_FACTS_PER_PRED)` terms:
+2 KiB SMALL / 4 KiB LARGE on targets with 16-byte native terms. It is local
+to one evaluation and returns before rule traversal continues; there is no
+per-group allocation or persistent aggregate cache. Existing explanation
+premise size is statically preserved. CFFI and JavaScript allocations are not
+covered by the engine's zero-allocation claim.
+
+Both Python APIs and the Node/Wasm playground exercise group counts, zero,
+explanations and (where sessions are exposed) snapshot reuse. Existing pipeline
+goldens continue to constrain identities and non-aggregate explanation bytes.
+These functional/allocation checks establish no speed improvement; apply the
+manual comparison protocol above to changes in ordinary solve paths.
+
 ## Installed facade and SDK
 
 ```sh

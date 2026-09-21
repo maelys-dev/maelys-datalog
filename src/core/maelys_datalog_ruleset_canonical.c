@@ -108,6 +108,14 @@ static maelys_result_t canonical_stream_literal(maelys_sha256_ctx_t *ctx,
             return canonical_stream_atom(ctx, ruleset, "body.atom=", &literal->atom);
         case MAELYS_DATALOG_LITERAL_NEGATED_ATOM:
             return canonical_stream_atom(ctx, ruleset, "body.not=", &literal->atom);
+        case MAELYS_DATALOG_LITERAL_COUNT: {
+            maelys_result_t rc = canonical_update(ctx, "body.count=");
+            if (rc == MAELYS_OK) rc = canonical_stream_term(ctx, ruleset, &literal->lhs);
+            if (rc == MAELYS_OK) rc = canonical_update(ctx, ":");
+            if (rc == MAELYS_OK) rc = canonical_stream_term(ctx, ruleset, &literal->rhs);
+            if (rc == MAELYS_OK) rc = canonical_stream_atom(ctx, ruleset, ":", &literal->atom);
+            return rc;
+        }
         case MAELYS_DATALOG_LITERAL_COMPARISON: {
             maelys_result_t rc = canonical_printf(ctx, "body.cmp=%u:", (unsigned)literal->op);
             if (rc != MAELYS_OK) return rc;

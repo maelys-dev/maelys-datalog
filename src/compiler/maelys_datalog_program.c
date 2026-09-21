@@ -26,6 +26,7 @@ _Static_assert((int)MAELYS_DATALOG_IR_COMPARISON == (int)MAELYS_DATALOG_LITERAL_
                "IR enum IR_COMPARISON");
 _Static_assert((int)MAELYS_DATALOG_IR_NEGATION == (int)MAELYS_DATALOG_LITERAL_NEGATED_ATOM,
                "IR enum IR_NEGATION");
+_Static_assert((int)MAELYS_DATALOG_IR_COUNT == (int)MAELYS_DATALOG_LITERAL_COUNT, "IR enum IR_COUNT");
 _Static_assert((int)MAELYS_DATALOG_IR_FILTER == (int)MAELYS_DATALOG_LITERAL_FILTER,
                "IR enum IR_FILTER");
 _Static_assert((int)MAELYS_DATALOG_IR_EQ == (int)MAELYS_DATALOG_CMP_EQ, "IR enum IR_EQ");
@@ -158,6 +159,8 @@ maelys_datalog_status_t maelys_datalog_program_info(const maelys_datalog_program
                 caps |= MAELYS_DATALOG_CAP_ARITHMETIC;
             if (l->kind == MAELYS_DATALOG_LITERAL_FILTER)
                 caps |= MAELYS_DATALOG_CAP_FILTERS;
+            if (l->kind == MAELYS_DATALOG_LITERAL_COUNT)
+                caps |= MAELYS_DATALOG_CAP_AGGREGATES;
         }
     *out = (maelys_datalog_program_info_t){MAELYS_DATALOG_PROGRAM_ABI_VERSION,
                                            r->policy_id,
@@ -275,7 +278,11 @@ maelys_result_t maelys_datalog_compute_program_fingerprint(const maelys_datalog_
             if (l->kind == MAELYS_DATALOG_LITERAL_ATOM ||
                 l->kind == MAELYS_DATALOG_LITERAL_NEGATED_ATOM)
                 hash_atom(&h, r, &l->atom);
-            else if (l->kind == MAELYS_DATALOG_LITERAL_COMPARISON) {
+            else if (l->kind == MAELYS_DATALOG_LITERAL_COUNT) {
+                hash_atom(&h, r, &l->atom);
+                hash_term(&h, r, &l->lhs);
+                hash_term(&h, r, &l->rhs);
+            } else if (l->kind == MAELYS_DATALOG_LITERAL_COMPARISON) {
                 hash_number(&h, l->op);
                 hash_number(&h, l->has_arith_expr);
                 if (l->has_arith_expr) {
@@ -367,7 +374,11 @@ maelys_datalog_status_t maelys_datalog_program_rule(const maelys_datalog_program
         if (a->kind == MAELYS_DATALOG_LITERAL_ATOM ||
             a->kind == MAELYS_DATALOG_LITERAL_NEGATED_ATOM)
             rc = export_atom(r, &a->atom, &b->atom);
-        else if (a->kind == MAELYS_DATALOG_LITERAL_COMPARISON) {
+        else if (a->kind == MAELYS_DATALOG_LITERAL_COUNT) {
+            rc = export_atom(r, &a->atom, &b->atom);
+            if (rc == MAELYS_OK) rc = export_term(r, &a->lhs, &b->lhs);
+            if (rc == MAELYS_OK) rc = export_term(r, &a->rhs, &b->rhs);
+        } else if (a->kind == MAELYS_DATALOG_LITERAL_COMPARISON) {
             b->comparison = (maelys_datalog_ir_comparison_t)a->op;
             b->has_arithmetic = a->has_arith_expr;
             if (a->has_arith_expr) {
@@ -520,7 +531,11 @@ maelys_datalog_status_t maelys_datalog_program_add_rule(maelys_datalog_program_b
         l->lhs_expr_root = l->rhs_expr_root = UINT8_MAX;
         if (a->kind == MAELYS_DATALOG_IR_ATOM || a->kind == MAELYS_DATALOG_IR_NEGATION)
             rc = import_atom(r, &a->atom, &l->atom, 1);
-        else if (a->kind == MAELYS_DATALOG_IR_COMPARISON) {
+        else if (a->kind == MAELYS_DATALOG_IR_COUNT) {
+            rc = import_atom(r, &a->atom, &l->atom, 1);
+            if (rc == MAELYS_OK) rc = import_term(r, &a->lhs, &l->lhs, 1);
+            if (rc == MAELYS_OK) rc = import_term(r, &a->rhs, &l->rhs, 1);
+        } else if (a->kind == MAELYS_DATALOG_IR_COMPARISON) {
             if (a->has_arithmetic != 0 && a->has_arithmetic != 1)
                 return fail(b, MAELYS_ERR_INVALID_FIELD);
             l->op = (maelys_datalog_cmp_op_t)a->comparison;

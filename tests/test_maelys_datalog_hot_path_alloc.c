@@ -76,6 +76,47 @@ static maelys_datalog_public_value_t symbol(const char *s) {
     maelys_datalog_public_value_t v = {.kind=MAELYS_DATALOG_VALUE_SYMBOL};
     v.as.symbol = s; return v;
 }
+static void count_without_allocator(void) {
+    const char source[] = "allow(N) :- count(I,seed(I),N).";
+    maelys_datalog_policy_t *policy = NULL;
+    assert(maelys_datalog_policy_load_inline("hot_path", "count", source,
+        sizeof(source)-1u, &policy, NULL) == 0);
+    maelys_datalog_session_config_t *config = NULL;
+    maelys_datalog_session_t *session = NULL;
+    assert(maelys_datalog_session_config_create(&config) == 0);
+    assert(maelys_datalog_session_config_set_explanation_workspace(config,
+        MAELYS_DATALOG_EXPLAIN_TRUE | MAELYS_DATALOG_EXPLAIN_FALSE) == 0);
+    assert(maelys_datalog_session_create_configured(policy, 0, config, &session) == 0);
+    assert(maelys_datalog_session_config_free(config) == 0);
+    maelys_datalog_public_fact_t facts[40] = {0};
+    for (size_t i = 0; i < 40; ++i) {
+        facts[i].predicate = "seed"; facts[i].arity = 1;
+        facts[i].terms[0].kind = MAELYS_DATALOG_VALUE_INTEGER;
+        facts[i].terms[0].as.integer = (int64_t)(39u-i);
+    }
+    forbidden = 1;
+    for (size_t n = 0; n <= 40; n += 8) {
+        maelys_datalog_result_t *result = NULL;
+        assert(maelys_datalog_session_solve(session,facts,n,&result,NULL) == 0);
+        maelys_datalog_public_value_t query = {.kind=MAELYS_DATALOG_VALUE_INTEGER,.as.integer=(int64_t)n};
+        int present;
+        assert(maelys_datalog_result_query(result,"allow",&query,1,&present) == 0 && present);
+        char text[4096]; size_t required;
+        assert(maelys_datalog_result_explain_true_text(result,"allow",&query,1,
+            text,sizeof(text),&required) == 0);
+        assert(strstr(text,"kind=count") && strstr(text,"status=complete"));
+        ++query.as.integer;
+        assert(maelys_datalog_result_explain_false_text(result,"allow",&query,1,
+            text,sizeof(text),&required) == 0);
+        assert(strstr(text,"count-mismatch"));
+        release_bounded(result);
+    }
+    assert(attempts == 0 && hot_frees == 0);
+    forbidden = 0;
+    assert(maelys_datalog_session_free(session) == 0);
+    assert(maelys_datalog_policy_free(policy) == 0);
+}
+
 int main(void) {
     const maelys_datalog_public_predicate_t predicates[] = {
         {"seed", 1, MAELYS_DATALOG_PREDICATE_EDB},
@@ -89,6 +130,7 @@ int main(void) {
     maelys_datalog_policy_t *policy = NULL;
     assert(maelys_datalog_policy_load_inline("hot_path", "hot", source, strlen(source), &policy, &diag) == 0);
     owned_release_does_not_clear();
+    count_without_allocator();
     maelys_datalog_session_t *session = NULL, *second = NULL, *filtered = NULL;
     size_t before = total, baseline = live;
     assert(maelys_datalog_session_create(policy, 0, &session) == 0);

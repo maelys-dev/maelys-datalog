@@ -7,6 +7,23 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+
+- Public stratified distinct count: `count(Id, relation(...), N)` in rule bodies,
+  with explicit group keys, typed projection, empty-group zero, and bounded
+  allocation-free reference evaluation. A source relation may be recursive;
+  recursion through an aggregate is rejected. Joins and filters use auxiliary
+  relations. Ordinary predicates named `count` retain their meaning.
+- Public `CAP_AGGREGATES` and `IR_COUNT`, using existing ABI 3 descriptors and
+  program ABI 1 rule layouts. Backends must opt in; the historical
+  `CAP_LANGUAGE` mask remains unchanged. Python-next exposes
+  `Capability.AGGREGATES`. Streaming, windows and incremental updates are not
+  introduced by this feature.
+- Count snapshot observations in Why-true, and `count-mismatch` obstacles in
+  Why-false, including prepared/caller-owned explanations. Existing programs'
+  explanation bytes and identities are preserved. Consumers of exhaustive
+  IR/explanation kind switches must implement or reject these new alternatives.
+
 ### Performance
 
 - Native session input materialization uses a bounded fact index instead of

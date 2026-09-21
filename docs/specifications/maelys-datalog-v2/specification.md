@@ -21,6 +21,7 @@ The normative package is:
 - [why-true-text.abnf](why-true-text.abnf): Why-true document bytes;
 - [why-false-text.abnf](why-false-text.abnf): Why-false document bytes;
 - [semantics.md](semantics.md): constraints not expressible in ABNF;
+- [aggregates.md](aggregates.md): stratified distinct-count semantics and compatibility;
 - [conformance.md](conformance.md): executable conformance contract.
 
 The ABNF uses RFC 5234 and RFC 7405 case-sensitive literals. The C engine is
@@ -31,7 +32,11 @@ is a specification defect, never permission to guess or accept more syntax.
 
 Version 2 consolidates the already-published language: positive recursion,
 typed comparisons, bounded integer arithmetic, isolated anonymous variable
-`_`, stratified `not(atom)`, and contextual `or`. It adds no parser feature.
+`_`, stratified `not(atom)`, and contextual `or`. That consolidation added no
+parser feature. The subsequent additive count extension introduces a new body
+literal and explanation alternatives; existing source and output bytes retain
+their previous interpretation. Consumers using exhaustive IR or explanation
+kind switches must add count support or reject the unknown alternative.
 
 Historical v1 documents remain historical evidence. Buffer manifests using
 `MAELYS-DATALOG-TEXT-v1` are rejected and must explicitly migrate to the v2

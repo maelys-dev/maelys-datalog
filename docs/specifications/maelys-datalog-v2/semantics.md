@@ -10,7 +10,8 @@ capacity, and canonical-order constraints.
   arity must exist. EDB and POLICY_FACT predicates are forbidden in rule heads.
 - A direct fact must use a POLICY_FACT predicate and be ground.
 - Head variables, comparison variables, arithmetic variables, and variables in
-  `not(...)` must be bound by positive body atoms as required by the parser.
+  `not(...)` must be bound by positive body atoms or count outputs. Count inputs
+  have their own local scope; see [aggregates](aggregates.md).
 - `starts_with(Value, Pattern)`, `ends_with(Value, Pattern)`, and
   `contains(Value, Pattern)` are contextual FILTER body literals only when the
   name is absent from the predicate registry. A registered homonym remains an
@@ -103,8 +104,10 @@ the C API. Valid UTF-8 symbols preserve non-ASCII bytes and use named escapes
 for quote, backslash, LF, CR, and tab; other controls use uppercase `\xHH`.
 For an invalid UTF-8 symbol, non-printable bytes use uppercase `\xHH`.
 
-The document is ground: it contains no variable or `_`. Source `or` has been
-expanded before solving and never appears as an explanation operator.
+Queries, derived facts and ordinary premises are ground. Count source patterns
+retain local projection and existential variables as `?N`, never source `_`;
+all group keys are instantiated. Source `or` has been expanded before solving
+and never appears as an explanation operator.
 `not(...)`, comparisons, and successful filters become typed premise records.
 FILTER premises retain their lexical body index and expose public name,
 semantic identity, ground value, and source pattern. These rules bind the

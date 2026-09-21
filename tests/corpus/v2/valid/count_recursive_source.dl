@@ -1,0 +1,4 @@
+% EXPECT: OK
+path(X,Y) :- edge(X,Y).
+path(X,Z) :- path(X,Y),edge(Y,Z).
+deny(G,N) :- user(G),count(I,path(G,I),N).

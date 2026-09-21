@@ -8,6 +8,9 @@
 "("
 ")"
 
+# Aggregate
+"count("
+
 # Negation
 "not("
 

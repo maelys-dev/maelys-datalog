@@ -13,7 +13,8 @@ diagnostic-block = diagnostic-line *binding-line *support-line obstacle-line
 diagnostic-line = %s"diagnostic=" decimal %s" rule=" decimal %s" depth=" decimal %s" target=" fact lf
 binding-line = %s"binding=" decimal %s" value=" term lf
 support-line = %s"support=" decimal %s" body=" decimal %s" origin=" origin %s" fact=" fact lf
-obstacle-line = pattern-obstacle / comparison-obstacle / filter-obstacle
+obstacle-line = pattern-obstacle / comparison-obstacle / filter-obstacle / count-obstacle
+count-obstacle = %s"obstacle=count-mismatch" obstacle-location %s" observed=" decimal %s" expected=" term %s" projected=?" decimal %s" pattern=" pattern lf
 obstacle-location = %s" body=" decimal %s" origin=" origin
 pattern-obstacle = %s"obstacle=" pattern-kind obstacle-location %s" pattern=" pattern lf
 pattern-kind = %s"positive-no-match" / %s"negative-contradicted" / %s"recursive-no-base-support"

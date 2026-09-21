@@ -1646,5 +1646,43 @@ await test('playground_explain_fact_text_memory_is_stable_across_repetitions', a
   truncated.freeResult();
 });
 
+await test('playground_count_distinct_groups_zero_and_explanation', async () => {
+  const pg = await createPlayground();
+  pg.domainBegin('count_groups');
+  pg.domainAddPredicate('group', 1, PredKind.EDB);
+  pg.domainAddPredicate('event', 2, PredKind.EDB);
+  pg.domainAddPredicate('total', 2, PredKind.IDB | PredKind.QUERY);
+  pg.domainAddPredicate('alert', 1, PredKind.IDB | PredKind.QUERY);
+  pg.domainCommit();
+  pg.loadRuleset('count_groups', 'count_groups.main',
+    'total(G,N) :- group(G),count(I,event(I,G),N). alert(G) :- total(G,N),N >= 2.');
+  pg.edbBegin();
+  pg.addFact('group', 'api');
+  pg.addFact('group', 'worker');
+  pg.addFact2('event', 'id1', 'api');
+  pg.addFact2('event', 'id2', 'api');
+  pg.addFact2('event', 'id1', 'api');
+  pg.solve();
+  const decode = (facts) => facts.map(([g, n]) => [pg.symbolText(g.symbolId), n.value]);
+  const facts = decode(pg.enumeratePredicateFacts('total', 2));
+  if (JSON.stringify(facts) !== JSON.stringify([['api', 2], ['worker', 0]])) {
+    throw new Error(`unexpected counts: ${JSON.stringify(facts)}`);
+  }
+  if (!pg.querySymbol('alert', 'api') || pg.querySymbol('alert', 'worker')) {
+    throw new Error('count threshold did not select api only');
+  }
+  if (!pg.explainFactText('alert', ['api']).includes('kind=count origin=edb')) {
+    throw new Error('missing count premise');
+  }
+  pg.freeResult();
+  pg.edbBegin();
+  pg.addFact('group', 'api');
+  pg.solve();
+  if (JSON.stringify(decode(pg.enumeratePredicateFacts('total', 2))) !== JSON.stringify([['api', 0]])) {
+    throw new Error('count survived a new empty snapshot');
+  }
+  pg.freeResult();
+});
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);

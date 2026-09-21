@@ -62,6 +62,56 @@ static maelys_result_t validate_rule_impl(validation_context_t *p,
                 r->has_positive_recursion = 1;
         }
     }
+    /* Aggregate inputs are scoped; outputs are generated bindings. Group keys
+     * must have an ordinary positive source, independently of join order. */
+    uint32_t positive_vars = body_vars, outside = head_vars | body_vars;
+    for (size_t i = 0; i < rule->body_count; ++i) {
+        const maelys_datalog_literal_t *l = &rule->body[i];
+        if (l->kind == MAELYS_DATALOG_LITERAL_COUNT) {
+            body_vars |= UINT32_C(1) << l->rhs.as.variable;
+            outside |= UINT32_C(1) << l->rhs.as.variable;
+            uint32_t keys = 0;
+            vars_in_atom(&l->atom, &keys);
+            keys &= (UINT32_C(1) << MAELYS_DATALOG_NAMED_VARIABLE_COUNT) - 1u;
+            keys &= ~(UINT32_C(1) << l->lhs.as.variable);
+            outside |= keys;
+            if (keys & ~positive_vars) {
+                validation_diag(p, MAELYS_DATALOG_DIAG_PARSER_UNSAFE_VARIABLE,
+                                "count group variable is not positively bound",
+                                "bind group keys in ordinary positive body atoms");
+                return MAELYS_ERR_INVALID_FIELD;
+            }
+        } else if (l->kind == MAELYS_DATALOG_LITERAL_NEGATED_ATOM) {
+            vars_in_atom(&l->atom, &outside);
+        } else if (l->kind == MAELYS_DATALOG_LITERAL_FILTER) {
+            if (l->filter_value.kind == MAELYS_DATALOG_TERM_VAR)
+                outside |= UINT32_C(1) << l->filter_value.as.variable;
+        } else if (l->kind == MAELYS_DATALOG_LITERAL_COMPARISON) {
+            if (l->has_arith_expr) {
+                vars_in_arith_expr(rule, l->lhs_expr_root, &outside);
+                vars_in_arith_expr(rule, l->rhs_expr_root, &outside);
+            } else {
+                if (l->lhs.kind == MAELYS_DATALOG_TERM_VAR)
+                    outside |= UINT32_C(1) << l->lhs.as.variable;
+                if (l->rhs.kind == MAELYS_DATALOG_TERM_VAR)
+                    outside |= UINT32_C(1) << l->rhs.as.variable;
+            }
+        }
+    }
+    for (size_t i = 0; i < rule->body_count; ++i) {
+        const maelys_datalog_literal_t *l = &rule->body[i];
+        if (l->kind != MAELYS_DATALOG_LITERAL_COUNT) continue;
+        uint32_t locals = 0;
+        vars_in_atom(&l->atom, &locals);
+        locals &= ~((UINT32_C(1) << MAELYS_DATALOG_NAMED_VARIABLE_COUNT) - 1u);
+        locals |= UINT32_C(1) << l->lhs.as.variable;
+        if (outside & locals) {
+            validation_diag(p, MAELYS_DATALOG_DIAG_PARSER_UNSAFE_VARIABLE,
+                            "count local variable escapes its scope",
+                            "use distinct variables for local projection and existential terms");
+            return MAELYS_ERR_INVALID_FIELD;
+        }
+    }
     for (size_t i = 0; i < rule->body_count; i++) {
         if (rule->body[i].kind == MAELYS_DATALOG_LITERAL_FILTER) {
             const maelys_datalog_term_t *value = &rule->body[i].filter_value;
@@ -128,7 +178,7 @@ static maelys_result_t assign_strata_impl(validation_context_t *p) {
     if (!p || !p->ruleset)
         return MAELYS_ERR_INVALID_ARGUMENT;
     maelys_datalog_ruleset_t *ruleset = p->ruleset;
-    if (!ruleset->negation_supported)
+    if (!ruleset->negation_supported && !ruleset->aggregates_supported)
         return MAELYS_OK;
 
     memset(ruleset->strata, 0, sizeof(ruleset->strata));
@@ -148,19 +198,23 @@ static maelys_result_t assign_strata_impl(validation_context_t *p) {
             for (size_t i = 0; i < rule->body_count; i++) {
                 const maelys_datalog_literal_t *literal = &rule->body[i];
                 if (literal->kind != MAELYS_DATALOG_LITERAL_ATOM &&
-                    literal->kind != MAELYS_DATALOG_LITERAL_NEGATED_ATOM) {
+                    literal->kind != MAELYS_DATALOG_LITERAL_NEGATED_ATOM &&
+                    literal->kind != MAELYS_DATALOG_LITERAL_COUNT) {
                     continue;
                 }
                 maelys_datalog_predicate_id_t bpid = literal->atom.predicate_id;
                 if (bpid >= MAELYS_DATALOG_MAX_PREDICATES)
                     return MAELYS_ERR_INVALID_FIELD;
                 uint32_t ns = ruleset->strata[bpid];
-                if (literal->kind == MAELYS_DATALOG_LITERAL_NEGATED_ATOM) {
+                if (literal->kind == MAELYS_DATALOG_LITERAL_NEGATED_ATOM ||
+                    literal->kind == MAELYS_DATALOG_LITERAL_COUNT) {
                     if (ns >= MAELYS_DATALOG_MAX_STRATA) {
                         validation_diag(
                             p, MAELYS_DATALOG_DIAG_POLICY_NOT_STRATIFIABLE,
-                            "negation stratum limit exceeded",
-                            "remove recursion through negation or reduce negation depth");
+                            ruleset->aggregates_supported ? "aggregate/negation stratum limit exceeded"
+                                                           : "negation stratum limit exceeded",
+                            ruleset->aggregates_supported ? "remove recursion through count/negation or reduce depth"
+                                                         : "remove recursion through negation or reduce negation depth");
                         return MAELYS_ERR_INVALID_FIELD;
                     }
                     ns += 1u;
@@ -170,7 +224,8 @@ static maelys_result_t assign_strata_impl(validation_context_t *p) {
             }
             if (s >= MAELYS_DATALOG_MAX_STRATA) {
                 validation_diag(p, MAELYS_DATALOG_DIAG_POLICY_NOT_STRATIFIABLE,
-                                "negation stratum limit exceeded",
+                                ruleset->aggregates_supported ? "aggregate/negation stratum limit exceeded"
+                                                           : "negation stratum limit exceeded",
                                 "reduce stratification depth below MAELYS_DATALOG_MAX_STRATA");
                 return MAELYS_ERR_INVALID_FIELD;
             }
@@ -184,7 +239,9 @@ static maelys_result_t assign_strata_impl(validation_context_t *p) {
 
     if (changed) {
         validation_diag(p, MAELYS_DATALOG_DIAG_POLICY_NOT_STRATIFIABLE,
-                        "policy is not stratifiable", "remove recursion through negation");
+                        "policy is not stratifiable", ruleset->aggregates_supported
+                            ? "remove recursion through count or negation"
+                            : "remove recursion through negation");
         return MAELYS_ERR_INVALID_FIELD;
     }
 
@@ -272,6 +329,19 @@ static int valid_literal(const maelys_datalog_ruleset_t *r, const maelys_datalog
         }
         return 1;
     }
+    if (l->kind == MAELYS_DATALOG_LITERAL_COUNT) {
+        if (!valid_atom(r, &l->atom, 1) ||
+            l->lhs.kind != MAELYS_DATALOG_TERM_VAR ||
+            l->rhs.kind != MAELYS_DATALOG_TERM_VAR ||
+            !valid_term(r, &l->lhs, 1) || !valid_term(r, &l->rhs, 1) ||
+            l->lhs.as.variable >= MAELYS_DATALOG_NAMED_VARIABLE_COUNT ||
+            l->rhs.as.variable >= MAELYS_DATALOG_NAMED_VARIABLE_COUNT ||
+            l->lhs.as.variable == l->rhs.as.variable) return 0;
+        uint32_t variables = 0;
+        vars_in_atom(&l->atom, &variables);
+        return (variables & (UINT32_C(1) << l->lhs.as.variable)) &&
+               !(variables & (UINT32_C(1) << l->rhs.as.variable));
+    }
     if (l->kind == MAELYS_DATALOG_LITERAL_FILTER) {
         if (l->filter_program_index >= r->filter_program_count ||
             (l->filter_value.kind != MAELYS_DATALOG_TERM_SYMBOL &&
@@ -324,6 +394,7 @@ static maelys_result_t validate_program_impl(maelys_datalog_ruleset_t *r, const 
         return MAELYS_ERR_INVALID_STATE;
     size_t line = 0, column = 0;
     r->program_validated = 0;
+    r->aggregates_supported = 0;
     r->compiled_fingerprint[0] = 0;
     if (r->registry.count > MAELYS_DATALOG_MAX_PREDICATES ||
         r->rule_count > MAELYS_DATALOG_MAX_RULES || r->fact_count > MAELYS_DATALOG_MAX_RULE_FACTS ||
@@ -396,6 +467,8 @@ static maelys_result_t validate_program_impl(maelys_datalog_ruleset_t *r, const 
                 goto malformed;
             if (rule->body[j].kind == MAELYS_DATALOG_LITERAL_NEGATED_ATOM)
                 r->negation_supported = 1;
+            if (rule->body[j].kind == MAELYS_DATALOG_LITERAL_COUNT)
+                r->aggregates_supported = 1;
         }
         validation_context_t p = {r, file, line, column, diag};
         maelys_result_t rc = validate_rule_impl(&p, rule);

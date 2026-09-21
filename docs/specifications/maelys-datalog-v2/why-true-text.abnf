@@ -11,9 +11,12 @@ counts-line = %s"steps=" decimal %s" premises=" decimal lf
 step-block = step-line *premise-line
 step-line = %s"step=" decimal %s" rule=" decimal %s" fact=" fact lf
 premise-line = %s"premise=" decimal %s" body=" decimal %s" kind=" premise-kind %s" origin=" premise-origin premise-value %s" parent=" parent lf
-premise-kind = %s"positive" / %s"negative-absence" / %s"comparison-true" / %s"filter-true"
+premise-kind = %s"positive" / %s"negative-absence" / %s"comparison-true" / %s"filter-true" / %s"count"
 premise-origin = %s"edb" / %s"policy-fact" / %s"idb" / %s"none"
-premise-value = (%s" fact=" fact) / (%s" lhs=" term %s" op=" comparator %s" rhs=" term) / filter-value
+premise-value = (%s" fact=" fact) / (%s" lhs=" term %s" op=" comparator %s" rhs=" term) / filter-value / count-value
+count-value = %s" pattern=" count-pattern %s" projected=?" decimal %s" value=" decimal
+count-pattern = quoted-name %s"(" [count-term *(%s"," count-term)] %s")"
+count-term = term / (%s"?" decimal)
 filter-value = %s" filter=" quoted-string %s" semantic=" quoted-string %s" value=" term %s" pattern=" quoted-string
 parent = %s"-" / decimal
 result-line = %s"result-step=" decimal lf

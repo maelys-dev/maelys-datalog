@@ -30,6 +30,7 @@ typedef struct {
     int positive_recursion_supported;
     int negation_supported;
     int negation_recursion_supported;
+    int aggregates_supported;
     uint32_t strata[MAELYS_DATALOG_MAX_PREDICATES];
     uint32_t max_stratum;
     int strata_assigned;
