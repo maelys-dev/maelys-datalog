@@ -60,6 +60,10 @@ extern "C" {
 #define MAELYS_DATALOG_PUBLIC_API_VERSION 1u
 #define MAELYS_DATALOG_PUBLIC_MAX_TERMS 4u
 #define MAELYS_DATALOG_PUBLIC_FINGERPRINT_BYTES 65u
+/* Independent optional manifest-loading permissions, combined with |.
+ * NONE is not a deny bit: NONE | X equals X. Use NONE alone for no permissions. */
+/* No optional manifest-loading permissions. This value is permanently zero. */
+#define MAELYS_DATALOG_PUBLIC_ALLOW_NONE 0u
 #define MAELYS_DATALOG_PUBLIC_ALLOW_TEST_ONLY 1u
 #define MAELYS_DATALOG_PUBLIC_ALLOW_UNDECLARED_POLICY_ATOMS (1u << 1)
 #define MAELYS_DATALOG_PUBLIC_MAX_POLICY_ATOMS 256u
@@ -209,9 +213,19 @@ MAELYS_DATALOG_API const char *maelys_datalog_status_name(
 MAELYS_DATALOG_API void maelys_datalog_public_diagnostic_clear(
     maelys_datalog_public_diagnostic_t *diagnostic);
 
+/* atoms belongs to the registered domain, not to a manifest. It authorizes
+ * symbolic constants in Datalog predicate arguments; it creates no facts.
+ * Runtime EDB strings need no atom declaration. For example, an EDB blocked/1
+ * may receive "mallory" and a rule may use not(blocked(User)) without that atom.
+ * Writing blocked("mallory") in a rule body requires the atom even for an EDB
+ * predicate; writing blocked("mallory"). also requires POLICY_FACT origin.
+ * Standard filter pattern parameters have their own validation. */
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_domain_register(
     const maelys_datalog_public_domain_t *domain);
 
+/* The Datalog inline path checks domain constants with no permission override.
+ * It takes no flags and reads no manifest test_only metadata. This signature
+ * differs from legacy/advanced inline loaders with a reserved zero argument. */
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_policy_load_inline(
     const char *domain,
     const char *policy_id,
@@ -220,6 +234,17 @@ MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_policy_load_inline(
     maelys_datalog_policy_t **out_policy,
     maelys_datalog_public_diagnostic_t *out_diagnostic);
 
+/* flags is a set of independent permissions, not ordered strict/permissive modes:
+ * - ALLOW_NONE: no optional permissions. An enabled test_only entry fails the
+ *   entire load with FORBIDDEN, rather than being silently skipped.
+ * - ALLOW_TEST_ONLY: admit such entries for normal evaluation; this is not a
+ *   simulation or production-environment detector. SHA-256 and atom checks remain.
+ * - ALLOW_UNDECLARED_POLICY_ATOMS: admit policy-local constants without changing
+ *   the global domain. Predicate, capability and capacity checks still apply.
+ * Disabled entries follow the manifest's existing disabled-entry contract.
+ * Every unknown bit, including one combined with known permissions, is rejected
+ * with INVALID_ARGUMENT; older libraries must not silently accept future bits.
+ * On failure, a non-NULL out_policy is set to NULL; no partial policy is returned. */
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_policy_load_manifest(
     const char *manifest_path,
     unsigned flags,

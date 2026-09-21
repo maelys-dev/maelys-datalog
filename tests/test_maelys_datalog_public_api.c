@@ -242,10 +242,11 @@ static int write_bytes(const char *path, const char *bytes, size_t length) {
     return written == length && !failed && closed == 0;
 }
 
-static maelys_datalog_status_t load_manifest_source(
+static maelys_datalog_status_t load_manifest_source_mode(
     const char *domain,
     const char *source,
     const char *source_sha256,
+    const char *mode,
     unsigned flags,
     maelys_datalog_policy_t **out_policy,
     maelys_datalog_public_diagnostic_t *out_diagnostic) {
@@ -264,11 +265,12 @@ static maelys_datalog_status_t load_manifest_source(
         "\"created_for\":\"test\",\"strict_loading\":true,\"fail_closed\":true,"
         "\"capabilities\":[],\"policies\":[{"
         "\"policy_id\":\"policy\",\"domain\":\"%s\",\"file\":\"policy.dl\","
-        "\"sha256\":\"%s\",\"mode\":\"enforce\",\"enabled\":true,"
+        "\"sha256\":\"%s\",\"mode\":\"%s\",\"enabled\":true,"
         "\"description\":\"policy atoms\","
         "\"queries\":[{\"name\":\"allow\",\"arity\":1}]}]}",
         domain,
-        source_sha256);
+        source_sha256,
+        mode);
     maelys_datalog_status_t status = MAELYS_DATALOG_STATUS_IO;
     if (manifest_length > 0 && (size_t)manifest_length < sizeof(manifest) &&
         write_bytes(source_path, source, strlen(source)) &&
@@ -282,6 +284,12 @@ static maelys_datalog_status_t load_manifest_source(
     (void)unlink(manifest_path);
     (void)rmdir(directory);
     return status;
+}
+
+static maelys_datalog_status_t load_manifest_source(
+    const char *domain, const char *source, const char *sha, unsigned flags,
+    maelys_datalog_policy_t **out, maelys_datalog_public_diagnostic_t *diag) {
+    return load_manifest_source_mode(domain, source, sha, "enforce", flags, out, diag);
 }
 
 static int policy_allows(maelys_datalog_policy_t *policy, const char *symbol) {
@@ -307,6 +315,160 @@ static int policy_allows(maelys_datalog_policy_t *policy, const char *symbol) {
     return ok;
 }
 
+static int test_public_api_loading_permissions(void) {
+    TEST_BEGIN();
+    const char *domain = "public_loading_permissions";
+    const char *atoms[] = {"alpha"};
+    const char *sources[] = {
+        "policy_value(\"alpha\").\nallow(X) :- policy_value(X).\n",
+        "policy_value(\"beta\").\nallow(X) :- policy_value(X).\n",
+    };
+    const char *hashes[] = {
+        "41ad802575655840e11ca1a1bdba31d638588fc5c39d09b7b5e74ef5acba7477",
+        "ae6be842375e9adc03836f9dd9e01eba6857870e89e75b6ffc289f075217257d",
+    };
+    const unsigned permissions[] = {
+        MAELYS_DATALOG_PUBLIC_ALLOW_NONE,
+        MAELYS_DATALOG_PUBLIC_ALLOW_TEST_ONLY,
+        MAELYS_DATALOG_PUBLIC_ALLOW_UNDECLARED_POLICY_ATOMS,
+        MAELYS_DATALOG_PUBLIC_ALLOW_TEST_ONLY |
+            MAELYS_DATALOG_PUBLIC_ALLOW_UNDECLARED_POLICY_ATOMS,
+    };
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK,
+                      register_domain_with_atoms(domain, atoms, 1u), "%d");
+    for (size_t i = 0; i < 4u; ++i) {
+        for (size_t test_only = 0; test_only < 2u; ++test_only) {
+            for (size_t local = 0; local < 2u; ++local) {
+                maelys_datalog_policy_t *policy = (maelys_datalog_policy_t *)(uintptr_t)1u;
+                maelys_datalog_public_diagnostic_t diag;
+                const int denied_mode = test_only && !(permissions[i] &
+                    MAELYS_DATALOG_PUBLIC_ALLOW_TEST_ONLY);
+                const int denied_atom = local && !(permissions[i] &
+                    MAELYS_DATALOG_PUBLIC_ALLOW_UNDECLARED_POLICY_ATOMS);
+                const maelys_datalog_status_t expected = denied_mode
+                    ? MAELYS_DATALOG_STATUS_FORBIDDEN : denied_atom
+                    ? MAELYS_DATALOG_STATUS_INVALID_FIELD : MAELYS_DATALOG_STATUS_OK;
+                TEST_ASSERT_EQUAL(expected, load_manifest_source_mode(
+                    domain, sources[local], hashes[local], test_only ? "test_only" : "enforce",
+                    permissions[i], &policy, &diag), "%d");
+                if (expected == MAELYS_DATALOG_STATUS_OK && policy) {
+                    TEST_ASSERT_TRUE(policy_allows(policy, local ? "beta" : "alpha"));
+                    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK,
+                                      maelys_datalog_policy_free(policy), "%d");
+                } else {
+                    TEST_ASSERT_NULL(policy);
+                    TEST_ASSERT_EQUAL(denied_mode ? MAELYS_DATALOG_DIAG_MANIFEST_TEST_ONLY_REJECTED
+                                                 : MAELYS_DATALOG_DIAG_PARSER_UNKNOWN_ATOM,
+                                      diag.code, "%d");
+                }
+            }
+        }
+        maelys_datalog_policy_t *policy = (maelys_datalog_policy_t *)(uintptr_t)1u;
+        TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_INVALID_ARGUMENT,
+            load_manifest_source(domain, sources[0], hashes[0], permissions[i] | (1u << 31),
+                                 &policy, NULL), "%d");
+        TEST_ASSERT_NULL(policy);
+    }
+    /* Keep literal 0u as a compatibility call and compare its observable result. */
+    char fingerprints[2][MAELYS_DATALOG_PUBLIC_FINGERPRINT_BYTES] = {{0}};
+    const unsigned no_permissions[] = {0u, MAELYS_DATALOG_PUBLIC_ALLOW_NONE};
+    for (size_t i = 0; i < 2u; ++i) {
+        maelys_datalog_policy_t *policy = NULL;
+        TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK,
+            load_manifest_source(domain, sources[0], hashes[0], no_permissions[i],
+                                 &policy, NULL), "%d");
+        TEST_ASSERT_NOT_NULL(policy);
+        if (policy) {
+            TEST_ASSERT_TRUE(policy_allows(policy, "alpha"));
+            TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK,
+                maelys_datalog_policy_fingerprint(policy, fingerprints[i]), "%d");
+            (void)maelys_datalog_policy_free(policy);
+        }
+    }
+    TEST_ASSERT_EQUAL_STRING(fingerprints[0], fingerprints[1]);
+    /* Both permissions still preserve SHA and predicate validation. */
+    maelys_datalog_policy_t *policy = (maelys_datalog_policy_t *)(uintptr_t)1u;
+    maelys_datalog_public_diagnostic_t diag;
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_INVALID_FIELD,
+        load_manifest_source_mode(domain, sources[0], hashes[1], "test_only",
+                                  permissions[3], &policy, &diag), "%d");
+    TEST_ASSERT_NULL(policy);
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_DIAG_MANIFEST_SHA_MISMATCH, diag.code, "%d");
+    const char unknown[] = "allow(X) :- missing(X).\n";
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_INVALID_FIELD,
+        load_manifest_source_mode(domain, unknown, "eed058285639819ad27d56d05e90074fd5b085e24139ce842896016cc67e4b59", "test_only",
+                                  permissions[3], &policy, &diag), "%d");
+    TEST_ASSERT_NULL(policy);
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_DIAG_PARSER_UNKNOWN_PREDICATE, diag.code, "%d");
+    TEST_END();
+}
+
+static int test_public_api_source_atoms_and_runtime_edb(void) {
+    TEST_BEGIN();
+    const maelys_datalog_public_predicate_t predicates[] = {
+        {"observed", 1u, MAELYS_DATALOG_PREDICATE_EDB},
+        {"blocked", 1u, MAELYS_DATALOG_PREDICATE_EDB},
+        {"allow", 1u, MAELYS_DATALOG_PREDICATE_IDB | MAELYS_DATALOG_PREDICATE_QUERY},
+    };
+    const char *atoms[] = {"mallory"};
+    const char *names[] = {"public_runtime_strings", "public_declared_string"};
+    const char variable_source[] = "allow(X) :- observed(X), not(blocked(X)).";
+    const char constant_source[] = "allow(X) :- observed(X), blocked(\"mallory\").";
+    for (size_t declared = 0; declared < 2u; ++declared) {
+        const maelys_datalog_public_domain_t domain = {
+            names[declared], predicates, 3u, declared ? atoms : NULL, declared,
+        };
+        TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK,
+                          maelys_datalog_domain_register(&domain), "%d");
+        maelys_datalog_policy_t *policy = (maelys_datalog_policy_t *)(uintptr_t)1u;
+        TEST_ASSERT_EQUAL(declared ? MAELYS_DATALOG_STATUS_OK : MAELYS_DATALOG_STATUS_INVALID_FIELD,
+            maelys_datalog_policy_load_inline(domain.name, "constant", constant_source,
+                strlen(constant_source), &policy, NULL), "%d");
+        if (!declared) {
+            TEST_ASSERT_NULL(policy);
+            TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK,
+                maelys_datalog_policy_load_inline(domain.name, "variables", variable_source,
+                    strlen(variable_source), &policy, NULL), "%d");
+        }
+        if (!policy) TEST_END();
+        maelys_datalog_session_t *session = NULL;
+        TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK,
+                          maelys_datalog_session_create(policy, 0u, &session), "%d");
+        (void)maelys_datalog_policy_free(policy);
+        const maelys_datalog_public_fact_t facts[] = {
+            fact("observed", symbol_value("alice")),
+            fact("observed", symbol_value("mallory")),
+            fact("blocked", symbol_value("mallory")),
+        };
+        /* Declaring mallory does not insert blocked(mallory); adding it does. */
+        for (size_t inserted = 0; inserted < 2u; ++inserted) {
+            maelys_datalog_result_t *result = NULL;
+            TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK,
+                maelys_datalog_session_solve(session, facts, 2u + inserted, &result, NULL), "%d");
+            if (!result) continue;
+            int present = -1;
+            maelys_datalog_public_value_t query = symbol_value("alice");
+            TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK,
+                maelys_datalog_result_query(result, "allow", &query, 1u, &present), "%d");
+            TEST_ASSERT_EQUAL(declared ? (int)inserted : 1, present, "%d");
+            query = symbol_value("mallory");
+            TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK,
+                maelys_datalog_result_query(result, "allow", &query, 1u, &present), "%d");
+            TEST_ASSERT_EQUAL(declared ? (int)inserted : !inserted, present, "%d");
+            (void)maelys_datalog_result_free(result);
+        }
+        (void)maelys_datalog_session_free(session);
+        if (declared) {
+            const char edb_fact[] = "blocked(\"mallory\").";
+            TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_INVALID_FIELD,
+                maelys_datalog_policy_load_inline(domain.name, "wrong-origin", edb_fact,
+                    strlen(edb_fact), &policy, NULL), "%d");
+            TEST_ASSERT_NULL(policy);
+        }
+    }
+    TEST_END();
+}
+
 static int test_public_api_policy_atom_modes(void) {
     TEST_BEGIN();
     const char *domain = "public_api_policy_atom_modes";
@@ -318,9 +480,13 @@ static int test_public_api_policy_atom_modes(void) {
 
     maelys_datalog_policy_t *policy = (maelys_datalog_policy_t *)(uintptr_t)1u;
     maelys_datalog_public_diagnostic_t diagnostic;
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_INVALID_FIELD,
+        maelys_datalog_policy_load_inline(domain, "inline-before", source,
+            strlen(source), &policy, &diagnostic), "%d");
+    TEST_ASSERT_NULL(policy);
     TEST_ASSERT_EQUAL(
         MAELYS_DATALOG_STATUS_INVALID_FIELD,
-        load_manifest_source(domain, source, sha, 0u, &policy, &diagnostic),
+        load_manifest_source(domain, source, sha, MAELYS_DATALOG_PUBLIC_ALLOW_NONE, &policy, &diagnostic),
         "%d");
     TEST_ASSERT_NULL(policy);
     TEST_ASSERT_EQUAL(MAELYS_DATALOG_DIAGNOSTIC_LOAD, diagnostic.source, "%d");
@@ -441,7 +607,8 @@ static size_t append_quad_facts(char *source, size_t capacity, size_t atom_count
 static int test_public_api_policy_atom_limits_and_filter_separation(void) {
     TEST_BEGIN();
     const char *domain = "public_api_policy_atom_limits";
-    const unsigned flag = MAELYS_DATALOG_PUBLIC_ALLOW_UNDECLARED_POLICY_ATOMS;
+    const unsigned flag = MAELYS_DATALOG_PUBLIC_ALLOW_UNDECLARED_POLICY_ATOMS |
+                          MAELYS_DATALOG_PUBLIC_ALLOW_TEST_ONLY;
     TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK, register_domain(domain), "%d");
 
     char atom63[96];
@@ -1157,6 +1324,8 @@ static int test_public_api_owned_input_edb(void) {
 
 int main(int argc, char **argv) {
     const test_case_t cases[] = {
+        {"public_api/loading_permissions", TEST_MODE_NON_BLOCKING, test_public_api_loading_permissions},
+        {"public_api/source_atoms_and_runtime_edb", TEST_MODE_NON_BLOCKING, test_public_api_source_atoms_and_runtime_edb},
         {"public_api/owned_input_edb", TEST_MODE_NON_BLOCKING, test_public_api_owned_input_edb},
         {"public_api/opaque_session_config", TEST_MODE_NON_BLOCKING, test_public_api_opaque_session_config},
         {"public_api/limits_and_derived_count", TEST_MODE_NON_BLOCKING, test_public_api_limits_and_derived_count},

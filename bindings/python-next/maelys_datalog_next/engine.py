@@ -285,13 +285,18 @@ class Engine:
     ) -> Ruleset:
         """Load a native manifest atomically, including its SHA-verified policies.
 
-        Policy-local vocabulary is opt-in and never changes the global domain.
+        The two boolean permissions are independent and default to False.
+        Enabled test_only entries fail without allow_test_only; once admitted,
+        they run normally. Neither option bypasses SHA or predicate validation.
+        Policy-local vocabulary never changes the global domain or inline loads.
         Paths in the manifest are resolved by the native loader.
         """
         self._require_open()
         if not isinstance(allow_test_only, bool) or not isinstance(allow_undeclared_policy_atoms, bool):
             raise TypeError("manifest options must be bool")
-        flags = (int(lib.MAELYS_DATALOG_PUBLIC_ALLOW_TEST_ONLY) if allow_test_only else 0)
+        flags = int(lib.MAELYS_DATALOG_PUBLIC_ALLOW_NONE)
+        if allow_test_only:
+            flags |= int(lib.MAELYS_DATALOG_PUBLIC_ALLOW_TEST_ONLY)
         if allow_undeclared_policy_atoms:
             flags |= int(lib.MAELYS_DATALOG_PUBLIC_ALLOW_UNDECLARED_POLICY_ATOMS)
         out = ffi.new("maelys_datalog_policy_t **")

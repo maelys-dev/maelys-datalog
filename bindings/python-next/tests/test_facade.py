@@ -456,6 +456,41 @@ class FacadeTest(unittest.TestCase):
             with self.assertRaises(MaelysDatalogError):
                 self.policy('allow("alice") :- seed("alice").')
 
+    def test_manifest_permissions_are_independent(self):
+        self.assertEqual(binding.lib.MAELYS_DATALOG_PUBLIC_ALLOW_NONE, 0)
+        with tempfile.TemporaryDirectory() as directory:
+            for local in (False, True):
+                source = 'allow(X) :- seed("alice"), seed(X).' if local else SOURCE
+                path = manifest(Path(directory), [source])
+                document = json.loads(path.read_text())
+                for test_only in (False, True):
+                    document["policies"][0]["mode"] = "test_only" if test_only else "enforce"
+                    path.write_text(json.dumps(document))
+                    for allow_test in (False, True):
+                        for allow_atoms in (False, True):
+                            options = dict(allow_test_only=allow_test,
+                                           allow_undeclared_policy_atoms=allow_atoms)
+                            with self.subTest(local=local, mode=test_only, **options):
+                                denied_mode = test_only and not allow_test
+                                if denied_mode or (local and not allow_atoms):
+                                    with self.assertRaises(MaelysDatalogError) as failure:
+                                        self.engine.load_manifest(path, **options)
+                                    self.assertEqual(failure.exception.status, -10 if denied_mode else -2)
+                                else:
+                                    with self.engine.load_manifest(path, **options) as rules:
+                                        with rules.solve(inputs(rules, ("seed", ["alice"]))) as result:
+                                            self.assertTrue(result.contains_fact("allow", ["alice"]))
+                    # Omitting both keywords keeps the same default rejection.
+                    if local or test_only:
+                        with self.assertRaises(MaelysDatalogError):
+                            self.engine.load_manifest(path)
+            with self.assertRaises(MaelysDatalogError):
+                self.policy('allow(X) :- seed("alice"), seed(X).')
+            for options in ({"allow_test_only": 1}, {"allow_undeclared_policy_atoms": 1},
+                            {"allow_none": True}):
+                with self.assertRaises(TypeError):
+                    self.engine.load_manifest(path, **options)
+
     def test_manifest_hash_and_query_whitelist_enforced(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
