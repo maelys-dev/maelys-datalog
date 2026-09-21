@@ -87,6 +87,14 @@ finalization, solve, query and result release; preparation is excluded. Two
 processes per revision/layout check repeatability. Ir counts executed software
 instructions, not hardware retired instructions or elapsed cycles.
 
+The runner records CPU models from `/proc/cpuinfo` and the kernel/architecture
+before measurement. Every comparison and diagnostic report shows this identity
+in its header, using the artifact's metadata rather than the rendering machine.
+Older artifacts without it are labeled explicitly; consult their original logs.
+A change of CPU prevents attributing a difference between runs to a code change;
+matching CPU names alone do not establish identical conditions either. Within-run
+comparisons retain their own A/A classifications and attribution limits.
+
 The diagnostic links the same compiled objects with 0, 16, 64 and 256 unreachable
 text bytes before the EDB object, checks the symbol displacement, and retains
 all variants. Two A/A pairs per unpadded revision precede two interleaved rounds;

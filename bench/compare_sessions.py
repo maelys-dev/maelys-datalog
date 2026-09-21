@@ -7,7 +7,7 @@ import math
 from pathlib import Path
 import statistics
 import sys
-from compare_runs import METRICS, PASSES, compare, display
+from compare_runs import METRICS, PASSES, compare, display, print_host
 
 KEY = ("policy", "order", "values", "size")
 CASES = {(p, o, v, s) for p in ("inert", "derive")
@@ -42,6 +42,7 @@ def report(directory):
     metadata = json.loads((directory / "metadata.json").read_text())
     print("# Public session solve comparison\n")
     print(f"Base: `{metadata['base']}`; head: `{metadata['head']}`.\n")
+    print_host(metadata.get("host"))
     print("Same public harness, Clang -O2, SMALL/LARGE. Two A/A pairs before A B A B, "
           "50 warmups + 301 samples per case/pass. Time only solve_edb, including clock overhead; "
           "exclude compilation, session creation, input append, queries and result release. "

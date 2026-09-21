@@ -2,6 +2,7 @@
 import contextlib
 import csv
 import io
+import json
 from pathlib import Path
 import tempfile
 import unittest
@@ -89,11 +90,13 @@ class SolverLayoutTest(unittest.TestCase):
             revisions = root / "revisions.txt"
             self.assertEqual(fixture_size(root), "2048")
             revisions.write_text(revisions.read_text() + "case=solver_size_pure/1024\n")
+            (root / "host.json").write_text(json.dumps({"cpu_models": ["Recorded EPYC"], "system": "Linux"}))
             for role in ROLES:
                 for pad in PADS: self.write_layout(root / f"{role}-{pad}.layout.csv")
             out = io.StringIO()
             with contextlib.redirect_stdout(out): report(root)
             self.assertIn("solver_size_pure / 1024", out.getvalue())
+            self.assertIn("Measurement CPU: <code>Recorded EPYC</code>", out.getvalue())
             self.assertIn("| C | 256 | 351960 | 5440 | 32 | 32 |", out.getvalue())
             (root / "C-256.layout.csv").unlink()
             with contextlib.redirect_stdout(io.StringIO()), self.assertRaisesRegex(ValueError, "inventory"):

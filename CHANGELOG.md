@@ -7,6 +7,9 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+Planned release: **0.6.0**, an additive language, IR and explanation extension.
+Consumer API v1, backend ABI 3 and program ABI 1 layouts remain unchanged.
+
 ### Added
 
 - Public stratified distinct count: `count(Id, relation(...), N)` in rule bodies,
@@ -21,8 +24,17 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
   introduced by this feature.
 - Count snapshot observations in Why-true, and `count-mismatch` obstacles in
   Why-false, including prepared/caller-owned explanations. Existing programs'
-  explanation bytes and identities are preserved. Consumers of exhaustive
-  IR/explanation kind switches must implement or reject these new alternatives.
+  explanation bytes and identities are preserved.
+
+### Migration
+
+- Exhaustive public IR switches must handle or explicitly reject
+  `MAELYS_DATALOG_IR_COUNT` (5). Native explanation integrations must account for
+  `MAELYS_DATALOG_EXPLANATION_PREMISE_COUNT` (5) and the Why-false obstacle
+  `MAELYS_DATALOG_WHY_FALSE_OBSTACLE_COUNT_MISMATCH` (6); text consumers must
+  recognize the corresponding count observation and `count-mismatch` alternative.
+  Existing enum numbers are unchanged. `AGGREGATES` is optional, and programs
+  without aggregates emit none of these count alternatives.
 
 ### Performance
 
@@ -40,7 +52,9 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
   permutations, duplicates and strided values up to the global EDB bound.
   Full result checks and A/A noise floors precede any performance conclusion.
   Optional Callgrind and neutral-link-layout diagnostics isolate the historical
-  LARGE/2048 solve payload; generated evidence remains in run artifacts.
+  LARGE/1024 or LARGE/2048 solve payload. Reports show the recorded CPU model and
+  system in their header, including an explicit unknown value for older artifacts;
+  generated evidence remains in run artifacts.
 
 - Adopt maelys-release v0.60.0 for CI and release workflows. The three retired
   compatibility check aliases disappear; all 16 required checks retain their

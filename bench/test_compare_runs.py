@@ -6,11 +6,44 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
-from compare_runs import INPUT_KEY, METRICS, PASSES, SOLVER_KEY, compare, load, report
+from compare_runs import INPUT_KEY, METRICS, PASSES, SOLVER_KEY, capture_host, compare, load, print_host, report
 
 
 class ComparisonTest(unittest.TestCase):
+    def test_host_capture_preserves_distinct_models_and_missing_cpuinfo(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "cpuinfo"
+            path.write_text("processor : 0\nmodel name\t: CPU A\nmodel name : CPU  B\nmodel name : CPU A\n")
+            self.assertEqual(capture_host(path)["cpu_models"], ["CPU A", "CPU B"])
+            path.write_text("processor : 0\nCPU architecture : 8\n")
+            self.assertEqual(capture_host(path)["cpu_models"], [])
+            path.unlink()
+            self.assertEqual(capture_host(path)["cpu_models"], [])
+
+    def test_reports_use_recorded_host_never_rendering_host(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary); self.fixture(directory)
+            with patch("compare_runs.capture_host", side_effect=AssertionError("rendering host leaked")):
+                output = io.StringIO()
+                with contextlib.redirect_stdout(output): report(directory)
+                self.assertIn("not recorded in this artifact", output.getvalue())
+                path = directory / "metadata.json"
+                metadata = json.loads(path.read_text())
+                metadata["host"] = {"cpu_models": ["Recorded Xeon & <EPYC>"], "system": "Recorded Linux"}
+                path.write_text(json.dumps(metadata))
+                output = io.StringIO()
+                with contextlib.redirect_stdout(output): report(directory)
+                text = output.getvalue()
+                self.assertIn("Recorded Xeon &amp; &lt;EPYC&gt;", text)
+                self.assertIn("Recorded Linux", text)
+                self.assertLess(text.index("Measurement CPU"), text.index("## SMALL"))
+                self.assertIn("matching CPU names alone", text)
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output): print_host({"cpu_models": [], "system": "Linux"})
+            self.assertIn("not available", output.getvalue())
+
     def fixture(self, directory):
         (directory / "metadata.json").write_text(json.dumps({
             "base": "a" * 40, "head": "b" * 40,

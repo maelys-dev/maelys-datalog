@@ -3,9 +3,11 @@
 """Observed noise floors, not confidence bounds or automatic acceptance."""
 import csv
 import hashlib
+import html
 import json
 import math
 from pathlib import Path
+import platform
 import statistics
 import subprocess
 import sys
@@ -14,6 +16,35 @@ SOLVER_KEY = ("benchmark", "group", "mode", "size", "selectivity")
 INPUT_KEY = ("scenario", "capacity", "entries", "distinct_strings", "mode", "text_capacity")
 PASSES = ("aa-1", "aa-2", "aa-3", "aa-4", "ab-A1", "ab-B1", "ab-A2", "ab-B2")
 METRICS = ("min_us", "median_us", "p95_us")
+
+
+def capture_host(cpuinfo_path=Path("/proc/cpuinfo")):
+    """Capture on the runner, never on the machine rendering an old report."""
+    try:
+        cpuinfo = cpuinfo_path.read_text()
+    except OSError:
+        cpuinfo = ""
+    models = set()
+    for line in cpuinfo.splitlines():
+        key, separator, value = line.partition(":")
+        if separator and key.strip() == "model name" and value.strip():
+            models.add(" ".join(value.split()))
+    uname = platform.uname()
+    return {"cpu_models": sorted(models), "cpu_model_source": "/proc/cpuinfo:model name",
+            "system": " ".join((uname.system, uname.release, uname.machine))}
+
+
+def print_host(host):
+    if host is None:
+        print("Measurement host: **not recorded in this artifact**; consult its original commands.log.\n")
+    else:
+        # Host strings are observations, not Markdown markup.
+        models = "; ".join(host["cpu_models"]) or "not available"
+        print(f"Measurement CPU: <code>{html.escape(models)}</code>. "
+              f"System: <code>{html.escape(host['system'])}</code>.\n")
+    print("Timings from different hosts or runs do not isolate a revision's effect. "
+          "The comparisons below apply within this run; matching CPU names alone "
+          "do not establish identical measurement conditions.\n")
 
 
 def load(path, kind):
@@ -75,6 +106,7 @@ def report(directory):
     metadata = json.loads((directory / "metadata.json").read_text())
     print("# Revision comparison\n")
     print(f"Base: `{metadata['base']}`; head: `{metadata['head']}`.\n")
+    print_host(metadata.get("host"))
     print("Clang -O2, SMALL/LARGE, complete solver and input matrices. No priority, "
           "affinity or case-selection adjustment. Each engine object compiled once "
           "per revision/profile, shared by both harnesses; no build during timing.\n")
@@ -167,6 +199,7 @@ def metadata(output, base, head, repo):
         "driver_dirty": bool(git("status", "--porcelain")),
         "input_source_blobs": {"base": a, "head": b},
         "input_implementation_identical": a == b,
+        "host": capture_host(),
         "harness_sha256": {name: hashlib.sha256((root / name).read_bytes()).hexdigest()
                            for name in ("bench_datalog.c", "bench_input_edb.c", "bench_explanations.c", "bench_sessions.c",
                                         "compare_sessions.py", "diagnose_sessions.py", "report_solver_layout.py",
@@ -177,11 +210,13 @@ def metadata(output, base, head, repo):
 
 if __name__ == "__main__":
     try:
-        if len(sys.argv) == 6 and sys.argv[1] == "metadata":
+        if len(sys.argv) == 3 and sys.argv[1] == "host-metadata":
+            (Path(sys.argv[2]) / "host.json").write_text(json.dumps(capture_host(), indent=2) + "\n")
+        elif len(sys.argv) == 6 and sys.argv[1] == "metadata":
             metadata(*sys.argv[2:])
         elif len(sys.argv) == 2:
             report(Path(sys.argv[1]))
         else:
-            raise ValueError("usage: compare_runs.py OUTPUT | metadata OUTPUT BASE HEAD REPO")
+            raise ValueError("usage: compare_runs.py OUTPUT | metadata OUTPUT BASE HEAD REPO | host-metadata OUTPUT")
     except (ValueError, OSError, KeyError, subprocess.CalledProcessError) as error:
         raise SystemExit(f"Invalid or incomplete benchmark evidence: {error}") from error

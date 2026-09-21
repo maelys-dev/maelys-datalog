@@ -2,12 +2,13 @@
 # SPDX-License-Identifier: MPL-2.0
 """Fail closed on incomplete diagnostic evidence; report every declared layout."""
 import csv
+import json
 import math
 from pathlib import Path
 import re
 import statistics
 import sys
-from compare_runs import compare, display
+from compare_runs import compare, display, print_host
 
 ROLES = ("A", "B", "C")
 PADS = (0, 16, 64, 256)
@@ -89,6 +90,8 @@ def data_layout(path):
 def report(root):
     size = fixture_size(root)
     print(f"# LARGE solver_size_pure / {size}: instructions and layout\n")
+    host_path = root / "host.json"
+    print_host(json.loads(host_path.read_text()) if host_path.exists() else None)
     print("```\n" + (root / "revisions.txt").read_text().rstrip() + "\n```\n")
     print("A = baseline; B = original candidate; C = revised candidate. Clang -O2, LARGE, "
           "same untouched historical fixture/payload included in a diagnostic driver. "

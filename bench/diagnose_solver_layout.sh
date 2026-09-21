@@ -26,7 +26,8 @@ workspace=$(mktemp -d)
 # Archives and symbols stay available until the diagnostic finishes.
 trap 'rm -rf "$workspace"' EXIT
 printf 'base=%s\noriginal=%s\nhead=%s\npads=0,16,64,256\nprofile=LARGE\ncase=solver_size_pure/%s\npriority=unchanged\naffinity=unchanged\n' "$base" "$original" "$head" "$size" > "$output/revisions.txt"
-sha256sum "$driver"/bench/{bench_datalog.c,bench_solver_diagnostic.c,Makefile.diagnostic,diagnose_solver_layout.sh,report_solver_layout.py} > "$output/harness.sha256"
+python3 "$driver/bench/compare_runs.py" host-metadata "$output"
+sha256sum "$driver"/bench/{bench_datalog.c,bench_solver_diagnostic.c,Makefile.diagnostic,diagnose_solver_layout.sh,report_solver_layout.py,compare_runs.py} > "$output/harness.sha256"
 unset MAKEFLAGS MFLAGS
 # All builds finish before any timed pass. Link variants reuse exact objects.
 for role in A B C; do
