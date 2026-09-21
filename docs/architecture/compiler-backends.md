@@ -208,8 +208,8 @@ Backend ABI 4 ships as one break, together with the first non-reference backend
   capability bit: a backend that retains state between solves says so. Before
   freezing the signature, specify initialization, duplicate/conflicting updates,
   atomic commit and failure recovery, including capacity and work exhaustion.
-- Capability bits for `AGGREGATES` (planned language feature) and a `WORK_LIMIT`
-  actually honoured by the reference.
+- A `WORK_LIMIT` actually honoured by the reference. `AGGREGATES` is introduced independently with public count support
+  using the existing ABI 3 descriptor layout.
 - A named backend registry reachable from the opaque facade, so Python-next and
   the WASM binding can select a backend by name. C context registration and
   selection already exist; the remaining work is coherent binding exposure.
@@ -219,9 +219,15 @@ for the same input and stable IDs during a result's lifetime, the reference
 identity `maelys.reference.v1`, results as snapshots. IDs may change between
 solves; persistent backend state needs its own bounded symbol identity and a
 mapping to each published snapshot, without retaining borrowed input strings.
-These ABI 4 additions are not implemented in ABI 3. The aggregate capability
-also requires a specified compiled-program representation and compatible
-accessors; a capability bit alone does not convey aggregate syntax.
+The delta/storage callback additions above are not implemented in ABI 3.
+Public stratified count is independent: `MAELYS_DATALOG_IR_COUNT` uses the
+existing rule/literal layout (`atom` is the nested relation, `lhs` is the local
+projection variable and `rhs` is the output variable). No array stride changes.
+The runtime checks `CAP_AGGREGATES` before backend preparation. The historical
+`CAP_LANGUAGE` mask stays 31; providers opt into count explicitly. Existing
+backends and frontends keep their descriptor/program ABI versions. Exhaustive
+kind switches must reject or implement the new alternative. See
+[the aggregate contract](../specifications/maelys-datalog-v2/aggregates.md).
 
 ## Budgets and shared filters
 

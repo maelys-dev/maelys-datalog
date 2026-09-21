@@ -144,7 +144,8 @@ typedef enum {
     MAELYS_DATALOG_LITERAL_ATOM = 1,
     MAELYS_DATALOG_LITERAL_COMPARISON = 2,
     MAELYS_DATALOG_LITERAL_NEGATED_ATOM = 3,
-    MAELYS_DATALOG_LITERAL_FILTER = 4
+    MAELYS_DATALOG_LITERAL_FILTER = 4,
+    MAELYS_DATALOG_LITERAL_COUNT = 5
 } maelys_datalog_literal_kind_t;
 
 typedef enum {
@@ -279,7 +280,8 @@ typedef enum {
     MAELYS_DATALOG_EXPLANATION_PREMISE_POSITIVE_FACT = 1,
     MAELYS_DATALOG_EXPLANATION_PREMISE_NEGATED_ABSENCE = 2,
     MAELYS_DATALOG_EXPLANATION_PREMISE_COMPARISON_TRUE = 3,
-    MAELYS_DATALOG_EXPLANATION_PREMISE_FILTER_TRUE = 4
+    MAELYS_DATALOG_EXPLANATION_PREMISE_FILTER_TRUE = 4,
+    MAELYS_DATALOG_EXPLANATION_PREMISE_COUNT = 5
 } maelys_datalog_explanation_premise_kind_t;
 
 typedef enum {
@@ -316,6 +318,15 @@ typedef struct {
     union {
         maelys_datalog_fact_t fact;
         struct {
+            /* Same size/alignment as a fact; use its header padding for the
+             * aggregate metadata, keeping every existing premise layout. */
+            maelys_datalog_predicate_id_t predicate_id;
+            uint8_t arity;
+            uint8_t projected_variable;
+            uint32_t value;
+            maelys_datalog_term_t terms[MAELYS_DATALOG_MAX_TERMS];
+        } count;
+        struct {
             maelys_datalog_term_t lhs;
             maelys_datalog_term_t rhs;
         } comparison;
@@ -328,6 +339,8 @@ typedef struct {
     } as;
 } maelys_datalog_explanation_premise_t;
 
+_Static_assert(sizeof(((maelys_datalog_explanation_premise_t *)0)->as.count) ==
+               sizeof(maelys_datalog_fact_t), "count must not enlarge the premise union");
 _Static_assert(sizeof(maelys_datalog_explanation_premise_t) <= 96u,
                "explanation premise exceeds 96-byte bound");
 
@@ -393,7 +406,8 @@ typedef enum {
     MAELYS_DATALOG_WHY_FALSE_OBSTACLE_NEGATIVE_CONTRADICTED = 2,
     MAELYS_DATALOG_WHY_FALSE_OBSTACLE_COMPARISON_FALSE = 3,
     MAELYS_DATALOG_WHY_FALSE_OBSTACLE_RECURSIVE_NO_BASE_SUPPORT = 4,
-    MAELYS_DATALOG_WHY_FALSE_OBSTACLE_FILTER_FALSE = 5
+    MAELYS_DATALOG_WHY_FALSE_OBSTACLE_FILTER_FALSE = 5,
+    MAELYS_DATALOG_WHY_FALSE_OBSTACLE_COUNT_MISMATCH = 6
 } maelys_datalog_why_false_obstacle_kind_t;
 
 typedef enum {

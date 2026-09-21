@@ -39,7 +39,13 @@ typedef enum {
     MAELYS_DATALOG_IR_ATOM = 1,
     MAELYS_DATALOG_IR_COMPARISON = 2,
     MAELYS_DATALOG_IR_NEGATION = 3,
-    MAELYS_DATALOG_IR_FILTER = 4
+    MAELYS_DATALOG_IR_FILTER = 4,
+    /* atom = source pattern, lhs = local projection variable, rhs = output
+     * variable, both in 0..25. Other source variables in 0..25 are group keys
+     * bound by ordinary positive atoms; 26..31 are local existentials. Neither
+     * projection nor local existentials may escape into the surrounding rule.
+     * Other fields inactive. Requires CAP_AGGREGATES. */
+    MAELYS_DATALOG_IR_COUNT = 5
 } maelys_datalog_ir_literal_kind_t;
 typedef enum {
     MAELYS_DATALOG_IR_EQ = 1,

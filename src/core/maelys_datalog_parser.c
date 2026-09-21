@@ -639,6 +639,48 @@ static maelys_result_t parse_filter_literal(
     return MAELYS_OK;
 }
 
+static int token_starts_count(const parser_t *p) {
+    if (p->tok.len != 5u || memcmp(p->tok.text, "count", 5u)) return 0;
+    maelys_datalog_lexer_t probe = p->lexer;
+    maelys_datalog_token_t token;
+    probe.diag = NULL;
+    const maelys_datalog_token_kind_t kinds[] = {
+        MAELYS_DATALOG_TOKEN_LPAREN, MAELYS_DATALOG_TOKEN_VARIABLE,
+        MAELYS_DATALOG_TOKEN_COMMA, MAELYS_DATALOG_TOKEN_PREDICATE,
+        MAELYS_DATALOG_TOKEN_LPAREN};
+    for (size_t i = 0; i < sizeof(kinds) / sizeof(kinds[0]); ++i)
+        if (maelys_datalog_lexer_next(&probe, &token) != MAELYS_OK || token.kind != kinds[i])
+            return 0;
+    return 1;
+}
+
+static maelys_result_t parse_count_literal(parser_t *p, maelys_datalog_literal_t *lit) {
+    maelys_result_t rc = next(p); /* count */
+    if (rc != MAELYS_OK) return rc;
+    rc = next(p); /* '(' */
+    if (rc != MAELYS_OK) return rc;
+    rc = parse_term(p, &lit->lhs, MAELYS_DATALOG_TERM_CTX_COMPARISON, NULL);
+    if (rc != MAELYS_OK) return rc;
+    rc = next(p); /* ',' verified by lookahead */
+    if (rc != MAELYS_OK) return rc;
+    int anonymous = 0;
+    rc = parse_atom(p, &lit->atom, MAELYS_DATALOG_TERM_CTX_BODY_ATOM, &anonymous);
+    if (rc != MAELYS_OK) return rc;
+    if (p->tok.kind != MAELYS_DATALOG_TOKEN_COMMA) goto syntax;
+    rc = next(p);
+    if (rc != MAELYS_OK) return rc;
+    if (p->tok.kind != MAELYS_DATALOG_TOKEN_VARIABLE) goto syntax;
+    rc = parse_term(p, &lit->rhs, MAELYS_DATALOG_TERM_CTX_COMPARISON, NULL);
+    if (rc != MAELYS_OK) return rc;
+    if (p->tok.kind != MAELYS_DATALOG_TOKEN_RPAREN) goto syntax;
+    lit->kind = MAELYS_DATALOG_LITERAL_COUNT;
+    return next(p);
+syntax:
+    parser_diag(p, MAELYS_DATALOG_DIAG_LEXER_INVALID_TOKEN,
+                "invalid count literal", "use count(Variable, predicate(...), ResultVariable)");
+    return MAELYS_ERR_INVALID_FIELD;
+}
+
 static maelys_result_t parse_literal(parser_t *p,
                                      maelys_datalog_rule_t *rule,
                                      maelys_datalog_literal_t *lit) {
@@ -681,6 +723,7 @@ static maelys_result_t parse_literal(parser_t *p,
         return MAELYS_OK;
     }
     if (p->tok.kind == MAELYS_DATALOG_TOKEN_PREDICATE) {
+        if (token_starts_count(p)) return parse_count_literal(p, lit);
         char name[64];
         if (p->tok.len < sizeof(name)) {
             memcpy(name, p->tok.text, p->tok.len);
@@ -781,7 +824,8 @@ static maelys_result_t normalize_anonymous_variables(parser_t *p,
     for (size_t i = 0; i < rule->body_count; i++) {
         maelys_datalog_literal_t *literal = &rule->body[i];
         if (literal->kind != MAELYS_DATALOG_LITERAL_ATOM &&
-            literal->kind != MAELYS_DATALOG_LITERAL_NEGATED_ATOM) {
+            literal->kind != MAELYS_DATALOG_LITERAL_NEGATED_ATOM &&
+            literal->kind != MAELYS_DATALOG_LITERAL_COUNT) {
             continue;
         }
         for (size_t t = 0; t < literal->atom.arity; t++) {

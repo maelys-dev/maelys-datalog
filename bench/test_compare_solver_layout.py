@@ -2,10 +2,11 @@
 import contextlib
 import csv
 import io
+import json
 from pathlib import Path
 import tempfile
 import unittest
-from report_solver_layout import PADS, ROLES, address, functions, instructions, report, timing
+from report_solver_layout import PADS, ROLES, address, data_layout, fixture_size, functions, instructions, report, timing
 
 
 class SolverLayoutTest(unittest.TestCase):
@@ -35,6 +36,7 @@ class SolverLayoutTest(unittest.TestCase):
             out = io.StringIO()
             with contextlib.redirect_stdout(out): report(root)
             self.assertIn("| B/0 → B/256 | median_us |", out.getvalue())
+            self.assertIn("| B/0 → C/0 | median_us |", out.getvalue())
             self.assertIn("No exclusive function-count difference", out.getvalue())
             self.assertIn("does not", out.getvalue())
             path = root / "B-16.nm"
@@ -55,3 +57,49 @@ class SolverLayoutTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "timing"): timing(path)
             path.write_text("sample,elapsed_us,result\n0,10,17\n")
             with self.assertRaisesRegex(ValueError, "inventory"): timing(path)
+
+    def write_layout(self, path, base=32):
+        values = {"sizeof.ruleset": 351960, "alignof.ruleset": 8,
+                  "address_mod64.ruleset": base}
+        for field, offset in dict(strata=4912, symbols=5440, registry=46416,
+                                  facts=73064, rules=82288).items():
+            values["offsetof.ruleset." + field] = offset
+            values["address_mod64.ruleset." + field] = (base + offset) % 64
+        with path.open("w", newline="") as stream:
+            writer = csv.writer(stream); writer.writerow(["key", "value"])
+            writer.writerows(values.items())
+
+    def test_data_alignment_and_invalid_layouts(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "layout.csv"
+            self.write_layout(path)
+            values = data_layout(path)
+            self.assertEqual(values["offsetof.ruleset.symbols"] % 64, 0)
+            self.assertEqual(values["address_mod64.ruleset.symbols"], 32)
+            valid = path.read_text()
+            path.write_text(valid.replace("address_mod64.ruleset.symbols,32", "address_mod64.ruleset.symbols,0"))
+            with self.assertRaisesRegex(ValueError, "inconsistent"): data_layout(path)
+            path.write_text(valid + "sizeof.ruleset,351960\n")
+            with self.assertRaisesRegex(ValueError, "duplicate"): data_layout(path)
+            path.write_text(valid.replace("alignof.ruleset,8\n", ""))
+            with self.assertRaisesRegex(ValueError, "missing"): data_layout(path)
+
+    def test_selectable_case_and_layout_inventory(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp); self.fixture(root)
+            revisions = root / "revisions.txt"
+            self.assertEqual(fixture_size(root), "2048")
+            revisions.write_text(revisions.read_text() + "case=solver_size_pure/1024\n")
+            (root / "host.json").write_text(json.dumps({"cpu_models": ["Recorded EPYC"], "system": "Linux"}))
+            for role in ROLES:
+                for pad in PADS: self.write_layout(root / f"{role}-{pad}.layout.csv")
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out): report(root)
+            self.assertIn("solver_size_pure / 1024", out.getvalue())
+            self.assertIn("Measurement CPU: <code>Recorded EPYC</code>", out.getvalue())
+            self.assertIn("| C | 256 | 351960 | 5440 | 32 | 32 |", out.getvalue())
+            (root / "C-256.layout.csv").unlink()
+            with contextlib.redirect_stdout(io.StringIO()), self.assertRaisesRegex(ValueError, "inventory"):
+                report(root)
+            revisions.write_text("case=solver_size_pure/512\n")
+            with self.assertRaisesRegex(ValueError, "case"): fixture_size(root)

@@ -4,30 +4,12 @@
 #include "src/core/maelys_datalog_predicate_registry.h"
 #include "src/core/maelys_datalog_symbol_table.h"
 #include "src/core/maelys_datalog_sort_internal.h"
+#include "src/core/maelys_datalog_term_internal.h"
 
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 
-static int term_cmp(const maelys_datalog_term_t *a, const maelys_datalog_term_t *b) {
-    if (a->kind != b->kind) return (int)a->kind - (int)b->kind;
-    switch (a->kind) {
-        case MAELYS_DATALOG_TERM_SYMBOL:
-            if (a->as.symbol < b->as.symbol) return -1;
-            if (a->as.symbol > b->as.symbol) return 1;
-            return 0;
-        case MAELYS_DATALOG_TERM_INT:
-            if (a->as.integer < b->as.integer) return -1;
-            if (a->as.integer > b->as.integer) return 1;
-            return 0;
-        case MAELYS_DATALOG_TERM_BOOL: return a->as.boolean - b->as.boolean;
-        case MAELYS_DATALOG_TERM_VAR:
-            if (a->as.variable < b->as.variable) return -1;
-            if (a->as.variable > b->as.variable) return 1;
-            return 0;
-        default: return 0;
-    }
-}
 
 int maelys_datalog_term_equal(const maelys_datalog_term_t *a,
                               const maelys_datalog_term_t *b) {
@@ -51,7 +33,7 @@ int maelys_datalog_fact_cmp(const maelys_datalog_fact_t *a,
     if (a->arity < b->arity) return -1;
     if (a->arity > b->arity) return 1;
     for (size_t i = 0; i < a->arity; i++) {
-        int cmp = term_cmp(&a->terms[i], &b->terms[i]);
+        int cmp = maelys_datalog_term_cmp(&a->terms[i], &b->terms[i]);
         if (cmp != 0) return cmp;
     }
     return 0;

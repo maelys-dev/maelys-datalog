@@ -172,6 +172,10 @@ static void wr_term(fmt_writer_t *w,
     case MAELYS_DATALOG_TERM_INT:
         wr_i64(w, term->as.integer);
         break;
+    case MAELYS_DATALOG_TERM_VAR:
+        wr_byte(w, '?');
+        wr_u64(w, term->as.variable);
+        break;
     case MAELYS_DATALOG_TERM_BOOL:
         if (term->as.boolean) {
             WR_LIT(w, "true");
@@ -204,6 +208,15 @@ static void wr_fact(fmt_writer_t *w,
     wr_byte(w, ')');
 }
 
+static maelys_datalog_fact_t count_premise_pattern(const maelys_datalog_explanation_premise_t *p) {
+    maelys_datalog_fact_t pattern = {0};
+    pattern.predicate_id = p->as.count.predicate_id;
+    pattern.arity = p->as.count.arity;
+    for (size_t i = 0; i < pattern.arity && i < MAELYS_DATALOG_MAX_TERMS; ++i)
+        pattern.terms[i] = p->as.count.terms[i];
+    return pattern;
+}
+
 static void wr_premise_kind(fmt_writer_t *w, uint8_t kind) {
     switch (kind) {
     case (uint8_t)MAELYS_DATALOG_EXPLANATION_PREMISE_POSITIVE_FACT:
@@ -214,6 +227,9 @@ static void wr_premise_kind(fmt_writer_t *w, uint8_t kind) {
         break;
     case (uint8_t)MAELYS_DATALOG_EXPLANATION_PREMISE_COMPARISON_TRUE:
         WR_LIT(w, "comparison-true");
+        break;
+    case (uint8_t)MAELYS_DATALOG_EXPLANATION_PREMISE_COUNT:
+        WR_LIT(w, "count");
         break;
     case (uint8_t)MAELYS_DATALOG_EXPLANATION_PREMISE_FILTER_TRUE:
         WR_LIT(w, "filter-true");
@@ -322,6 +338,14 @@ static void emit_explanation_text(const maelys_datalog_ruleset_t *ruleset,
                 wr_cmp_op(w, premise->op);
                 WR_LIT(w, " rhs=");
                 wr_term(w, ruleset, &premise->as.comparison.rhs);
+            } else if (premise->kind == MAELYS_DATALOG_EXPLANATION_PREMISE_COUNT) {
+                WR_LIT(w, " pattern=");
+                maelys_datalog_fact_t pattern = count_premise_pattern(premise);
+                wr_fact(w, ruleset, &pattern);
+                WR_LIT(w, " projected=?");
+                wr_u64(w, premise->as.count.projected_variable);
+                WR_LIT(w, " value=");
+                wr_u64(w, premise->as.count.value);
             } else if (premise->kind ==
                        (uint8_t)MAELYS_DATALOG_EXPLANATION_PREMISE_FILTER_TRUE) {
                 const maelys_datalog_filter_program_t *program =
@@ -469,6 +493,31 @@ static maelys_result_t validate_premise(const maelys_datalog_ruleset_t *ruleset,
         if (lhs_rc != MAELYS_OK) return lhs_rc;
         return validate_term(ruleset, &premise->as.comparison.rhs);
     }
+    case MAELYS_DATALOG_EXPLANATION_PREMISE_COUNT: {
+        const maelys_datalog_fact_t stored_pattern = count_premise_pattern(premise);
+        const maelys_datalog_fact_t *pattern = &stored_pattern;
+        const maelys_datalog_predicate_def_t *def =
+            maelys_datalog_predicate_registry_get(&ruleset->registry, pattern->predicate_id);
+        const unsigned projected = premise->as.count.projected_variable;
+        size_t name_length;
+        if (!def || !predicate_name_span(def, &name_length) ||
+            pattern->arity > MAELYS_DATALOG_MAX_TERMS || pattern->arity != def->arity ||
+            !origin_is_store(premise->origin) || premise->op ||
+            premise->parent_step != MAELYS_DATALOG_EXPLANATION_NO_STEP ||
+            projected >= MAELYS_DATALOG_NAMED_VARIABLE_COUNT ||
+            premise->as.count.value > MAELYS_DATALOG_MAX_INT) return MAELYS_ERR_INVALID_FIELD;
+        int present = 0;
+        for (size_t t = 0; t < pattern->arity; ++t) {
+            const maelys_datalog_term_t *term = &pattern->terms[t];
+            if (term->kind == MAELYS_DATALOG_TERM_VAR) {
+                if (term->as.variable >= MAELYS_DATALOG_MAX_RULE_VARIABLES ||
+                    (term->as.variable < MAELYS_DATALOG_NAMED_VARIABLE_COUNT &&
+                     term->as.variable != projected)) return MAELYS_ERR_INVALID_FIELD;
+                if (term->as.variable == projected) present = 1;
+            } else if (validate_term(ruleset, term) != MAELYS_OK) return MAELYS_ERR_INVALID_FIELD;
+        }
+        return present ? MAELYS_OK : MAELYS_ERR_INVALID_FIELD;
+    }
     case (uint8_t)MAELYS_DATALOG_EXPLANATION_PREMISE_FILTER_TRUE: {
         if (premise->origin !=
                 (uint8_t)MAELYS_DATALOG_EXPLANATION_ORIGIN_NOT_APPLICABLE ||
@@ -597,6 +646,8 @@ static const char *why_false_obstacle_name(unsigned kind) {
         return "recursive-no-base-support";
     case MAELYS_DATALOG_WHY_FALSE_OBSTACLE_FILTER_FALSE:
         return "filter-false";
+    case MAELYS_DATALOG_WHY_FALSE_OBSTACLE_COUNT_MISMATCH:
+        return "count-mismatch";
     default:
         return NULL;
     }
@@ -630,6 +681,11 @@ static maelys_result_t validate_why_false(const maelys_datalog_ruleset_t *r,
             if (!origin_is_store(d->supports[s].origin) || validate_fact(r, &d->supports[s].fact) ||
                 d->supports[s].body_index >= r->rules[d->rule_id - 1u].body_count)
                 return MAELYS_ERR_INVALID_FIELD;
+        if (o->kind == MAELYS_DATALOG_WHY_FALSE_OBSTACLE_COUNT_MISMATCH &&
+            (o->lhs.kind != MAELYS_DATALOG_TERM_INT || o->lhs.as.integer < 0 ||
+             o->lhs.as.integer > MAELYS_DATALOG_MAX_INT || validate_term(r, &o->rhs) ||
+             r->rules[d->rule_id - 1u].body[o->body_index].kind != MAELYS_DATALOG_LITERAL_COUNT))
+            return MAELYS_ERR_INVALID_FIELD;
         if (o->kind == MAELYS_DATALOG_WHY_FALSE_OBSTACLE_COMPARISON_FALSE) {
             if (o->op < MAELYS_DATALOG_CMP_EQ || o->op > MAELYS_DATALOG_CMP_GTE ||
                 validate_term(r, &o->lhs) || validate_term(r, &o->rhs))
@@ -775,6 +831,14 @@ static void emit_why_false_text(const maelys_datalog_ruleset_t *r,
             WR_LIT(w, " pattern=");
             wr_quoted(w, r->filter_pattern_pool + p->pattern_offset, p->pattern_length);
         } else {
+            if (o->kind == MAELYS_DATALOG_WHY_FALSE_OBSTACLE_COUNT_MISMATCH) {
+                WR_LIT(w, " observed=");
+                wr_term(w, r, &o->lhs);
+                WR_LIT(w, " expected=");
+                wr_term(w, r, &o->rhs);
+                WR_LIT(w, " projected=?");
+                wr_u64(w, r->rules[d->rule_id - 1u].body[o->body_index].lhs.as.variable);
+            }
             const maelys_datalog_why_false_pattern_t *p = &o->pattern;
             const maelys_datalog_predicate_def_t *pred =
                 maelys_datalog_predicate_registry_get(&r->registry, p->predicate_id);

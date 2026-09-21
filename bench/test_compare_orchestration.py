@@ -153,6 +153,11 @@ done
                 self.assertTrue(all("EXPLANATIONS=1" in line for line in lines[2:4]))
             self.assertIn("workspace" if enabled else "Skipped", (output / "explanations.md").read_text())
             self.assertEqual(json.loads((output / "metadata.json").read_text())["head"], head)
+            host = json.loads((output / "metadata.json").read_text())["host"]
+            self.assertIsInstance(host["cpu_models"], list)
+            self.assertTrue(host["system"])
+            for name in ("comparison.md", "sessions.md", "explanations.md"):
+                self.assertIn("Measurement CPU:", (output / name).read_text())
             self.assertIn("indéterminé", (output / "comparison.md").read_text())
             self.assertFalse((repo / "bench/results").exists())
             # Existing artifacts must never be overwritten.

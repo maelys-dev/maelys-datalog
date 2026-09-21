@@ -1,7 +1,8 @@
 # Open core and module boundary
 
 The public core is a complete MPL-2.0 library. It includes the reference solver,
-parser, negation, arithmetic, prepared sessions, diagnostics, explanations and
+parser, negation, arithmetic, stratified distinct count, prepared sessions,
+diagnostics, explanations and
 standard string filters. Separately compiled providers can add capabilities
 without including or modifying private engine headers.
 

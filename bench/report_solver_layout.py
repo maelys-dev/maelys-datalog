@@ -2,12 +2,13 @@
 # SPDX-License-Identifier: MPL-2.0
 """Fail closed on incomplete diagnostic evidence; report every declared layout."""
 import csv
+import json
 import math
 from pathlib import Path
 import re
 import statistics
 import sys
-from compare_runs import compare, display
+from compare_runs import compare, display, print_host
 
 ROLES = ("A", "B", "C")
 PADS = (0, 16, 64, 256)
@@ -56,8 +57,41 @@ def address(path, name):
     return int(matches[0], 16)
 
 
+def fixture_size(root):
+    cases = re.findall(r"^case=(.+)$", (root / "revisions.txt").read_text(), re.M)
+    if not cases:  # Older diagnostic artifacts predate the selectable case.
+        return "2048"
+    if len(cases) != 1 or cases[0] not in ("solver_size_pure/1024", "solver_size_pure/2048"):
+        raise ValueError("invalid diagnostic case")
+    return cases[0].split("/")[1]
+
+
+def data_layout(path):
+    with path.open(newline="") as stream:
+        rows = list(csv.DictReader(stream))
+    if len({r["key"] for r in rows}) != len(rows):
+        raise ValueError(f"duplicate layout key: {path}")
+    values = {r["key"]: int(r["value"]) for r in rows}
+    required = ["sizeof.ruleset", "alignof.ruleset", "address_mod64.ruleset"]
+    required += ["offsetof.ruleset." + field for field in ("strata", "symbols", "registry", "facts", "rules")]
+    if any(key not in values for key in required) or any(v < 0 for v in values.values()):
+        raise ValueError(f"missing/invalid data layout: {path}")
+    alignment = values["alignof.ruleset"]
+    if not alignment or alignment & (alignment - 1) or values["address_mod64.ruleset"] >= 64:
+        raise ValueError(f"invalid data alignment: {path}")
+    for key, offset in values.items():
+        if key.startswith("offsetof.ruleset."):
+            address_key = key.replace("offsetof.", "address_mod64.")
+            if offset >= values["sizeof.ruleset"] or values.get(address_key) != (values["address_mod64.ruleset"] + offset) % 64:
+                raise ValueError(f"inconsistent member layout: {path}/{key}")
+    return values
+
+
 def report(root):
-    print("# LARGE solver_size_pure / 2048: instructions and layout\n")
+    size = fixture_size(root)
+    print(f"# LARGE solver_size_pure / {size}: instructions and layout\n")
+    host_path = root / "host.json"
+    print_host(json.loads(host_path.read_text()) if host_path.exists() else None)
     print("```\n" + (root / "revisions.txt").read_text().rstrip() + "\n```\n")
     print("A = baseline; B = original candidate; C = revised candidate. Clang -O2, LARGE, "
           "same untouched historical fixture/payload included in a diagnostic driver. "
@@ -74,6 +108,24 @@ def report(root):
           "checks are excluded. This is not a hardware retired-instruction counter. "
           "Equal Ir rules out extra instruction volume for this fixture; it does not "
           "establish equal cycles/cache behavior or alone prove a layout cause.\n")
+    layouts = list(root.glob("*.layout.csv"))
+    if layouts:
+        if len(layouts) != len(ROLES) * len(PADS):
+            raise ValueError("incomplete data-layout inventory")
+        print("| Revision | Padding | sizeof ruleset | symbols offset | Ruleset address mod 64 | Symbols address mod 64 |\n"
+              "| --- | ---: | ---: | ---: | ---: | ---: |")
+        for role in ROLES:
+            for pad in PADS:
+                data = data_layout(root / f"{role}-{pad}.layout.csv")
+                print(f"| {role} | {pad} | {data['sizeof.ruleset']} | {data['offsetof.ruleset.symbols']} | "
+                      f"{data['address_mod64.ruleset']} | {data['address_mod64.ruleset.symbols']} |")
+        print("\nLayout snapshots also retain all prior ruleset member offsets, enclosing context "
+              "size/offset, and element sizes/alignments. Modulo 64 is an explicit reference, "
+              "not a portable cache-line guarantee. Text padding controls code addresses, "
+              "not member offsets. Restoring offsets can change generated code and does not "
+              "by itself prove a cache mechanism or zero overhead.\n")
+    else:
+        print("Data-layout snapshots were not collected by this older driver.\n")
     ir = {}
     print("| Revision | Padding | Ir run 1 | Ir run 2 | EDB add address | Solve address |\n"
           "| --- | ---: | ---: | ---: | --- | --- |")
@@ -119,6 +171,7 @@ def report(root):
     print("| Comparison | Metric | Reference µs | Variant µs | Ratio | A/A floor | Observation |\n"
           "| --- | --- | ---: | ---: | ---: | ---: | --- |")
     comparisons = [(f"A/0 → {r}/{pad}", "A", ("A", 0), (r, pad)) for r in ("B", "C") for pad in PADS]
+    comparisons += [(f"B/0 → C/{pad}", "B", ("B", 0), ("C", pad)) for pad in PADS]
     comparisons += [(f"{r}/0 → {r}/{pad}", r, (r, 0), (r, pad)) for r in ROLES for pad in PADS[1:]]
     for label, floor_role, reference, variant in comparisons:
         for metric in ("median_us", "p95_us"):

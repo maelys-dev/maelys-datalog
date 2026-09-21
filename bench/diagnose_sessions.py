@@ -10,7 +10,7 @@ from pathlib import Path
 import statistics
 import subprocess
 import sys
-from compare_runs import compare
+from compare_runs import compare, print_host
 from compare_sessions import CASES, KEY, PASSES, load, report as session_report
 from report_solver_layout import functions, instructions
 
@@ -73,6 +73,7 @@ def run(root, workspace):
         counted_cases=[dict(profile=p, case=k) for p, k in sorted(selection)]), indent=2) + "\n")
     print("# Session residuals and scoped instruction counts\n")
     print(f"Base `{meta['base']}`; candidate `{meta['head']}`.\n")
+    print_host(meta.get("host"))
     print(f"The 9.94% reference comes from [one earlier solver layout control]({REFERENCE_RUN}). "
           "It is a triage reference, not a bound or a noise floor for sessions. "
           "Keep all A/A classifications; smaller signals remain visible. Only slower "

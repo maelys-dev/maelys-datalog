@@ -16,6 +16,7 @@ native library or compiled to WebAssembly.
 
 - deterministic semi-naive fixed-point evaluation;
 - stratified negation with negative-cycle rejection;
+- stratified distinct `count` with explicit grouping and empty-group zero (unreleased);
 - bounded memory profiles with stack-owned solver working state;
 - static join planning and reproducible results;
 - SHA-256 ruleset and complete policy-set identity, diagnostics, and decision
@@ -26,6 +27,24 @@ native library or compiled to WebAssembly.
 The solver does not allocate heap memory while evaluating rules. A successful
 solve creates one caller-owned result object that must be released through the
 public API.
+
+## Count values per group (unreleased)
+
+Register the ordinary predicates in your domain, then use the same language
+through C, Python or WebAssembly:
+
+```datalog
+errors(Id, Service) :- log(Id, Service, "error").
+error_count(Service, N) :- service(Service), count(Id, errors(Id, Service), N).
+alert(Service) :- error_count(Service, N), N >= 10.
+```
+
+A registered service with no errors gets zero. Give each log occurrence a unique
+ID: `count` counts distinct typed IDs, not duplicate input tuples. Sources are
+fully evaluated before counting; recursion through an aggregate is rejected.
+The reference engine recomputes each supplied snapshot. See the
+[aggregate contract](docs/specifications/maelys-datalog-v2/aggregates.md) for
+binding, capability negotiation and explanation semantics.
 
 ## Build an explanation once
 

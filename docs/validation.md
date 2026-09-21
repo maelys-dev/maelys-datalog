@@ -80,11 +80,20 @@ facts appended through the unindexed entry.
 
 The manual benchmark's optional `diagnostic_original` input compares a baseline,
 the original candidate and the revised head on native Linux x86_64. It reuses
-the historical `solver_size_pure` LARGE/2048 fixture and payload in a separate
-driver. Callgrind collection surrounds only the payload after eight warmups:
+the historical `solver_size_pure` fixture and payload in a separate driver;
+`diagnostic_size` predeclares LARGE/1024 or LARGE/2048 (the default).
+Callgrind collection surrounds only the payload after eight warmups:
 finalization, solve, query and result release; preparation is excluded. Two
 processes per revision/layout check repeatability. Ir counts executed software
 instructions, not hardware retired instructions or elapsed cycles.
+
+The runner records CPU models from `/proc/cpuinfo` and the kernel/architecture
+before measurement. Every comparison and diagnostic report shows this identity
+in its header, using the artifact's metadata rather than the rendering machine.
+Older artifacts without it are labeled explicitly; consult their original logs.
+A change of CPU prevents attributing a difference between runs to a code change;
+matching CPU names alone do not establish identical conditions either. Within-run
+comparisons retain their own A/A classifications and attribution limits.
 
 The diagnostic links the same compiled objects with 0, 16, 64 and 256 unreachable
 text bytes before the EDB object, checks the symbol displacement, and retains
@@ -99,6 +108,15 @@ with unchanged instruction work demonstrates sensitivity for that case/run.
 See the [Callgrind manual](https://valgrind.org/docs/manual/cl-manual.html) and
 [Mytkowicz et al., ASPLOS 2009](https://sape.inf.usi.ch/publications/asplos09.html).
 No generated measurement is committed and no diagnostic authorizes a merge.
+
+Code placement and data layout need separate controls. Text padding does not
+vary member offsets or object alignment. The diagnostic's layout snapshots
+record native sizes/alignments, all existing ruleset offsets and actual fixture
+addresses modulo 64 (an explicit diagnostic reference, not a portable cache-line
+size guarantee). A divisible member offset does not establish absolute alignment.
+Compare baseline/original/revised layouts in one run; changed field accesses can
+also alter generated code. Restoring offsets or losing one above-floor timing gap
+does not prove a universal zero-cost extension or establish a cache mechanism.
 
 The input-allocation test checks colliding/wrapping hash chains and byte-for-byte
 arena restoration on rejected batches, including empty strings in one/three-byte
@@ -118,6 +136,33 @@ and reject batches over stale colliding slots with byte-exact restoration.
 exercise D=15/16 and both the 16-byte text linear regime (D=8) and 128-byte text
 indexed regime, including cross-role deduplication, byte-exact rejection and
 reuse with allocation disabled. The SDK consumer stays at 128 text bytes.
+
+## Stratified count
+
+`test_maelys_datalog_count` runs in both native profiles and sanitizers; CMake
+registers it as `stratified_count`. It covers typed distinct projection, explicit
+empty groups, global and policy-fact counts, positive recursive sources,
+negation, multiple aggregates, scope/stratification rejections, custom frontend
+round trips and malformed IR, old planner callbacks, and rejection of a backend
+without aggregate capability before its prepare callback. A host-side oracle
+checks 100 successive snapshots against integer sets after source filtering.
+Capacity rejection and session reuse never publish partial results. Explanation
+checks cover order independence, short-output retries and count mismatches.
+
+The whole-engine allocator guard solves and explains count snapshots with the
+allocator disabled and a configured explanation workspace. The bounded
+projection buffer contains `max(MAX_RULE_FACTS, MAX_FACTS_PER_PRED)` terms:
+2 KiB SMALL / 4 KiB LARGE on targets with 16-byte native terms. It is local
+to one evaluation and returns before rule traversal continues; there is no
+per-group allocation or persistent aggregate cache. Existing explanation
+premise size is statically preserved. CFFI and JavaScript allocations are not
+covered by the engine's zero-allocation claim.
+
+Both Python APIs and the Node/Wasm playground exercise group counts, zero,
+explanations and (where sessions are exposed) snapshot reuse. Existing pipeline
+goldens continue to constrain identities and non-aggregate explanation bytes.
+These functional/allocation checks establish no speed improvement; apply the
+manual comparison protocol above to changes in ordinary solve paths.
 
 ## Installed facade and SDK
 

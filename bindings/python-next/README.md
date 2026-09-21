@@ -448,6 +448,18 @@ native status. `.diagnostic` is an immutable `Diagnostic` containing `source`,
 operation status. APIs without a diagnostic output leave that object empty.
 The convenient `.message` and `.hint` remain available. Do not parse prose.
 
+## Stratified count (unreleased)
+
+The reference backend supports `count(I, event(I,G,_), N)` in rule bodies,
+with `G` bound by an ordinary positive atom. It counts distinct typed `I`
+values and emits zero for an explicitly bound empty group. The usual typed
+result enumeration and `explain_true` / `explain_false` methods work with counts.
+`Capability.AGGREGATES` requests this contract explicitly; loading an aggregate
+program already makes it required. This capability currently means stratified
+count only. Unsupported backends fail before preparation.
+Each `PreparedSession.solve()` still recomputes its input snapshot; it is not
+a streaming update API. Python conversions and output strings still allocate.
+
 ## Identities, capabilities and work limits
 
 - `ruleset.fingerprint`: identity of the loaded policy set.

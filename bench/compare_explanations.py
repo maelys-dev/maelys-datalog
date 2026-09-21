@@ -8,7 +8,7 @@ from pathlib import Path
 import statistics
 import sys
 
-from compare_runs import METRICS, PASSES, compare, display
+from compare_runs import METRICS, PASSES, compare, display, print_host
 
 CASES = {(scenario, kind) for scenario in ("fresh-result", "alternating-query", "cache-hit")
          for kind in ("true", "false")}
@@ -45,6 +45,7 @@ def report(directory):
         raise ValueError("invalid explanation availability")
     print("# Session explanation workspace comparison\n")
     print(f"One candidate revision: `{metadata['head']}`. A = legacy; B = configured workspace.\n")
+    print_host(metadata.get("host"))
     if enabled == "0":
         print("Skipped: the candidate has no session explanation workspace API. Solver/input comparison remains available.")
         return

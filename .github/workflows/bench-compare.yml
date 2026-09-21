@@ -13,10 +13,16 @@ on:
         type: string
 
       diagnostic_original:
-        description: Optional original candidate SHA for LARGE/2048 Callgrind and layout diagnosis
+        description: Optional original candidate SHA for LARGE Callgrind and layout diagnosis
         required: false
         default: ''
         type: string
+      diagnostic_size:
+        description: Predeclared solver_size_pure case for the optional diagnostic
+        required: false
+        default: '2048'
+        type: choice
+        options: ['1024', '2048']
       session_diagnostics:
         description: Count only residual session slowdowns above the named 9.94% triage reference
         required: false
@@ -50,6 +56,7 @@ jobs:
         env:
           BASE_REF: ${{ inputs.base }}
           ORIGINAL_REF: ${{ inputs.diagnostic_original }}
+          DIAGNOSTIC_SIZE: ${{ inputs.diagnostic_size || '2048' }}
           HEAD_REF: ${{ inputs.head }}
         run: bash bench/diagnose_solver_layout.sh "$BASE_REF" "$ORIGINAL_REF" "$HEAD_REF" "$RUNNER_TEMP/bench-diagnostic"
       - name: Compare immutable revisions
