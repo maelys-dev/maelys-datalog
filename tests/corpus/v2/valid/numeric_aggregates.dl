@@ -1,0 +1,3 @@
+% EXPECT: OK
+deny(G,N) :- user(G), min(V,edge(G,V),N), max(W,edge(G,W),N).
+allow(N) :- sum(V,edge(_,V),N).
