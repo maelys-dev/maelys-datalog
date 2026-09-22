@@ -78,9 +78,13 @@ extern "C" {
 #define MAELYS_DATALOG_CAP_EXPLAIN_FALSE (UINT64_C(1) << 7)
 /* Stratified distinct count. Future aggregate operators require separate negotiation. */
 #define MAELYS_DATALOG_CAP_AGGREGATES (UINT64_C(1) << 8)
+/* Independently negotiated integer aggregates; AGGREGATES still means count. */
+#define MAELYS_DATALOG_CAP_MIN (UINT64_C(1) << 9)
+#define MAELYS_DATALOG_CAP_MAX (UINT64_C(1) << 10)
+#define MAELYS_DATALOG_CAP_SUM (UINT64_C(1) << 11)
 /* Historical base-language mask; opt into aggregates explicitly. */
 #define MAELYS_DATALOG_CAP_LANGUAGE (UINT64_C(31))
-#define MAELYS_DATALOG_CAP_ALL (UINT64_C(511))
+#define MAELYS_DATALOG_CAP_ALL (UINT64_C(4095))
 
 typedef enum {
     MAELYS_DATALOG_STATUS_OK = 0,

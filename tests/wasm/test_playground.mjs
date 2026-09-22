@@ -1684,5 +1684,36 @@ await test('playground_count_distinct_groups_zero_and_explanation', async () => 
   pg.freeResult();
 });
 
+await test('playground_numeric_aggregates_and_empty_groups', async () => {
+  const pg = await createPlayground();
+  pg.domainBegin('numeric_groups');
+  pg.domainAddPredicate('group', 1, PredKind.EDB);
+  pg.domainAddPredicate('base', 2, PredKind.POLICY_FACT);
+  pg.domainAddPredicate('blocked', 1, PredKind.EDB);
+  pg.domainAddPredicate('event', 3, PredKind.IDB);
+  for (const name of ['low', 'high', 'total']) pg.domainAddPredicate(name, 2, PredKind.IDB | PredKind.QUERY);
+  pg.domainAddPredicate('alert', 1, PredKind.IDB | PredKind.QUERY);
+  pg.domainCommit();
+  pg.loadRuleset('numeric_groups', 'numeric_groups.main',
+    'base(1,10). base(2,10). base(3,7). base(1,10). ' +
+    'event(I,G,V) :- group(G),base(I,V),not(blocked(G)). ' +
+    'low(G,N) :- group(G),min(V,event(_,G,V),N). ' +
+    'high(G,N) :- group(G),max(V,event(_,G,V),N). ' +
+    'total(G,N) :- group(G),sum(V,event(_,G,V),N). ' +
+    'alert(G) :- low(G,L),high(G,H),total(G,T),L = 7,H = 10,T = 27.');
+  pg.edbBegin();
+  pg.addFact('group', 'api');
+  pg.addFact('group', 'worker');
+  pg.addFact('blocked', 'worker');
+  pg.solve();
+  const decode = name => pg.enumeratePredicateFacts(name, 2).map(([g,n]) => [pg.symbolText(g.symbolId),n.value]);
+  for (const [name, expected] of [['low', [['api',7]]], ['high', [['api',10]]], ['total', [['api',27],['worker',0]]]]) {
+    if (JSON.stringify(decode(name)) !== JSON.stringify(expected)) throw new Error(`unexpected ${name}`);
+  }
+  const text = pg.explainFactText('alert', ['api']);
+  for (const op of ['min', 'max', 'sum']) if (!text.includes(`kind=${op} origin=idb`)) throw new Error(`missing ${op}`);
+  pg.freeResult();
+});
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);

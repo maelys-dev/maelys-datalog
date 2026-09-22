@@ -45,7 +45,14 @@ typedef enum {
      * bound by ordinary positive atoms; 26..31 are local existentials. Neither
      * projection nor local existentials may escape into the surrounding rule.
      * Other fields inactive. Requires CAP_AGGREGATES. */
-    MAELYS_DATALOG_IR_COUNT = 5
+    MAELYS_DATALOG_IR_COUNT = 5,
+    /* Same active fields and scoping as COUNT; integer projection only.
+     * MIN/MAX fail on an empty group. SUM returns zero and sums distinct
+     * complete source facts (not distinct projected values). Requires the
+     * corresponding CAP_MIN, CAP_MAX or CAP_SUM, independently of COUNT. */
+    MAELYS_DATALOG_IR_MIN = 6,
+    MAELYS_DATALOG_IR_MAX = 7,
+    MAELYS_DATALOG_IR_SUM = 8
 } maelys_datalog_ir_literal_kind_t;
 typedef enum {
     MAELYS_DATALOG_IR_EQ = 1,

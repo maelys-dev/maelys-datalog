@@ -42,6 +42,26 @@ class CountTest(unittest.TestCase):
             prepared.close()
             rules.close()
 
+            for op, cap, value in [("min", Capability.MIN, 7), ("max", Capability.MAX, 10), ("sum", Capability.SUM, 27)]:
+                rules = engine.load_inline_ruleset("next_count", op,
+                    f"total(G,N) :- group(G),{op}(V,event(_,G,V),N).")
+                prepared = rules.prepare(required_capabilities=cap)
+                edb = rules.edb()
+                edb.add_facts([("group", ["api"]), ("group", ["worker"]),
+                               ("event", [1, "api", 10]), ("event", [2, "api", 10]),
+                               ("event", [3, "api", 7]), ("event", [1, "api", 10])])
+                result = prepared.solve(edb)
+                expected = {("api", value)} | ({("worker", 0)} if op == "sum" else set())
+                self.assertEqual(set(result.enumerate_predicate_facts("total", 2)), expected)
+                self.assertIn(f"kind={op} origin=edb", result.explain_true("total", ["api", value]))
+                self.assertIn(f"{op}-mismatch", result.explain_false("total", ["api", 99]))
+                if op != "sum":
+                    self.assertIn(f"{op}-empty", result.explain_false("total", ["worker", 0]))
+                result.close()
+                edb.close()
+                prepared.close()
+                rules.close()
+
 
 if __name__ == "__main__":
     unittest.main()

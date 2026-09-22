@@ -137,7 +137,7 @@ exercise D=15/16 and both the 16-byte text linear regime (D=8) and 128-byte text
 indexed regime, including cross-role deduplication, byte-exact rejection and
 reuse with allocation disabled. The SDK consumer stays at 128 text bytes.
 
-## Stratified count
+## Stratified aggregates
 
 `test_maelys_datalog_count` runs in both native profiles and sanitizers; CMake
 registers it as `stratified_count`. It covers typed distinct projection, explicit
@@ -149,7 +149,13 @@ checks 100 successive snapshots against integer sets after source filtering.
 Capacity rejection and session reuse never publish partial results. Explanation
 checks cover order independence, short-output retries and count mismatches.
 
-The whole-engine allocator guard solves and explains count snapshots with the
+The numeric cases additionally check complete-tuple sum deduplication, empty
+extrema, nonmatching heterogeneous groups, integer boundaries, overflow/type
+rejection and reuse, frozen recursive IDB sources, separate capability gates
+and malformed IR. A second host-side oracle checks 100 snapshots against
+complete tuple sets for all three numeric operators.
+
+The whole-engine allocator guard solves and explains all aggregate snapshots with the
 allocator disabled and a configured explanation workspace. The bounded
 projection buffer contains `max(MAX_RULE_FACTS, MAX_FACTS_PER_PRED)` terms:
 2 KiB SMALL / 4 KiB LARGE on targets with 16-byte native terms. It is local
@@ -202,7 +208,7 @@ working table cannot pass that lookup (exit 9).
 | `test_maelys_datalog_predicate_builders` | All six origin/query flag mappings, static and dynamic initializers, single evaluation, query permissions, query-only rejection and policy-fact input rejection; C11/C++17 compilation is also covered by the fact-builder and installed-SDK gates. Python constructor tests exercise the same origins and retain subclass/immutability checks. |
 | `test_maelys_datalog_query_builders` | Query arities 0–4, typed API parity, integer bounds, Boolean/integer distinction, unchanged output on errors versus successful absence, single evaluation, borrowed symbol initializers. |
 | `test_maelys_datalog_input_edb_alloc` | Caller-owned alignment/size, copied and shared strings, byte-for-byte atomic rejection, fixed capacities and allocation-free append/clear. |
-| `test_maelys_datalog_hot_path_alloc` | All engine units use allocator hooks: repeated reference append/solve/query/release without allocator calls, constructor allocation failures, independent sessions and failure recovery. A source-level `memset` hook checks zero reset bytes on owned native release and at most 4,096 on reusable public release, on both profiles; this is not a hardware store counter or secure-erasure guarantee. Explanations are outside the allocation guard. |
+| `test_maelys_datalog_hot_path_alloc` | All engine units use allocator hooks: repeated reference append/solve/query/release without allocator calls, constructor allocation failures, independent sessions and failure recovery. A source-level `memset` hook checks zero reset bytes on owned native release and at most 4,096 on reusable public release, on both profiles; this is not a hardware store counter or secure-erasure guarantee. Configured aggregate explanations are exercised with allocation disabled. |
 | `test_maelys_datalog_pipeline` | Existing fingerprint/proof goldens and identical result symbol IDs under input permutation. |
 | C11 cases in `test_maelys_datalog_input_edb_alloc` | Unit/batch arity 0–4, integer ranks, copied strings, typed/explicit booleans, exactly-once arguments, multi-digit fact/term range diagnostics, and byte-identical late range/type/text/fact-capacity rejection with the allocator disabled. |
 | `make check-c11-fact-builders` / CTest `c11_fact_builder_compilation` | Strict C11 unit/batch/query consumers; float, double, pointer, struct and five-term compilation failures for each macro. The Make gate additionally checks C++17 symbol/predicate initializers and absence of C11-only macros; CMake keeps its C-only compiler requirement. |

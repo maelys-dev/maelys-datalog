@@ -24,6 +24,9 @@ static int setup(void) {
         {"raw", 3, MAELYS_DATALOG_PREDICATE_EDB},
         {"edge", 2, MAELYS_DATALOG_PREDICATE_EDB},
         {"count", 1, MAELYS_DATALOG_PREDICATE_EDB},
+        {"min", 1, MAELYS_DATALOG_PREDICATE_EDB},
+        {"max", 1, MAELYS_DATALOG_PREDICATE_EDB},
+        {"sum", 1, MAELYS_DATALOG_PREDICATE_EDB},
         {"blocked", 1, MAELYS_DATALOG_PREDICATE_EDB},
         {"expected", 2, MAELYS_DATALOG_PREDICATE_EDB},
         {"base", 1, MAELYS_DATALOG_PREDICATE_POLICY_FACT},
@@ -284,6 +287,8 @@ static maelys_datalog_status_t old_planner(const maelys_datalog_join_candidate_t
     *out=n-1; return MAELYS_DATALOG_STATUS_OK;
 }
 static int old_planner_compatibility(void) {
+    const char *names[]={"count","min","max","sum"};
+    for(unsigned op=0;op<4;++op) {
     maelys_datalog_context_t *c = NULL; OK(maelys_datalog_context_create(&c));
     maelys_datalog_planner_module_t p = {MAELYS_DATALOG_MODULE_ABI_VERSION,sizeof(p),
         "old_planner","tests.old-planner.v1",old_planner};
@@ -291,15 +296,18 @@ static int old_planner_compatibility(void) {
     e.abi_version=MAELYS_DATALOG_EXTENSION_ABI_VERSION;e.struct_size=sizeof(e);
     e.name="count_planner";e.semantic_id="tests.count-planner.v1";e.planners=&p;e.planner_count=1;
     OK(maelys_datalog_context_register(c,&e)); OK(maelys_datalog_context_seal(c,"old_planner"));
-    const char source[] = "out(G,N) :- N = 0,count(I,raw(I,G,_),N),group(G).";
+    char source[160];snprintf(source,sizeof(source),"out(G,N) :- N >= 0,%s(I,raw(I,G,_),N),group(G).",names[op]);
     maelys_datalog_policy_t *policy = NULL;
-    OK(maelys_datalog_context_load_inline(c,NULL,"aggregates","planner",source,sizeof(source)-1,&policy,NULL));
+    OK(maelys_datalog_context_load_inline(c,NULL,"aggregates","planner",source,strlen(source),&policy,NULL));
     maelys_datalog_session_t *s = NULL;OK(maelys_datalog_session_create(policy,0,&s));
     OK(maelys_datalog_policy_free(policy));OK(maelys_datalog_context_free(c));
-    maelys_datalog_public_fact_t input = fact("group",1,symbol("a"),integer(0),integer(0));
-    maelys_datalog_result_t *r = NULL; REQUIRE(solve(s,&input,1,&r) == 0);
-    REQUIRE(present(r,"out",2,symbol("a"),integer(0),1) == 0);
-    REQUIRE(planner_calls > 0);OK(maelys_datalog_result_free(r));OK(maelys_datalog_session_free(s));return 0;
+    maelys_datalog_public_fact_t input[] = {fact("group",1,symbol("a"),integer(0),integer(0)),
+        fact("raw",3,integer(0),symbol("a"),integer(0))};
+    maelys_datalog_result_t *r = NULL; REQUIRE(solve(s,input,2,&r) == 0);
+    REQUIRE(present(r,"out",2,symbol("a"),integer(op==0?1:0),1) == 0);
+    REQUIRE(planner_calls > 0);OK(maelys_datalog_result_free(r));OK(maelys_datalog_session_free(s));
+    }
+    return 0;
 }
 static uint32_t random_state = UINT32_C(9834721);
 static uint32_t draw(void) { random_state=random_state*UINT32_C(1664525)+UINT32_C(1013904223);return random_state; }
@@ -372,9 +380,236 @@ static int prebound_outputs_and_repeated_projection(void) {
     OK(maelys_datalog_result_free(r));OK(maelys_datalog_session_free(s));return 0;
 }
 
+/* The numeric operators share scope/strata rules but not count's distinct-value
+ * semantics. The oracle below deliberately deduplicates complete input tuples. */
+static const char *numeric_names[] = {"min", "max", "sum"};
+static const uint64_t numeric_caps[] = {MAELYS_DATALOG_CAP_MIN, MAELYS_DATALOG_CAP_MAX, MAELYS_DATALOG_CAP_SUM};
+static const unsigned numeric_ir[] = {MAELYS_DATALOG_IR_MIN, MAELYS_DATALOG_IR_MAX, MAELYS_DATALOG_IR_SUM};
+
+static int prepared_matches(maelys_datalog_result_t *result,
+    maelys_datalog_explanation_kind_t kind, const maelys_datalog_public_value_t *query,
+    const char *expected) {
+    size_t bytes=0,alignment=0;
+    OK(maelys_datalog_result_explanation_storage_requirements(result,kind,&bytes,&alignment));
+    void *storage=malloc(bytes+alignment);REQUIRE(storage);
+    void *aligned=(void *)(((uintptr_t)storage+alignment-1u)&~(uintptr_t)(alignment-1u));
+    maelys_datalog_prepared_explanation_t *prepared=NULL;
+    OK(maelys_datalog_result_prepare_explanation(result,kind,"out",query,2,aligned,bytes,&prepared));
+    REQUIRE(maelys_datalog_result_free(result)==MAELYS_DATALOG_STATUS_INVALID_STATE);
+    size_t required=0;OK(maelys_datalog_prepared_explanation_text_size(prepared,&required));
+    REQUIRE(required==strlen(expected));char text[4096];
+    REQUIRE(maelys_datalog_prepared_explanation_write_text(prepared,text,1)==MAELYS_DATALOG_STATUS_PAYLOAD_TOO_LARGE && !text[0]);
+    OK(maelys_datalog_prepared_explanation_write_text(prepared,text,sizeof(text)));REQUIRE(!strcmp(text,expected));
+    OK(maelys_datalog_prepared_explanation_release(prepared));free(storage);return 0;
+}
+
+static int numeric_groups_and_explanations(void) {
+    for (size_t op = 0; op < 3; ++op) {
+        char source[256];
+        snprintf(source,sizeof(source),"out(G,N) :- N >= 0,%s(V,raw(_,G,V),N),group(G).",numeric_names[op]);
+        maelys_datalog_session_t *s = NULL; REQUIRE(session(source,&s) == 0);
+        maelys_datalog_public_value_t a=symbol("a"),b=symbol("b"),z=integer(0);
+        maelys_datalog_public_fact_t f[]={fact("group",1,a,z,z),fact("group",1,b,z,z),
+            fact("raw",3,integer(1),a,integer(10)),fact("raw",3,integer(2),a,integer(10)),
+            fact("raw",3,integer(3),a,integer(7)),fact("raw",3,integer(1),a,integer(10)),
+            /* Nonmatching groups do not impose a global column type. */
+            fact("raw",3,integer(4),symbol("c"),symbol("keep"))};
+        const int expected[] = {7,10,27};
+        char canonical[4096]={0};
+        for (int pass=0;pass<2;++pass) {
+            maelys_datalog_result_t *r=NULL; REQUIRE(solve(s,f,7,&r)==0);
+            REQUIRE(present(r,"out",2,a,integer(expected[op]),1)==0);
+            REQUIRE(present(r,"out",2,b,z,op==2)==0);
+            REQUIRE(present(r,"out",2,symbol("z"),z,0)==0);
+            maelys_datalog_public_value_t q[]={a,integer(expected[op])};
+            char text[4096],needle[64];size_t bytes=0;
+            OK(maelys_datalog_result_explain_true_text(r,"out",q,2,text,sizeof(text),&bytes));
+            snprintf(needle,sizeof(needle),"kind=%s origin=edb",numeric_names[op]); REQUIRE(strstr(text,needle));
+            if (!pass) memcpy(canonical,text,bytes+1); else REQUIRE(!strcmp(text,canonical));
+            REQUIRE(prepared_matches(r,MAELYS_DATALOG_EXPLAIN_TRUE,q,text)==0);
+            char short_text[2]={'x','y'};size_t required=0;
+            REQUIRE(maelys_datalog_result_explain_true_text(r,"out",q,2,short_text,2,&required)==MAELYS_DATALOG_STATUS_PAYLOAD_TOO_LARGE);
+            REQUIRE(!short_text[0] && required==bytes);
+            q[1]=integer(99);
+            OK(maelys_datalog_result_explain_false_text(r,"out",q,2,text,sizeof(text),&bytes));
+            snprintf(needle,sizeof(needle),"obstacle=%s-mismatch",numeric_names[op]); REQUIRE(strstr(text,needle));
+            REQUIRE(strstr(text,"expected=99"));
+            REQUIRE(prepared_matches(r,MAELYS_DATALOG_EXPLAIN_FALSE,q,text)==0);
+            q[0]=b;q[1]=z;
+            if (op<2) {
+                OK(maelys_datalog_result_explain_false_text(r,"out",q,2,text,sizeof(text),&bytes));
+                snprintf(needle,sizeof(needle),"obstacle=%s-empty",numeric_names[op]); REQUIRE(strstr(text,needle));
+                REQUIRE(!strstr(text," observed="));
+                REQUIRE(prepared_matches(r,MAELYS_DATALOG_EXPLAIN_FALSE,q,text)==0);
+            }
+            OK(maelys_datalog_result_free(r));
+            for (size_t i=0;i<3;++i) { maelys_datalog_public_fact_t t=f[i];f[i]=f[6-i];f[6-i]=t; }
+        }
+        maelys_datalog_result_t *r=NULL;REQUIRE(solve(s,NULL,0,&r)==0);
+        size_t n=99;OK(maelys_datalog_result_derived_fact_count(r,&n));REQUIRE(n==0);
+        OK(maelys_datalog_result_free(r));OK(maelys_datalog_session_free(s));
+    }
+    return 0;
+}
+static int numeric_error_atomicity_and_boundaries(void) {
+    for (size_t op=0;op<3;++op) {
+        char source[160];snprintf(source,sizeof(source),"summary(N) :- %s(V,raw(_,_,V),N).",numeric_names[op]);
+        maelys_datalog_session_t *s=NULL;REQUIRE(session(source,&s)==0);
+        maelys_datalog_public_value_t z=integer(0),max=integer(INT32_MAX);
+        maelys_datalog_public_value_t bad[]={symbol("1"),{.kind=MAELYS_DATALOG_VALUE_BOOLEAN,.as.boolean=1}};
+        maelys_datalog_public_fact_t f[]={fact("raw",3,z,z,max),fact("raw",3,integer(1),z,z)};
+        for (size_t k=0;k<2;++k) {
+            f[1].terms[2]=bad[k];maelys_datalog_result_t *r=(void *)(uintptr_t)1;
+            REQUIRE(maelys_datalog_session_solve(s,f,2,&r,NULL)==MAELYS_DATALOG_STATUS_INVALID_FIELD && !r);
+            /* A rejection releases the result lease and every working binding. */
+            REQUIRE(solve(s,f,1,&r)==0);REQUIRE(present(r,"summary",1,max,z,1)==0);OK(maelys_datalog_result_free(r));
+        }
+        f[1].terms[2]=integer(1);maelys_datalog_result_t *r=NULL;
+        if (op==2) REQUIRE(maelys_datalog_session_solve(s,f,2,&r,NULL)==MAELYS_DATALOG_STATUS_INVALID_FIELD && !r);
+        else { REQUIRE(solve(s,f,2,&r)==0);REQUIRE(present(r,"summary",1,op?max:integer(1),z,1)==0);OK(maelys_datalog_result_free(r)); }
+        f[1]=f[0];REQUIRE(solve(s,f,2,&r)==0);REQUIRE(present(r,"summary",1,max,z,1)==0);OK(maelys_datalog_result_free(r));
+        REQUIRE(solve(s,NULL,0,&r)==0);REQUIRE(present(r,"summary",1,z,z,op==2)==0);OK(maelys_datalog_result_free(r));
+        OK(maelys_datalog_session_free(s));
+    }
+    return 0;
+}
+static int numeric_policy_and_frozen_idb(void) {
+    for(size_t op=0;op<3;++op) {
+        char source[512];
+        snprintf(source,sizeof(source),"base(10). base(10). base(3). summary(N) :- %s(V,base(V),N). "
+            "path(X,Y) :- edge(X,Y). path(X,Z) :- path(X,Y),edge(Y,Z). "
+            "out(G,N) :- group(G),%s(V,path(G,V),N). "
+            "allow(G) :- group(G),not(out(G,0)).",numeric_names[op],numeric_names[op]);
+        maelys_datalog_session_t *s=NULL;REQUIRE(session(source,&s)==0);
+        maelys_datalog_public_value_t z=integer(0),a=integer(1);
+        maelys_datalog_public_fact_t f[]={fact("group",1,a,z,z),fact("edge",2,a,integer(2),z),
+            fact("edge",2,integer(2),integer(3),z),fact("edge",2,a,integer(3),z)};
+        maelys_datalog_result_t *r=NULL;REQUIRE(solve(s,f,4,&r)==0);
+        const int policy[]={3,10,13},idb[]={2,3,5};
+        REQUIRE(present(r,"summary",1,integer(policy[op]),z,1)==0);
+        REQUIRE(present(r,"out",2,a,integer(idb[op]),1)==0);
+        REQUIRE(present(r,"allow",1,a,z,1)==0);
+        char text[4096];size_t bytes=0;maelys_datalog_public_value_t q[]={a,integer(idb[op])};
+        OK(maelys_datalog_result_explain_true_text(r,"out",q,2,text,sizeof(text),&bytes));REQUIRE(strstr(text,"origin=idb"));
+        q[1]=integer(99);OK(maelys_datalog_result_explain_false_text(r,"out",q,2,text,sizeof(text),&bytes));REQUIRE(strstr(text,"-mismatch"));
+        OK(maelys_datalog_result_free(r));OK(maelys_datalog_session_free(s));
+    }
+    return 0;
+}
+static int numeric_snapshot_oracle(void) {
+    maelys_datalog_session_t *s=NULL;
+    REQUIRE(session("out(G,N) :- group(G),min(V,raw(_,G,V),N). "
+        "project(G,N) :- group(G),max(V,raw(_,G,V),N). "
+        "path(G,N) :- group(G),sum(V,raw(_,G,V),N).",&s)==0);
+    for(size_t pass=0;pass<100;++pass) {
+        unsigned char seen[3][5][4]={{{0}}};maelys_datalog_public_fact_t f[43];
+        for(size_t g=0;g<3;++g)f[g]=fact("group",1,integer((int64_t)g),integer(0),integer(0));
+        size_t n=draw()%41;
+        for(size_t i=0;i<n;++i) {
+            unsigned id=draw()%5,g=draw()%3,v=draw()%4;seen[g][id][v]=1;
+            f[i+3]=fact("raw",3,integer(id),integer(g),integer(v));
+        }
+        maelys_datalog_result_t *r=NULL;REQUIRE(solve(s,f,n+3,&r)==0);
+        for(size_t g=0;g<3;++g) {
+            unsigned lo=4,hi=0,sum=0,found=0;
+            for(unsigned id=0;id<5;++id)for(unsigned v=0;v<4;++v)if(seen[g][id][v]) {
+                found=1;if(v<lo)lo=v;if(v>hi)hi=v;sum+=v;
+            }
+            REQUIRE(present(r,"out",2,integer((int64_t)g),integer(lo),found)==0);
+            REQUIRE(present(r,"project",2,integer((int64_t)g),integer(hi),found)==0);
+            REQUIRE(present(r,"path",2,integer((int64_t)g),integer(sum),1)==0);
+        }
+        OK(maelys_datalog_result_free(r));
+    }
+    OK(maelys_datalog_session_free(s));return 0;
+}
+static int numeric_ir_and_capabilities(void) {
+    for(size_t op=0;op<3;++op) {
+        char source[160];snprintf(source,sizeof(source),"summary(N) :- %s(I,raw(I,_,_),N).",numeric_names[op]);
+        maelys_datalog_policy_t *p=NULL;OK(load(source,&p));
+        maelys_datalog_backend_t b=*maelys_datalog_backend_reference();
+        b.name="count_only";b.semantic_id="tests.count-only.v1";b.capabilities&=~numeric_caps[op];b.prepare=forbidden_prepare;
+        maelys_datalog_session_options_t o={MAELYS_DATALOG_BACKEND_ABI_VERSION,sizeof(o),&b,0,0};
+        maelys_datalog_session_t *s=NULL;
+        REQUIRE(maelys_datalog_session_create_ex(p,0,&o,&s)==MAELYS_DATALOG_STATUS_UNSUPPORTED && !s && !prepare_calls);
+        OK(maelys_datalog_session_create(p,0,&s));OK(maelys_datalog_policy_free(p));
+        OK(maelys_datalog_session_program(s,&roundtrip_source));
+        maelys_datalog_program_info_t info;OK(maelys_datalog_program_info(roundtrip_source,&info));
+        REQUIRE(info.required_capabilities==(MAELYS_DATALOG_CAP_POSITIVE|numeric_caps[op]));
+        maelys_datalog_ir_rule_t rule;OK(maelys_datalog_program_rule(roundtrip_source,0,&rule));REQUIRE(rule.body[0].kind==numeric_ir[op]);
+        maelys_datalog_frontend_t frontend={MAELYS_DATALOG_PROGRAM_ABI_VERSION,sizeof(frontend),"numeric_ir","tests.numeric-ir.v1",lower_count};
+        for(char variant='0';variant<='8';++variant) {
+            char input[]={variant,0};p=NULL;
+            int rc=maelys_datalog_policy_load_frontend("aggregates","numeric.ir",input,1,&frontend,&p,NULL);
+            if(variant!='0') { REQUIRE(rc && !p);continue; }
+            REQUIRE(!rc && p);maelys_datalog_session_t *other=NULL;OK(maelys_datalog_session_create(p,0,&other));
+            OK(maelys_datalog_policy_free(p));maelys_datalog_result_t *r=NULL;
+            maelys_datalog_public_fact_t fact_input=fact("raw",3,integer(7),integer(0),integer(0));
+            REQUIRE(solve(other,&fact_input,1,&r)==0);REQUIRE(present(r,"summary",1,integer(7),integer(0),1)==0);
+            OK(maelys_datalog_result_free(r));OK(maelys_datalog_session_free(other));
+        }
+        OK(maelys_datalog_session_free(s));roundtrip_source=NULL;
+    }
+    return 0;
+}
+static int numeric_scope_and_strata_rejections(void) {
+    const char *invalid[]={"out(G,N) :- %s(V,raw(_,G,V),N).", "out(V,N) :- %s(V,raw(_,_,V),N).",
+        "summary(N) :- %s(V,raw(_,_,V),N),group(V).", "summary(N) :- %s(V,summary(V),N).",
+        "summary(N) :- %s(V,allow(V),N). allow(N) :- summary(N).", "summary(N) :- %s(V,raw(_,_,V),V).",
+        "summary(N) :- %s(V,raw(N,_,V),N).", "summary(N) :- %s(_,raw(_,_,_),N)."};
+    for(size_t op=0;op<3;++op)for(size_t i=0;i<sizeof(invalid)/sizeof(invalid[0]);++i) {
+        char source[200];snprintf(source,sizeof(source),invalid[i],numeric_names[op]);
+        maelys_datalog_policy_t *p=NULL;
+        REQUIRE(maelys_datalog_policy_load_inline("aggregates","bad",source,strlen(source),&p,NULL)!=0 && !p);
+    }
+    return 0;
+}
+
+static int numeric_capacity_and_bindings(void) {
+    size_t capacity=0;OK(maelys_datalog_limit_get(MAELYS_DATALOG_LIMIT_MAX_FACTS_PER_PRED,&capacity));
+    maelys_datalog_public_fact_t *facts=calloc(capacity+1,sizeof(*facts));REQUIRE(facts);
+    for(size_t i=0;i<=capacity;++i)facts[i]=fact("raw",3,integer((int64_t)i),integer(0),integer(1));
+    for(size_t op=0;op<3;++op) {
+        char source[256];snprintf(source,sizeof(source),"summary(N) :- %s(V,raw(_,_,V),N).",numeric_names[op]);
+        maelys_datalog_session_t *s=NULL;REQUIRE(session(source,&s)==0);maelys_datalog_result_t *r=NULL;
+        REQUIRE(solve(s,facts,capacity,&r)==0);
+        REQUIRE(present(r,"summary",1,integer(op==2?(int64_t)capacity:1),integer(0),1)==0);OK(maelys_datalog_result_free(r));
+        REQUIRE(maelys_datalog_session_solve(s,facts,capacity+1,&r,NULL)==MAELYS_DATALOG_STATUS_PAYLOAD_TOO_LARGE && !r);
+        REQUIRE(solve(s,facts,1,&r)==0);REQUIRE(present(r,"summary",1,integer(1),integer(0),1)==0);
+        OK(maelys_datalog_result_free(r));OK(maelys_datalog_session_free(s));
+        /* Ordinary homonyms, repeated projection and prebound typed outputs. */
+        snprintf(source,sizeof(source),"summary(N) :- %s(N). out(G,N) :- expected(G,N),%s(V,edge(V,V),N).",numeric_names[op],numeric_names[op]);
+        REQUIRE(session(source,&s)==0);
+        maelys_datalog_public_value_t z=integer(0),truth={.kind=MAELYS_DATALOG_VALUE_BOOLEAN,.as.boolean=1};
+        maelys_datalog_public_fact_t f[]={fact(numeric_names[op],1,integer(9),z,z),
+            fact("expected",2,symbol("a"),integer(1),z),fact("expected",2,symbol("a"),truth,z),
+            fact("edge",2,integer(1),integer(1),z),fact("edge",2,integer(2),integer(3),z)};
+        REQUIRE(solve(s,f,5,&r)==0);REQUIRE(present(r,"summary",1,integer(9),z,1)==0);
+        REQUIRE(present(r,"out",2,symbol("a"),integer(1),1)==0);REQUIRE(present(r,"out",2,symbol("a"),truth,0)==0);
+        char text[4096];size_t bytes;maelys_datalog_public_value_t q[]={symbol("a"),truth};
+        OK(maelys_datalog_result_explain_false_text(r,"out",q,2,text,sizeof(text),&bytes));REQUIRE(strstr(text,"observed=1 expected=true"));
+        OK(maelys_datalog_result_free(r));OK(maelys_datalog_session_free(s));
+    }
+    free(facts);
+    maelys_datalog_session_t *s=NULL;
+    REQUIRE(session("allow(G) :- group(G),min(V,raw(_,G,V),N),max(W,raw(_,G,W),N).",&s)==0);
+    maelys_datalog_public_fact_t f=fact("group",1,symbol("a"),integer(0),integer(0));maelys_datalog_result_t *r=NULL;
+    REQUIRE(solve(s,&f,1,&r)==0);char text[4096];size_t bytes;maelys_datalog_public_value_t q=symbol("a");
+    OK(maelys_datalog_result_explain_false_text(r,"allow",&q,1,text,sizeof(text),&bytes));REQUIRE(strstr(text,"min-empty"));
+    OK(maelys_datalog_result_free(r));OK(maelys_datalog_session_free(s));return 0;
+}
+
 int main(int argc, char **argv) {
     if (setup()) return 1;
     const test_case_t cases[] = {
+        {"numeric/capacity_and_bindings",TEST_MODE_NON_BLOCKING,numeric_capacity_and_bindings},
+        {"numeric/groups_and_explanations",TEST_MODE_NON_BLOCKING,numeric_groups_and_explanations},
+        {"numeric/error_atomicity_and_boundaries",TEST_MODE_NON_BLOCKING,numeric_error_atomicity_and_boundaries},
+        {"numeric/policy_and_frozen_idb",TEST_MODE_NON_BLOCKING,numeric_policy_and_frozen_idb},
+        {"numeric/snapshot_oracle",TEST_MODE_NON_BLOCKING,numeric_snapshot_oracle},
+        {"numeric/ir_and_capabilities",TEST_MODE_NON_BLOCKING,numeric_ir_and_capabilities},
+        {"numeric/scope_and_strata_rejections",TEST_MODE_NON_BLOCKING,numeric_scope_and_strata_rejections},
+
         {"count/frontend_roundtrip_malformed",TEST_MODE_NON_BLOCKING,frontend_roundtrip_and_malformed_ir},
         {"count/old_planner",TEST_MODE_NON_BLOCKING,old_planner_compatibility},
         {"count/snapshot_oracle",TEST_MODE_NON_BLOCKING,snapshot_oracle},

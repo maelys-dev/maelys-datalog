@@ -108,6 +108,9 @@ static maelys_result_t canonical_stream_literal(maelys_sha256_ctx_t *ctx,
             return canonical_stream_atom(ctx, ruleset, "body.atom=", &literal->atom);
         case MAELYS_DATALOG_LITERAL_NEGATED_ATOM:
             return canonical_stream_atom(ctx, ruleset, "body.not=", &literal->atom);
+        case MAELYS_DATALOG_LITERAL_MIN:
+        case MAELYS_DATALOG_LITERAL_MAX:
+        case MAELYS_DATALOG_LITERAL_SUM:
         case MAELYS_DATALOG_LITERAL_COUNT: {
             maelys_result_t rc = canonical_update(ctx, "body.count=");
             if (rc == MAELYS_OK) rc = canonical_stream_term(ctx, ruleset, &literal->lhs);

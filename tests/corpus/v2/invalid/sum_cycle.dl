@@ -1,0 +1,3 @@
+% EXPECT: POLICY_NOT_STRATIFIABLE
+allow(N) :- sum(V,path(V,_),N).
+path(V,V) :- allow(V).

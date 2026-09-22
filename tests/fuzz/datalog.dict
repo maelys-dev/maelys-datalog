@@ -10,6 +10,9 @@
 
 # Aggregate
 "count("
+"min("
+"max("
+"sum("
 
 # Negation
 "not("

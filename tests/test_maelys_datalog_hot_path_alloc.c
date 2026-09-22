@@ -76,11 +76,13 @@ static maelys_datalog_public_value_t symbol(const char *s) {
     maelys_datalog_public_value_t v = {.kind=MAELYS_DATALOG_VALUE_SYMBOL};
     v.as.symbol = s; return v;
 }
-static void count_without_allocator(void) {
-    const char source[] = "allow(N) :- count(I,seed(I),N).";
+static void aggregate_without_allocator(unsigned op) {
+    const char *names[] = {"count", "min", "max", "sum"};
+    char source[100];
+    snprintf(source,sizeof(source),"allow(N) :- %s(I,seed(I),N).",names[op]);
     maelys_datalog_policy_t *policy = NULL;
     assert(maelys_datalog_policy_load_inline("hot_path", "count", source,
-        sizeof(source)-1u, &policy, NULL) == 0);
+        strlen(source), &policy, NULL) == 0);
     maelys_datalog_session_config_t *config = NULL;
     maelys_datalog_session_t *session = NULL;
     assert(maelys_datalog_session_config_create(&config) == 0);
@@ -98,17 +100,34 @@ static void count_without_allocator(void) {
     for (size_t n = 0; n <= 40; n += 8) {
         maelys_datalog_result_t *result = NULL;
         assert(maelys_datalog_session_solve(session,facts,n,&result,NULL) == 0);
-        maelys_datalog_public_value_t query = {.kind=MAELYS_DATALOG_VALUE_INTEGER,.as.integer=(int64_t)n};
+        int64_t expected = op == 0 ? (int64_t)n : op == 1 ? (int64_t)(40u-n) : op == 2 ? 39 : (int64_t)(n*(79u-n)/2u);
+        const int empty = !n && (op == 1 || op == 2);
+        maelys_datalog_public_value_t query = {.kind=MAELYS_DATALOG_VALUE_INTEGER,.as.integer=expected};
         int present;
-        assert(maelys_datalog_result_query(result,"allow",&query,1,&present) == 0 && present);
+        assert(maelys_datalog_result_query(result,"allow",&query,1,&present) == 0 && present == !empty);
         char text[4096]; size_t required;
-        assert(maelys_datalog_result_explain_true_text(result,"allow",&query,1,
-            text,sizeof(text),&required) == 0);
-        assert(strstr(text,"kind=count") && strstr(text,"status=complete"));
+        if (!empty) {
+            assert(maelys_datalog_result_explain_true_text(result,"allow",&query,1,
+                text,sizeof(text),&required) == 0);
+            char marker[32];snprintf(marker,sizeof(marker),"kind=%s",names[op]);
+            assert(strstr(text,marker) && strstr(text,"status=complete"));
+        }
         ++query.as.integer;
         assert(maelys_datalog_result_explain_false_text(result,"allow",&query,1,
             text,sizeof(text),&required) == 0);
-        assert(strstr(text,"count-mismatch"));
+        assert(strstr(text,empty ? "-empty" : "-mismatch"));
+        release_bounded(result);
+    }
+    if (op) {
+        maelys_datalog_result_t *result = NULL;
+        facts[0].terms[0] = symbol("wrong");
+        assert(maelys_datalog_session_solve(session,facts,1,&result,NULL) == MAELYS_DATALOG_STATUS_INVALID_FIELD && !result);
+        if (op == 3) {
+            facts[0].terms[0].kind=MAELYS_DATALOG_VALUE_INTEGER;
+            facts[0].terms[0].as.integer=INT32_MAX;
+            assert(maelys_datalog_session_solve(session,facts,2,&result,NULL) == MAELYS_DATALOG_STATUS_INVALID_FIELD && !result);
+        }
+        assert(maelys_datalog_session_solve(session,NULL,0,&result,NULL) == 0);
         release_bounded(result);
     }
     assert(attempts == 0 && hot_frees == 0);
@@ -130,7 +149,7 @@ int main(void) {
     maelys_datalog_policy_t *policy = NULL;
     assert(maelys_datalog_policy_load_inline("hot_path", "hot", source, strlen(source), &policy, &diag) == 0);
     owned_release_does_not_clear();
-    count_without_allocator();
+    for (unsigned op=0;op<4;++op) aggregate_without_allocator(op);
     maelys_datalog_session_t *session = NULL, *second = NULL, *filtered = NULL;
     size_t before = total, baseline = live;
     assert(maelys_datalog_session_create(policy, 0, &session) == 0);

@@ -22,3 +22,19 @@ def test_stratified_count_groups_and_explanation():
         result.close()
         edb.close()
         rules.close()
+
+        for op, value in [("min", 7), ("max", 10), ("sum", 27)]:
+            rules = engine.load_inline_ruleset("legacy_count", op,
+                f"total(G,N) :- group(G),{op}(V,event(_,G,V),N).")
+            edb = rules.edb()
+            for predicate, terms in [("group", ["api"]), ("group", ["worker"]),
+                                     ("event", [1, "api", 10]), ("event", [2, "api", 10]),
+                                     ("event", [3, "api", 7]), ("event", [1, "api", 10])]:
+                edb.add_fact(predicate, terms)
+            result = rules.solve(edb)
+            expected = {("api", value)} | ({("worker", 0)} if op == "sum" else set())
+            assert set(result.enumerate_predicate_facts("total", 2)) == expected
+            assert f"kind={op} origin=edb" in result.explain_fact_text("total", ["api", value])
+            result.close()
+            edb.close()
+            rules.close()
