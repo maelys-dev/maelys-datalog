@@ -112,7 +112,7 @@ Planner SDK v1 callbacks continue to see only the existing literal kinds. The
 core schedules a ready count itself before asking the planner for the next
 ordinary literal. The planner cannot bypass binding or stratification checks.
 
-## Integer extrema and sum (unreleased)
+## Integer extrema and sum (0.7.0)
 
 `min(V, source(...), N)`, `max(V, source(...), N)` and
 `sum(V, source(...), N)` use exactly the same contextual syntax, local projection,
