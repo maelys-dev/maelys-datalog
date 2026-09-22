@@ -25,6 +25,13 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
   Existing programs' identities, explanation bytes and native struct layouts
   remain unchanged. This additive language feature requires a minor release.
 
+### Changed
+
+- Read-only symbol lookup probes the existing hash index when the table has
+  more entries than the lookup text has bytes, retaining the scan for short
+  tables/long keys. Symbol identities, storage sizes and valid-table lookup
+  results remain unchanged; no allocations or new index storage are introduced.
+
 ## 0.6.0 — 2026-09-21
 
 An additive language, IR and explanation extension.
