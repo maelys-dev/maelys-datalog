@@ -1,0 +1,6 @@
+% EXPECT: OK
+% Same-generation shape: a repeated head variable, and a recursive atom in the
+% middle whose own variables never reach the head. Transitive closure, the only
+% recursion the rest of the corpus uses, exercises neither.
+deny(X, X) :- user(X).
+deny(X, Y) :- edge(X, P), deny(P, Q), edge(Y, Q).
