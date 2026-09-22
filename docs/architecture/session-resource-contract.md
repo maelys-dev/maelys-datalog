@@ -7,6 +7,31 @@ backend ABI 4.
 The current consumer API and backend ABI 3 retain their behavior and identities.
 The [backend contract](compiler-backends.md) remains authoritative for that API.
 
+## Delivery gates
+
+Two gates have different deadlines. The first private incremental experiment
+must prove transactions, identity lifetimes, byte-for-byte persistent rollback,
+observable fallback and differential equivalence over generated sequences. It
+does not have to implement the future profile catalogue, elastic storage, a strict
+no-heap artifact, public work accounting or new execution fingerprints.
+
+The initial experimental catalogue contains **one profile, one memory mode and
+one candidate backend**: the existing LARGE build limits, fixed storage reserved
+at initialization, and the private incremental candidate. The reference solver
+on the same build is its oracle and, where permitted, its recompute path, not a
+second experimental product selection. Existing SMALL/LARGE reference offerings
+remain unchanged. The supported rule subset is explicit; unsupported programs
+are rejected or take an explicitly permitted, observed recompute path.
+
+The second gate applies when publishing a new capacity profile, memory mode or
+public API/ABI. Validate only combinations actually offered in that delivery;
+unimplemented combinations are rejected, not promised. Strict native no-heap is
+a separate artifact assurance track with its own build/dependency evidence, not
+a third memory-management mode or a prerequisite for the first experiment.
+Its implementation remains deferred until a named consumer and target define
+the required deployment boundary. The requirements below preserve that design
+option without adding it to the current incremental milestone.
+
 ## Scope and ownership
 
 A resource contract belongs to the whole session: host input validation and
@@ -46,19 +71,22 @@ is implemented. Successful logical results agree on their common admitted domain
 
 | Memory contract | Reservation behavior | Allocation guarantee |
 |---|---|---|
-| Fixed, preallocated at creation | Finite reservation and peak bound; no growth during execution | No engine allocator calls on the configured execution path; creation/destruction may allocate/free |
-| Fixed, strict native no-heap | Entire lifecycle uses caller-owned, bounded storage | No heap allocation or deallocation from initialization through destruction, including errors and explanations, within the audited native component |
+| Fixed | Caller-owned arena or creation-time preallocation; finite reservation and peak bound, no execution growth | No engine allocator calls on the configured execution path; a convenience constructor/destructor may allocate/free |
 | Elastic, explicitly selected | Blocks/pools can grow and be reclaimed under the accepted policy | Allocations are allowed; a configured memory cap is enforced, and allocation failure rejects the operation atomically |
+
+Strict native no-heap is stronger assurance for a separately built and audited
+fixed-storage artifact, not a selectable third value in this table. Caller-owned
+storage is necessary but does not by itself certify its reachable dependencies.
 
 These are design targets. The current reference implementation guarantees zero
 engine allocator calls on its covered execution path **after session creation**;
 it does not guarantee a heap-free lifecycle. Current ABI 3 policy/session setup,
 legacy explanation wrappers and binding conversions may allocate. Custom backends,
 callbacks and allocations internal to external libraries are not automatically
-covered by that existing guarantee. Neither strict native no-heap sessions nor
+covered by that existing guarantee. Neither a strict native no-heap artifact nor
 elastic sessions are implemented by this document.
 
-## Fixed storage and strict native no-heap
+## Fixed storage
 
 Every fixed combination specifies a finite reservation/peak bound for its target
 build, backend and explanation mode. It covers host/backend persistent state,
@@ -85,6 +113,13 @@ solve, queries, result release and explanation preparation/writing in configured
 or caller-owned storage. Legacy allocating explanation convenience calls are
 outside that path. A creation-time allocation followed by fixed execution does
 not establish the stronger strict native no-heap guarantee.
+
+## Separate strict native no-heap artifact track
+
+This track is outside the first incremental milestone. Before scheduling it,
+identify the consumer, native target, toolchain, provider set and whether source
+loading on target is needed. Its evidence qualifies that artifact; it does not
+raise the acceptance bar for ordinary fixed or elastic builds.
 
 The strict variant requires caller-owned storage for the program, configuration,
 session, facts/text, indexes, supports, transaction state, results, provenance and
@@ -189,6 +224,23 @@ The public input buffer already supports smaller capacities and caller-owned
 storage, but that does not resize the prepared session or result arrays.
 `backend_emit` still enforces host total and per-predicate IDB limits, including
 non-query helpers. Every ABI 3 backend receives input after host materialization.
+
+The current [symbol table](../../src/core/maelys_datalog_symbol_table.c) is
+append-only between resets: `symbol_intern` assigns
+the entry index plus one, and its API has no individual deletion, reference
+decrement or reclamation operation. Whole-table initialization exists.
+[`reset_transaction_state`](../../src/core/maelys_datalog_prepared_session.c)
+restores the prepared program's symbol table before
+each input materialization, so input symbols do not accumulate across current
+reference solves. The 512-entry and text limits include program vocabulary;
+512 is not a budget of 512 additional event names.
+
+An ABI 3 candidate still receives snapshots after this host reset. It cannot
+retain snapshot-local IDs as stable private identities or borrowed symbol text
+across calls. Making the backend persistent does not remove the host reset;
+mapping into backend-owned state is a separate requirement. Reusing the native
+append-only table indefinitely for that state would exhaust it under continuing
+symbol churn. A future persistent input path must address the same issue.
 
 ## Three distinct quantities
 
@@ -331,6 +383,41 @@ programs or use an explicitly permitted full-recompute path; it must not maintai
 them as if they were monotone. Aggregates keep their existing snapshot semantics:
 replacement removes the old tuple and inserts the new one atomically.
 
+## Persistent vocabulary and the first window adapter
+
+A persistent backend that accepts ongoing symbol churn must define reclamation
+of both symbol entries and text storage. Program vocabulary remains rooted;
+runtime symbols cannot be recycled while a live fact, index, support, delta,
+rollback record, proof or result references them. Reclamation/rebuilding must
+preserve typed values and identity validity and be transactional. Merely raising
+`MAX_SYMBOLS`, or reclaiming slots while leaking their text, does not meet the
+long-stream requirement.
+
+The first experiment avoids that implementation dependency: its window adapter
+uses **integer occurrence IDs** and a declared, bounded symbolic dictionary fixed
+at initialization, including program vocabulary. A new persistent symbol outside
+that dictionary is rejected atomically before persistent interning/publication. This applies
+to every field, not just occurrence IDs: arbitrary log messages, addresses encoded
+as strings and other changing payloads can otherwise reproduce the same leak.
+This restricted input schema is explicit prototype scope, not a language change
+or a claim to support arbitrary string streams. The original payload can remain
+outside the engine under a separately bounded collector contract; it is not
+silently hashed or coerced into a supposedly equivalent Datalog value.
+
+Occurrence IDs are distinct native integer values in the admitted range. For the
+initial adapter, use a monotonically increasing ID and reject exhaustion before
+commit; no wraparound or reuse of `event_number modulo N`. At the current engine
+boundary the maximum integer is 2,147,483,647. Test exhaustion near that limit
+without processing billions of events. A future reuse/epoch scheme needs its own
+identity/reference contract. Expiration alone does not prove an ID is unreferenced.
+
+Integer occurrences remove per-event symbol growth, not all symbol maintenance.
+Supporting changing symbolic payloads later requires a validated reclamation or
+transactional reconstruction strategy, including remapping snapshot IDs and text
+ownership. Repeated windows must exercise more than 512 distinct occurrence IDs
+with a stable dictionary in the first experiment; symbol-churn tests belong to
+the later feature that actually accepts such churn.
+
 ## Observable, bounded fallback
 
 Fallback is part of the accepted contract, not a silent algorithm substitution.
@@ -362,6 +449,8 @@ expiration order and any mapping from one event to several facts. N events is
 not necessarily N facts, nor a bound on derived facts. A retained dependency
 outside the last N events needs a separate budget and property-preservation
 contract; truncating it is not exact analysis of the original execution.
+The initial adapter uses the integer occurrence IDs and fixed symbolic dictionary
+specified above. This choice does not specialize the pure engine to a trace format.
 
 Window capacity, collection batch size and overflow/backpressure behavior must
 match the accepted session contract. A rejected engine transaction must not make
@@ -372,35 +461,65 @@ and Datalog work units or promise a wall-clock deadline.
 
 ## Validation and ABI gate
 
+### Gate 1 — first private incremental experiment
+
+Validate the single LARGE/fixed/candidate combination, under current host limits:
+
+- Set transactions with removals, duplicates, conflicts and full-window replacement;
+  exact restoration of persistent bytes/bookkeeping on rejection, then successful
+  retry without advancing the adapter's committed window on failure.
+- Stable private identities and snapshot remapping; integer occurrence IDs across
+  many window rotations; bounded fixed dictionary, unknown-symbol rejection and
+  counter exhaustion, including unchanged state after each rejection.
+- At least one actually maintained path, observed recompute/rebuild paths where
+  permitted, and explicit rejection of unsupported programs. No silent fallback
+  or incremental performance claim from a recompute-only candidate.
+- Generated typed programs and transaction sequences compared with complete
+  reference recomputation after every commit, using the admitted rule subset;
+  directed negative/aggregate cases must either agree through the permitted path
+  or be rejected as declared. Compare promised explanations and truncation too.
+- Account for host/backend reservations and transaction peaks, keep allocator
+  calls out of fixed execution, and measure initial/steady-state work end to end.
+  Prototype attempt counters include work before and during fallback, but their
+  units are experimental: no public `WORK_LIMIT` or fingerprint contract is implied.
+
+Preserve seeds/reduced failures and a negative control proving the differential
+harness detects a wrong tuple, identity or path. No capacity negotiation API,
+multi-profile matrix, elastic pool, strict artifact audit or public accounting
+model is required to pass this gate. Existing reference CI obligations remain.
+
+ABI 3 can host this private experiment receiving full snapshots and diffing them.
+It retains the host materialization and output limits; it does not implement
+per-session capacity negotiation or a public delta API.
+
+### Gate 2 — publication of new contracts
+
 Before public API/ABI publication, validate both existing profiles and each new
 predefined profile/memory-mode/backend combination being offered. If a build
 offers multiple profiles, validate at least two different session contracts in
 one process: boundaries, conflicting caps, checked sizing, allocator-disabled
-updates, exact rollback/reuse, storage leases,
+updates for fixed execution, exact rollback/reuse, storage leases,
 identity recycling and sustained windows. Generated small typed programs and
 transaction sequences must be compared with full reference recomputation after
 every commit, including negation, aggregate empty groups, removals/reinsertions,
 failures and subsequent retries. Compare explanations and truncation when those
 capabilities are promised; detect a backend that always falls back.
 
-Additional memory-mode evidence is required before claiming each guarantee:
+The following evidence is conditional on the feature or artifact actually offered,
+not a combined checklist imposed on Gate 1:
 
 | Contract | Required evidence |
 |---|---|
 | Fixed execution | Allocator counters and disabled-allocator execution after creation, including updates, solve/query, result release and configured explanations; capacity failures and reuse; no elastic fallback. |
-| Strict native no-heap | Checked static arena bounds/alignment and stack bounds; artifact/dependency audit, allocating entry-point exclusion and direct/indirect allocator traps from planning/loading through destruction; malformed programs, saturation, explanations, teardown and retries with every heap service forbidden. |
+| Separate strict native artifact | Named consumer/target and qualified toolchain/providers; checked arena/stack bounds; artifact/dependency audit, allocating entry-point exclusion and allocator traps across planning/loading, explanations, errors and destruction. Not a prerequisite for other modes. |
 | Elastic | Failure injection at every growth point, cap boundaries including staged/cached blocks, stable references across growth, exact persistent rollback without allocating, and successful retry; sustained expiration/reuse with observed block reclamation/retention and no historical-state leak. |
-| Cross-mode | Complete canonical results and promised explanations agree for the same admitted program/state; unsupported combinations reject; compact builds do not inherit large-profile representations or elastic-only state. |
+| Cross-mode, when multiple combinations are offered | Complete canonical results and promised explanations agree for the same admitted program/state; unsupported combinations reject; compact builds do not inherit large-profile representations or elastic-only state. |
+| Persistent symbolic churn, when offered | More cumulative distinct symbols/text than fit at once, within live bounds; rooted symbols retained, dead entries and text reclaimed, remapping/reclamation failures rolled back, and retry/oracle equivalence. |
 
 The existing engine allocation guard is evidence for the execution paths and
 allocator entry points it instruments, not certification of a strict artifact or
 its transitive libraries. Distinguish tests already present from this future
 conformance matrix; no new mode is certified by documenting its requirements.
-
-ABI 3 can host a bounded private experiment receiving full snapshots and diffing
-them. It remains subject to the current host materialization and output limits;
-this does not implement per-session capacity negotiation or a public delta API.
-The first experiment must nevertheless account for all storage and update peaks.
 
 Freeze ABI 4 callbacks and compatibility rules only with the validated backend.
 The opaque consumer configuration, context/binding selection, capability checks,

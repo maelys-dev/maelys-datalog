@@ -223,12 +223,20 @@ Backend ABI 4 ships as one break, together with the first non-reference backend
   independently of solver choice where that combination is supported. Fixed
   storage may be compact or very large; elastic blocks/pools grow only under their
   accepted cap/growth/retention policy, with stable references and atomic failure.
-  Strict native no-heap is a stronger lifecycle guarantee than today's execution
-  guarantee after creation: it requires caller-owned storage, bounded loading or
-  compilation, and an audited build/provider set. Static arenas require sizing
-  metadata before execution, not only a runtime query. Compact builds need not
+  Strict native no-heap is a separate artifact qualification track, stronger than
+  today's execution guarantee after creation; it requires caller-owned storage,
+  bounded loading or compilation, and an audited build/provider set. It is not a
+  third memory mode or a prerequisite for the incremental prototype. Static arenas
+  require sizing metadata before execution, not only a runtime query. Compact builds need not
   include the largest representation or elastic storage; fixed storage never
   silently switches to elastic mode. These new modes remain design requirements.
+  The first private experiment has one existing LARGE profile, fixed memory and
+  one candidate backend, checked against the reference oracle. Its gate covers
+  transactions, identities, exact rollback, observed fallback and generated
+  differential sequences. Integer occurrence IDs and a fixed declared dictionary
+  keep persistent symbol reclamation outside that first milestone; the current
+  append-only symbol table cannot support indefinite symbolic churn. Publication
+  gates for new memory modes/artifacts apply only when those features are offered.
 
 Invariants that do not move: one live result per session, canonical public IDs
 for the same input and stable IDs during a result's lifetime, the reference
