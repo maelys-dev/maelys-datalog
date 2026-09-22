@@ -1208,8 +1208,8 @@ static void witness_commit_range(maelys_datalog_solve_result_t *result,
 }
 
 /* Keep duplicate scans out of the derivation dispatch's control-flow graph.
- * Otherwise changing literal cases can move return-value setup into each scan
- * iteration. One call per instantiated head separates that work from dispatch. */
+ * With Ubuntu Clang 18.1.3 (-O2, Linux x86_64), changing dispatch moved return-value
+ * setup into each scan iteration. Keep one call per instantiated head. */
 #if defined(__GNUC__) || defined(__clang__)
 __attribute__((noinline))
 #endif
