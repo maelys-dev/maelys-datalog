@@ -1207,6 +1207,12 @@ static void witness_commit_range(maelys_datalog_solve_result_t *result,
     result->premise_pool_count = (uint16_t)(begin + body_count);
 }
 
+/* Keep duplicate scans out of the derivation dispatch's control-flow graph.
+ * Otherwise changing literal cases can move return-value setup into each scan
+ * iteration. One call per instantiated head separates that work from dispatch. */
+#if defined(__GNUC__) || defined(__clang__)
+__attribute__((noinline))
+#endif
 static int solve_once_append_idb_merge(maelys_datalog_solve_result_t *result,
                                        const maelys_datalog_fact_t *fact,
                                        size_t rule_id,
