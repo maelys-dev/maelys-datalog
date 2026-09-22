@@ -1715,5 +1715,67 @@ await test('playground_numeric_aggregates_and_empty_groups', async () => {
   pg.freeResult();
 });
 
+/* A failed solve must name the bound it met. Before this was wired, every
+ * solve-time failure reached the caller as a bare return code, so a capacity
+ * ceiling and a depth ceiling were indistinguishable from a defect. The names
+ * are the ones the native public API reports for the same failures. */
+await test('solve failure names its category', async () => {
+  const sameGeneration = `person(X) :- parent(X, _).
+person(X) :- parent(_, X).
+same_generation(X, X) :- person(X).
+same_generation(X, Y) :- parent(X, P), same_generation(P, Q), parent(Y, Q).`;
+  const closure = `path(X,Y) :- edge(X,Y).
+path(X,Z) :- path(X,Y), edge(Y,Z).`;
+
+  const attempt = async (preds, policy, pred, flatPairs) => {
+    const pg = await createPlayground();
+    pg.domainBegin('diag');
+    for (const [name, arity, kind] of preds) pg.domainAddPredicate(name, arity, kind);
+    pg.domainCommit();
+    pg.loadRuleset('diag', 'p', policy);
+    pg.edbBegin();
+    pg.addRuntimeSymbolPairFacts(pred, flatPairs);
+    try {
+      pg.solve();
+      return null;
+    } catch (err) {
+      return err.message;
+    }
+  };
+
+  const SG = [['parent', 2, PredKind.EDB], ['person', 1, PredKind.IDB | PredKind.QUERY],
+              ['same_generation', 2, PredKind.IDB | PredKind.QUERY]];
+  const TC = [['edge', 2, PredKind.EDB], ['path', 2, PredKind.IDB | PredKind.QUERY]];
+
+  /* Leaves pair with every leaf, so the relation grows as their square and
+   * meets the per-predicate ceiling well before any depth limit. */
+  const tree = leaves => {
+    const pairs = ['b', 'a', 'c', 'a'];
+    for (let i = 0; i < leaves; i++) pairs.push(`l${i}`, i % 2 ? 'c' : 'b');
+    return pairs;
+  };
+  const chain = edges => {
+    const pairs = [];
+    for (let i = 0; i < edges; i++) pairs.push(`n${i}`, `n${i + 1}`);
+    return pairs;
+  };
+
+  const widthLimit = profile === 'large' ? 16 : 8;
+  const fits = await attempt(SG, sameGeneration, 'parent', tree(widthLimit - 1));
+  if (fits !== null) throw new Error(`expected a solve below the ceiling, got ${fits}`);
+  const overflow = await attempt(SG, sameGeneration, 'parent', tree(widthLimit));
+  if (!overflow || !overflow.includes('idb_overflow')) {
+    throw new Error(`expected idb_overflow, got ${overflow}`);
+  }
+
+  /* Depth is the same in both profiles: it counts evaluation rounds, not facts. */
+  const shallow = await attempt(TC, closure, 'edge', chain(9));
+  if (shallow !== null) throw new Error(`expected a solve at nine edges, got ${shallow}`);
+  const deep = await attempt(TC, closure, 'edge', chain(10));
+  if (!deep || !deep.includes('max_depth')) {
+    throw new Error(`expected max_depth, got ${deep}`);
+  }
+});
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);
