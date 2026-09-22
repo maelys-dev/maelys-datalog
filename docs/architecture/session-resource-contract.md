@@ -20,9 +20,64 @@ An incomplete explanation must never be presented as exhaustive evidence.
 
 Resource limits do not extend the source language or change aggregate semantics.
 Public configuration and diagnostics must be usable without private backend
-headers. Algorithm-specific data structures can remain private. Named use-case
-profiles are versioned presets of explicit values, not separate dialects or
+headers. Algorithm-specific data structures can remain private. The primary
+consumer model is a catalogue of predefined, versioned profiles with explicit
+capacities and storage guarantees. Consumers select a tested profile rather than
+having to assemble independent limits. Profiles are not separate dialects or
 implicit backend selection.
+
+## Predefined profiles and fixed execution memory
+
+The product target is the same language in a compact engine or in engines with
+larger, potentially much larger, memory budgets. A full-language profile retains
+typed values, stratified negation, bounded recursion and the four aggregates;
+profiles change admitted sizes and resource budgets, not operator meanings.
+The catalogue must declare capabilities as well as capacities. A restricted
+experimental backend is not evidence that a full-language profile supports its
+promised features.
+
+Every shipped profile specifies a finite reservation/peak bound for its target
+build, supported backend and selected explanation mode. It covers host/backend
+persistent state, result/provenance, indexes, transaction rollback, scratch and
+bounded automatic stack usage. The session's live data may vary inside that
+reservation; it cannot make the reservation grow. Exhaustion fails according to
+the contract, even for the largest profile. A large profile does not introduce
+an unbounded or grow-on-demand execution mode.
+
+Two provisioning paths preserve this execution guarantee:
+
+- **Caller-owned static storage:** the application may reserve an aligned arena
+  at build time. The selected SDK/profile must publish a checked storage upper
+  bound and alignment for that target and supported mode, valid for admitted
+  programs. Initialization checks the actual plan against the supplied arena.
+  A runtime-only size query is insufficient for this provisioning path. Native
+  structure layouts remain private; exact sizing metadata/API is not frozen here.
+- **Preallocation at session creation:** a convenience constructor reserves the
+  same bounded storage, states its allocation count and never resizes it during
+  execution. This is fixed-capacity execution, not a claim that initialization
+  itself avoids the heap.
+
+The bounded path requires zero engine allocator calls during input updates,
+solve, queries, result release and explanation preparation/writing in configured
+or caller-owned storage. Legacy allocating explanation convenience calls are
+outside that path. Compilation, application/binding allocations and external
+callbacks need separate contracts; no whole-lifecycle or whole-process zero-heap
+claim follows from a session guarantee. Current ABI 3 sessions still allocate at
+creation: full caller-owned session storage is a target, not an existing API.
+
+An embedded build may include only its chosen profile and representation. A
+larger build may offer several validated profiles, each with its own reservation.
+Choosing a compact profile must not reserve the largest profile's arrays. Wider
+indices required by a large profile must not silently enlarge the compact
+representation. Selecting a larger build does not by itself establish that
+all larger capacities, intermediate states, stack bounds or work budgets are safe.
+
+Profile names, byte sizes and capacities require measurements and conformance
+evidence before publication; this design does not invent an XL profile by
+multiplying today's macros. Existing SMALL/LARGE behavior stays unchanged.
+Advanced custom contracts may be considered separately; the initial product
+does not require arbitrary runtime tuning of every bound. A profile change
+requires new initialization and controlled state reconstruction, not live growth.
 
 ## Current boundary
 
@@ -99,7 +154,7 @@ only on final-state size must also prove that its intermediate/rollback needs fi
 The target lifecycle is:
 
 1. Load and validate the program under supported structural bounds.
-2. Select a backend and an explicit resource contract. Resolve defaults and
+2. Select a backend and a predefined profile/resource contract. Resolve defaults and
    profile versions before acceptance; inspect all effective values.
 3. Check host/backend compatibility and compute a checked storage plan for that
    program, contract, backend and target build. Report bytes, alignments and
@@ -210,8 +265,9 @@ Datalog work units or promise a wall-clock deadline.
 
 ## Validation and ABI gate
 
-Before public API/ABI publication, validate both existing profiles and at least
-two different session contracts in one process: boundaries, conflicting caps,
+Before public API/ABI publication, validate both existing profiles and each new
+predefined profile. If a build offers multiple profiles, validate at least two
+different session contracts in one process: boundaries, conflicting caps,
 checked sizing, allocator-disabled updates, exact rollback/reuse, storage leases,
 identity recycling and sustained windows. Generated small typed programs and
 transaction sequences must be compared with full reference recomputation after

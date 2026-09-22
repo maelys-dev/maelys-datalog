@@ -218,6 +218,10 @@ Backend ABI 4 ships as one break, together with the first non-reference backend
   planning, immutable session budgets, transaction peaks and observable bounded
   fallback. This is a design requirement, not an ABI 3 option or a frozen ABI 4
   layout. Smaller quotas and genuinely capacity-sized storage are separate steps.
+  The consumer selects predefined, validated profiles; even a much larger profile
+  retains fixed execution storage, and a compact build need not include or reserve
+  the largest representation. Static caller-owned arenas require sizing metadata
+  available before execution, not only a runtime requirements query.
 
 Invariants that do not move: one live result per session, canonical public IDs
 for the same input and stable IDs during a result's lifetime, the reference
