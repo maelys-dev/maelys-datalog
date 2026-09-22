@@ -2069,7 +2069,12 @@ static int solve_once_derive_recursive(const maelys_datalog_ruleset_t *ruleset,
     }
 
     const maelys_datalog_literal_t *literal = &rule->body[literal_index];
-    if (literal->kind == MAELYS_DATALOG_LITERAL_COMPARISON) {
+    /* All non-atom cases return; ordinary joins continue below the switch.
+     * Keep dispatch explicit as the language adds literal kinds. */
+    switch (literal->kind) {
+    case MAELYS_DATALOG_LITERAL_ATOM:
+        break;
+    case MAELYS_DATALOG_LITERAL_COMPARISON: {
         maelys_datalog_term_t cmp_lhs;
         maelys_datalog_term_t cmp_rhs;
         memset(&cmp_lhs, 0, sizeof(cmp_lhs));
@@ -2088,7 +2093,7 @@ static int solve_once_derive_recursive(const maelys_datalog_ruleset_t *ruleset,
                                            depth,
                                            parent_proof_index);
     }
-    if (literal->kind == MAELYS_DATALOG_LITERAL_FILTER) {
+    case MAELYS_DATALOG_LITERAL_FILTER: {
         maelys_datalog_term_t value;
         memset(&value, 0, sizeof(value));
         const int filter = solve_once_evaluate_filter_literal(
@@ -2105,14 +2110,17 @@ static int solve_once_derive_recursive(const maelys_datalog_ruleset_t *ruleset,
                                            depth,
                                            parent_proof_index);
     }
-    if (maelys_datalog_literal_is_aggregate(literal->kind)) {
+    case MAELYS_DATALOG_LITERAL_COUNT:
+    case MAELYS_DATALOG_LITERAL_MIN:
+    case MAELYS_DATALOG_LITERAL_MAX:
+    case MAELYS_DATALOG_LITERAL_SUM: {
         solve_once_bindings_t next_bindings = *bindings;
         int matched = solve_aggregate_literal(result, literal, literal_index, &next_bindings);
         if (matched != 2) return matched;
         return solve_once_derive_recursive(ruleset, result, rule, literal_index + 1u,
             &next_bindings, delta_literal_index, depth, parent_proof_index);
     }
-    if (literal->kind == MAELYS_DATALOG_LITERAL_NEGATED_ATOM) {
+    case MAELYS_DATALOG_LITERAL_NEGATED_ATOM: {
         maelys_datalog_fact_t neg_ground;
         maelys_datalog_explanation_origin_t neg_origin =
             MAELYS_DATALOG_EXPLANATION_ORIGIN_NOT_APPLICABLE;
@@ -2127,6 +2135,10 @@ static int solve_once_derive_recursive(const maelys_datalog_ruleset_t *ruleset,
                                            delta_literal_index,
                                            depth,
                                            parent_proof_index);
+    }
+    default:
+        solve_once_set_invalid_state(result);
+        return 0;
     }
 
     const maelys_datalog_predicate_def_t *def =
@@ -2333,7 +2345,12 @@ static int solve_once_derive_ordered(const maelys_datalog_ruleset_t *ruleset,
     const size_t literal_index = join_order[order_pos];
     if (literal_index >= rule->body_count) return 0;
     const maelys_datalog_literal_t *literal = &rule->body[literal_index];
-    if (literal->kind == MAELYS_DATALOG_LITERAL_COMPARISON) {
+    /* All non-atom cases return; ordinary joins continue below the switch.
+     * Keep dispatch explicit as the language adds literal kinds. */
+    switch (literal->kind) {
+    case MAELYS_DATALOG_LITERAL_ATOM:
+        break;
+    case MAELYS_DATALOG_LITERAL_COMPARISON: {
         maelys_datalog_term_t cmp_lhs;
         maelys_datalog_term_t cmp_rhs;
         memset(&cmp_lhs, 0, sizeof(cmp_lhs));
@@ -2354,7 +2371,7 @@ static int solve_once_derive_ordered(const maelys_datalog_ruleset_t *ruleset,
                                          depth,
                                          parent_proof_index);
     }
-    if (literal->kind == MAELYS_DATALOG_LITERAL_FILTER) {
+    case MAELYS_DATALOG_LITERAL_FILTER: {
         maelys_datalog_term_t value;
         memset(&value, 0, sizeof(value));
         const int filter = solve_once_evaluate_filter_literal(
@@ -2373,14 +2390,17 @@ static int solve_once_derive_ordered(const maelys_datalog_ruleset_t *ruleset,
                                          depth,
                                          parent_proof_index);
     }
-    if (maelys_datalog_literal_is_aggregate(literal->kind)) {
+    case MAELYS_DATALOG_LITERAL_COUNT:
+    case MAELYS_DATALOG_LITERAL_MIN:
+    case MAELYS_DATALOG_LITERAL_MAX:
+    case MAELYS_DATALOG_LITERAL_SUM: {
         solve_once_bindings_t next_bindings = *bindings;
         int matched = solve_aggregate_literal(result, literal, literal_index, &next_bindings);
         if (matched != 2) return matched;
         return solve_once_derive_ordered(ruleset, result, rule, (uint8_t)(order_pos + 1u),
             join_order, join_order_count, &next_bindings, delta_literal_index, depth, parent_proof_index);
     }
-    if (literal->kind == MAELYS_DATALOG_LITERAL_NEGATED_ATOM) {
+    case MAELYS_DATALOG_LITERAL_NEGATED_ATOM: {
         maelys_datalog_fact_t neg_ground;
         maelys_datalog_explanation_origin_t neg_origin =
             MAELYS_DATALOG_EXPLANATION_ORIGIN_NOT_APPLICABLE;
@@ -2397,6 +2417,10 @@ static int solve_once_derive_ordered(const maelys_datalog_ruleset_t *ruleset,
                                          delta_literal_index,
                                          depth,
                                          parent_proof_index);
+    }
+    default:
+        solve_once_set_invalid_state(result);
+        return 0;
     }
 
     const maelys_datalog_predicate_def_t *def =
