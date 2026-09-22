@@ -186,6 +186,8 @@ int maelys_datalog_input_edb_add_facts(
     maelys_datalog_input_edb_t *, const maelys_datalog_public_fact_t *,
     size_t, maelys_datalog_public_diagnostic_t *);
 int maelys_datalog_input_edb_count(const maelys_datalog_input_edb_t *, size_t *);
+int maelys_datalog_input_edb_view(const maelys_datalog_input_edb_t *,
+    const maelys_datalog_public_fact_t **, size_t *);
 int maelys_datalog_input_edb_clear(maelys_datalog_input_edb_t *);
 int maelys_datalog_input_edb_free(maelys_datalog_input_edb_t *);
 int maelys_datalog_session_solve_edb(

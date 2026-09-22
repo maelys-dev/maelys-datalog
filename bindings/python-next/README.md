@@ -274,6 +274,12 @@ For native callers requiring a completely allocation-free input lifecycle,
 accept aligned caller-owned memory. `create_with_capacity()` is the optional
 one-allocation convenience path, and both use the same append implementation.
 
+The CFFI utility `maelys_datalog_input_edb_view()` borrows the ordered raw input
+entries, including duplicates. Its array and strings are read-only and must not
+be used after a successful mutation or close of the EDB. It is not a Python
+iterator or an owning copy. The native last-N window API is in a separate header
+and is not yet exposed as a Python wrapper.
+
 For example, after one valid buffered fact:
 
 ```python
