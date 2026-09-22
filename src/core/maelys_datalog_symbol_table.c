@@ -72,13 +72,34 @@ maelys_result_t maelys_datalog_symbol_lookup_readonly(
     if (len > MAELYS_DATALOG_MAX_STRING_BYTES) {
         return MAELYS_ERR_INVALID_ARGUMENT;
     }
-    for (size_t i = 0u; i < table->count; i++) {
-        const size_t offset = (size_t)table->entries[i].offset;
-        if ((size_t)table->entries[i].len == len &&
-            memcmp(table->storage + offset, text, len) == 0) {
+    /* Avoid hashing every byte of a long key for a short table. This compares
+     * entry count with hash-byte work, not a measured universal crossover. */
+    if (table->count <= len) {
+        for (size_t i = 0u; i < table->count; i++) {
+            if ((size_t)table->entries[i].len == len &&
+                memcmp(table->storage + table->entries[i].offset, text, len) == 0) {
+                *out_id = (maelys_datalog_symbol_id_t)(i + 1u);
+                *out_found = 1;
+                return MAELYS_OK;
+            }
+        }
+        return MAELYS_OK;
+    }
+    uint32_t h = fnv1a(text, len);
+    size_t bucket = (size_t)h & (MAELYS_DATALOG_SYMBOL_INDEX_BUCKETS - 1u);
+    size_t probes = 0;
+    while (table->index[bucket] != 0u) {
+        size_t i = (size_t)table->index[bucket] - 1u;
+        if (i >= table->count) return MAELYS_ERR_INVALID_STATE;
+        if (table->entries[i].hash == h && table->entries[i].len == len &&
+            memcmp(table->storage + table->entries[i].offset, text, len) == 0) {
             *out_id = (maelys_datalog_symbol_id_t)(i + 1u);
             *out_found = 1;
             return MAELYS_OK;
+        }
+        bucket = (bucket + 1u) & (MAELYS_DATALOG_SYMBOL_INDEX_BUCKETS - 1u);
+        if (++probes >= MAELYS_DATALOG_SYMBOL_INDEX_BUCKETS) {
+            return MAELYS_ERR_INVALID_STATE;
         }
     }
     return MAELYS_OK;

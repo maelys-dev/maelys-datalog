@@ -78,6 +78,19 @@ without an index parameter or branch; only validation is shared. Do not mix
 indexed and unindexed insertions in one construction: the index cannot see
 facts appended through the unindexed entry.
 
+The symbol-table suite checks read-only lookup against known insertion IDs,
+including a collision chain wrapping from the last bucket to the first, a full
+32-bit hash collision, copied tables, embedded NULs, maximum-length values and
+lookups after entry/text capacity rejection. Byte comparisons verify no table
+mutation. In the indexed path, corrupt bucket references and an exhausted probe
+cycle fail with `INVALID_STATE`; valid misses still return success with an invalid ID and
+`found = 0`. The existing index adds no storage or allocations. Hashing costs
+time proportional to the input length, so a table with at most `len` entries
+keeps the scan; a larger table probes the index. This work-based policy is not
+a measured universal crossover. The capacity test checks lookups as the table
+grows through that boundary. Collisions can still require a bounded linear probe;
+no universal constant-time or latency claim follows.
+
 The manual benchmark's optional `diagnostic_original` input compares a baseline,
 the original candidate and the revised head on native Linux x86_64. It reuses
 the historical `solver_size_pure` fixture and payload in a separate driver;
