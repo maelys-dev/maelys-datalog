@@ -7,6 +7,11 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## 0.7.1 — 2026-09-22
+
+A named zero for the loading permissions, and a WebAssembly failure that
+says which bound it met. No behavior, export, identity or ABI change.
+
 ### Added
 
 - `MAELYS_DATALOG_PUBLIC_ALLOW_NONE` names the absence of optional manifest-loading
