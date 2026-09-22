@@ -37,7 +37,7 @@ parser feature. The subsequent additive count extension introduces a new body
 literal and explanation alternatives; existing source and output bytes retain
 their previous interpretation. Consumers using exhaustive IR or explanation
 kind switches must add aggregate support or reject unknown alternatives.
-The unreleased integer `min`, `max` and `sum` extension negotiates each operator
+The integer `min`, `max` and `sum` extension added in 0.7.0 negotiates each operator
 separately; `AGGREGATES` retains its count-only promise.
 
 Historical v1 documents remain historical evidence. Buffer manifests using

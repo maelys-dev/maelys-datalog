@@ -508,7 +508,7 @@ This remains experimental, not a drop-in replacement for `maelys_datalog`:
 
 The old binding and its documentation remain separate and unchanged.
 
-## Numeric aggregates (unreleased)
+## Numeric aggregates (0.7.0)
 
 `min(V,event(_,G,V),N)`, `max(...)` and `sum(...)` use the same syntax and
 scope as count. The separate capabilities are `Capability.MIN`, `.MAX`, `.SUM`;

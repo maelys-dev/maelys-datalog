@@ -7,6 +7,11 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## 0.7.0 — 2026-09-22
+
+Three additive numeric aggregates and a read-path optimization.
+Consumer API v1, backend ABI 3 and program ABI 1 layouts remain unchanged.
+
 ### Added
 
 - Public stratified integer `min`, `max` and `sum`, with the same contextual
