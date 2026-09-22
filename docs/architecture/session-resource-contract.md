@@ -12,8 +12,11 @@ A resource contract belongs to the whole session: host input validation and
 canonicalization, backend state, result publication, provenance and explanations.
 A backend cannot accept capacities that the host cannot represent or publish.
 The same Datalog program has the same complete result under every accepted
-contract in which its execution succeeds. Capacity exhaustion is an explicit
-failure, never a successful partial result or a smaller implicit window.
+contract in which its execution succeeds. Exhausting a fact or transaction limit
+is an explicit failure, never a successful partial result or a smaller implicit
+window. Explanation limits remain distinct: a complete fact result may have a
+bounded explanation explicitly marked as truncated under its existing contract.
+An incomplete explanation must never be presented as exhaustive evidence.
 
 Resource limits do not extend the source language or change aggregate semantics.
 Public configuration and diagnostics must be usable without private backend
