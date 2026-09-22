@@ -47,6 +47,15 @@ The reference engine recomputes each supplied snapshot. See the
 [aggregate contract](docs/specifications/maelys-datalog-v2/aggregates.md) for
 binding, capability negotiation and explanation semantics.
 
+## Retain the last N events (unreleased)
+
+The native [`datalog_window.h` adapter](docs/architecture/last-n-window.md) adds
+integer occurrence IDs and recomputes the last N accepted events. Expiration,
+insertion and result replacement commit together: a rejected event preserves
+the old window and result. It uses caller-provided input storage and two borrowed
+sessions; there are no adapter allocations or language changes. This reference
+path provides transactional behavior before incremental maintenance.
+
 ## Build an explanation once
 
 ### Reuse a session workspace (0.5.0)

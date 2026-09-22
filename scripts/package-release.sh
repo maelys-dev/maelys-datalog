@@ -115,7 +115,7 @@ if [ "$target" != wasm32 ]; then
   cp include/maelys_datalog_version.h "$stage/include/"
   cp include/maelys/datalog.h include/maelys/datalog_builders.h include/maelys/datalog_module.h \
      include/maelys/datalog_program.h include/maelys/datalog_backend.h \
-     include/maelys/datalog_extension.h "$stage/include/maelys/"
+     include/maelys/datalog_extension.h include/maelys/datalog_window.h "$stage/include/maelys/"
   mkdir -p "$stage/share/maelys-datalog/conformance"
   cp sdk/conformance/maelys_conformance.h sdk/conformance/README.md \
      "$stage/share/maelys-datalog/conformance/"

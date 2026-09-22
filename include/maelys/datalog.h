@@ -406,6 +406,14 @@ MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_input_edb_add_facts(
     size_t fact_count, maelys_datalog_public_diagnostic_t *out_diagnostic);
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_input_edb_count(
     const maelys_datalog_input_edb_t *edb, size_t *out_count);
+/* Borrow the ordered raw entries (before native validation/deduplication).
+ * Neither the array nor its strings may be modified. The view is valid until
+ * the next successful mutation or free of edb. It must not be fed back into a
+ * mutating operation on the same edb; copying to a DIFFERENT buffer is allowed.
+ * No allocation. Errors leave both outputs unchanged. */
+MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_input_edb_view(
+    const maelys_datalog_input_edb_t *edb,
+    const maelys_datalog_public_fact_t **out_facts, size_t *out_count);
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_input_edb_clear(
     maelys_datalog_input_edb_t *edb);
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_input_edb_free(

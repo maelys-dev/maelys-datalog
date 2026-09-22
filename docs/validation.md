@@ -22,6 +22,16 @@ suite summaries rather than a hardcoded historical count.
 ASan/UBSan run locally; macOS disables leak detection. The Linux CI enables
 LSan. A local macOS PASS alone is not evidence of Linux leak safety.
 
+The [last-N window](architecture/last-n-window.md) tests cover atomic expiry and
+recomputation against a separately maintained FIFO, all IDB and canonical IDs,
+aggregate/negation/recursion behavior, capacity errors, injected backend failures,
+prepared result leases and long vocabulary rotation. Its allocation guard checks
+the complete engine during adapter initialization, pushes, query/explanations,
+result replacement and destruction after session creation. Failed transactions
+preserve the committed input bank and window metadata byte-for-byte; candidate
+scratch is explicitly outside this comparison. The ordinary consumer also runs
+outside the source tree against both installed SDK libraries.
+
 Pipeline counters are compiled only under `MAELYS_TESTING`: the private header
 `src/core/maelys_datalog_pipeline_testing.h` expands `MAELYS_DATALOG_COUNT_PIPELINE`
 to nothing otherwise, so the tested translation units are the shipped ones and
