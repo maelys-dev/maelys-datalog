@@ -7,6 +7,17 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed
+
+- A failed `solve` through the WebAssembly binding now reports why it stopped.
+  `maelys_datalog_wasm_solve` returned the solver's status but never recorded a
+  diagnostic, so every solve-time failure reached callers as a bare return code
+  and a capacity ceiling could not be told from a depth ceiling or a defect. The
+  message is the category name the native public API reports for the same
+  failure, the hint carries the observed count and the limit where the solver
+  provides them, and state rejections name the missing precondition. No public
+  signature, export or identity changes.
+
 ## 0.7.0 — 2026-09-22
 
 Three additive numeric aggregates and a read-path optimization.

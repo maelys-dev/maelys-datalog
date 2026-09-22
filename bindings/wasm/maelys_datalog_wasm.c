@@ -12,6 +12,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -427,20 +428,72 @@ maelys_result_t maelys_datalog_wasm_edb_add_symbol2(const char *pred,
     return maelys_datalog_wasm_edb_add_symbol_ids_fact(pred_buf, id0, id1);
 }
 
+/* Record why a solve stopped. The status alone cannot distinguish a depth
+ * ceiling from a capacity ceiling, and a caller that only sees a return code
+ * cannot tell a bound from a defect. The message is the category name the
+ * native public API reports for the same failure, so both surfaces name a
+ * bound identically; the observed/limit pair goes to the hint, which callers
+ * read separately. */
+static void wasm_record_solve_failure(
+    const maelys_datalog_solve_diagnostic_t *diag) {
+    maelys_datalog_diagnostic_clear(&s_last_diag);
+    const char *name = maelys_datalog_solve_diagnostic_category_name(
+        diag ? diag->category : MAELYS_DATALOG_SOLVE_DIAG_NONE);
+    char hint[256];
+    hint[0] = '\0';
+    if (diag && diag->category == MAELYS_DATALOG_SOLVE_DIAG_IDB_OVERFLOW) {
+        snprintf(hint, sizeof(hint),
+                 "derived facts reached the build limit of %u for this predicate",
+                 (unsigned)diag->capacity);
+    } else if (diag && diag->category == MAELYS_DATALOG_SOLVE_DIAG_MAX_DEPTH) {
+        snprintf(hint, sizeof(hint),
+                 "evaluation did not converge within the build limit of %u iterations",
+                 (unsigned)diag->depth_limit);
+    }
+    maelys_datalog_diagnostic_set(&s_last_diag, MAELYS_DATALOG_DIAG_NONE,
+                                  "solve", "", 0u, 0u, name,
+                                  hint[0] ? hint : NULL);
+    if (diag) {
+        maelys_datalog_diagnostic_set_limit(&s_last_diag,
+                                            (size_t)diag->count_observed,
+                                            (size_t)diag->capacity);
+    }
+}
+
+/* A state rejection never reaches the solver, so it has no category. Name the
+ * precondition instead of leaving the caller with a bare return code. */
+static void wasm_record_solve_state_error(const char *what) {
+    maelys_datalog_diagnostic_clear(&s_last_diag);
+    maelys_datalog_diagnostic_set(&s_last_diag, MAELYS_DATALOG_DIAG_NONE,
+                                  "solve", "", 0u, 0u, "invalid_state", what);
+}
+
 maelys_result_t maelys_datalog_wasm_solve(void) {
-    if (s_edb_state != WASM_EDB_STATE_OPEN) return MAELYS_ERR_INVALID_STATE;
-    if (s_policy_set.policy_count != 1u || !s_policy_set.policies[0].loaded) {
+    if (s_edb_state != WASM_EDB_STATE_OPEN) {
+        wasm_record_solve_state_error("no open EDB: add facts before solving");
         return MAELYS_ERR_INVALID_STATE;
     }
+    if (s_policy_set.policy_count != 1u || !s_policy_set.policies[0].loaded) {
+        wasm_record_solve_state_error("no policy loaded");
+        return MAELYS_ERR_INVALID_STATE;
+    }
+    maelys_datalog_diagnostic_clear(&s_last_diag);
     free_solve_result_only();
     maelys_result_t rc = maelys_datalog_edb_finalize(&s_edb);
     if (rc != MAELYS_OK) {
+        maelys_datalog_diagnostic_set(&s_last_diag, MAELYS_DATALOG_DIAG_NONE,
+                                      "solve", "", 0u, 0u, "malformed_edb",
+                                      "input facts were rejected before evaluation");
         maelys_datalog_edb_clear(&s_edb);
         s_edb_state = WASM_EDB_STATE_EMPTY;
         return rc;
     }
-    rc = maelys_datalog_solve_once(&s_policy_set.policies[0], &s_edb, &s_solve_result);
+    maelys_datalog_solve_diagnostic_t solve_diag;
+    memset(&solve_diag, 0, sizeof(solve_diag));
+    rc = maelys_datalog_solve_once_ex(&s_policy_set.policies[0], &s_edb,
+                                      &s_solve_result, &solve_diag);
     if (rc != MAELYS_OK) {
+        wasm_record_solve_failure(&solve_diag);
         free_solve_result_only();
         maelys_datalog_edb_clear(&s_edb);
         s_edb_state = WASM_EDB_STATE_EMPTY;
