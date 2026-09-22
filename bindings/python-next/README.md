@@ -326,6 +326,43 @@ reimplemented in Python. `path` accepts a string or `pathlib.Path`.
 with `ruleset.solve(edb, policy_index=1)` or `ruleset.prepare(policy_index=1)`;
 indices are zero-based in the loaded set, not source-file indices.
 
+The C facade names the three values together:
+
+| C value | Python spelling | Permission |
+| --- | --- | --- |
+| `MAELYS_DATALOG_PUBLIC_ALLOW_NONE` (`0u`, permanently) | `engine.load_manifest(path)` | Neither optional permission |
+| `MAELYS_DATALOG_PUBLIC_ALLOW_TEST_ONLY` | `allow_test_only=True` | Admit enabled `test_only` policies |
+| `MAELYS_DATALOG_PUBLIC_ALLOW_UNDECLARED_POLICY_ATOMS` | `allow_undeclared_policy_atoms=True` | Admit policy-local undeclared constants |
+
+The two bits are independent and combine with `|`; they are not ordered
+strict/permissive modes. `ALLOW_NONE` is not a denial: `ALLOW_NONE | X` is `X`.
+Python keeps the two boolean keywords, both defaulting to `False`, with no
+numeric mask or `allow_none` option. Without the test-only permission, an enabled
+`"mode": "test_only"` entry fails the whole load with `FORBIDDEN`, rather than
+being skipped. Once admitted, it is evaluated normally; the engine neither
+simulates evaluation nor detects a production environment. Disabled entries keep
+the manifest's existing behavior. `allow_test_only` bypasses neither SHA-256
+verification nor atom checks. Predicate, capability and capacity checks remain
+active with either or both permissions. The public C facade rejects every
+unknown flag bit with `INVALID_ARGUMENT`, also when combined with known bits,
+and clears `out_policy` on failure. Older libraries must reject unknown future
+bits rather than ignore them.
+
+`atoms` belongs to the registered domain, not the manifest. It authorizes
+symbolic constants in Datalog predicate arguments and creates no facts. An EDB
+`blocked/1` can receive `edb.add_fact("blocked", ["mallory"])` without declaring
+`"mallory"`, while a rule checks `not(blocked(User))`. Writing
+`blocked("mallory").` in the source requires `POLICY_FACT` origin and an allowed
+constant (unless the manifest explicitly permits a local constant). Writing
+`blocked("mallory")` in a rule body requires the constant too, even when
+`blocked/1` is EDB: the distinction is source text versus runtime input.
+
+`Engine.load_inline_ruleset` uses `maelys_datalog_policy_load_inline()`, which
+has no flags, checks Datalog domain constants without an override, and reads no
+manifest `test_only` metadata. Some legacy/advanced inline C functions have a
+reserved argument that must be zero; they are different signatures, not an
+additional permission path in this facade.
+
 The vocabulary opt-in is restricted to manifest loading. It admits ordinary
 policy string constants into that policy's symbol table without changing the
 registered domain. Inline loads remain closed. Distinct referenced policy atoms

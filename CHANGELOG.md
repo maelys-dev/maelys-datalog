@@ -7,6 +7,12 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+
+- `MAELYS_DATALOG_PUBLIC_ALLOW_NONE` names the absence of optional manifest-loading
+  permissions. Its value is permanently `0u`; existing literal-zero calls,
+  behavior, exported symbols and ABI layouts are unchanged.
+
 ### Fixed
 
 - A failed `solve` through the WebAssembly binding now reports why it stopped.
