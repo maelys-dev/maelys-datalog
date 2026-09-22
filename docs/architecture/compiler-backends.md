@@ -213,6 +213,11 @@ Backend ABI 4 ships as one break, together with the first non-reference backend
 - A named backend registry reachable from the opaque facade, so Python-next and
   the WASM binding can select a backend by name. C context registration and
   selection already exist; the remaining work is coherent binding exposure.
+- A [session resource contract](session-resource-contract.md), agreed by the
+  host and backend before initialization: effective capacities, checked storage
+  planning, immutable session budgets, transaction peaks and observable bounded
+  fallback. This is a design requirement, not an ABI 3 option or a frozen ABI 4
+  layout. Smaller quotas and genuinely capacity-sized storage are separate steps.
 
 Invariants that do not move: one live result per session, canonical public IDs
 for the same input and stable IDs during a result's lifetime, the reference
@@ -230,6 +235,11 @@ kind switches must reject or implement the new alternative. See
 [the aggregate contract](../specifications/maelys-datalog-v2/aggregates.md).
 
 ## Budgets and shared filters
+
+Current limits below describe ABI 3. The
+[target resource contract](session-resource-contract.md) also budgets persistent
+incremental state and the whole transaction; it is not implemented by the
+existing `work_limit` or input-buffer capacity setters.
 
 `backend_charge` is cooperative. Charge before bounded units of work; work units
 are algorithm-specific, not comparable benchmarks or a wall-clock deadline.
