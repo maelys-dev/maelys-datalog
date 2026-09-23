@@ -7,6 +7,12 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## 0.8.0 — 2026-09-23
+
+A bounded last-N event window over the public facade, and the read-only
+accessors it needed. Consumer API v1, backend ABI 3 and program ABI 1
+layouts remain unchanged.
+
 ### Added
 
 - Native last-N event windows in `<maelys/datalog_window.h>`: caller-owned bounded
@@ -23,8 +29,7 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 - Read-only `input_edb_view` for ordered raw entries. The window adapter consumes
   only the public facade and ships in the installed native SDK. Existing ABI
   layouts and language syntax are unchanged; Python/JS window bindings and
-  incremental maintenance are not introduced. These public additions target the
-  next minor release; `VERSION` remains at the last published version.
+  incremental maintenance are not introduced.
 
 ## 0.7.1 — 2026-09-22
 
