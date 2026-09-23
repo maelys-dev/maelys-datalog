@@ -49,7 +49,7 @@ ASAN_RUN_ON_BUILD ?= 1
 ASAN_TEST_SRCS = $(wildcard tests/test_*.c)
 
 $(BUILD_DIR)/test_maelys_datalog_modules: ASAN_EXTRA_SRCS = sdk/examples/filter/src/extension.c
-$(BUILD_DIR)/test_maelys_datalog_window: ASAN_CFLAGS += -UNDEBUG
+$(BUILD_DIR)/test_maelys_datalog_window $(BUILD_DIR)/test_maelys_datalog_group_window: ASAN_CFLAGS += -UNDEBUG
 $(BUILD_DIR)/test_maelys_datalog_modules: ASAN_CFLAGS += -pthread
 $(BUILD_DIR)/test_maelys_datalog_modules: sdk/examples/filter/src/extension.c
 $(BUILD_DIR)/test_maelys_datalog_compiler: ASAN_EXTRA_SRCS = sdk/examples/frontend/src/extension.c sdk/examples/backend/src/extension.c
@@ -96,6 +96,10 @@ $(BUILD_DIR)/test_maelys_datalog_session_explanations: tests/test_maelys_datalog
 
 $(BUILD_DIR)/test_maelys_datalog_window_alloc: tests/test_maelys_datalog_window_alloc.c $(filter-out $(BUILD_DIR)/guard-obj/src/runtime/maelys_datalog_window.o,$(ASAN_GUARD_OBJS)) $(ASAN_HEADERS) tests/fixtures/allocation_guard.h src/runtime/maelys_datalog_window.c | $(BUILD_DIR)
 	$(CC) $(ASAN_CFLAGS) -UNDEBUG $(filter-out $(BUILD_DIR)/guard-obj/src/runtime/maelys_datalog_window.o,$(ASAN_GUARD_OBJS)) $< -o $@
+	$(if $(filter 1,$(ASAN_RUN_ON_BUILD)),$(ASAN_ENV) ./$@,@:)
+
+$(BUILD_DIR)/test_maelys_datalog_group_window_alloc: tests/test_maelys_datalog_group_window_alloc.c $(filter-out $(BUILD_DIR)/guard-obj/src/runtime/maelys_datalog_group_window.o,$(ASAN_GUARD_OBJS)) $(ASAN_HEADERS) tests/fixtures/allocation_guard.h src/runtime/maelys_datalog_group_window.c | $(BUILD_DIR)
+	$(CC) $(ASAN_CFLAGS) -UNDEBUG $(filter-out $(BUILD_DIR)/guard-obj/src/runtime/maelys_datalog_group_window.o,$(ASAN_GUARD_OBJS)) $< -o $@
 	$(if $(filter 1,$(ASAN_RUN_ON_BUILD)),$(ASAN_ENV) ./$@,@:)
 
 $(BUILD_DIR)/%: tests/%.c $(ASAN_OBJS) $(ASAN_HEADERS) | $(BUILD_DIR)

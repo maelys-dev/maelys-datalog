@@ -7,6 +7,20 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+
+- Native multi-fact event windows in `<maelys/datalog_group_window.h>`, with
+  caller-owned fixed storage and separate group, raw contribution, unique-fact
+  and text capacities. Group IDs stay outside facts; shared facts survive until
+  their last contributing group expires. Empty groups advance retention normally.
+  Boolean normalization and typed union preserve existing Datalog semantics.
+- Atomic publication of the retained groups, union, result and cursor using two
+  borrowed sessions. Rejection preserves committed bytes and views; closed
+  handles reject before accessing returned sessions. Allocation guards, generated
+  independent FIFO/set oracles and installed static/shared consumers cover both
+  SMALL and LARGE. This additive native API targets the next minor release;
+  existing single-fact windows and backend ABI 3 remain unchanged.
+
 ## 0.8.0 — 2026-09-23
 
 A bounded last-N event window over the public facade, and the read-only

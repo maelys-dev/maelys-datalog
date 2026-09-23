@@ -47,6 +47,17 @@ The reference engine recomputes each supplied snapshot. See the
 [aggregate contract](docs/specifications/maelys-datalog-v2/aggregates.md) for
 binding, capability negotiation and explanation semantics.
 
+## Retain multi-fact events (unreleased)
+
+The native [`datalog_group_window.h` adapter](docs/architecture/multi-fact-window.md)
+retains N groups of complete typed facts and recomputes their union. A shared fact
+survives until its last contributing group expires; empty groups still advance
+retention. Group IDs are metadata, with no implicit term injection. Caller-owned
+storage has separate group, contribution, unique-fact and text limits. Atomic
+replacement borrows two matching sessions and preserves the old result on failure.
+See the [installed-SDK C example](examples/multi_fact_window.c). This additive API
+leaves the original single-fact adapter below unchanged; bindings are deferred.
+
 ## Retain the last N events (0.8.0)
 
 The native [`datalog_window.h` adapter](docs/architecture/last-n-window.md) adds

@@ -39,7 +39,10 @@ the new event, the result and the occurrence cursor together. This baseline is
 not the private incremental experiment and does not implement session resource
 negotiation. Its snapshot vocabulary can renew within the existing limits; the
 fixed-dictionary restriction below belongs to private R1, not this public adapter.
-The adapter is on main and awaits a published SDK; VERSION remains 0.7.1.
+The single-fact adapter ships in the v0.8.0 SDK. The additive
+[multi-fact window](multi-fact-window.md) supplies a further transaction reference
+for grouped contributions and shared facts; its publication is a separate step.
+It does not change either resource gate or prescribe persistent backend storage.
 
 ## Scope and ownership
 

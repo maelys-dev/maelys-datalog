@@ -22,6 +22,19 @@ suite summaries rather than a hardcoded historical count.
 ASan/UBSan run locally; macOS disables leak detection. The Linux CI enables
 LSan. A local macOS PASS alone is not evidence of Linux leak safety.
 
+The [multi-fact window](architecture/multi-fact-window.md) adds a separate FIFO/set
+oracle and allocation guard, included in both native profiles and sanitizer
+inventories. Tests distinguish groups, raw contributions and the unique union,
+cover empty groups, shared facts, boolean normalization, last-contributor expiry,
+full replacement, every storage bound, prepared leases, cursor exhaustion and
+closed handles after session destruction. Fixed generated sequences use seeds
+1, 0x752abc91 and 0xdeadbeef; mutations of a tuple, group ID and expiration must
+fail the independent oracle. Backend failures before work and after emission
+exercise retry, cleanup and reentry. Allocation hooks cover init through close
+with already-created sessions; rejected attempts preserve every committed bank
+byte and adapter header byte, excluding candidate scratch. The installed static
+and shared SDK runs the functional suite and minimal multi-fact C example.
+
 The [last-N window](architecture/last-n-window.md) tests cover atomic expiry and
 recomputation against a separately maintained FIFO, all IDB and canonical IDs,
 aggregate/negation/recursion behavior, capacity errors, injected backend failures,
@@ -212,7 +225,7 @@ Repeat in `build/cmake-large` with `-DMAELYS_DATALOG_PROFILE_LARGE=ON`.
 The SDK check installs into a fresh temporary prefix, copies all consumers and
 providers outside the source tree and builds them with only installed includes
 and libraries, both static and shared. It checks all five headers independently
-as C11/C++17 and rejects `sizeof` on all nine opaque handle types. All five
+as C11/C++17 and rejects `sizeof` on all eleven opaque handle types. All five
 standalone examples (including the frontend/filter bundle) are copied out, built
 with their own CMake projects and run through the installed conformance kit in
 both linkage modes and size profiles.
@@ -247,7 +260,7 @@ working table cannot pass that lookup (exit 9).
 | `test_maelys_datalog_prepared_explanations` | All engine units use allocator hooks; Why-true/Why-false prepared, one-shot and session-cached paths run with allocation disabled and preserve identical text, including both truncated kinds. One-shot short storage preserves the required-length output; short text reports its length, retry rebuilds, and write failures release the lease. Per-kind reference bounds dominate exact sizes; copied descriptors are refused. Repeated prepared writes call no preparation callback; result leases, alignment, storage reuse, unknown symbols, invalid callbacks and ABI 2 rejection are checked. |
 | `test_maelys_datalog_why_false` | Every successful legacy fixture is compared byte-for-byte with the caller-owned workspace path, including recursion, reordered symbol vocabularies, filters and truncation budgets. |
 | `test_maelys_datalog_modules` | Filter validation, cost and evaluation callbacks, and planner callbacks, preserve `STORAGE_TOO_SMALL`; failed solves expose no result and the session remains reusable. |
-| `check_module_sdk.sh` | All nine opaque handle layouts rejected in C11/C++17; static/shared external consumers exercise caller-owned explanations, configured owned/borrowed workspaces, `STORAGE_TOO_SMALL` and result leases. |
+| `check_module_sdk.sh` | All eleven opaque handle layouts rejected in C11/C++17; static/shared external consumers exercise caller-owned explanations, configured owned/borrowed workspaces, `STORAGE_TOO_SMALL` and result leases. |
 
 Run the sanitizer build used by CI, not only CMake's separate targets:
 

@@ -1,7 +1,8 @@
 # Last-N event window
 
 `<maelys/datalog_window.h>` adds a native C adapter above the public snapshot
-API. It retains the last **N successfully accepted events**, in arrival order,
+API. For groups of complete facts without implicit ID terms, see the separate
+[multi-fact window](multi-fact-window.md). This original API retains the last **N successfully accepted events**, in arrival order,
 and recomputes the whole snapshot on every push. It neither changes Datalog
 syntax nor adds an incremental backend. Backend ABI 3 and program ABI 1 remain
 unchanged. Python and JavaScript bindings do not yet expose this adapter.

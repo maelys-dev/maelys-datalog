@@ -5,4 +5,5 @@ src/public/maelys_datalog_values.c
 src/runtime/maelys_datalog_runtime.c
 src/runtime/maelys_datalog_input_edb.c
 src/runtime/maelys_datalog_window.c
+src/runtime/maelys_datalog_group_window.c
 src/backends/maelys_datalog_reference.c
