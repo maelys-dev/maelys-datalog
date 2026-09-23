@@ -29,7 +29,7 @@ FUZZ_SRCS = tests/fuzz/fuzz_parse_ruleset.c
 FUZZ_BIN = $(BUILD)/fuzz_parse_ruleset
 
 FUZZ_CFLAGS = \
-	-Wall -Wextra -g -O1 -I. -Iinclude \
+	-Wall -Wextra -g -O1 -I. -Iinclude -DMAELYS_TESTING \
 	-fsanitize=fuzzer,address,undefined \
 	-fno-omit-frame-pointer
 

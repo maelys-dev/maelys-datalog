@@ -133,7 +133,11 @@ Both simulations remain active during warmup; their models do not measure actual
 CPU cache traffic, its branch predictor or cycles. Identical modeled events do
 not prove identical hardware cost. The declared LARGE/inert/duplicate/integer/
 maximum control retains the prior +30% median case even if its next timing falls
-below its floor.
+below its floor. The P1 controls additionally include LARGE/derive/strided/integer/256
+and LARGE/derive/sorted/symbol/maximum, declared before measuring base-membership
+elimination. They remain counted even when timing improves; none replaces the
+full workload matrix. Test-only membership auditing is absent from all of these
+production engine objects.
 
 ### Input index crossover and memory
 

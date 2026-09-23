@@ -23,6 +23,12 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ### Changed
 
+- Reference solving classifies base-predicate presence once per rule application
+  and skips base fact membership for derived heads whose predicate is absent.
+  Low-level hand-built bases retain duplicate suppression before capacity errors,
+  with binary membership in the sorted EDB. IDB duplicate handling, storage
+  bounds, existing field offsets and public/backend contracts are unchanged.
+
 - Reused sessions reset live metadata and the required pointer/index scratch
   instead of clearing their whole fact and symbol-pointer capacity on every
   successful materialization. Each inserted fact is fully initialized before

@@ -5,7 +5,7 @@
  *   maelys_datalog_parse_ruleset_ex()
  *
  * Setup mirrors the deterministic corpus runner:
- *   ruleset_init -> add predicates -> register atoms -> freeze -> parse -> clear
+ *   ruleset_init -> add predicates -> register atoms -> freeze -> parse -> bounded solve -> clear
  *
  * FUZZ_ATOMS are registered before parsing so string constants such as
  * "alice", "push", and "main" can pass the parser atom allowlist check and
@@ -18,6 +18,8 @@
 #include "include/maelys_datalog.h"
 #include "src/core/maelys_datalog_parser.h"
 #include "src/core/maelys_datalog_predicate_registry.h"
+
+#include "tests/helpers/solve_validated_seed.h"
 
 #include <stdint.h>
 #include <stddef.h>
@@ -100,12 +102,13 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
         abort();
     }
 
-    (void)maelys_datalog_parse_ruleset_ex(&ruleset,
+    maelys_result_t rc = maelys_datalog_parse_ruleset_ex(&ruleset,
                                           (const char *)data,
                                           size,
                                           "fuzz",
                                           &diag);
 
+    if (rc == MAELYS_OK) solve_validated_seed(&ruleset);
     maelys_datalog_ruleset_clear(&ruleset);
     return 0;
 }

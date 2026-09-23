@@ -73,6 +73,18 @@ checks their distinct `document=why-true` / `document=why-false` discriminators.
 Python-next tests the discriminator for complete, truncated and
 not-applicable output from actual solves, not constructed formatter fixtures.
 
+Base-membership instrumentation is also restricted to `MAELYS_TESTING`.
+Every structurally valid candidate head is compared with the historical linear
+policy/EDB lookup, including candidates for which production skips membership.
+Any disagreement aborts even under `NDEBUG`. The dedicated test checks zero
+lookups on ordinary validated rules, both derivation traversals, stratification,
+byte-identical facts/proofs/explanations and positive low-level controls in both
+base sources. Those controls include an IDB fact manually placed in a base with
+a stale `program_validated` bit; registry flags or that bit alone are insufficient.
+At the per-predicate capacity, a base duplicate must still succeed; removing
+that fact must expose the named overflow instead. Existing full-scan reference
+entry points force membership as well as full EDB candidate scans.
+
 The bounded-sort test compares canonical values with a libc reference for
 ordered, reverse, equal, duplicate-heavy, organ-pipe, sawtooth and random input,
 including overlapping ordered suffixes, profile capacity and an explicitly
@@ -336,6 +348,10 @@ git diff --check
 
 The existing libFuzzer smoke is bounded to 30 seconds / 10,000 runs; the AFL++
 smoke is bounded to 30 seconds. Both use build-directory corpus copies.
+Accepted inputs now also run against a small typed EDB. The deterministic corpus
+uses the same bounded fixture. The solver's test-only linear oracle checks every
+candidate and the fixture requires no base hits or production base lookups for
+these unmodified validated programs. This does not enumerate all bindings.
 They are regression smokes, not exhaustive
 coverage, a security certification, or a campaign to develop exploits.
 The harness rulesets are zero-initialized and preparation failures abort the
