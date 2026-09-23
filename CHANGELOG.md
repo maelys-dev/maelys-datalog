@@ -7,6 +7,11 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## 0.9.1 — 2026-09-23
+
+One fix on the low-level domain registry. No public surface, behavior,
+identity or ABI change for declarative consumers.
+
 ### Fixed
 
 - Low-level domains now install their declared `atoms` after a successful
