@@ -22,7 +22,7 @@ maelys_result_t maelys_datalog_validate_query_predicate(const maelys_datalog_rul
     maelys_datalog_predicate_id_t pid = 0;
     if (!maelys_datalog_predicate_registry_find(&ruleset->registry, predicate, arity, &pid))
         return MAELYS_ERR_INVALID_FIELD;
-    const maelys_datalog_predicate_def_t *def =
+    const maelys_datalog_predicate_entry_t *def =
         maelys_datalog_predicate_registry_get(&ruleset->registry, pid);
     if (!def || !(def->kind_flags & MAELYS_DATALOG_PRED_KIND_QUERY))
         return MAELYS_ERR_INVALID_FIELD;

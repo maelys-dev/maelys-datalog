@@ -174,7 +174,7 @@ static maelys_result_t validate_and_copy_query_whitelist(
             maelys_datalog_diagnostic_set_predicate(diag, name, arity);
             return MAELYS_ERR_INVALID_FIELD;
         }
-        const maelys_datalog_predicate_def_t *def =
+        const maelys_datalog_predicate_entry_t *def =
             maelys_datalog_predicate_registry_get(&ruleset->registry, pid);
         if (!def || !(def->kind_flags & MAELYS_DATALOG_PRED_KIND_QUERY)) {
             manifest_diag(diag,
@@ -626,7 +626,7 @@ maelys_result_t maelys_datalog_load_policy_inline(
 }
 
 maelys_result_t maelys_datalog_load_policy_inline_with_static_domain(
-    const maelys_datalog_predicate_def_t *predicates,
+    const maelys_datalog_public_predicate_t *predicates,
     size_t predicate_count,
     const char *domain_name,
     const char *policy_id,

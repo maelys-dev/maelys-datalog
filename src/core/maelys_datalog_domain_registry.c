@@ -3,10 +3,10 @@
 #include <string.h>
 
 typedef struct {
-    maelys_datalog_domain_def_t def;
+    maelys_datalog_domain_entry_t def;
     char domain_name[64];
     char description[256];
-    maelys_datalog_predicate_def_t predicates[MAELYS_DATALOG_MAX_PREDICATES];
+    maelys_datalog_predicate_entry_t predicates[MAELYS_DATALOG_MAX_PREDICATES];
     char atom_storage[MAELYS_DATALOG_MAX_ATOMS][64];
     const char *atoms[MAELYS_DATALOG_MAX_ATOMS];
 } maelys_datalog_registered_domain_t;
@@ -65,7 +65,7 @@ maelys_result_t maelys_datalog_domain_registry_register(const maelys_datalog_dom
                 return MAELYS_ERR_INVALID_FIELD;
             }
             candidate.predicates[i].arity = def->predicates[i].arity;
-            candidate.predicates[i].kind_flags = def->predicates[i].kind_flags;
+            candidate.predicates[i].kind_flags = def->predicates[i].flags;
         }
         candidate.def.predicates = candidate.predicates;
         candidate.def.predicate_count = def->predicate_count;
@@ -92,7 +92,7 @@ maelys_result_t maelys_datalog_domain_registry_register(const maelys_datalog_dom
     return MAELYS_OK;
 }
 
-const maelys_datalog_domain_def_t *maelys_datalog_domain_registry_find(const char *domain_name) {
+const maelys_datalog_domain_entry_t *maelys_datalog_domain_registry_find(const char *domain_name) {
     if (!domain_name || !*domain_name) return NULL;
     for (size_t i = 0; i < s_domain_count; i++) {
         if (strcmp(s_domains[i].def.domain_name, domain_name) == 0) return &s_domains[i].def;
@@ -102,7 +102,7 @@ const maelys_datalog_domain_def_t *maelys_datalog_domain_registry_find(const cha
 
 maelys_result_t maelys_datalog_domain_registry_install(const char *domain_name,
                                                        maelys_datalog_predicate_registry_t *registry) {
-    const maelys_datalog_domain_def_t *domain = maelys_datalog_domain_registry_find(domain_name);
+    const maelys_datalog_domain_entry_t *domain = maelys_datalog_domain_registry_find(domain_name);
     if (!domain || (!domain->install_predicates && !domain->predicates)) return MAELYS_ERR_UNSUPPORTED;
     if (domain->install_predicates) {
         maelys_result_t rc = domain->install_predicates(registry);

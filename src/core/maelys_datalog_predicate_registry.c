@@ -136,7 +136,7 @@ int maelys_datalog_predicate_registry_find(const maelys_datalog_predicate_regist
     return 0;
 }
 
-const maelys_datalog_predicate_def_t *maelys_datalog_predicate_registry_get(
+const maelys_datalog_predicate_entry_t *maelys_datalog_predicate_registry_get(
     const maelys_datalog_predicate_registry_t *registry,
     maelys_datalog_predicate_id_t id) {
     if (!registry || id >= registry->count) return NULL;

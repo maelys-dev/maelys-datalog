@@ -663,7 +663,7 @@ static int test_datalog_policy_fact_parser_does_not_mutate_frozen_registry(void)
                       "%d");
     maelys_datalog_predicate_id_t pid = 0;
     TEST_ASSERT_TRUE(maelys_datalog_predicate_registry_find(&r.registry, "runtime_fact", 1, &pid));
-    const maelys_datalog_predicate_def_t *def =
+    const maelys_datalog_predicate_entry_t *def =
         maelys_datalog_predicate_registry_get(&r.registry, pid);
     TEST_ASSERT_NOT_NULL(def);
     TEST_ASSERT_TRUE(def->kind_flags & MAELYS_DATALOG_PRED_KIND_EDB);

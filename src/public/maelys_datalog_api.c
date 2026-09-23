@@ -96,7 +96,7 @@ void maelys_datalog_public_diagnostic_clear(
 }
 
 static int public_predicates_match(
-    const maelys_datalog_domain_def_t *existing,
+    const maelys_datalog_domain_entry_t *existing,
     const maelys_datalog_public_domain_t *candidate) {
     if (!existing || !candidate || existing->install_predicates ||
         existing->predicate_count != candidate->predicate_count ||
@@ -128,7 +128,7 @@ maelys_datalog_status_t maelys_datalog_domain_register(
         (domain->atom_count > 0u && !domain->atoms)) {
         return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
     }
-    const maelys_datalog_domain_def_t *existing =
+    const maelys_datalog_domain_entry_t *existing =
         maelys_datalog_domain_registry_find(domain->name);
     if (existing) {
         return public_predicates_match(existing, domain)
@@ -136,23 +136,19 @@ maelys_datalog_status_t maelys_datalog_domain_register(
                    : MAELYS_DATALOG_STATUS_INVALID_FIELD;
     }
 
-    maelys_datalog_predicate_def_t predicates[MAELYS_DATALOG_MAX_PREDICATES];
-    memset(predicates, 0, sizeof(predicates));
+    const size_t name_capacity = sizeof(((maelys_datalog_predicate_entry_t *)0)->name);
     for (size_t i = 0u; i < domain->predicate_count; i++) {
         const maelys_datalog_public_predicate_t *source = &domain->predicates[i];
         if (!source->name) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
-        const size_t name_length = strnlen(source->name, sizeof(predicates[i].name));
-        if (name_length == 0u || name_length >= sizeof(predicates[i].name) ||
+        const size_t name_length = strnlen(source->name, name_capacity);
+        if (name_length == 0u || name_length >= name_capacity ||
             source->arity > MAELYS_DATALOG_MAX_ARITY) {
             return MAELYS_DATALOG_STATUS_INVALID_FIELD;
         }
-        memcpy(predicates[i].name, source->name, name_length + 1u);
-        predicates[i].arity = source->arity;
-        predicates[i].kind_flags = source->flags;
     }
     maelys_datalog_domain_def_t internal = {
         .domain_name = domain->name,
-        .predicates = predicates,
+        .predicates = domain->predicates,
         .predicate_count = domain->predicate_count,
         .atoms = domain->atoms,
         .atom_count = domain->atom_count,

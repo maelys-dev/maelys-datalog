@@ -107,7 +107,7 @@ class Engine:
         _raise_rc(rc)
         if not found[0] or not inspectable[0]:
             return bool(found[0]), bool(inspectable[0]), ()
-        preds = ffi.new("maelys_py_predicate_def_t[]", count[0])
+        preds = ffi.new("maelys_datalog_public_predicate_t[]", count[0])
         rc = lib.maelys_py_find_domain(domain_b, preds, count[0], count, found, inspectable)
         _raise_rc(rc)
         copied = []
@@ -116,7 +116,7 @@ class Engine:
                 Predicate(
                     ffi.string(preds[i].name).decode("utf-8"),
                     int(preds[i].arity),
-                    int(preds[i].kind_flags),
+                    int(preds[i].flags),
                 )
             )
         return True, True, tuple(copied)
@@ -141,11 +141,11 @@ class Engine:
 
             domain_b = domain_name.encode("utf-8")
             name_buffers = [ffi.new("char[]", pred.name.encode("utf-8")) for pred in normalized]
-            pred_array = ffi.new("maelys_py_predicate_def_t[]", len(normalized))
+            pred_array = ffi.new("maelys_datalog_public_predicate_t[]", len(normalized))
             for i, pred in enumerate(normalized):
                 pred_array[i].name = name_buffers[i]
                 pred_array[i].arity = pred.arity
-                pred_array[i].kind_flags = pred.kind_flags
+                pred_array[i].flags = pred.kind_flags
             rc = lib.maelys_py_register_domain(domain_b, pred_array, len(normalized))
             if rc == C.ERR_PAYLOAD_TOO_LARGE:
                 raise DomainRegistryFullError(

@@ -393,7 +393,7 @@ static maelys_datalog_ruleset_t g_explain_ruleset_snapshot;
 
 static maelys_result_t explain_install_predicates(
     maelys_datalog_predicate_registry_t *registry) {
-    static const maelys_datalog_predicate_def_t defs[] = {
+    static const maelys_datalog_public_predicate_t defs[] = {
         {"safe", 1u, MAELYS_DATALOG_PRED_KIND_EDB},
         {"edge", 2u, MAELYS_DATALOG_PRED_KIND_EDB},
         {"observed", 1u, MAELYS_DATALOG_PRED_KIND_EDB | MAELYS_DATALOG_PRED_KIND_QUERY},
@@ -407,7 +407,7 @@ static maelys_result_t explain_install_predicates(
         maelys_result_t rc = maelys_datalog_predicate_registry_add_domain(registry,
                                                                           defs[i].name,
                                                                           defs[i].arity,
-                                                                          defs[i].kind_flags);
+                                                                          defs[i].flags);
         if (rc != MAELYS_OK) return rc;
     }
     return maelys_datalog_predicate_registry_add_atom(registry, "strict");

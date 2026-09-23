@@ -296,7 +296,7 @@ static void solve_once_diag_from_fact(maelys_datalog_solve_diagnostic_t *diag,
     diag->predicate_id = fact->predicate_id;
     diag->arity_observed = fact->arity;
     if (registry) {
-        const maelys_datalog_predicate_def_t *def =
+        const maelys_datalog_predicate_entry_t *def =
             maelys_datalog_predicate_registry_get(registry, fact->predicate_id);
         if (def) diag->arity_expected = def->arity;
     }
@@ -567,7 +567,7 @@ static int datalog_term_kind_known(maelys_datalog_term_kind_t kind) {
 static int datalog_fact_structurally_valid(const maelys_datalog_predicate_registry_t *registry,
                                            const maelys_datalog_fact_t *fact) {
     if (!registry || !fact || fact->arity > MAELYS_DATALOG_MAX_TERMS) return 0;
-    const maelys_datalog_predicate_def_t *def =
+    const maelys_datalog_predicate_entry_t *def =
         maelys_datalog_predicate_registry_get(registry, fact->predicate_id);
     if (!def || fact->arity != def->arity) return 0;
     for (size_t i = 0; i < fact->arity; i++) {
@@ -764,7 +764,7 @@ static void solve_once_set_invalid_fact(maelys_datalog_solve_result_t *result,
     result->runtime_diag.predicate_id = fact->predicate_id;
     result->runtime_diag.observed_arity = fact->arity;
     if (registry) {
-        const maelys_datalog_predicate_def_t *def =
+        const maelys_datalog_predicate_entry_t *def =
             maelys_datalog_predicate_registry_get(registry, fact->predicate_id);
         if (def) result->runtime_diag.expected_arity = def->arity;
     }
@@ -1278,7 +1278,7 @@ static int solve_once_append_idb_merge(maelys_datalog_solve_result_t *result,
 static int solve_once_literal_delta_eligible(const maelys_datalog_ruleset_t *ruleset,
                                              const maelys_datalog_literal_t *literal) {
     if (!ruleset || !literal || literal->kind != MAELYS_DATALOG_LITERAL_ATOM) return 0;
-    const maelys_datalog_predicate_def_t *def =
+    const maelys_datalog_predicate_entry_t *def =
         maelys_datalog_predicate_registry_get(&ruleset->registry, literal->atom.predicate_id);
     return def && (def->kind_flags & MAELYS_DATALOG_PRED_KIND_IDB);
 }
@@ -1402,7 +1402,7 @@ static int64_t literal_static_score(const maelys_datalog_ruleset_t *ruleset,
         }
     }
     if (ruleset) {
-        const maelys_datalog_predicate_def_t *def =
+        const maelys_datalog_predicate_entry_t *def =
             maelys_datalog_predicate_registry_get(&ruleset->registry, literal->atom.predicate_id);
         if (def && (def->kind_flags & MAELYS_DATALOG_PRED_KIND_IDB)) score -= 50;
     }
@@ -1431,7 +1431,7 @@ static maelys_result_t module_choose_literal(
         c->variable_mask = literal_var_mask(literal);
         if (literal->kind == MAELYS_DATALOG_LITERAL_ATOM ||
             literal->kind == MAELYS_DATALOG_LITERAL_NEGATED_ATOM) {
-            const maelys_datalog_predicate_def_t *def = maelys_datalog_predicate_registry_get(
+            const maelys_datalog_predicate_entry_t *def = maelys_datalog_predicate_registry_get(
                 &ruleset->registry, literal->atom.predicate_id);
             if (!def) return MAELYS_ERR_INVALID_STATE;
             c->predicate_name = def->name;
@@ -1483,7 +1483,7 @@ static maelys_result_t build_static_join_order(
         const uint8_t delta_index = (uint8_t)delta_body_index;
         const maelys_datalog_literal_t *delta_literal = &rule->body[delta_index];
         if (delta_literal->kind != MAELYS_DATALOG_LITERAL_ATOM) return MAELYS_ERR_INVALID_ARGUMENT;
-        const maelys_datalog_predicate_def_t *def =
+        const maelys_datalog_predicate_entry_t *def =
             maelys_datalog_predicate_registry_get(&ruleset->registry, delta_literal->atom.predicate_id);
         if (!def || !(def->kind_flags & MAELYS_DATALOG_PRED_KIND_IDB)) {
             return MAELYS_ERR_INVALID_ARGUMENT;
@@ -1783,7 +1783,7 @@ static int solve_negated_literal(maelys_datalog_solve_result_t *result,
     }
     if (!datalog_fact_structurally_valid(&ruleset->registry, &query)) return 0;
 
-    const maelys_datalog_predicate_def_t *def =
+    const maelys_datalog_predicate_entry_t *def =
         maelys_datalog_predicate_registry_get(&ruleset->registry, query.predicate_id);
     if (!def) return 0;
     /* On a satisfied negation, publish the exact ground atom whose absence was
@@ -1835,7 +1835,7 @@ static maelys_result_t aggregate_source(
     maelys_datalog_fact_t *pattern, maelys_datalog_explanation_origin_t *origin,
     const maelys_datalog_fact_t **out_facts, size_t *out_count) {
     const maelys_datalog_ruleset_t *ruleset = result->ruleset;
-    const maelys_datalog_predicate_def_t *def = maelys_datalog_predicate_registry_get(
+    const maelys_datalog_predicate_entry_t *def = maelys_datalog_predicate_registry_get(
         &ruleset->registry, literal->atom.predicate_id);
     if (!def || literal->lhs.kind != MAELYS_DATALOG_TERM_VAR ||
         literal->lhs.as.variable >= MAELYS_DATALOG_MAX_RULE_VARIABLES ||
@@ -2147,7 +2147,7 @@ static int solve_once_derive_recursive(const maelys_datalog_ruleset_t *ruleset,
         return 0;
     }
 
-    const maelys_datalog_predicate_def_t *def =
+    const maelys_datalog_predicate_entry_t *def =
         maelys_datalog_predicate_registry_get(&ruleset->registry, literal->atom.predicate_id);
     if (!def) return 1;
 
@@ -2429,7 +2429,7 @@ static int solve_once_derive_ordered(const maelys_datalog_ruleset_t *ruleset,
         return 0;
     }
 
-    const maelys_datalog_predicate_def_t *def =
+    const maelys_datalog_predicate_entry_t *def =
         maelys_datalog_predicate_registry_get(&ruleset->registry, literal->atom.predicate_id);
     if (!def) return 1;
 
@@ -3582,7 +3582,7 @@ maelys_result_t maelys_datalog_solve_result_enumerate_predicate_facts(
     if (!maelys_datalog_predicate_registry_find(&result->ruleset->registry, predicate, arity, &pid)) {
         return MAELYS_ERR_INVALID_FIELD;
     }
-    const maelys_datalog_predicate_def_t *def =
+    const maelys_datalog_predicate_entry_t *def =
         maelys_datalog_predicate_registry_get(&result->ruleset->registry, pid);
     if (!def || !(def->kind_flags & MAELYS_DATALOG_PRED_KIND_QUERY)) return MAELYS_ERR_INVALID_FIELD;
 
@@ -4470,7 +4470,7 @@ static why_false_candidate_t *why_false_collect_candidates(
         *out_count = end - first;
         return context->shared_candidates + first;
     }
-    const maelys_datalog_predicate_def_t *def =
+    const maelys_datalog_predicate_entry_t *def =
         maelys_datalog_predicate_registry_get(
             &context->result->ruleset->registry, literal->atom.predicate_id);
     if (!def) return NULL;
@@ -4787,7 +4787,7 @@ static int why_false_explore_body(
     why_false_fill_pattern(
         literal, &branch->bindings, &diagnostic.obstacle.pattern);
 
-    const maelys_datalog_predicate_def_t *def =
+    const maelys_datalog_predicate_entry_t *def =
         maelys_datalog_predicate_registry_get(
             &context->result->ruleset->registry, literal->atom.predicate_id);
     if (def && (def->kind_flags & MAELYS_DATALOG_PRED_KIND_IDB) != 0u &&
@@ -4872,7 +4872,7 @@ static maelys_result_t explain_absent_solved_fact(
             &result->ruleset->registry, queried_fact)) {
         return MAELYS_ERR_INVALID_FIELD;
     }
-    const maelys_datalog_predicate_def_t *def =
+    const maelys_datalog_predicate_entry_t *def =
         maelys_datalog_predicate_registry_get(
             &result->ruleset->registry, queried_fact->predicate_id);
     if (!def) return MAELYS_ERR_INVALID_FIELD;

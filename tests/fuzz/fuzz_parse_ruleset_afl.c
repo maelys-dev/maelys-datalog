@@ -51,7 +51,7 @@ static const char *const FUZZ_ATOMS[] = {
     NULL
 };
 
-static const maelys_datalog_predicate_def_t FUZZ_PREDS[] = {
+static const maelys_datalog_public_predicate_t FUZZ_PREDS[] = {
     {"user", 1, MAELYS_DATALOG_PRED_KIND_EDB},
     {"owns", 2, MAELYS_DATALOG_PRED_KIND_EDB},
     {"safe", 1, MAELYS_DATALOG_PRED_KIND_EDB},
@@ -101,7 +101,7 @@ int main(int argc, char **argv) {
             if (maelys_datalog_predicate_registry_add_domain(&ruleset.registry,
                                                              FUZZ_PREDS[i].name,
                                                              FUZZ_PREDS[i].arity,
-                                                             FUZZ_PREDS[i].kind_flags) != MAELYS_OK) {
+                                                             FUZZ_PREDS[i].flags) != MAELYS_OK) {
                 setup_ok = 0;
             }
         }

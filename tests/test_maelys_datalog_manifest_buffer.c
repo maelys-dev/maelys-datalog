@@ -15,18 +15,18 @@ static const char k_policy_src[] =
     "allow(X) :- safe(X).\n";
 static const char k_whitelist_domain[] = "whitelist_test";
 static const char k_whitelist_policy_id[] = "whitelist_policy";
-static const maelys_datalog_predicate_def_t k_whitelist_domain_table[] = {
-    {.name = "safe", .arity = 1, .kind_flags = MAELYS_DATALOG_PRED_KIND_EDB},
+static const maelys_datalog_public_predicate_t k_whitelist_domain_table[] = {
+    {.name = "safe", .arity = 1, .flags = MAELYS_DATALOG_PRED_KIND_EDB},
     {.name = "allow",
      .arity = 1,
-     .kind_flags = MAELYS_DATALOG_PRED_KIND_IDB | MAELYS_DATALOG_PRED_KIND_QUERY},
+     .flags = MAELYS_DATALOG_PRED_KIND_IDB | MAELYS_DATALOG_PRED_KIND_QUERY},
     {.name = "deny",
      .arity = 1,
-     .kind_flags = MAELYS_DATALOG_PRED_KIND_IDB | MAELYS_DATALOG_PRED_KIND_QUERY},
+     .flags = MAELYS_DATALOG_PRED_KIND_IDB | MAELYS_DATALOG_PRED_KIND_QUERY},
     {.name = "debug_trace",
      .arity = 1,
-     .kind_flags = MAELYS_DATALOG_PRED_KIND_IDB | MAELYS_DATALOG_PRED_KIND_QUERY},
-    {.name = "helper", .arity = 1, .kind_flags = MAELYS_DATALOG_PRED_KIND_IDB},
+     .flags = MAELYS_DATALOG_PRED_KIND_IDB | MAELYS_DATALOG_PRED_KIND_QUERY},
+    {.name = "helper", .arity = 1, .flags = MAELYS_DATALOG_PRED_KIND_IDB},
 };
 
 static void sha_bytes(const char *src, size_t len, char out[65]) {

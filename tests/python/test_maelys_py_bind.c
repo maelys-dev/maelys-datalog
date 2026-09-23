@@ -8,7 +8,7 @@
 #include "src/core/maelys_datalog_domain_registry.h"
 #include "tests/helpers/test_framework.h"
 
-static const maelys_py_predicate_def_t k_predicates[] = {
+static const maelys_datalog_public_predicate_t k_predicates[] = {
     {"edge", 2u, MAELYS_DATALOG_PRED_KIND_EDB},
     {"path", 2u, MAELYS_DATALOG_PRED_KIND_IDB | MAELYS_DATALOG_PRED_KIND_QUERY},
     {"reach", 2u, MAELYS_DATALOG_PRED_KIND_IDB | MAELYS_DATALOG_PRED_KIND_QUERY},
@@ -466,7 +466,7 @@ static int test_maelys_py_bind_noninspectable_domain_fails_closed(void) {
     int call_rc = (int)maelys_datalog_domain_registry_register(&callback_domain);
     TEST_ASSERT_EQUAL((int)MAELYS_OK, call_rc, "%d");
 
-    maelys_py_predicate_def_t predicates[1];
+    maelys_datalog_public_predicate_t predicates[1];
     size_t count = 123u;
     int found = 0;
     int inspectable = 1;
@@ -487,9 +487,39 @@ static int test_maelys_py_bind_noninspectable_domain_fails_closed(void) {
     TEST_END();
 }
 
+static int test_maelys_py_bind_copies_common_declarations(void) {
+    TEST_BEGIN();
+    char name[] = "owned_predicate";
+    char domain[] = "py_owned_declaration";
+    maelys_datalog_public_predicate_t declaration = {
+        name, 2u, MAELYS_DATALOG_PREDICATE_EDB};
+    TEST_ASSERT_EQUAL((int)MAELYS_OK,
+        maelys_py_register_domain(domain, &declaration, 1u), "%d");
+    memset(name, 'x', sizeof(name) - 1u);
+    memset(domain, 'x', sizeof(domain) - 1u);
+    declaration.arity = 0u; declaration.flags = 0u;
+    maelys_datalog_public_predicate_t view = {0};
+    size_t count = 0; int found = 0, inspectable = 0;
+    TEST_ASSERT_EQUAL((int)MAELYS_OK,
+        maelys_py_find_domain("py_owned_declaration", &view, 1u,
+                             &count, &found, &inspectable), "%d");
+    TEST_ASSERT_TRUE(found && inspectable && count == 1u);
+    if (!view.name) return 1;
+    TEST_ASSERT_EQUAL_STRING("owned_predicate", view.name);
+    TEST_ASSERT_EQUAL((size_t)2u, view.arity, "%zu");
+    TEST_ASSERT_EQUAL((unsigned)MAELYS_DATALOG_PREDICATE_EDB, view.flags, "%u");
+    /* The same copied public view is also a valid stable input declaration. */
+    const maelys_datalog_public_domain_t stable = {
+        "py_shared_declaration", &view, 1u, NULL, 0u};
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK, maelys_datalog_domain_register(&stable), "%d");
+    TEST_END();
+}
+
 int main(int argc, char **argv) {
     tests_init_logging();
     const test_case_t cases[] = {
+        {"maelys_py_bind/copies_common_declarations",
+         TEST_MODE_NON_BLOCKING, test_maelys_py_bind_copies_common_declarations},
         {"maelys_py_bind/reuses_domain_slot_1000_times",
          TEST_MODE_NON_BLOCKING,
          test_maelys_py_bind_reuses_domain_slot_1000_times},

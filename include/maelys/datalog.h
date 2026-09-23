@@ -137,6 +137,11 @@ typedef struct {
     char hint[256];
 } maelys_datalog_public_diagnostic_t;
 
+/* Common predicate declaration for stable and low-level domain registration.
+ * Registration copies name synchronously into bounded storage (63 bytes plus
+ * NUL); the pointer does not require allocation or a lasting caller buffer.
+ * Program accessors also use this shape for read-only borrowed views: their
+ * returned names live with the program, as specified in datalog_program.h. */
 typedef struct {
     const char *name;
     size_t arity;

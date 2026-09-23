@@ -13,7 +13,7 @@ static maelys_result_t make_ruleset(maelys_datalog_ruleset_t *ruleset,
     maelys_result_t rc = maelys_datalog_ruleset_init(
         ruleset, "filters.test", "filters", MAELYS_DATALOG_SHA256_UNSET, 1);
     if (rc != MAELYS_OK) return rc;
-    static const maelys_datalog_predicate_def_t defs[] = {
+    static const maelys_datalog_public_predicate_t defs[] = {
         {"ref", 1u, MAELYS_DATALOG_PRED_KIND_EDB},
         {"ref2", 1u, MAELYS_DATALOG_PRED_KIND_EDB},
         {"start", 1u, MAELYS_DATALOG_PRED_KIND_IDB | MAELYS_DATALOG_PRED_KIND_QUERY},
@@ -22,7 +22,7 @@ static maelys_result_t make_ruleset(maelys_datalog_ruleset_t *ruleset,
     };
     for (size_t i = 0u; i < sizeof(defs) / sizeof(defs[0]); i++) {
         rc = maelys_datalog_predicate_registry_add_domain(
-            &ruleset->registry, defs[i].name, defs[i].arity, defs[i].kind_flags);
+            &ruleset->registry, defs[i].name, defs[i].arity, defs[i].flags);
         if (rc != MAELYS_OK) return rc;
     }
     if (homonym) {

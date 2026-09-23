@@ -227,7 +227,7 @@ static inline maelys_result_t validate_fact(maelys_datalog_edb_t *edb,
     if (!maelys_datalog_predicate_registry_find(edb->registry, predicate, arity, &pid)) {
         return MAELYS_ERR_INVALID_FIELD;
     }
-    const maelys_datalog_predicate_def_t *def =
+    const maelys_datalog_predicate_entry_t *def =
         maelys_datalog_predicate_registry_get(edb->registry, pid);
     if (!def) return MAELYS_ERR_INVALID_FIELD;
     if (def->kind_flags & MAELYS_DATALOG_PRED_KIND_POLICY_FACT) {
@@ -347,7 +347,7 @@ static maelys_result_t validate_edb_symbol_target(maelys_datalog_edb_t *edb,
     if (!maelys_datalog_predicate_registry_find(edb->registry, predicate, arity, &pid)) {
         return MAELYS_ERR_INVALID_FIELD;
     }
-    const maelys_datalog_predicate_def_t *def =
+    const maelys_datalog_predicate_entry_t *def =
         maelys_datalog_predicate_registry_get(edb->registry, pid);
     if (!def) return MAELYS_ERR_INVALID_FIELD;
     if (def->kind_flags & MAELYS_DATALOG_PRED_KIND_POLICY_FACT) return MAELYS_ERR_FORBIDDEN;
@@ -366,7 +366,7 @@ static maelys_result_t validate_edb_symbol_batch_target(maelys_datalog_edb_t *ed
     if (!maelys_datalog_predicate_registry_find(edb->registry, predicate, arity, &pid)) {
         return MAELYS_ERR_INVALID_FIELD;
     }
-    const maelys_datalog_predicate_def_t *def =
+    const maelys_datalog_predicate_entry_t *def =
         maelys_datalog_predicate_registry_get(edb->registry, pid);
     if (!def) return MAELYS_ERR_INVALID_FIELD;
     if (def->kind_flags & MAELYS_DATALOG_PRED_KIND_POLICY_FACT) return MAELYS_ERR_FORBIDDEN;

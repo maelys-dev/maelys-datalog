@@ -11,17 +11,17 @@
 static const char k_inline_domain[] = "inline_test";
 static const char k_policy_id[] = "inline-policy";
 static const char k_policy_src[] = "allow(X) :- safe(X).\n";
-static const maelys_datalog_predicate_def_t k_static_domain_table_a[] = {
-    {.name = "safe", .arity = 1, .kind_flags = MAELYS_DATALOG_PRED_KIND_EDB},
+static const maelys_datalog_public_predicate_t k_static_domain_table_a[] = {
+    {.name = "safe", .arity = 1, .flags = MAELYS_DATALOG_PRED_KIND_EDB},
     {.name = "allow",
      .arity = 1,
-     .kind_flags = MAELYS_DATALOG_PRED_KIND_IDB | MAELYS_DATALOG_PRED_KIND_QUERY},
+     .flags = MAELYS_DATALOG_PRED_KIND_IDB | MAELYS_DATALOG_PRED_KIND_QUERY},
 };
-static const maelys_datalog_predicate_def_t k_static_domain_table_b[] = {
-    {.name = "blocked", .arity = 1, .kind_flags = MAELYS_DATALOG_PRED_KIND_EDB},
+static const maelys_datalog_public_predicate_t k_static_domain_table_b[] = {
+    {.name = "blocked", .arity = 1, .flags = MAELYS_DATALOG_PRED_KIND_EDB},
     {.name = "deny",
      .arity = 1,
-     .kind_flags = MAELYS_DATALOG_PRED_KIND_IDB | MAELYS_DATALOG_PRED_KIND_QUERY},
+     .flags = MAELYS_DATALOG_PRED_KIND_IDB | MAELYS_DATALOG_PRED_KIND_QUERY},
 };
 
 static maelys_result_t install_inline_test_predicates(maelys_datalog_predicate_registry_t *reg) {
