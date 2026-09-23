@@ -38,10 +38,11 @@ def instructions(path):
 def functions(path, exclude_insertion=True):
     costs = {}
     for line in path.read_text().splitlines():
-        match = re.match(r"^\s*([\d,]+)\s+\([\d. ]+%\)\s+(\S+):(\S+)", line)
+        match = re.match(r"^\s*([\d,]+|\.)\s+(?:\([\d. ]+%\)\s+)?(\S+):(.+?)(?:\s+\[.*\])?\s*$", line)
         if match:
             name = re.sub(r"'\d+$", "", match[3])
-            costs[name] = costs.get(name, 0) + int(match[1].replace(",", ""))
+            # Zero costs omit the percentage; a dot means no event on that line.
+            costs[name] = costs.get(name, 0) + (0 if match[1] == "." else int(match[1].replace(",", "")))
     if not costs:
         raise ValueError(f"missing function costs: {path}")
     for name in ("maelys_datalog_edb_add_fact", "maelys_datalog_edb_add_runtime_symbol_fact"):

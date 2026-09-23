@@ -51,7 +51,10 @@ class SessionDiagnosticsTest(unittest.TestCase):
                         with path.open("w", newline="") as f:
                             w = csv.DictWriter(f, data); w.writeheader(); w.writerow(data)
                 else:
-                    kwargs["stdout"].write("10,000 (100.0%) src/edb.c:maelys_datalog_edb_add_fact [binary]\n")
+                    event = next(c.split("=", 1)[1] for c in command if c.startswith("--show="))
+                    cost = {"Ir":10000, "Dw":100, "I1mr":1, "ILmr":0, "Bcm":3, "Bim":1}[event]
+                    kwargs["stdout"].write(f"{cost} " + ("(100.0%) " if cost else "") +
+                                           "src/edb.c:maelys_datalog_edb_add_fact [binary]\n")
             output = io.StringIO()
             with patch("diagnose_sessions.subprocess.check_output", return_value="synthetic valgrind\n"), patch("diagnose_sessions.subprocess.run", side_effect=fake_run), contextlib.redirect_stdout(output):
                 run(root, root, controls=(("SMALL", ("inert", "sorted", "integer", "31")),))
@@ -63,6 +66,7 @@ class SessionDiagnosticsTest(unittest.TestCase):
                 self.assertIn(f"| {event} |", output.getvalue())
             self.assertIn("2 distinct cases selected", output.getvalue())
             self.assertIn("| no |", output.getvalue())
+            self.assertIn("| ILmr | 1 | 1 | 1 | 1 |", output.getvalue())
             prefix = root / "session-counts/001-SMALL-A-1"
             path = prefix.with_suffix(".csv")
             path.write_text(path.read_text().replace("0123456789abcdef", "ffffffffffffffff"))

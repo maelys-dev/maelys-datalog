@@ -191,6 +191,13 @@ def run(root, workspace, controls=()):
         for name in sorted(a.keys() | b.keys()):
             if a.get(name, 0) != b.get(name, 0):
                 print(f"| {name} | {a.get(name, 0)} | {b.get(name, 0)} | {b.get(name, 0)-a.get(name, 0):+d} |")
+        print("\nSimulated events not attributed to listed functions (summary minus exclusive rows); "
+              "retain these instead of assigning them to a function:\n")
+        print("| Event | A run 1 | A run 2 | B run 1 | B run 2 |\n| --- | ---: | ---: | ---: | ---: |")
+        for event in ("I1mr", "ILmr", "Bcm", "Bim"):
+            remainder = [cache_counts[role, repeat][event] - sum(simulated[event, role, repeat].values())
+                         for role in ("A", "B") for repeat in (1, 2)]
+            print("| " + event + " | " + " | ".join(map(str, remainder)) + " |")
         print("\n| Changed function, simulated event | Event | A | B | B−A | Repeats identical |\n"
               "| --- | --- | ---: | ---: | ---: | --- |")
         for event in ("I1mr", "ILmr", "Bcm", "Bim"):
