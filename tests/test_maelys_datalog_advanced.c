@@ -271,7 +271,7 @@ static int capacity_rejections(void) {
 
     size_t outputs=global/per_pred+1;
     maelys_datalog_predicate_t *preds=calloc(outputs+1,sizeof(*preds));
-    char (*names)[16]=calloc(outputs,sizeof(*names));char *rules=calloc(outputs,48);
+    char (*names)[32]=calloc(outputs,sizeof(*names));char *rules=calloc(outputs,48);
     CHECK(preds && names && rules);
     preds[0]=(maelys_datalog_predicate_t){"seed",1,MAELYS_DATALOG_PREDICATE_EDB};
     size_t used=0;
