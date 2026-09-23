@@ -218,7 +218,7 @@ per-group allocation or persistent aggregate cache. Existing explanation
 premise size is statically preserved. CFFI and JavaScript allocations are not
 covered by the engine's zero-allocation claim.
 
-Both Python APIs and the Node/Wasm playground exercise group counts, zero,
+The Python binding and the Node/Wasm playground exercise group counts, zero,
 explanations and (where sessions are exposed) snapshot reuse. Existing pipeline
 goldens continue to constrain identities and non-aggregate explanation bytes.
 These functional/allocation checks establish no speed improvement; apply the
@@ -227,7 +227,7 @@ manual comparison protocol above to changes in ordinary solve paths.
 ## Installed facade and SDK
 
 ```sh
-cmake -S . -B build/cmake -DMAELYS_DATALOG_BUILD_PYTHON_BINDING=ON
+cmake -S . -B build/cmake
 cmake --build build/cmake --parallel 3
 ctest --test-dir build/cmake --output-on-failure
 bash tools/check_module_sdk.sh "$PWD/build/cmake"
@@ -266,8 +266,8 @@ working table cannot pass that lookup (exit 9).
 | `test_maelys_datalog_pipeline` | Existing fingerprint/proof goldens and identical result symbol IDs under input permutation. |
 | C11 cases in `test_maelys_datalog_input_edb_alloc` | Unit/batch arity 0–4, integer ranks, copied strings, typed/explicit booleans, exactly-once arguments, multi-digit fact/term range diagnostics, and byte-identical late range/type/text/fact-capacity rejection with the allocator disabled. |
 | `make check-c11-fact-builders` / CTest `c11_fact_builder_compilation` | Strict C11 unit/batch/query consumers; float, double, pointer, struct and five-term compilation failures for each macro. The Make gate additionally checks C++17 symbol/predicate initializers and absence of C11-only macros; CMake keeps its C-only compiler requirement. |
-| `bindings/python-next/tests` | Public-header-only CFFI, native atomic input, limits/diagnostics, manifest/domain isolation, prepared sessions, explicit reset, one-result lease, filters and Why-true/Why-false truncation. Parity is mandatory with `MAELYS_DATALOG_REQUIRE_PARITY=1`; otherwise it may skip when the legacy extension is absent. |
-| `bindings/python-next/tests/test_prepared_explanations.py` | Default calls prepare once in CFFI-owned storage and release in finally. Opt-in sessions use two direct-text calls without allocating a CFFI arena per explanation; alternating kinds preserve default output. Mask validation, unreserved-kind rejection, output allocation/write/UTF-8 decoding failures, result close and session reuse are exercised. Python/CFFI still allocate. |
+| `tests/python` | Public-header-only CFFI, native atomic input, limits/diagnostics, manifest/domain isolation, prepared sessions, explicit reset, one-result lease, filters and Why-true/Why-false truncation. Compiled outside the checkout against an installed SDK. Expected facts/text and V1 migration contracts replace cross-binding parity; no missing-extension skip. |
+| `tests/python/test_prepared_explanations.py` | Default calls prepare once in CFFI-owned storage and release in finally. Opt-in sessions use two direct-text calls without allocating a CFFI arena per explanation; alternating kinds preserve default output. Mask validation, unreserved-kind rejection, output allocation/write/UTF-8 decoding failures, result close and session reuse are exercised. Python/CFFI still allocate. |
 | `test_maelys_datalog_session_explanations` | All engine units use allocator hooks. Owned/borrowed session workspaces, one extra allocation at initialization, constructor failures, overlapping live ranges, mask replacement, default behavior and custom-descriptor rejection. Forty alternating TRUE/FALSE measure/query/short-write/retry cycles per mode make no allocator calls and prepare once per query. The runtime is included only in this test to instrument the canonical backend's callback, not to allow a copied backend to claim its bound. Value/kind/predicate/result-generation cache keys, failure recovery and explicit versus internal result leases are checked. |
 | `test_maelys_datalog_prepared_explanations` | All engine units use allocator hooks; Why-true/Why-false prepared, one-shot and session-cached paths run with allocation disabled and preserve identical text, including both truncated kinds. One-shot short storage preserves the required-length output; short text reports its length, retry rebuilds, and write failures release the lease. Per-kind reference bounds dominate exact sizes; copied descriptors are refused. Repeated prepared writes call no preparation callback; result leases, alignment, storage reuse, unknown symbols, invalid callbacks and ABI 2 rejection are checked. |
 | `test_maelys_datalog_why_false` | Every successful legacy fixture is compared byte-for-byte with the caller-owned workspace path, including recursion, reordered symbol vocabularies, filters and truncation budgets. |
@@ -287,14 +287,14 @@ one separate guarded object set. macOS runs ASan/UBSan with LSAN disabled; Linux
 runs LSAN. Custom callbacks/backends, Python/CFFI and libc internals are not
 covered by the reference-engine no-allocation assertion.
 
-Python-next's executable build/test commands and lifecycle examples are in its
-[README](../bindings/python-next/README.md); run both SMALL and LARGE builds.
+The single Python binding’s build/test commands, migration table and lifecycle
+examples are in its [README](../bindings/python/README.md); test SMALL and LARGE.
 
 The WASM C boundary and JavaScript wrapper live together in
 [`bindings/wasm/`](../bindings/wasm/README.md). Tests import the wrapper from
 there; generated modules remain under `build/wasm` and `build/wasm-large`.
 
-After each profile's CMake shim build, rebuild cffi and run a fresh Python process:
+After each profile’s CMake build, run the isolated installed-SDK Python gate:
 
 ```sh
 python3 -m venv build/validation-venv
@@ -303,15 +303,14 @@ bash tools/check_python_binding.sh "$PWD/build/cmake" build/validation-venv/bin/
 bash tools/check_python_binding.sh "$PWD/build/cmake-large" build/validation-venv/bin/python large
 ```
 
-The shim copies its two native libraries next to the Python package. Do not
-rely on an up-to-date CMake build to copy them again: `POST_BUILD` will not run.
-The check script explicitly selects the libraries from the requested build and
-sets `MAELYS_DATALOG_EXPECT_PROFILE`: the test checks the loaded limits.
-Libraries are copied to fresh files and renamed into place; overwriting an
-already loaded Mach-O inode can trigger macOS code-signature page-cache kills
-when changing profiles, even if `codesign --verify` reports valid files on disk.
-CTest's C shim test is complementary,
-not a replacement for pytest.
+The gate installs a fresh SDK, copies binding/tests outside the checkout, clears
+ambient C include/library search paths and compiles CFFI using only that prefix.
+Only `libmaelys_datalog_shared` is copied next to the extension; the native-object
+shim is removed. Each profile starts fresh Python processes and checks loaded
+limits through `MAELYS_DATALOG_EXPECT_PROFILE`. New inodes avoid stale Mach-O
+signature pages when switching builds. Ground-query origins, exact Why-true
+text, truncation, raw-term ownership, domain conflict/reuse, and intentional V1
+API/lifecycle changes are covered alongside the former Python-next suite.
 
 ```sh
 for profile in small large; do

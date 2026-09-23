@@ -2,7 +2,7 @@
 from dataclasses import FrozenInstanceError
 import unittest
 
-from maelys_datalog_next import (
+from maelys_datalog import (
     Engine, Predicate, PRED_EDB, PRED_IDB, PRED_QUERY, PRED_POLICY_FACT,
     MaelysDatalogError,
 )

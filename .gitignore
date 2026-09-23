@@ -16,11 +16,6 @@ bindings/python/maelys_datalog/_maelys_cffi*.so
 bindings/python/maelys_datalog/_maelys_cffi*.dylib
 bindings/python/maelys_datalog/libmaelys_*.so
 bindings/python/maelys_datalog/libmaelys_*.dylib
-bindings/python-next/build/
-bindings/python-next/maelys_datalog_next/_maelys_cffi*.so
-bindings/python-next/maelys_datalog_next/_maelys_cffi*.dylib
-bindings/python-next/maelys_datalog_next/libmaelys_datalog_shared*.so
-bindings/python-next/maelys_datalog_next/libmaelys_datalog_shared*.dylib
 
 # Local configuration and secrets
 .env

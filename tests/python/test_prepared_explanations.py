@@ -3,8 +3,8 @@
 import unittest
 from unittest.mock import patch
 
-from maelys_datalog_next import Engine, ExplanationKind, MaelysDatalogError, Predicate, PRED_EDB, PRED_IDB, PRED_QUERY
-from maelys_datalog_next import engine as binding
+from maelys_datalog import Engine, ExplanationKind, MaelysDatalogError, Predicate, PRED_EDB, PRED_IDB, PRED_QUERY
+from maelys_datalog import engine as binding
 
 
 PREFIX = "maelys_datalog_"

@@ -60,7 +60,7 @@ jobs:
 
       - name: Verify CMake build
         run: |
-          cmake -S . -B build/cmake -DMAELYS_DATALOG_BUILD_PYTHON_BINDING=ON
+          cmake -S . -B build/cmake
           cmake --build build/cmake --parallel 4
           ctest --test-dir build/cmake --output-on-failure
 
@@ -72,36 +72,18 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Test actual Python wrapper
+      - name: Test unified Python against installed SMALL SDK
         run: |
           python -m pip install cffi setuptools pytest
           bash tools/check_python_binding.sh "$PWD/build/cmake" python small
 
-      - name: Test Python-next SMALL including legacy parity
-        env:
-          MAELYS_DATALOG_EXPECT_PROFILE: small
-          MAELYS_DATALOG_REQUIRE_PARITY: '1'
-          PYTHONPATH: bindings/python-next
-        run: |
-          python bindings/python-next/build_cffi.py --build-dir "$PWD/build/cmake"
-          python -m unittest discover -s bindings/python-next/tests -v
-
       - name: Verify LARGE installed SDK and Python wrapper
         run: |
-          cmake -S . -B build/cmake-large -DMAELYS_DATALOG_PROFILE_LARGE=ON -DMAELYS_DATALOG_BUILD_PYTHON_BINDING=ON
+          cmake -S . -B build/cmake-large -DMAELYS_DATALOG_PROFILE_LARGE=ON
           cmake --build build/cmake-large --parallel 4
           ctest --test-dir build/cmake-large --output-on-failure
           bash tools/check_module_sdk.sh "$PWD/build/cmake-large"
           bash tools/check_python_binding.sh "$PWD/build/cmake-large" python large
-
-      - name: Test Python-next LARGE including legacy parity
-        env:
-          MAELYS_DATALOG_EXPECT_PROFILE: large
-          MAELYS_DATALOG_REQUIRE_PARITY: '1'
-          PYTHONPATH: bindings/python-next
-        run: |
-          python bindings/python-next/build_cffi.py --build-dir "$PWD/build/cmake-large"
-          python -m unittest discover -s bindings/python-next/tests -v
 
   # The socle's sanitizers job covers SMALL on Linux; the three other cells
   # (LARGE on Linux, both profiles on macOS) keep the coverage of the
