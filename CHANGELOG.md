@@ -23,6 +23,12 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ### Changed
 
+- Reused sessions reset live metadata and the required pointer/index scratch
+  instead of clearing their whole fact and symbol-pointer capacity on every
+  successful materialization. Each inserted fact is fully initialized before
+  publication; rejected transactions retain complete cleanup. Storage bounds,
+  canonical results, allocation guarantees and ABI layouts are unchanged.
+
 - **0.10.0 migration:** the common diagnostic has an explicit size/version
   initialization protocol, separate status and precise code, independent detail
   sections and owned bounded text. Consumer API 2, frontend/program ABI 2 and

@@ -297,7 +297,11 @@ int main(void) {
         assert(maelys_datalog_input_edb_add_fact(edb, "unknown", &alpha, 1u, NULL) == 0);
         assert(maelys_datalog_session_solve_edb(session, edb, &result, &diag) != 0 && !result);
         assert(maelys_datalog_input_edb_clear(edb) == 0);
+        size_t reset_before = memset_bytes;
         assert(maelys_datalog_session_solve_edb(session, edb, &result, &diag) == 0);
+        /* Empty success resets bounded metadata/index, not whole fact/symbol
+         * payloads. This source-level byte budget includes the full solve. */
+        assert(memset_bytes - reset_before < 32768u);
         size_t derived = SIZE_MAX;
         assert(maelys_datalog_result_derived_fact_count(result, &derived) == 0 && derived == 0u);
         release_bounded(result);

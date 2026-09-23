@@ -1122,8 +1122,72 @@ static int test_result_symbol_text_read_only(void) {
     TEST_END();
 }
 
+static int test_reuse_ignores_inactive_payload(void) {
+    TEST_BEGIN();
+    static maelys_datalog_internal_ruleset_t source, oracle;
+    static maelys_datalog_internal_fact_t oracle_pool[MAELYS_DATALOG_MAX_EDB_FACTS];
+    static maelys_datalog_fact_t facts[MAELYS_DATALOG_MAX_EDB_FACTS];
+    TEST_ASSERT_EQUAL(MAELYS_OK, make_ruleset(&source), "%d");
+    maelys_datalog_internal_prepared_session_t *session = NULL;
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_prepared_session_create(&source, &session), "%d");
+    /* Inactive payload is not required to be zero. Catch reads of old facts,
+     * pointers or index slots before their current-transaction initialization. */
+    memset(session->fact_pool, 0xa5, sizeof(session->fact_pool));
+    memset(session->symbol_inputs, 0x5a, sizeof(session->symbol_inputs));
+    for (size_t pass = 0; pass < 4; ++pass) {
+        size_t count = 0, symbol_count = 0;
+        if (pass == 0) {
+            maelys_datalog_fact_t pattern[4]; authorization_facts(pattern, 0);
+            count = MAELYS_DATALOG_MAX_EDB_FACTS;
+            for (size_t i = 0; i < count; ++i) facts[i] = pattern[i % 4u];
+        } else if (pass == 1) {
+            /* Cross the 32/33 index boundary after a long symbol-pointer sort. */
+            count = 34;
+            for (size_t i = 0; i < count; ++i) {
+                facts[i] = (maelys_datalog_fact_t){.predicate = "member", .arity = 2};
+                facts[i].terms[0] = (maelys_datalog_value_t){.kind = MAELYS_DATALOG_VALUE_INTEGER, .as.integer = (int64_t)(33u-i)};
+                facts[i].terms[1] = (maelys_datalog_value_t){.kind = MAELYS_DATALOG_VALUE_INTEGER, .as.integer = 7};
+            }
+            facts[33].predicate = "admin"; facts[33].arity = 1;
+            facts[33].terms[0].as.integer = 7;
+        } else if (pass == 2) {
+            authorization_facts(facts, 1); count = 4;
+        }
+        for (size_t i = 0; i < count; ++i)
+            for (size_t j = 0; j < facts[i].arity; ++j)
+                symbol_count += facts[i].terms[j].kind == MAELYS_DATALOG_VALUE_SYMBOL;
+        maelys_datalog_internal_solve_result_t *actual = NULL, *expected = NULL;
+        TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_prepared_session_solve(session, facts, count, &actual), "%d");
+        TEST_ASSERT_EQUAL(MAELYS_OK, solve_fresh_canonical(&source, facts, count, &oracle, oracle_pool, &expected), "%d");
+        TEST_ASSERT_TRUE(results_byte_identical(actual, expected));
+        /* The tail beyond the index must no longer retain caller pointers,
+         * including when a duplicate-heavy batch fills the pointer scratch. */
+        for (size_t i = sizeof(session->fact_index); i < symbol_count * sizeof(session->symbol_inputs[0]); ++i)
+            TEST_ASSERT_EQUAL(0, ((unsigned char *)session->symbol_inputs)[i], "%d");
+        maelys_datalog_solve_result_free(actual);
+        maelys_datalog_solve_result_free(expected);
+    }
+    facts[0] = binary_fact("member", "alice", "team");
+    facts[1] = unary_fact("unknown", "orphan");
+    maelys_datalog_internal_solve_result_t *result = NULL;
+    TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_FIELD, maelys_datalog_prepared_session_solve(session, facts, 2, &result), "%d");
+    TEST_ASSERT_NULL(result);
+    TEST_ASSERT_EQUAL(0, session->edb.fact_count, "%zu");
+    TEST_ASSERT_EQUAL(0, memcmp(&session->prepared.symbols, &session->working.symbols, sizeof(session->working.symbols)), "%d");
+    for (size_t i = 0; i < sizeof(session->fact_pool); ++i)
+        TEST_ASSERT_EQUAL(0, ((unsigned char *)session->fact_pool)[i], "%d");
+    for (size_t i = 0; i < sizeof(session->symbol_inputs); ++i)
+        TEST_ASSERT_EQUAL(0, ((unsigned char *)session->symbol_inputs)[i], "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_prepared_session_solve(session, NULL, 0, &result), "%d");
+    maelys_datalog_solve_result_free(result);
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_prepared_session_destroy(session), "%d");
+    TEST_END();
+}
+
 int main(int argc, char **argv) {
     test_case_t cases[] = {
+        {"prepared_session/reuse_ignores_inactive_payload",
+         TEST_MODE_NON_BLOCKING, test_reuse_ignores_inactive_payload},
         {"prepared_session/order_independent_results_and_why_true",
          TEST_MODE_NON_BLOCKING, test_order_independent_results_and_why_true},
         {"prepared_session/matches_fresh_full_solve_oracle",

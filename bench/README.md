@@ -116,7 +116,8 @@ from the generated `diagnostic.md` report.
 The optional `session_diagnostics` workflow input adds a separate count-mode
 build of the session harness, using the same engine objects, before any timing.
 After the complete matrix, `diagnose_sessions.py` lists every slower session row
-by amplitude, preserving its A/A floor. It counts only distinct cases with a
+by amplitude, preserving its A/A floor. It counts the predeclared controls in
+`CONTROLS` regardless of their new timing verdict, plus distinct cases with a
 slower metric above the named 9.94% reference from the earlier solver control.
 This prioritizes diagnostics; it does not erase smaller effects or calibrate
 sessions from a different workload. Each selected case has 50 warmups followed
@@ -125,6 +126,14 @@ stay outside collection. The unchanged oracle digest must match the timed run.
 The separate mode changes layout and prior case history and produces no timings.
 `sessions-diagnostic.md` and `session-counts/` retain the complete selection,
 profiles, exclusive function differences, hashes and checked outputs as artifacts.
+Cache simulation reports instruction/data reads and writes and both cache levels;
+branch simulation reports conditional/indirect branches and mispredictions. The
+I1/LL instruction misses and branch mispredictions also have per-function reports.
+Both simulations remain active during warmup; their models do not measure actual
+CPU cache traffic, its branch predictor or cycles. Identical modeled events do
+not prove identical hardware cost. The declared LARGE/inert/duplicate/integer/
+maximum control retains the prior +30% median case even if its next timing falls
+below its floor.
 
 ### Input index crossover and memory
 

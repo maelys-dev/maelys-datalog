@@ -250,7 +250,7 @@ working table cannot pass that lookup (exit 9).
 | `test_maelys_datalog_predicate_builders` | All six origin/query flag mappings, static and dynamic initializers, single evaluation, query permissions, query-only rejection and policy-fact input rejection; C11/C++17 compilation is also covered by the fact-builder and installed-SDK gates. Python constructor tests exercise the same origins and retain subclass/immutability checks. |
 | `test_maelys_datalog_query_builders` | Query arities 0–4, typed API parity, integer bounds, Boolean/integer distinction, unchanged output on errors versus successful absence, single evaluation, borrowed symbol initializers. |
 | `test_maelys_datalog_input_edb_alloc` | Caller-owned alignment/size, copied and shared strings, byte-for-byte atomic rejection, fixed capacities and allocation-free append/clear. |
-| `test_maelys_datalog_hot_path_alloc` | All engine units use allocator hooks: repeated reference append/solve/query/release without allocator calls, constructor allocation failures, independent sessions and failure recovery. A source-level `memset` hook checks zero reset bytes on owned native release and at most 4,096 on reusable public release, on both profiles; this is not a hardware store counter or secure-erasure guarantee. Configured aggregate explanations are exercised with allocation disabled. |
+| `test_maelys_datalog_hot_path_alloc` | All engine units use allocator hooks: repeated reference append/solve/query/release without allocator calls, constructor allocation failures, independent sessions and failure recovery. A source-level `memset` hook checks zero reset bytes on owned native release and at most 4,096 on reusable public release, on both profiles; this is not a hardware store counter or secure-erasure guarantee. Configured aggregate explanations are exercised with allocation disabled. Empty successful public solves must request fewer than 32,768 memset bytes across the engine; rejected transactions retain their full cleanup. |
 | `test_maelys_datalog_pipeline` | Existing fingerprint/proof goldens and identical result symbol IDs under input permutation. |
 | C11 cases in `test_maelys_datalog_input_edb_alloc` | Unit/batch arity 0–4, integer ranks, copied strings, typed/explicit booleans, exactly-once arguments, multi-digit fact/term range diagnostics, and byte-identical late range/type/text/fact-capacity rejection with the allocator disabled. |
 | `make check-c11-fact-builders` / CTest `c11_fact_builder_compilation` | Strict C11 unit/batch/query consumers; float, double, pointer, struct and five-term compilation failures for each macro. The Make gate additionally checks C++17 symbol/predicate initializers and absence of C11-only macros; CMake keeps its C-only compiler requirement. |
@@ -366,3 +366,12 @@ bytes through both public solve entries, verifies that text tails remain intact,
 and checks that invalid versions cause no writes. The advanced SDK consumer
 provokes per-predicate and global IDB exhaustion through real solves, checks
 capacity/predicate sections together, then reuses each session successfully.
+
+Prepared-session reuse tests poison inactive fact/index/pointer payload, alternate
+full duplicate-heavy symbolic batches, indexed integer batches, tiny and empty
+inputs, and compare results/proofs byte-for-byte with the independent fresh EDB
+construction path. Borrowed-pointer cleanup covers the live scratch beyond the
+index. Late rejection restores empty facts/scratch and the exact prepared symbol
+table, and a subsequent solve succeeds. Normal success only resets metadata and
+the scratch span needed to drop pointers and initialize the index; inactive facts
+are retained until overwritten, with no secure-erasure guarantee or new storage.

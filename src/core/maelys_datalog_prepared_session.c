@@ -182,8 +182,8 @@ static maelys_result_t reset_transaction_state(
     maelys_datalog_internal_prepared_session_t *session) {
     if (!session) return MAELYS_ERR_INVALID_ARGUMENT;
     session->working.symbols = session->prepared.symbols;
-    memset(session->fact_pool, 0, sizeof(session->fact_pool));
-    memset(session->symbol_inputs, 0, sizeof(session->symbol_inputs));
+    /* Only fact_count entries are live. Insertion initializes each whole fact;
+     * collecting symbols writes every pointer before the sort reads it. */
     return maelys_datalog_edb_init(
         &session->edb,
         session->fact_pool,
@@ -195,6 +195,10 @@ static maelys_result_t reset_transaction_state(
 static maelys_result_t reject_transaction(
     maelys_datalog_internal_prepared_session_t *session,
     maelys_result_t rejection) {
+    /* Preserve the canonical rejected state, including partially collected
+     * borrowed pointers. Full payload clearing is confined to failure paths. */
+    memset(session->fact_pool, 0, sizeof(session->fact_pool));
+    memset(session->symbol_inputs, 0, sizeof(session->symbol_inputs));
     maelys_result_t reset = reset_transaction_state(session);
     return reset == MAELYS_OK ? rejection : reset;
 }
@@ -327,9 +331,14 @@ maelys_result_t maelys_datalog_prepared_session_materialize_inputs_diagnosed(
     rc = collect_input_symbols(session, facts, fact_count, &symbol_count, message, message_capacity);
     if (rc != MAELYS_OK) return reject_transaction(session, rc);
     rc = intern_input_symbols(session, symbol_count, facts, fact_count, message, message_capacity);
-    /* Drop borrowed pointers and initialize the overlapping insertion index. */
-    memset(session->symbol_inputs, 0, sizeof(session->symbol_inputs));
     if (rc != MAELYS_OK) return reject_transaction(session, rc);
+    /* Drop every borrowed pointer and initialize the whole overlapping index,
+     * even for integer-only batches following an indexed transaction. The
+     * unused pointer tail never needs clearing; neither phase reads it. */
+    size_t scratch_bytes = symbol_count * sizeof(session->symbol_inputs[0]);
+    if (scratch_bytes < sizeof(session->fact_index))
+        scratch_bytes = sizeof(session->fact_index);
+    memset(session->symbol_inputs, 0, scratch_bytes);
     for (size_t i = 0u; i < fact_count; i++) {
         rc = materialize_input_fact(session, &facts[i]);
         if (rc != MAELYS_OK) {
