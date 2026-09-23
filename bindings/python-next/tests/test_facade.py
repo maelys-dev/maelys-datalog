@@ -68,13 +68,21 @@ class FacadeTest(unittest.TestCase):
 
     def test_cffi_input_view_borrows_ordered_typed_entries(self):
         rules = self.policy()
-        edb = rules.edb()
+        edb = rules.edb(fact_capacity=4, text_capacity=7)
         self.addCleanup(edb.close)
         edb.add_facts([("seed", [1]), ("seed", [True]), ("seed", ["1"]), ("seed", [1])])
         facts = binding.ffi.new("const maelys_datalog_public_fact_t **")
         count = binding.ffi.new("size_t *")
         self.assertEqual(binding.lib.maelys_datalog_input_edb_view(edb._edb, facts, count), 0)
         self.assertEqual(count[0], 4)  # Raw entries, including the duplicate.
+        used, capacity = binding.ffi.new("size_t *"), binding.ffi.new("size_t *")
+        self.assertEqual(binding.lib.maelys_datalog_input_edb_text_usage(edb._edb, used, capacity), 0)
+        self.assertEqual((used[0], capacity[0]), (7, 7))  # seed + NUL, 1 + NUL.
+        self.assertEqual(binding.lib.maelys_datalog_input_edb_text_usage(binding.ffi.NULL, used, capacity), -1)
+        self.assertEqual((used[0], capacity[0]), (7, 7))
+        self.assertEqual(binding.lib.maelys_datalog_input_edb_text_usage(edb._edb, binding.ffi.NULL, capacity), -1)
+        self.assertEqual(binding.lib.maelys_datalog_input_edb_text_usage(edb._edb, used, binding.ffi.NULL), -1)
+        self.assertEqual((used[0], capacity[0]), (7, 7))
         self.assertEqual(binding.ffi.string(facts[0][0].predicate), b"seed")
         self.assertEqual([facts[0][i].terms[0].kind for i in range(4)], [2, 3, 1, 2])
         self.assertEqual(getattr(facts[0][0].terms[0], "as").integer, 1)
@@ -87,6 +95,8 @@ class FacadeTest(unittest.TestCase):
         edb.clear()  # Invalidates the old view: acquire again before reading.
         self.assertEqual(binding.lib.maelys_datalog_input_edb_view(edb._edb, facts, count), 0)
         self.assertEqual(count[0], 0)
+        self.assertEqual(binding.lib.maelys_datalog_input_edb_text_usage(edb._edb, used, capacity), 0)
+        self.assertEqual((used[0], capacity[0]), (0, 7))
 
     def test_explicit_input_storage_bounds_are_atomic_and_reusable(self):
         rules = self.policy()
@@ -202,6 +212,7 @@ class FacadeTest(unittest.TestCase):
             "input_edb_init": "CFFI caller-owned storage utility",
             "input_edb_add_facts": "Edb.add_facts", "input_edb_count": "len(edb)",
             "input_edb_view": "CFFI only: borrowed ordered input view; no Python window API",
+            "input_edb_text_usage": "CFFI only: interned input text occupancy/capacity",
             "input_edb_clear": "Edb.clear", "input_edb_free": "Edb.close",
             "session_solve_edb": "Session.solve",
             "session_free": "Session.close", "result_query": "SolveResult.contains_fact",

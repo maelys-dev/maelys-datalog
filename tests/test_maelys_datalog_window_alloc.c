@@ -35,11 +35,18 @@ void *maelys_test_memset(void *p,int v,size_t n) { return memset(p,v,n); }
 
 /* White-box ONLY to snapshot precisely the committed region, excluding the
  * candidate bank. Normal behavior is also tested against the installed SDK. */
+static maelys_datalog_result_t *release_failure_target;
+static maelys_datalog_status_t injected_result_free(maelys_datalog_result_t *r) {
+    if (r == release_failure_target) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
+    return maelys_datalog_result_free(r);
+}
+#define maelys_datalog_result_free injected_result_free
 #define malloc maelys_test_malloc
 #define calloc maelys_test_calloc
 #define realloc maelys_test_realloc
 #define free maelys_test_free
 #include "src/runtime/maelys_datalog_window.c"
+#undef maelys_datalog_result_free
 #undef malloc
 #undef calloc
 #undef realloc
@@ -86,6 +93,8 @@ int main(void) {
     for(uint32_t i=0;i<600;++i) {
         maelys_datalog_public_value_t v=integer(1); uint32_t id=UINT32_MAX;
         assert(!maelys_datalog_window_push(w,"event",&v,1,&id,NULL) && id==i);
+        size_t used,capacity;
+        assert(!maelys_datalog_window_text_usage(w,&used,&capacity) && used==6 && capacity==16);
         v=integer(INT32_MAX);
         rejected_unchanged(w,"event",&v,1,MAELYS_DATALOG_STATUS_INVALID_FIELD,input_bytes);
         v=integer(3);
@@ -102,9 +111,30 @@ int main(void) {
         assert(!maelys_datalog_prepared_explanation_write_text(e,text,sizeof(text)));
         assert(!maelys_datalog_prepared_explanation_release(e));
     }
+    /* A release failure need not be caused by an explanation lease. */
+    release_failure_target=w->result;
+    maelys_datalog_public_value_t proposed=integer(1);
+    rejected_unchanged(w,"event",&proposed,1,MAELYS_DATALOG_STATUS_INVALID_ARGUMENT,input_bytes);
+    maelys_datalog_public_diagnostic_t diag;
+    assert(maelys_datalog_window_push(w,"event",&proposed,1,NULL,&diag)==MAELYS_DATALOG_STATUS_INVALID_ARGUMENT);
+    assert(strstr(diag.message,"could not be released") && !strstr(diag.message,"explanations"));
+    release_failure_target=NULL;
+    assert(!maelys_datalog_window_push(w,"event",&proposed,1,NULL,NULL));
     assert(!maelys_datalog_window_free(w));
+    assert(!w->result && !w->sessions[0] && !w->sessions[1] && !w->inputs[0] && !w->inputs[1]);
+    size_t closed_count=123,closed_capacity=456; uint64_t closed_next=789;
+    maelys_datalog_result_t *closed_result=NULL;
+    const maelys_datalog_public_fact_t *closed_events=NULL;
+    assert(maelys_datalog_window_push(w,"event",&proposed,1,NULL,&diag)==MAELYS_DATALOG_STATUS_INVALID_STATE);
+    assert(maelys_datalog_window_state(w,&closed_count,&closed_next)==MAELYS_DATALOG_STATUS_INVALID_STATE);
+    assert(maelys_datalog_window_text_usage(w,&closed_count,&closed_capacity)==MAELYS_DATALOG_STATUS_INVALID_STATE);
+    assert(maelys_datalog_window_result(w,&closed_result)==MAELYS_DATALOG_STATUS_INVALID_STATE);
+    assert(maelys_datalog_window_events(w,&closed_events,&closed_count)==MAELYS_DATALOG_STATUS_INVALID_STATE);
+    assert(maelys_datalog_window_free(w)==MAELYS_DATALOG_STATUS_INVALID_STATE);
+    assert(closed_count==123 && closed_capacity==456 && closed_next==789 && !closed_result && !closed_events);
     /* Same caller arena/sessions are reusable, including zero text capacity. */
     assert(!maelys_datalog_window_init(storage,bytes,1,0,0,a,b,&w,NULL));
+    assert(!maelys_datalog_window_text_usage(w,&closed_count,&closed_capacity) && !closed_count && !closed_capacity);
     maelys_datalog_public_value_t v=integer(1);
     assert(maelys_datalog_window_push(w,"event",&v,1,NULL,NULL)==MAELYS_DATALOG_STATUS_PAYLOAD_TOO_LARGE);
     assert(!maelys_datalog_window_free(w));

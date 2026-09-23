@@ -68,10 +68,30 @@ The application must advance its own input acknowledgement only after success.
    completed candidate work before discovering this lease. Free the window,
    then free the two sessions and release application storage.
 
+A successful `window_free` marks the handle closed and clears its borrowed
+references. While the caller arena remains alive and unmodified, subsequent
+operations with valid arguments, including a second free, return `INVALID_STATE`
+without touching the sessions; the sessions may already have been destroyed.
+The arena can be passed to `window_init` for a new lifetime. This guard cannot
+protect a dangling arena pointer or distinguish old handles after the same
+storage is reused. Release, repurposing or reinitialization ends the old handle
+and view lifetimes.
+
 `window_events` exposes the committed, ordered input with generated IDs.
 `input_edb_view` is the underlying read-only buffer view; it also supports copying
 entries to a different input buffer. Neither view permits mutation or aliasing
 the source into a mutating operation on itself.
+
+`window_state` reports the committed event count and next occurrence ID.
+`window_text_usage` reports the committed input bank's used bytes and total text
+capacity in constant time, via the public `input_edb_text_usage` accessor. Used bytes
+include the terminating NUL for each interned predicate or symbol; capacity is
+the configured per-bank total, not the remaining space. The count can remain
+below N when text is exhausted. Repeated strings share storage and expiry can
+recover it on a successful push. Rejected candidates do not change either
+reported value. This is not total engine memory or a peak measurement: candidate
+scratch, indexes, session vocabulary and policy storage are excluded. Remaining
+text space does not guarantee admission against the engine's other bounds.
 
 All handle access must be serialized, including queries and explanations.
 Scalar outputs, input strings and workspaces must respect the disjoint-storage
@@ -84,6 +104,9 @@ it, copy the retained suffix, append the proposed event, then solve using its
 session. Only after success and release of the old result lease does the adapter
 swap banks and advance the cursor. Nothing that follows old-result release can
 fail. Candidate results are released when publication is blocked.
+If releasing the current result fails, its actual status is preserved and the
+diagnostic reports that release failed and the candidate was discarded; it does
+not infer a particular cause from the status alone.
 
 Rejected input, text/symbol/fact/derivation saturation, aggregate overflow or a
 backend failure preserves the committed bank, result and cursor. Scratch and
@@ -122,6 +145,10 @@ It covers aggregate expiry, negation, bounded recursion, duplicates, generated
 sequences, a negative oracle control, ID exhaustion, input/predicate/text limits,
 initialization failure, backend faults before work and after result emission,
 prepared leases, and vocabulary rotation beyond the cumulative symbol capacity.
+Lifecycle checks close the window, destroy both sessions, and exercise every
+closed-handle entry point while retaining the arena, including under ASan/UBSan.
+They also reinitialize that arena for a new lifetime. Text checks cover shared
+strings, saturation below N, unchanged usage on rejection and expiry reclamation.
 The same consumer runs against the installed static and shared SDK.
 
 `test_maelys_datalog_window_alloc` instruments all engine allocation paths, disables
@@ -130,3 +157,7 @@ explanations/replacement/free. On rejection it compares the entire committed
 input bank and window metadata byte-for-byte, deliberately excluding candidate
 scratch. Both tests run in SMALL/LARGE and under ASan/UBSan. These are correctness
 and allocation checks, not a timing comparison or performance claim.
+The allocation guard also covers closed-handle rejection, text observation and
+same-arena reuse. A test-only release failure verifies the neutral diagnostic,
+candidate cleanup and successful retry without attributing every failure to a
+prepared explanation.

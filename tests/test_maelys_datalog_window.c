@@ -131,6 +131,8 @@ static void rejected(fixture *f, const char *p, const maelys_datalog_public_valu
     size_t n, maelys_datalog_status_t expected) {
     const maelys_datalog_public_fact_t *before, *after; size_t count, after_count;
     uint64_t next, after_next; maelys_datalog_result_t *old=result(f);
+    size_t used, capacity, after_used, after_capacity;
+    OK(maelys_datalog_window_text_usage(f->w,&used,&capacity));
     OK(maelys_datalog_window_events(f->w,&before,&count));
     maelys_datalog_public_fact_t *copy=malloc((count+1)*sizeof(*copy)); assert(copy);
     memcpy(copy,before,count*sizeof(*copy));
@@ -142,6 +144,8 @@ static void rejected(fixture *f, const char *p, const maelys_datalog_public_valu
     OK(maelys_datalog_window_state(f->w,&after_count,&after_next));
     assert(old==result(f) && before==after && count==after_count && next==after_next);
     assert(!memcmp(copy,after,count*sizeof(*copy)));
+    OK(maelys_datalog_window_text_usage(f->w,&after_used,&after_capacity));
+    assert(used==after_used && capacity==after_capacity);
     oracle(f,copy,count); free(copy);
 }
 static void aggregates_and_rejections(void) {
@@ -251,6 +255,29 @@ static void full_arity_typed_events(void) {
     assert(count==3 && events[1].terms[1].kind==MAELYS_DATALOG_VALUE_BOOLEAN && events[1].terms[1].as.boolean==1);
     close_fixture(&f);
 }
+static void text_occupancy(void) {
+    fixture f; sessions(&f,"copy(I,G,V) :- event(I,G,V)."); init(&f,2,9,0);
+    size_t used=99, capacity=88;
+    OK(maelys_datalog_window_text_usage(f.w,&used,&capacity)); assert(used==0 && capacity==9);
+    maelys_datalog_public_value_t v[]={integer(0),symbol("xx")};
+    OK(maelys_datalog_window_push(f.w,"event",v,2,NULL,NULL));
+    /* event + NUL = 6, xx + NUL = 3: text fills before N does. */
+    state(&f,1,1);
+    OK(maelys_datalog_window_text_usage(f.w,&used,&capacity)); assert(used==9 && capacity==9);
+    v[1]=symbol("yy"); rejected(&f,"event",v,2,MAELYS_DATALOG_STATUS_PAYLOAD_TOO_LARGE);
+    v[1]=symbol("xx"); OK(maelys_datalog_window_push(f.w,"event",v,2,NULL,NULL));
+    state(&f,2,2);
+    OK(maelys_datalog_window_text_usage(f.w,&used,&capacity)); assert(used==9 && capacity==9);
+    push(&f,"event",0,7,2,2);  /* One reference to xx remains. */
+    OK(maelys_datalog_window_text_usage(f.w,&used,&capacity)); assert(used==9);
+    push(&f,"event",0,8,2,3);  /* Last reference expires. */
+    OK(maelys_datalog_window_text_usage(f.w,&used,&capacity)); assert(used==6 && capacity==9);
+    assert(maelys_datalog_window_text_usage(NULL,&used,&capacity)==MAELYS_DATALOG_STATUS_INVALID_ARGUMENT);
+    assert(used==6 && capacity==9);
+    assert(maelys_datalog_window_text_usage(f.w,NULL,&capacity)==MAELYS_DATALOG_STATUS_INVALID_ARGUMENT && capacity==9);
+    assert(maelys_datalog_window_text_usage(f.w,&used,NULL)==MAELYS_DATALOG_STATUS_INVALID_ARGUMENT && used==6);
+    close_fixture(&f);
+}
 static void renewable_snapshot_vocabulary(void) {
     fixture f; sessions(&f,"copy(I,G,V) :- event(I,G,V)."); init(&f,3,128,0);
     size_t max; OK(maelys_datalog_limit_get(MAELYS_DATALOG_LIMIT_MAX_SYMBOLS,&max));
@@ -345,11 +372,48 @@ static void initialization_and_backend_failure(void) {
     push(&f,"event",0,1,2,2); state(&f,2,3);
     close_fixture(&f);
 }
+static void closed_window(fixture *f) {
+    unsigned char *before=malloc(f->bytes); assert(before);
+    memcpy(before,f->storage,f->bytes);
+    size_t count=123; uint64_t next=456; uint32_t id=789;
+    maelys_datalog_result_t *r=NULL;
+    const maelys_datalog_public_fact_t *events=NULL;
+    maelys_datalog_public_value_t v[]={integer(0),integer(1)};
+    maelys_datalog_public_diagnostic_t diag;
+    /* Push first: the regression dereferenced freed sessions before returning. */
+    assert(maelys_datalog_window_push(f->w,"event",v,2,&id,&diag)==MAELYS_DATALOG_STATUS_INVALID_STATE);
+    assert(id==789 && !strcmp(diag.phase,"window") && strstr(diag.message,"closed"));
+    assert(maelys_datalog_window_state(f->w,&count,&next)==MAELYS_DATALOG_STATUS_INVALID_STATE);
+    assert(count==123 && next==456);
+    assert(maelys_datalog_window_result(f->w,&r)==MAELYS_DATALOG_STATUS_INVALID_STATE && !r);
+    assert(maelys_datalog_window_events(f->w,&events,&count)==MAELYS_DATALOG_STATUS_INVALID_STATE);
+    assert(!events && count==123);
+    size_t used=17,capacity=19;
+    assert(maelys_datalog_window_text_usage(f->w,&used,&capacity)==MAELYS_DATALOG_STATUS_INVALID_STATE);
+    assert(used==17 && capacity==19);
+    assert(maelys_datalog_window_free(f->w)==MAELYS_DATALOG_STATUS_INVALID_STATE);
+    assert(!memcmp(before,f->storage,f->bytes)); free(before);
+}
+static void lifecycle(void) {
+    fixture f; sessions(&f,source); init(&f,1,64,0);
+    push(&f,"event",0,1,2,0);
+    OK(maelys_datalog_window_free(f.w));
+    closed_window(&f);
+    /* Closing does not prevent explicit reinitialization of the caller arena. */
+    OK(maelys_datalog_window_init(f.storage,f.bytes,1,64,17,f.a,f.b,&f.w,NULL));
+    state(&f,0,17); push(&f,"event",0,1,2,17);
+    OK(maelys_datalog_window_free(f.w));
+    /* Keep only the caller arena alive. No stale call may touch either session. */
+    OK(maelys_datalog_session_free(f.a)); OK(maelys_datalog_session_free(f.b));
+    closed_window(&f);
+    OK(maelys_datalog_session_free(f.oracle)); free(f.storage);
+}
 int main(void) {
     maelys_datalog_public_domain_t d={"window",predicates,sizeof(predicates)/sizeof(*predicates),NULL,0};
     OK(maelys_datalog_domain_register(&d));
+    lifecycle();
     admission(); initialization_and_backend_failure(); aggregates_and_rejections(); directed_limits(); explanations();
-    generated_sequences(); full_arity_typed_events(); renewable_snapshot_vocabulary();
+    generated_sequences(); full_arity_typed_events(); text_occupancy(); renewable_snapshot_vocabulary();
     puts("last-N window: admission, transactions, aggregates, leases, limits, FIFO oracle and vocabulary rotation PASS");
     return 0;
 }

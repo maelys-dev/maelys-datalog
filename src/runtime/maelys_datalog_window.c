@@ -7,7 +7,7 @@
 struct maelys_datalog_window {
     maelys_datalog_session_t *sessions[2];
     maelys_datalog_input_edb_t *inputs[2];
-    maelys_datalog_result_t *result;
+    maelys_datalog_result_t *result; /* NULL marks a closed caller-owned handle. */
     size_t capacity;
     uint64_t next;
     unsigned active;
@@ -101,6 +101,7 @@ maelys_datalog_status_t maelys_datalog_window_push(
     maelys_datalog_public_diagnostic_clear(diag);
     if (!w || !predicate || count >= MAELYS_DATALOG_PUBLIC_MAX_TERMS || (!values && count))
         return window_error(diag, MAELYS_DATALOG_STATUS_INVALID_ARGUMENT, "An event needs a predicate and at most three payload values.");
+    if (!w->result) return window_error(diag, MAELYS_DATALOG_STATUS_INVALID_STATE, "Window is closed.");
     if (w->busy) return window_error(diag, MAELYS_DATALOG_STATUS_INVALID_STATE, "Window operation reentry is forbidden.");
     if (w->next > INT32_MAX)
         return window_error(diag, MAELYS_DATALOG_STATUS_PAYLOAD_TOO_LARGE, "The window occurrence ID space is exhausted.");
@@ -123,7 +124,7 @@ maelys_datalog_status_t maelys_datalog_window_push(
         rc = maelys_datalog_result_free(w->result);
         if (rc) {
             (void)maelys_datalog_result_free(result);
-            window_error(diag, rc, "Release prepared explanations before replacing the window result.");
+            window_error(diag, rc, "Current window result could not be released; candidate discarded.");
         } else {
             /* The old lease is released. Publication below cannot fail. */
             w->result = result;
@@ -139,30 +140,40 @@ maelys_datalog_status_t maelys_datalog_window_push(
 maelys_datalog_status_t maelys_datalog_window_result(
     const maelys_datalog_window_t *w, maelys_datalog_result_t **out) {
     if (!w || !out) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
-    if (w->busy) return MAELYS_DATALOG_STATUS_INVALID_STATE;
+    if (!w->result || w->busy) return MAELYS_DATALOG_STATUS_INVALID_STATE;
     *out = w->result;
     return MAELYS_DATALOG_STATUS_OK;
 }
 maelys_datalog_status_t maelys_datalog_window_events(
     const maelys_datalog_window_t *w, const maelys_datalog_public_fact_t **out, size_t *count) {
     if (!w) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
-    if (w->busy) return MAELYS_DATALOG_STATUS_INVALID_STATE;
+    if (!w->result || w->busy) return MAELYS_DATALOG_STATUS_INVALID_STATE;
     return maelys_datalog_input_edb_view(w->inputs[w->active], out, count);
 }
 maelys_datalog_status_t maelys_datalog_window_state(
     const maelys_datalog_window_t *w, size_t *count, uint64_t *next) {
     if (!w || !count || !next) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
-    if (w->busy) return MAELYS_DATALOG_STATUS_INVALID_STATE;
+    if (!w->result || w->busy) return MAELYS_DATALOG_STATUS_INVALID_STATE;
     maelys_datalog_status_t rc = maelys_datalog_input_edb_count(w->inputs[w->active], count);
     if (!rc) *next = w->next;
     return rc;
 }
+maelys_datalog_status_t maelys_datalog_window_text_usage(
+    const maelys_datalog_window_t *w, size_t *used, size_t *capacity) {
+    if (!w) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
+    if (!w->result || w->busy) return MAELYS_DATALOG_STATUS_INVALID_STATE;
+    return maelys_datalog_input_edb_text_usage(w->inputs[w->active], used, capacity);
+}
 maelys_datalog_status_t maelys_datalog_window_free(maelys_datalog_window_t *w) {
     if (!w) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
-    if (w->busy) return MAELYS_DATALOG_STATUS_INVALID_STATE;
+    if (!w->result || w->busy) return MAELYS_DATALOG_STATUS_INVALID_STATE;
     w->busy = 1;
     maelys_datalog_status_t rc = maelys_datalog_result_free(w->result);
-    if (!rc) w->result = NULL;
+    if (!rc) {
+        w->result = NULL;
+        w->sessions[0] = w->sessions[1] = NULL;
+        w->inputs[0] = w->inputs[1] = NULL;
+    }
     w->busy = 0;
     return rc;
 }

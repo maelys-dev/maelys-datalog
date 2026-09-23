@@ -31,6 +31,12 @@ result replacement and destruction after session creation. Failed transactions
 preserve the committed input bank and window metadata byte-for-byte; candidate
 scratch is explicitly outside this comparison. The ordinary consumer also runs
 outside the source tree against both installed SDK libraries.
+The lifecycle regression closes a window, destroys its borrowed sessions and
+calls every entry point on the closed handle while retaining its caller arena;
+all reject with unchanged outputs/storage, including under ASan/UBSan. Tests
+also cover same-arena reinitialization, allocation-free closed-handle rejection,
+committed text usage (interning, exhaustion below N and expiry), and a release
+failure unrelated to explanations with candidate cleanup and successful reuse.
 
 Pipeline counters are compiled only under `MAELYS_TESTING`: the private header
 `src/core/maelys_datalog_pipeline_testing.h` expands `MAELYS_DATALOG_COUNT_PIPELINE`

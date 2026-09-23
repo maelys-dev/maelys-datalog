@@ -79,9 +79,25 @@ MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_window_events(
     const maelys_datalog_public_fact_t **out_facts, size_t *out_count);
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_window_state(
     const maelys_datalog_window_t *window, size_t *out_count, uint64_t *out_next_occurrence);
+/* Interned predicate/symbol bytes (including NULs) used by the COMMITTED input
+ * bank, and its text capacity. Excludes candidate scratch, indexes, session and
+ * policy storage. O(1), no allocation; rejection preserves the reported usage.
+ * Expiry can recover bytes on commit. Free text does not guarantee that a future
+ * push meets the engine's other bounds. Both outputs are required and unchanged
+ * on error. This reports occupancy, not a peak or a reservation for a next push. */
+MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_window_text_usage(
+    const maelys_datalog_window_t *window, size_t *out_used, size_t *out_capacity);
 /* Release the current result and return both borrowed sessions to the caller.
  * Does not free/erase caller storage. Live prepared explanations -> INVALID_STATE,
- * leaving the window usable. The handle is invalid after a successful free. */
+ * leaving the window usable. Success marks the handle closed and clears borrowed
+ * references. While the caller arena remains alive and unmodified, subsequent
+ * operations with valid arguments (including a second free) return INVALID_STATE
+ * without accessing sessions, even after those sessions have been destroyed.
+ * window_init may reuse the arena for a NEW lifetime. Once the arena is released,
+ * repurposed or reinitialized, old handles/views must not be used; the marker
+ * cannot protect a dangling arena pointer or distinguish an old pointer after
+ * address reuse. Closed-handle rejection leaves accessor and occurrence outputs
+ * unchanged; push still reports its error through the optional diagnostic. */
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_window_free(
     maelys_datalog_window_t *window);
 

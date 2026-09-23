@@ -279,6 +279,10 @@ entries, including duplicates. Its array and strings are read-only and must not
 be used after a successful mutation or close of the EDB. It is not a Python
 iterator or an owning copy. The native last-N window API is in a separate header
 and is not yet exposed as a Python wrapper.
+The CFFI utility `maelys_datalog_input_edb_text_usage()` reports interned
+predicate/symbol bytes including NUL terminators and the configured text capacity.
+Repeated strings share storage; rejected appends preserve usage and clear resets
+it to zero. This measures input text only, not native session or Python memory.
 
 For example, after one valid buffered fact:
 
