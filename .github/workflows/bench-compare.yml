@@ -24,7 +24,7 @@ on:
         type: choice
         options: ['1024', '2048']
       session_diagnostics:
-        description: Count only residual session slowdowns above the named 9.94% triage reference
+        description: Count declared controls and residuals with cache/branch simulation
         required: false
         default: false
         type: boolean
