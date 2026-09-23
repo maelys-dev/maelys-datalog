@@ -58,6 +58,9 @@ $(BUILD_DIR)/tests/test_maelys_datalog_pipeline: sdk/examples/frontend/src/exten
 
 # This test includes the EDB implementation with local allocator fault hooks.
 # Do not link a second copy of that translation unit into its executable.
+$(BUILD_DIR)/tests/test_maelys_datalog_diagnostic_writes: tests/test_maelys_datalog_diagnostic_writes.c $(SRCS) $(ENGINE_HEADERS) | $(BUILD_DIR)/tests
+	$(CC) $(TEST_CFLAGS) -UNDEBUG -I. -Iinclude $(filter-out src/core/maelys_datalog_diagnostic.c,$(SRCS)) $< -o $@
+
 $(BUILD_DIR)/tests/test_maelys_datalog_input_edb_alloc: tests/test_maelys_datalog_input_edb_alloc.c $(SRCS) $(ENGINE_HEADERS) | $(BUILD_DIR)/tests
 	$(CC) $(TEST_CFLAGS) -UNDEBUG -I. -Iinclude $(filter-out src/runtime/maelys_datalog_input_edb.c,$(SRCS)) $< -o $@
 

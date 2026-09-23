@@ -3,6 +3,12 @@
 #include <stdio.h>
 #include <string.h>
 
+_Static_assert(offsetof(maelys_datalog_internal_diagnostic_t, limit_kind) + 1u <=
+               offsetof(maelys_datalog_internal_diagnostic_t, line),
+               "bound identity occupies the pre-existing alignment gap");
+_Static_assert(MAELYS_DATALOG_LIMIT_MAX_FACTS_PER_PRED <= UINT8_MAX,
+               "compact bound identity must fit");
+
 /* Returns 1 when the null-terminated source fits, 0 on truncation or error.
  * Current callers pass string literals or file paths; this guards future long
  * diagnostic strings without changing fail-closed behavior.
@@ -107,6 +113,47 @@ const char *maelys_datalog_diag_code_name(maelys_datalog_diag_code_t code) {
         case MAELYS_DATALOG_DIAG_REGISTRY_CONFLICT: return "registry_conflict";
         case MAELYS_DATALOG_DIAG_REGISTRY_MUTATION_AFTER_FREEZE: return "registry_mutation_after_freeze";
         case MAELYS_DATALOG_DIAG_MALFORMED_PROGRAM: return "malformed_program";
+        case MAELYS_DATALOG_DIAG_OPERATION_REJECTED: return "operation_rejected";
+        case MAELYS_DATALOG_DIAG_SOLVE_MAX_DEPTH: return "solve_max_depth";
+        case MAELYS_DATALOG_DIAG_SOLVE_IDB_OVERFLOW: return "solve_idb_overflow";
+        case MAELYS_DATALOG_DIAG_SOLVE_COMPARISON_TYPE_ERROR: return "solve_comparison_type_error";
+        case MAELYS_DATALOG_DIAG_SOLVE_FILTER_ERROR: return "solve_filter_error";
+        case MAELYS_DATALOG_DIAG_SOLVE_MALFORMED_FACT: return "solve_malformed_fact";
+        case MAELYS_DATALOG_DIAG_SOLVE_MALFORMED_EDB: return "solve_malformed_edb";
+        case MAELYS_DATALOG_DIAG_SOLVE_INVALID_STATE: return "solve_invalid_state";
+        case MAELYS_DATALOG_DIAG_SOLVE_INVALID_ARGUMENT: return "solve_invalid_argument";
+        case MAELYS_DATALOG_DIAG_SOLVE_INTERNAL_ERROR: return "solve_internal_error";
         default: return "unknown";
     }
+}
+
+maelys_datalog_status_t maelys_datalog_diagnostic_init(void *storage, size_t bytes) {
+    if (!storage || (uintptr_t)storage % _Alignof(maelys_datalog_diagnostic_t))
+        return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
+    if (bytes < sizeof(maelys_datalog_diagnostic_t))
+        return MAELYS_DATALOG_STATUS_STORAGE_TOO_SMALL;
+    maelys_datalog_diagnostic_t *d = storage;
+    memset(d, 0, sizeof(*d));
+    d->struct_size = bytes;
+    d->abi_version = MAELYS_DATALOG_DIAGNOSTIC_ABI_VERSION;
+    return MAELYS_DATALOG_STATUS_OK;
+}
+maelys_datalog_status_t maelys_datalog_diagnostic_clear(maelys_datalog_diagnostic_t *d) {
+    if (!d) return MAELYS_DATALOG_STATUS_OK;
+    if ((uintptr_t)d % _Alignof(maelys_datalog_diagnostic_t))
+        return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
+    if (d->struct_size < sizeof(*d)) return MAELYS_DATALOG_STATUS_STORAGE_TOO_SMALL;
+    if (d->abi_version != MAELYS_DATALOG_DIAGNOSTIC_ABI_VERSION)
+        return MAELYS_DATALOG_STATUS_UNSUPPORTED;
+    /* Reset semantic fields, not the unused tails of owned C strings. Keep
+     * absent numeric sections zero, including for callbacks and CFFI readers.
+     * Initialization still zeroes the whole known object once. This is not
+     * secure erasure; bytes after each first NUL remain unspecified. */
+    memset((unsigned char *)d + offsetof(maelys_datalog_diagnostic_t, source), 0,
+           offsetof(maelys_datalog_diagnostic_t, phase) - offsetof(maelys_datalog_diagnostic_t, source));
+    memset((unsigned char *)d + offsetof(maelys_datalog_diagnostic_t, arity), 0,
+           offsetof(maelys_datalog_diagnostic_t, token) - offsetof(maelys_datalog_diagnostic_t, arity));
+    d->phase[0] = d->message[0] = d->hint[0] = d->file[0] = d->predicate[0] = '\0';
+    d->token[0] = d->field[0] = d->domain[0] = '\0';
+    return MAELYS_DATALOG_STATUS_OK;
 }

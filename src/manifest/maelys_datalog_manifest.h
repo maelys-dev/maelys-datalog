@@ -3,6 +3,7 @@
 #define MAELYS_DATALOG_MANIFEST_H
 
 #include "src/core/maelys_datalog_diagnostic.h"
+#include "maelys/datalog_advanced.h"
 #include "src/core/maelys_datalog_predicate_registry.h"
 #include "src/core/maelys_datalog_ruleset.h"
 #include "src/core/maelys_datalog_types.h"
@@ -11,16 +12,6 @@
 #define MAELYS_DATALOG_MANIFEST_ALLOW_UNDECLARED_POLICY_ATOMS (1u << 1)
 #define MAELYS_DATALOG_INLINE_MAX_DOMAIN_LEN 63u
 #define MAELYS_DATALOG_INLINE_MAX_POLICY_ID_LEN 127u
-
-/*
- * Bundle entry for buffer-based manifest loading.
- * Each entry matches one policy entry in the manifest JSON by policy_id.
- */
-typedef struct {
-    const char *policy_id;   /* matches the policy_id field in the manifest JSON */
-    const char *src;         /* .dl source text (need not be NUL-terminated) */
-    size_t src_len;          /* byte length of src */
-} maelys_datalog_policy_bundle_entry_t;
 
 typedef struct {
     int allow_test_only;

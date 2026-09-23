@@ -40,4 +40,11 @@ typedef maelys_datalog_public_domain_t maelys_bench_domain_t;
 typedef maelys_datalog_public_term_view_t maelys_bench_term_view_t;
 typedef maelys_datalog_public_fact_view_t maelys_bench_fact_view_t;
 #endif
+#if MAELYS_DATALOG_PUBLIC_API_VERSION >= 2u
+typedef maelys_datalog_diagnostic_t maelys_bench_diagnostic_t;
+#define MAELYS_BENCH_DIAGNOSTIC_INIT MAELYS_DATALOG_DIAGNOSTIC_INIT
+#else
+typedef maelys_datalog_public_diagnostic_t maelys_bench_diagnostic_t;
+#define MAELYS_BENCH_DIAGNOSTIC_INIT {0}
+#endif
 #endif

@@ -3,13 +3,13 @@
 
 static maelys_datalog_status_t lower_source(
     const char *source, size_t length, maelys_datalog_program_builder_t *builder,
-    maelys_datalog_public_diagnostic_t *diagnostic)
+    maelys_datalog_diagnostic_t *diagnostic)
 {
     (void)source;
     (void)length;
     (void)builder;
     if (diagnostic)
-        *diagnostic = (maelys_datalog_public_diagnostic_t){0};
+        (void)maelys_datalog_diagnostic_clear(diagnostic);
     /* TODO: translate your language through the public IR builder.
      * Return OK only after complete lowering; retain source locations. */
     return MAELYS_DATALOG_STATUS_UNSUPPORTED;

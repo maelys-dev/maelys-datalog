@@ -6,7 +6,7 @@
 extern "C" {
 #endif
 
-#define MAELYS_DATALOG_BACKEND_ABI_VERSION 3u
+#define MAELYS_DATALOG_BACKEND_ABI_VERSION 4u
 typedef struct maelys_datalog_backend_output maelys_datalog_backend_output_t;
 
 /* Emit the complete derived IDB, including non-query helpers. The core copies,
@@ -36,8 +36,9 @@ typedef struct {
     maelys_datalog_status_t (*solve)(void *state,
                                      const maelys_datalog_fact_t *canonical_inputs,
                                      size_t input_count, maelys_datalog_backend_output_t *,
-                                     void **out_result_state, maelys_datalog_public_diagnostic_t *);
-    /* ABI 3 replaces the two direct-text callbacks with caller-owned storage.
+                                     void **out_result_state, maelys_datalog_diagnostic_t *);
+    /* Caller-owned explanation storage introduced in ABI 3 is retained in ABI 4.
+     * ABI 4 additionally requires the versioned common diagnostic protocol.
      * All three are required if either EXPLAIN capability is advertised; the
      * host calls only supported kinds. No allocator calls, acquired resources,
      * engine reentry or retained query-string pointers. Result state stays alive

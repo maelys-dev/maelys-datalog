@@ -140,8 +140,9 @@ static inline size_t maelys_datalog_detail_decimal(char *out, size_t number) {
 }
 
 static inline maelys_datalog_status_t maelys_datalog_detail_range_error(
-    maelys_datalog_public_diagnostic_t *diagnostic, size_t fact, size_t term) {
-    maelys_datalog_public_diagnostic_clear(diagnostic);
+    maelys_datalog_diagnostic_t *diagnostic, size_t fact, size_t term) {
+    maelys_datalog_status_t ds = maelys_datalog_diagnostic_clear(diagnostic);
+    if (ds) return ds;
     if (diagnostic) {
         const char prefix[] = "Fact ", middle[] = ", term ";
         const char suffix[] = ": integer outside INT64_MIN..INT64_MAX.";
@@ -154,7 +155,8 @@ static inline maelys_datalog_status_t maelys_datalog_detail_range_error(
         pos += maelys_datalog_detail_decimal(diagnostic->message + pos, term);
         for (size_t i = 0u; i < sizeof(suffix); ++i) diagnostic->message[pos++] = suffix[i];
         diagnostic->source = MAELYS_DATALOG_DIAGNOSTIC_SOLVE;
-        diagnostic->code = MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
+        diagnostic->code = MAELYS_DATALOG_DIAG_OPERATION_REJECTED;
+        diagnostic->status = MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
         for (size_t i = 0u; i < sizeof(phase); ++i) diagnostic->phase[i] = phase[i];
         for (size_t i = 0u; i < sizeof(hint); ++i) diagnostic->hint[i] = hint[i];
     }
@@ -196,7 +198,7 @@ maelys_datalog_detail_boolean(_Bool value) {
 }
 
 static inline maelys_datalog_status_t maelys_datalog_detail_add_fact(
-    maelys_datalog_input_edb_t *edb, maelys_datalog_public_diagnostic_t *diagnostic,
+    maelys_datalog_input_edb_t *edb, maelys_datalog_diagnostic_t *diagnostic,
     const char *predicate, const maelys_datalog_detail_argument_t *arguments, size_t count) {
     maelys_datalog_value_t terms[MAELYS_DATALOG_PUBLIC_MAX_TERMS];
     for (size_t i = 0u; i < count; ++i) {
@@ -220,7 +222,7 @@ static inline maelys_datalog_detail_fact_t maelys_datalog_detail_fact(
 }
 
 static inline maelys_datalog_status_t maelys_datalog_detail_add_facts(
-    maelys_datalog_input_edb_t *edb, maelys_datalog_public_diagnostic_t *diagnostic,
+    maelys_datalog_input_edb_t *edb, maelys_datalog_diagnostic_t *diagnostic,
     const maelys_datalog_detail_fact_t *built, maelys_datalog_fact_t *facts,
     size_t count) {
     for (size_t i = 0u; i < count; ++i) {

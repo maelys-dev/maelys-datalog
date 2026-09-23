@@ -273,6 +273,8 @@ const char *maelys_datalog_solve_diagnostic_category_name(
 static void solve_once_diag_clear(maelys_datalog_internal_solve_diagnostic_t *diag) {
     if (!diag) return;
     memset(diag, 0, sizeof(*diag));
+    diag->predicate_id = UINT16_MAX;
+    diag->rule_id = UINT16_MAX;
 }
 
 static void solve_once_diag_base(maelys_datalog_internal_solve_diagnostic_t *diag,
@@ -368,8 +370,10 @@ static void solve_once_diag_idb_overflow(maelys_datalog_internal_solve_diagnosti
                          MAELYS_ERR_PAYLOAD_TOO_LARGE,
                          MAELYS_DATALOG_DENY_IDB_OVERFLOW);
     if (!diag || !result) return;
-    diag->capacity = (uint16_t)MAELYS_DATALOG_MAX_IDB_FACTS;
-    diag->count_observed = (uint16_t)result->idb_merge_end;
+    diag->capacity = (uint16_t)result->runtime_diag.limit;
+    diag->count_observed = (uint16_t)result->runtime_diag.count;
+    diag->predicate_id = result->runtime_diag.predicate_id;
+    diag->limit_kind = result->runtime_diag.limit_kind;
 }
 
 static void solve_once_diag_comparison(maelys_datalog_internal_solve_diagnostic_t *diag,
@@ -1207,6 +1211,20 @@ static void witness_commit_range(maelys_datalog_internal_solve_result_t *result,
     result->premise_pool_count = (uint16_t)(begin + body_count);
 }
 
+/* Record the attempted insertion against the actual bound, not the unrelated
+ * global population. This path runs only on failure and adds no result fields. */
+static int solve_once_idb_overflow(maelys_datalog_internal_solve_result_t *result,
+                                  const maelys_datalog_internal_fact_t *fact,
+                                  maelys_datalog_limit_t kind,
+                                  size_t observed, size_t limit) {
+    result->failure_reason = MAELYS_DATALOG_DENY_IDB_OVERFLOW;
+    result->runtime_diag.predicate_id = fact->predicate_id;
+    result->runtime_diag.limit_kind = (uint8_t)kind;
+    result->runtime_diag.count = observed;
+    result->runtime_diag.limit = limit;
+    return 0;
+}
+
 /* Keep duplicate scans out of the derivation dispatch's control-flow graph.
  * With Ubuntu Clang 18.1.3 (-O2, Linux x86_64), changing dispatch moved return-value
  * setup into each scan iteration. Keep one call per instantiated head. */
@@ -1233,16 +1251,19 @@ static int solve_once_append_idb_merge(maelys_datalog_internal_solve_result_t *r
     if (solve_once_fact_in_range(result->idb_facts, result->idb_current_end, result->idb_merge_end, fact)) return 1;
     if (result->idb_merge_end >= result->idb_final.capacity ||
         result->idb_merge_end >= MAELYS_DATALOG_MAX_IDB_FACTS) {
-        result->failure_reason = MAELYS_DATALOG_DENY_IDB_OVERFLOW;
-        return 0;
+        const size_t limit = result->idb_final.capacity < MAELYS_DATALOG_MAX_IDB_FACTS
+            ? result->idb_final.capacity : MAELYS_DATALOG_MAX_IDB_FACTS;
+        return solve_once_idb_overflow(result, fact, MAELYS_DATALOG_LIMIT_MAX_IDB_FACTS,
+                                       result->idb_merge_end + 1u, limit);
     }
     if (fact->predicate_id >= MAELYS_DATALOG_MAX_PREDICATES) {
-        result->failure_reason = MAELYS_DATALOG_DENY_IDB_OVERFLOW;
-        return 0;
+        return solve_once_idb_overflow(result, fact, MAELYS_DATALOG_LIMIT_MAX_PREDICATES,
+                                       (size_t)fact->predicate_id + 1u, MAELYS_DATALOG_MAX_PREDICATES);
     }
     if (result->facts_per_pred[fact->predicate_id] >= MAELYS_DATALOG_MAX_FACTS_PER_PRED) {
-        result->failure_reason = MAELYS_DATALOG_DENY_IDB_OVERFLOW;
-        return 0;
+        return solve_once_idb_overflow(result, fact, MAELYS_DATALOG_LIMIT_MAX_FACTS_PER_PRED,
+                                       (size_t)result->facts_per_pred[fact->predicate_id] + 1u,
+                                       MAELYS_DATALOG_MAX_FACTS_PER_PRED);
     }
     const size_t insert_index = result->idb_merge_end;
     result->idb_facts[result->idb_merge_end++] = *fact;

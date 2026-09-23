@@ -233,7 +233,7 @@ int main(void) {
     const maelys_datalog_domain_t domain = {"hot_path", predicates, 3, NULL, 0};
     assert(maelys_datalog_domain_register(&domain) == 0);
     const char *source = "allow(X) :- seed(X), not(blocked(X)).";
-    maelys_datalog_public_diagnostic_t diag;
+    maelys_datalog_diagnostic_t diag = MAELYS_DATALOG_DIAGNOSTIC_INIT;
     maelys_datalog_policy_t *policy = NULL;
     assert(maelys_datalog_policy_load_inline("hot_path", "hot", source, strlen(source), &policy, &diag) == 0);
     owned_release_does_not_clear();

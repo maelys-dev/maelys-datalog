@@ -19,6 +19,11 @@ struct maelys_datalog_session_config {
     unsigned explanation_kinds;
     void *explanation_storage;
     size_t explanation_bytes;
+    maelys_datalog_backend_t backend;
+    char backend_name[64], backend_semantic_id[128];
+    int custom_backend;
+    maelys_datalog_context_t *context;
+    char context_backend_name[64];
 };
 
 static maelys_datalog_status_t configure_explanation_workspace(
@@ -58,6 +63,7 @@ maelys_datalog_status_t maelys_datalog_session_config_get_work_limit(
 }
 maelys_datalog_status_t maelys_datalog_session_config_free(
     maelys_datalog_session_config_t *config) {
+    if (config) maelys_datalog_context_release(config->context);
     free(config);
     return MAELYS_DATALOG_STATUS_OK;
 }
@@ -89,11 +95,13 @@ maelys_datalog_status_t maelys_datalog_session_create_configured(
     const maelys_datalog_session_options_t options = {
         .abi_version = MAELYS_DATALOG_BACKEND_ABI_VERSION,
         .struct_size = sizeof(options),
-        .backend = NULL,
+        .backend = config->custom_backend ? &config->backend : NULL,
         .required_capabilities = config->required_capabilities,
         .work_limit = config->work_limit,
     };
-    maelys_datalog_status_t rc = maelys_datalog_session_create_ex(policy, index, &options, out);
+    maelys_datalog_status_t rc = config->context
+        ? maelys_datalog_context_session_create(config->context, policy, index, config->context_backend_name[0] ? config->context_backend_name : NULL, config->required_capabilities, config->work_limit, out)
+        : maelys_datalog_session_create_ex(policy, index, &options, out);
     if (!rc) {
         rc = configure_explanation_workspace(*out, config);
         if (rc) {
@@ -379,11 +387,12 @@ maelys_datalog_status_t maelys_datalog_session_free(maelys_datalog_session_t *s)
     return MAELYS_DATALOG_STATUS_OK;
 }
 static maelys_datalog_status_t solve_input_error(
-    maelys_datalog_public_diagnostic_t *diag, maelys_datalog_status_t status,
+    maelys_datalog_diagnostic_t *diag, maelys_datalog_status_t status,
     const char *format, ...) {
     if (diag) {
         diag->source = MAELYS_DATALOG_DIAGNOSTIC_SOLVE;
-        diag->code = status;
+        diag->status = status;
+        diag->code = MAELYS_DATALOG_DIAG_OPERATION_REJECTED;
         snprintf(diag->phase, sizeof(diag->phase), "input");
         va_list args;
         va_start(args, format);
@@ -398,10 +407,10 @@ static maelys_datalog_status_t solve_input_error(
 maelys_datalog_status_t maelys_datalog_session_solve(maelys_datalog_session_t *s,
                                                      const maelys_datalog_fact_t *facts,
                                                      size_t count, maelys_datalog_result_t **out,
-                                                     maelys_datalog_public_diagnostic_t *diag) {
+                                                     maelys_datalog_diagnostic_t *diag) {
     if (out)
         *out = NULL;
-    maelys_datalog_public_diagnostic_clear(diag);
+    { maelys_datalog_status_t ds = maelys_datalog_diagnostic_clear(diag); if (ds) return ds; }
     if (!s || !out)
         return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
     if (s->busy || s->active)
@@ -476,9 +485,11 @@ maelys_datalog_status_t maelys_datalog_session_solve(maelys_datalog_session_t *s
         s->backend.destroy_result(s->state, result->state);
         memset(result, 0, offsetof(maelys_datalog_result_t, facts));
         s->busy = 0;
+        if (diag) diag->status = status;
         if (diag && diag->source == MAELYS_DATALOG_DIAGNOSTIC_NONE) {
             diag->source = MAELYS_DATALOG_DIAGNOSTIC_SOLVE;
-            diag->code = status;
+            diag->status = status;
+            diag->code = MAELYS_DATALOG_DIAG_OPERATION_REJECTED;
             snprintf(diag->phase, sizeof(diag->phase), "backend");
             snprintf(diag->message, sizeof(diag->message), "backend failed: %s",
                      maelys_datalog_status_name(status));
@@ -914,5 +925,174 @@ maelys_datalog_status_t maelys_datalog_result_free(maelys_datalog_result_t *resu
     s->active = NULL;
     s->busy = 0;
     memset(result, 0, offsetof(maelys_datalog_result_t, facts));
+    return MAELYS_DATALOG_STATUS_OK;
+}
+
+maelys_datalog_status_t maelys_datalog_session_config_set_backend(
+    maelys_datalog_session_config_t *c, const maelys_datalog_backend_t *b) {
+    if (!c) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
+    if (!b || b == maelys_datalog_backend_reference()) {
+        maelys_datalog_context_release(c->context); c->context = NULL;
+        c->custom_backend = 0; return MAELYS_DATALOG_STATUS_OK;
+    }
+    if (!maelys_datalog_backend_descriptor_valid(b)) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
+    if (strlen(b->name) >= sizeof(c->backend_name) || strlen(b->semantic_id) >= sizeof(c->backend_semantic_id))
+        return MAELYS_DATALOG_STATUS_PAYLOAD_TOO_LARGE;
+    maelys_datalog_context_release(c->context); c->context = NULL;
+    c->backend = *b;
+    strcpy(c->backend_name, b->name); strcpy(c->backend_semantic_id, b->semantic_id);
+    c->backend.name = c->backend_name; c->backend.semantic_id = c->backend_semantic_id;
+    c->custom_backend = 1;
+    return MAELYS_DATALOG_STATUS_OK;
+}
+maelys_datalog_status_t maelys_datalog_session_config_set_requirements(
+    maelys_datalog_session_config_t *c, uint64_t capabilities, uint64_t work_limit) {
+    if (!c || (capabilities & ~MAELYS_DATALOG_CAP_ALL)) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
+    c->required_capabilities = capabilities; c->work_limit = work_limit;
+    return MAELYS_DATALOG_STATUS_OK;
+}
+static maelys_datalog_status_t structured_valid(const maelys_datalog_prepared_explanation_t *p,
+    void *out, size_t bytes) {
+    if (!out) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
+    maelys_datalog_status_t rc = prepared_valid(p);
+    if (rc) return rc;
+    if (!p->owner->owner->reference_backend) return MAELYS_DATALOG_STATUS_UNSUPPORTED;
+    if (bytes > UINTPTR_MAX - (uintptr_t)out || explanation_overlap(out, bytes, p, p->storage_bytes))
+        return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
+    return MAELYS_DATALOG_STATUS_OK;
+}
+static const void *structured_payload(const maelys_datalog_prepared_explanation_t *p) {
+    return (const unsigned char *)p + EXPLANATION_HEADER_BYTES;
+}
+static maelys_datalog_status_t export_value(const maelys_datalog_internal_ruleset_t *r,
+    const maelys_datalog_internal_term_t *v, maelys_datalog_value_t *out) {
+    maelys_datalog_ir_term_t term;
+    maelys_result_t rc = maelys_datalog_export_ir_term(r, v, &term);
+    if (rc) return (maelys_datalog_status_t)rc;
+    out->kind = (maelys_datalog_value_kind_t)term.kind;
+    switch (term.kind) {
+    case MAELYS_DATALOG_IR_SYMBOL: out->as.symbol = term.as.symbol; break;
+    case MAELYS_DATALOG_IR_INTEGER: out->as.integer = term.as.integer; break;
+    case MAELYS_DATALOG_IR_BOOLEAN: out->as.boolean = term.as.boolean; break;
+    default: return MAELYS_DATALOG_STATUS_INVALID_STATE;
+    }
+    return MAELYS_DATALOG_STATUS_OK;
+}
+maelys_datalog_status_t maelys_datalog_prepared_explanation_info(
+    const maelys_datalog_prepared_explanation_t *p, maelys_datalog_explanation_info_t *out) {
+    maelys_datalog_status_t rc = structured_valid(p, out, sizeof(*out)); if (rc) return rc;
+    memset(out, 0, sizeof(*out)); out->kind = p->kind;
+    if (p->kind == MAELYS_DATALOG_EXPLAIN_TRUE) {
+        const maelys_datalog_explanation_t *e = structured_payload(p);
+        out->found = e->found; out->truncated = e->truncated;
+        out->step_count = e->step_count; out->premise_count = e->premise_count;
+    } else {
+        const maelys_datalog_why_false_explanation_t *e = maelys_datalog_why_false_workspace_view(structured_payload(p));
+        out->false_status = e->status; out->false_summary = e->summary;
+        out->query_origin = e->query_origin; out->limit_hits = e->limit_hits;
+        out->candidate_rule_count = e->candidate_rule_count; out->substitution_count = e->substitution_count;
+        out->diagnostic_count = e->diagnostic_count; out->filter_cost_units = e->filter_cost_units;
+        out->truncated = e->status == MAELYS_DATALOG_WHY_FALSE_STATUS_TRUNCATED;
+        out->found = e->status == MAELYS_DATALOG_WHY_FALSE_STATUS_NOT_APPLICABLE;
+        return (maelys_datalog_status_t)maelys_datalog_export_fact(&p->owner->owner->inputs->working, &e->query, &out->query);
+    }
+    return MAELYS_DATALOG_STATUS_OK;
+}
+maelys_datalog_status_t maelys_datalog_prepared_explanation_step(
+    const maelys_datalog_prepared_explanation_t *p, size_t index, maelys_datalog_explanation_step_view_t *out) {
+    maelys_datalog_status_t rc = structured_valid(p, out, sizeof(*out)); if (rc) return rc;
+    if (p->kind != MAELYS_DATALOG_EXPLAIN_TRUE) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
+    const maelys_datalog_explanation_t *e = structured_payload(p);
+    if (index >= e->step_count) return MAELYS_DATALOG_STATUS_NOT_FOUND;
+    const maelys_datalog_explanation_step_t *v = &e->steps[index];
+    memset(out, 0, sizeof(*out)); out->rule_id = v->rule_id;
+    out->premise_begin = v->premise_begin; out->premise_count = v->premise_count;
+    return (maelys_datalog_status_t)maelys_datalog_export_fact(&p->owner->owner->inputs->working, &v->derived_fact, &out->fact);
+}
+maelys_datalog_status_t maelys_datalog_prepared_explanation_premise(
+    const maelys_datalog_prepared_explanation_t *p, size_t index, maelys_datalog_explanation_premise_view_t *out) {
+    maelys_datalog_status_t rc = structured_valid(p, out, sizeof(*out)); if (rc) return rc;
+    if (p->kind != MAELYS_DATALOG_EXPLAIN_TRUE) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
+    const maelys_datalog_explanation_t *e = structured_payload(p);
+    if (index >= e->premise_count) return MAELYS_DATALOG_STATUS_NOT_FOUND;
+    const maelys_datalog_explanation_premise_t *v = &e->premises[index];
+    const maelys_datalog_internal_ruleset_t *r = &p->owner->owner->inputs->working;
+    memset(out, 0, sizeof(*out)); out->kind = v->kind; out->origin = v->origin;
+    out->body_index = v->body_index; out->parent_step = v->parent_step; out->op = (maelys_datalog_ir_comparison_t)v->op;
+    if (maelys_datalog_premise_is_aggregate(v->kind)) {
+        maelys_datalog_internal_fact_t fact = {0}; fact.predicate_id = v->as.count.predicate_id; fact.arity = v->as.count.arity;
+        memcpy(fact.terms, v->as.count.terms, sizeof(fact.terms));
+        out->projected_variable = v->as.count.projected_variable; out->aggregate_value = v->as.count.value;
+        return (maelys_datalog_status_t)maelys_datalog_export_ir_atom(r, &fact, &out->atom);
+    }
+    switch (v->kind) {
+    case MAELYS_DATALOG_EXPLANATION_PREMISE_POSITIVE_FACT:
+    case MAELYS_DATALOG_EXPLANATION_PREMISE_NEGATED_ABSENCE:
+        return (maelys_datalog_status_t)maelys_datalog_export_ir_atom(r, &v->as.fact, &out->atom);
+    case MAELYS_DATALOG_EXPLANATION_PREMISE_COMPARISON_TRUE:
+        rc = export_value(r, &v->as.comparison.lhs, &out->lhs);
+        return rc ? rc : export_value(r, &v->as.comparison.rhs, &out->rhs);
+    case MAELYS_DATALOG_EXPLANATION_PREMISE_FILTER_TRUE:
+        out->filter_program_index = v->as.filter.program_index; out->filter_kind = v->as.filter.filter_kind;
+        return export_value(r, &v->as.filter.value, &out->filter_value);
+    default: return MAELYS_DATALOG_STATUS_INVALID_STATE;
+    }
+}
+maelys_datalog_status_t maelys_datalog_prepared_explanation_obstacle(
+    const maelys_datalog_prepared_explanation_t *p, size_t index, maelys_datalog_explanation_obstacle_view_t *out) {
+    maelys_datalog_status_t rc = structured_valid(p, out, sizeof(*out)); if (rc) return rc;
+    if (p->kind != MAELYS_DATALOG_EXPLAIN_FALSE) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
+    const maelys_datalog_why_false_explanation_t *e = maelys_datalog_why_false_workspace_view(structured_payload(p));
+    if (index >= e->diagnostic_count) return MAELYS_DATALOG_STATUS_NOT_FOUND;
+    const maelys_datalog_why_false_diagnostic_t *v = &e->diagnostics[index];
+    const maelys_datalog_internal_ruleset_t *r = &p->owner->owner->inputs->working;
+    memset(out, 0, sizeof(*out)); out->rule_id = v->rule_id; out->depth = v->depth;
+    rc = (maelys_datalog_status_t)maelys_datalog_export_fact(r, &v->target_fact, &out->target);
+    if (rc) return rc;
+    out->bound_variable_mask = v->bound_variable_mask;
+    for (size_t i = 0; i < MAELYS_DATALOG_IR_MAX_VARIABLES; ++i)
+        if (v->bound_variable_mask & (UINT32_C(1) << i)) { rc = export_value(r, &v->substitution[i], &out->substitution[i]); if (rc) return rc; }
+    out->support_count = v->support_count;
+    for (size_t i = 0; i < v->support_count; ++i) {
+        out->supports[i].body_index = v->supports[i].body_index; out->supports[i].origin = v->supports[i].origin;
+        rc = (maelys_datalog_status_t)maelys_datalog_export_fact(r, &v->supports[i].fact, &out->supports[i].fact); if (rc) return rc;
+    }
+    const maelys_datalog_why_false_obstacle_t *o = &v->obstacle;
+    out->obstacle_kind = o->kind; out->obstacle_origin = o->origin; out->body_index = o->body_index;
+    out->unbound_term_mask = o->pattern.unbound_term_mask; out->op = (maelys_datalog_ir_comparison_t)o->op;
+    if (o->kind == MAELYS_DATALOG_WHY_FALSE_OBSTACLE_COMPARISON_FALSE) {
+        rc = export_value(r, &o->lhs, &out->lhs); return rc ? rc : export_value(r, &o->rhs, &out->rhs);
+    }
+    if (o->kind == MAELYS_DATALOG_WHY_FALSE_OBSTACLE_FILTER_FALSE) {
+        out->filter_program_index = o->filter_program_index; out->filter_kind = o->filter_kind;
+        return export_value(r, &o->filter_value, &out->filter_value);
+    }
+    if (o->kind >= MAELYS_DATALOG_WHY_FALSE_OBSTACLE_COUNT_MISMATCH &&
+        o->kind <= MAELYS_DATALOG_WHY_FALSE_OBSTACLE_SUM_MISMATCH) {
+        rc = export_value(r, &o->lhs, &out->lhs); if (rc) return rc;
+        rc = export_value(r, &o->rhs, &out->rhs); if (rc) return rc;
+    }
+    maelys_datalog_internal_fact_t fact = {0}; fact.predicate_id = o->pattern.predicate_id; fact.arity = o->pattern.arity;
+    memcpy(fact.terms, o->pattern.terms, sizeof(fact.terms));
+    return (maelys_datalog_status_t)maelys_datalog_export_ir_atom(r, &fact, &out->pattern);
+}
+maelys_datalog_status_t maelys_datalog_result_filter_statistics(
+    const maelys_datalog_result_t *result, maelys_datalog_filter_statistics_t *out) {
+    if (!result || !out) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
+    if (!result->owner || result->owner->busy || result->owner->active != result) return MAELYS_DATALOG_STATUS_INVALID_STATE;
+    if (!result->owner->reference_backend) return MAELYS_DATALOG_STATUS_UNSUPPORTED;
+    return (maelys_datalog_status_t)maelys_datalog_solve_result_filter_statistics(result->state, out);
+}
+
+maelys_datalog_status_t maelys_datalog_session_config_set_context(
+    maelys_datalog_session_config_t *c, maelys_datalog_context_t *context, const char *name) {
+    if (!c || !context || (name && !name[0])) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
+    if (!maelys_datalog_context_is_sealed(context)) return MAELYS_DATALOG_STATUS_INVALID_STATE;
+    if (name && strlen(name) >= sizeof(c->context_backend_name)) return MAELYS_DATALOG_STATUS_PAYLOAD_TOO_LARGE;
+    if (!maelys_datalog_context_backend(context, name)) return MAELYS_DATALOG_STATUS_NOT_FOUND;
+    maelys_datalog_context_retain(context);
+    maelys_datalog_context_release(c->context);
+    c->context = context; c->custom_backend = 0;
+    strcpy(c->context_backend_name, name ? name : "");
     return MAELYS_DATALOG_STATUS_OK;
 }

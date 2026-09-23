@@ -15,13 +15,7 @@ extern "C" {
 #define MAELYS_DATALOG_DECISION_NAME_DENY_DEFAULT "deny_default"
 #define MAELYS_DATALOG_DECISION_NAME_DENY_CONFLICT "deny_conflict"
 
-typedef enum {
-    MAELYS_DATALOG_DECISION_DENY = 0,
-    MAELYS_DATALOG_DECISION_ALLOW = 1,
-    MAELYS_DATALOG_DECISION_REDUCED = 2,
-    MAELYS_DATALOG_DECISION_DENY_DEFAULT = 3,
-    MAELYS_DATALOG_DECISION_DENY_CONFLICT = 4
-} maelys_datalog_decision_t;
+
 
 const char *maelys_datalog_decision_name(maelys_datalog_decision_t decision);
 maelys_result_t maelys_datalog_decision_from_queries(

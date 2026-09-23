@@ -74,6 +74,11 @@ $(BUILD_DIR)/obj/%.o: %.c $(ASAN_HEADERS)
 	@mkdir -p $(dir $@)
 	$(CC) $(ASAN_CFLAGS) -I. -c $< -o $@
 
+# Observe diagnostic reset calls and bytes through the real session paths.
+$(BUILD_DIR)/test_maelys_datalog_diagnostic_writes: tests/test_maelys_datalog_diagnostic_writes.c $(filter-out $(BUILD_DIR)/obj/src/core/maelys_datalog_diagnostic.o,$(ASAN_OBJS)) $(ASAN_HEADERS) src/core/maelys_datalog_diagnostic.c | $(BUILD_DIR)
+	$(CC) $(ASAN_CFLAGS) -UNDEBUG $(filter-out $(BUILD_DIR)/obj/src/core/maelys_datalog_diagnostic.o,$(ASAN_OBJS)) $< -o $@
+	$(if $(filter 1,$(ASAN_RUN_ON_BUILD)),$(ASAN_ENV) ./$@,@:)
+
 # This test includes the input implementation with its own allocator hooks.
 $(BUILD_DIR)/test_maelys_datalog_input_edb_alloc: tests/test_maelys_datalog_input_edb_alloc.c $(filter-out $(BUILD_DIR)/obj/src/runtime/maelys_datalog_input_edb.o,$(ASAN_OBJS)) $(ASAN_HEADERS) src/runtime/maelys_datalog_input_edb.c | $(BUILD_DIR)
 	$(CC) $(ASAN_CFLAGS) -UNDEBUG $(filter-out $(BUILD_DIR)/obj/src/runtime/maelys_datalog_input_edb.o,$(ASAN_OBJS)) $< -o $@

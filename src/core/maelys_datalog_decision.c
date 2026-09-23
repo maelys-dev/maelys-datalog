@@ -1,4 +1,5 @@
 #include "src/core/maelys_datalog_decision.h"
+#include "maelys/datalog_advanced.h"
 
 const char *maelys_datalog_decision_name(maelys_datalog_decision_t decision) {
     switch (decision) {
@@ -35,4 +36,13 @@ maelys_result_t maelys_datalog_decision_from_queries(
         *out_decision = MAELYS_DATALOG_DECISION_DENY_DEFAULT;
     }
     return MAELYS_OK;
+}
+
+maelys_datalog_status_t maelys_datalog_decision_from_presence(
+    int allow, int reduce, int deny, maelys_datalog_decision_t *out) {
+    if (!out || (allow != 0 && allow != 1) || (reduce != 0 && reduce != 1) || (deny != 0 && deny != 1))
+        return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
+    *out = deny ? ((allow || reduce) ? MAELYS_DATALOG_DECISION_DENY_CONFLICT : MAELYS_DATALOG_DECISION_DENY)
+        : reduce ? MAELYS_DATALOG_DECISION_REDUCED : allow ? MAELYS_DATALOG_DECISION_ALLOW : MAELYS_DATALOG_DECISION_DENY_DEFAULT;
+    return MAELYS_DATALOG_STATUS_OK;
 }

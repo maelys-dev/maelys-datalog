@@ -21,12 +21,13 @@ typedef struct {
     size_t bytes, alignment, start, stride, input, groups, facts, input_bytes;
 } group_layout;
 
-static maelys_datalog_status_t group_error(maelys_datalog_public_diagnostic_t *d,
+static maelys_datalog_status_t group_error(maelys_datalog_diagnostic_t *d,
     maelys_datalog_status_t rc, const char *message) {
     if (d) {
-        maelys_datalog_public_diagnostic_clear(d);
+        { maelys_datalog_status_t ds = maelys_datalog_diagnostic_clear(d); if (ds) return ds; }
         d->source = MAELYS_DATALOG_DIAGNOSTIC_SOLVE;
-        d->code = rc;
+        d->status = rc;
+        d->code = MAELYS_DATALOG_DIAG_OPERATION_REJECTED;
         snprintf(d->phase, sizeof(d->phase), "group_window");
         snprintf(d->message, sizeof(d->message), "%s", message);
         snprintf(d->hint, sizeof(d->hint), "No group transaction was published; the group cursor did not advance.");
@@ -82,9 +83,9 @@ maelys_datalog_status_t maelys_datalog_group_window_storage_requirements(
 maelys_datalog_status_t maelys_datalog_group_window_init(void *storage, size_t storage_bytes,
     const maelys_datalog_group_window_capacities_t *c, uint32_t first,
     maelys_datalog_session_t *a, maelys_datalog_session_t *b,
-    maelys_datalog_group_window_t **out, maelys_datalog_public_diagnostic_t *diag) {
+    maelys_datalog_group_window_t **out, maelys_datalog_diagnostic_t *diag) {
     if (out) *out = NULL;
-    maelys_datalog_public_diagnostic_clear(diag);
+    { maelys_datalog_status_t ds = maelys_datalog_diagnostic_clear(diag); if (ds) return ds; }
     if (!out || !storage || !a || !b || a == b || first > INT32_MAX)
         return group_error(diag, MAELYS_DATALOG_STATUS_INVALID_ARGUMENT, "Two distinct sessions, storage and a nonnegative int32 group ID are required.");
     group_layout l;
@@ -163,8 +164,8 @@ static size_t make_union(maelys_datalog_fact_t *a, size_t n) {
 
 maelys_datalog_status_t maelys_datalog_group_window_push(maelys_datalog_group_window_t *w,
     const maelys_datalog_fact_t *facts, size_t count, uint32_t *id,
-    maelys_datalog_public_diagnostic_t *diag) {
-    maelys_datalog_public_diagnostic_clear(diag);
+    maelys_datalog_diagnostic_t *diag) {
+    { maelys_datalog_status_t ds = maelys_datalog_diagnostic_clear(diag); if (ds) return ds; }
     if (!w || (!facts && count))
         return group_error(diag, MAELYS_DATALOG_STATUS_INVALID_ARGUMENT, "A nonempty group needs a fact array.");
     if (!w->result) return group_error(diag, MAELYS_DATALOG_STATUS_INVALID_STATE, "Window is closed.");

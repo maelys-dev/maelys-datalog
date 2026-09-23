@@ -42,13 +42,16 @@ maelys_result_t maelys_datalog_compile_frontend(const char *, const char *, cons
                                                 const maelys_datalog_frontend_t *,
                                                 maelys_datalog_context_t *,
                                                 maelys_datalog_internal_ruleset_t *,
-                                                maelys_datalog_public_diagnostic_t *);
-void maelys_datalog_copy_load_diagnostic(maelys_datalog_public_diagnostic_t *,
-                                         const maelys_datalog_internal_diagnostic_t *);
-void maelys_datalog_copy_solve_diagnostic(maelys_datalog_public_diagnostic_t *,
-                                          const maelys_datalog_internal_solve_diagnostic_t *);
+                                                maelys_datalog_diagnostic_t *);
+void maelys_datalog_copy_load_diagnostic(maelys_datalog_diagnostic_t *,
+                                         const maelys_datalog_internal_diagnostic_t *, maelys_result_t);
+void maelys_datalog_copy_solve_diagnostic(maelys_datalog_diagnostic_t *,
+                                          const maelys_datalog_internal_solve_diagnostic_t *,
+    const maelys_datalog_internal_ruleset_t *, maelys_result_t);
 maelys_datalog_status_t maelys_datalog_callback_status(maelys_datalog_status_t);
 maelys_result_t maelys_datalog_export_fact(const maelys_datalog_internal_ruleset_t *,
                                            const maelys_datalog_internal_fact_t *,
                                            maelys_datalog_fact_t *);
+maelys_result_t maelys_datalog_export_ir_term(const maelys_datalog_internal_ruleset_t *, const maelys_datalog_internal_term_t *, maelys_datalog_ir_term_t *);
+maelys_result_t maelys_datalog_export_ir_atom(const maelys_datalog_internal_ruleset_t *, const maelys_datalog_internal_fact_t *, maelys_datalog_ir_atom_t *);
 #endif

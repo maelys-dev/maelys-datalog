@@ -16,7 +16,7 @@ static maelys_datalog_status_t prepare(const maelys_datalog_program_t *program, 
 static maelys_datalog_status_t solve(void *state, const maelys_datalog_fact_t *facts,
                                      size_t count, maelys_datalog_backend_output_t *output,
                                      void **out_result,
-                                     maelys_datalog_public_diagnostic_t *diagnostic) {
+                                     maelys_datalog_diagnostic_t *diagnostic) {
     maelys_datalog_internal_prepared_session_t *session = state;
     (void)facts;
     (void)count;
@@ -25,7 +25,7 @@ static maelys_datalog_status_t solve(void *state, const maelys_datalog_fact_t *f
     maelys_result_t rc =
         maelys_datalog_prepared_session_solve_materialized_ex(session, &result, &diag);
     if (rc != MAELYS_OK) {
-        maelys_datalog_copy_solve_diagnostic(diagnostic, &diag);
+        maelys_datalog_copy_solve_diagnostic(diagnostic, &diag, &session->working, rc);
         return (maelys_datalog_status_t)rc;
     }
     *out_result = result; /* The host cleans up even if emission fails. */

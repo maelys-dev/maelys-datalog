@@ -47,7 +47,7 @@ MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_window_init(
     void *storage, size_t storage_bytes, size_t event_capacity, size_t text_capacity,
     uint32_t first_occurrence, maelys_datalog_session_t *session_a,
     maelys_datalog_session_t *session_b, maelys_datalog_window_t **out_window,
-    maelys_datalog_public_diagnostic_t *out_diagnostic);
+    maelys_datalog_diagnostic_t *out_diagnostic);
 
 /* Expire the oldest event if full, append, then solve on the other session.
  * Publish the new window/result/next ID together, only after success. On ANY
@@ -64,7 +64,7 @@ MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_window_init(
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_window_push(
     maelys_datalog_window_t *window, const char *predicate,
     const maelys_datalog_value_t *values, size_t value_count,
-    uint32_t *out_occurrence, maelys_datalog_public_diagnostic_t *out_diagnostic);
+    uint32_t *out_occurrence, maelys_datalog_diagnostic_t *out_diagnostic);
 
 /* Borrow the latest result, including the initial empty snapshot. Do NOT call
  * result_free: the window owns this lease. Query/enumerate/explanation APIs

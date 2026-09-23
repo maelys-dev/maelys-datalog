@@ -2667,7 +2667,7 @@ static int test_datalog_solve_once_unknown_term_kind_classified(void) {
     TEST_ASSERT_EQUAL(MAELYS_DATALOG_DENY_NONE, (diag_ptr)->failure_reason, "%d"); \
     TEST_ASSERT_EQUAL(MAELYS_DATALOG_SOLVE_DIAG_NONE, (diag_ptr)->category, "%d"); \
     TEST_ASSERT_EQUAL(0u, (diag_ptr)->_pad[0], "%u"); \
-    TEST_ASSERT_EQUAL(0u, (diag_ptr)->_pad[1], "%u"); \
+    TEST_ASSERT_EQUAL(0u, (diag_ptr)->limit_kind, "%u"); \
 } while (0)
 
 static int test_solve_once_diag_none_on_success(void) {
@@ -2747,8 +2747,10 @@ static int test_solve_once_diag_idb_overflow(void) {
     TEST_ASSERT_EQUAL(MAELYS_DATALOG_SOLVE_DIAG_IDB_OVERFLOW, diag.category, "%d");
     TEST_ASSERT_EQUAL(MAELYS_ERR_PAYLOAD_TOO_LARGE, diag.failure_error, "%d");
     TEST_ASSERT_EQUAL(MAELYS_DATALOG_DENY_IDB_OVERFLOW, diag.failure_reason, "%d");
-    TEST_ASSERT_EQUAL((uint16_t)MAELYS_DATALOG_MAX_IDB_FACTS, diag.capacity, "%u");
-    TEST_ASSERT_TRUE(diag.count_observed > 0u);
+    TEST_ASSERT_EQUAL((uint16_t)MAELYS_DATALOG_MAX_FACTS_PER_PRED, diag.capacity, "%u");
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_MAX_FACTS_PER_PRED + 1u, diag.count_observed, "%u");
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_LIMIT_MAX_FACTS_PER_PRED, diag.limit_kind, "%u");
+    TEST_ASSERT_EQUAL_STRING("path", maelys_datalog_predicate_registry_get(&r.registry, diag.predicate_id)->name);
     TEST_END();
 }
 
@@ -2854,7 +2856,7 @@ static int test_solve_once_diag_null_arg(void) {
     TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_ARGUMENT, diag.failure_error, "%d");
     TEST_ASSERT_EQUAL(MAELYS_DATALOG_DENY_NONE, diag.failure_reason, "%d");
     TEST_ASSERT_EQUAL(0u, diag._pad[0], "%u");
-    TEST_ASSERT_EQUAL(0u, diag._pad[1], "%u");
+    TEST_ASSERT_EQUAL(0u, diag.limit_kind, "%u");
     TEST_END();
 }
 
@@ -2925,7 +2927,7 @@ static int test_solve_once_diag_no_raw_payload(void) {
     TEST_ASSERT_EQUAL_STRING("internal_error",
                              maelys_datalog_solve_diagnostic_category_name(MAELYS_DATALOG_SOLVE_DIAG_INTERNAL_ERROR));
     TEST_ASSERT_TRUE(sizeof(maelys_datalog_internal_solve_diagnostic_t) <= 40u);
-    TEST_ASSERT_EQUAL((size_t)2u, sizeof(((maelys_datalog_internal_solve_diagnostic_t *)0)->_pad), "%zu");
+    TEST_ASSERT_EQUAL((size_t)1u, sizeof(((maelys_datalog_internal_solve_diagnostic_t *)0)->_pad), "%zu");
     TEST_END();
 }
 

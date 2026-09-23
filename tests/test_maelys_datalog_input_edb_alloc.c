@@ -29,7 +29,7 @@ static unsigned argument_calls[7];
 static maelys_datalog_input_edb_t *counted_edb(maelys_datalog_input_edb_t *edb) {
     ++argument_calls[0]; return edb;
 }
-static maelys_datalog_public_diagnostic_t *counted_diagnostic(maelys_datalog_public_diagnostic_t *d) {
+static maelys_datalog_diagnostic_t *counted_diagnostic(maelys_datalog_diagnostic_t *d) {
     ++argument_calls[1]; return d;
 }
 static const char *counted_predicate(void) { ++argument_calls[2]; return "mixed"; }
@@ -43,7 +43,7 @@ static void test_c11_fact_builders(void) {
     unsigned char snapshot[sizeof(arena.bytes)];
     memset(arena.bytes, 0xA5, sizeof(arena.bytes));
     maelys_datalog_input_edb_t *edb = NULL;
-    maelys_datalog_public_diagnostic_t diag;
+    maelys_datalog_diagnostic_t diag = MAELYS_DATALOG_DIAGNOSTIC_INIT;
     forbid_allocations = 1;
     assert(maelys_datalog_input_edb_init(arena.bytes, sizeof(arena.bytes), 8u, 256u, &edb) == 0);
     assert(MAELYS_DATALOG_ADD_FACT(edb, &diag, "ready") == 0);
@@ -102,7 +102,7 @@ static void test_c11_fact_builders(void) {
     memcpy(snapshot, arena.bytes, sizeof(snapshot));
     assert(MAELYS_DATALOG_ADD_FACT(edb, &diag, "bad", (uint64_t)INT64_MAX + 1u) == MAELYS_DATALOG_STATUS_INVALID_ARGUMENT);
     assert(strstr(diag.message, "term 0") && strstr(diag.message, "INT64_MIN..INT64_MAX"));
-    assert(strcmp(diag.phase, "input") == 0 && diag.code == MAELYS_DATALOG_STATUS_INVALID_ARGUMENT);
+    assert(strcmp(diag.phase, "input") == 0 && diag.status == MAELYS_DATALOG_STATUS_INVALID_ARGUMENT && diag.code == MAELYS_DATALOG_DIAG_OPERATION_REJECTED);
     assert(diag.line == 0 && diag.column == 0);
     assert(memcmp(snapshot, arena.bytes, sizeof(snapshot)) == 0);
     assert(MAELYS_DATALOG_ADD_FACT(edb, &diag, "bad", "unused", UINT64_MAX) == MAELYS_DATALOG_STATUS_INVALID_ARGUMENT);
@@ -130,7 +130,7 @@ static void test_c11_batch_builders(void) {
     union { max_align_t align; unsigned char bytes[8192]; } arena;
     unsigned char snapshot[sizeof(arena.bytes)];
     maelys_datalog_input_edb_t *edb = NULL;
-    maelys_datalog_public_diagnostic_t diag;
+    maelys_datalog_diagnostic_t diag = MAELYS_DATALOG_DIAGNOSTIC_INIT;
     forbid_allocations = 1;
     memset(arena.bytes, 0xA5, sizeof(arena.bytes));
     assert(maelys_datalog_input_edb_init(arena.bytes, sizeof(arena.bytes), 8u, 256u, &edb) == 0);
@@ -337,7 +337,7 @@ int main(void) {
     maelys_datalog_fact_t batch[2] = {0};
     batch[0].predicate = "seen"; batch[0].arity = 1; batch[0].terms[0] = value;
     batch[1] = batch[0]; batch[1].terms[0].as.symbol = NULL;
-    maelys_datalog_public_diagnostic_t diag;
+    maelys_datalog_diagnostic_t diag = MAELYS_DATALOG_DIAGNOSTIC_INIT;
     memcpy(snapshot, arena.bytes, sizeof(snapshot));
     assert(maelys_datalog_input_edb_add_facts(edb, batch, 2u, &diag) != 0);
     assert(strstr(diag.message, "Fact 1, term 0"));

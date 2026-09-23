@@ -35,7 +35,7 @@ static maelys_datalog_status_t counted_evaluate(const unsigned char *v, size_t v
 }
 static maelys_datalog_status_t observed_lower(const char *source, size_t size,
                                               maelys_datalog_program_builder_t *builder,
-                                              maelys_datalog_public_diagnostic_t *diag) {
+                                              maelys_datalog_diagnostic_t *diag) {
     maelys_datalog_status_t rc =
         maelys_datalog_frontend_datalog()->lower(source, size, builder, diag);
 #ifdef MAELYS_TESTING
@@ -229,7 +229,7 @@ static void filter_validation_once(void) {
     for (size_t i = 0; i < 2; ++i) {
         filter_validations = 0;
         maelys_datalog_policy_t *policy = NULL;
-        maelys_datalog_public_diagnostic_t diag;
+        maelys_datalog_diagnostic_t diag = MAELYS_DATALOG_DIAGNOSTIC_INIT;
         maelys_datalog_status_t rc = maelys_datalog_policy_load_inline(
             "pipeline", "filter", sources[i], strlen(sources[i]), &policy, &diag);
         assert(filter_validations == 1); /* Including shared OR alternatives. */
@@ -244,16 +244,16 @@ static void filter_validation_once(void) {
         }
     }
 }
-static maelys_datalog_public_diagnostic_t load_failure(const char *source) {
+static maelys_datalog_diagnostic_t load_failure(const char *source) {
     maelys_datalog_policy_t *policy = NULL;
-    maelys_datalog_public_diagnostic_t diag;
+    maelys_datalog_diagnostic_t diag = MAELYS_DATALOG_DIAGNOSTIC_INIT;
     assert(maelys_datalog_policy_load_inline("pipeline", "order", source, strlen(source), &policy,
                                              &diag) != MAELYS_DATALOG_STATUS_OK);
     assert(!policy && diag.code);
     return diag;
 }
-static int same_diagnostic(const maelys_datalog_public_diagnostic_t *a,
-                           const maelys_datalog_public_diagnostic_t *b) {
+static int same_diagnostic(const maelys_datalog_diagnostic_t *a,
+                           const maelys_datalog_diagnostic_t *b) {
     return a->code == b->code && a->line == b->line && a->column == b->column &&
            !strcmp(a->message, b->message);
 }
@@ -267,14 +267,14 @@ static void diagnostic_order(void) {
     const char *unstratified =
         "allow(X) :- seed(X), not(reach(X, X)).\nreach(X, Y) :- edge(X, Y), not(allow(X)).";
     const char *broken = "allow(X) :- seed(X";
-    const maelys_datalog_public_diagnostic_t unsafe_diag = load_failure(unsafe);
-    const maelys_datalog_public_diagnostic_t edb_head_diag = load_failure(edb_head);
-    const maelys_datalog_public_diagnostic_t strata_diag = load_failure(unstratified);
+    const maelys_datalog_diagnostic_t unsafe_diag = load_failure(unsafe);
+    const maelys_datalog_diagnostic_t edb_head_diag = load_failure(edb_head);
+    const maelys_datalog_diagnostic_t strata_diag = load_failure(unstratified);
     assert(unsafe_diag.code == MAELYS_DATALOG_DIAG_PARSER_UNSAFE_VARIABLE);
     assert(edb_head_diag.code == MAELYS_DATALOG_DIAG_PARSER_RULE_HEAD_EDB_FORBIDDEN);
     assert(strata_diag.code == MAELYS_DATALOG_DIAG_POLICY_NOT_STRATIFIABLE);
     char source[256];
-    maelys_datalog_public_diagnostic_t diag;
+    maelys_datalog_diagnostic_t diag = MAELYS_DATALOG_DIAGNOSTIC_INIT;
     snprintf(source, sizeof(source), "%s\n%s", unsafe, broken);
     diag = load_failure(source);
     assert(same_diagnostic(&diag, &unsafe_diag));

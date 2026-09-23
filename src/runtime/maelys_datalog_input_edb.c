@@ -50,11 +50,12 @@ static size_t input_index_slots(size_t capacity, size_t text_capacity) {
 }
 
 static maelys_datalog_status_t input_error(
-    maelys_datalog_public_diagnostic_t *diag, maelys_datalog_status_t status,
+    maelys_datalog_diagnostic_t *diag, maelys_datalog_status_t status,
     const char *format, ...) {
     if (diag) {
         diag->source = MAELYS_DATALOG_DIAGNOSTIC_SOLVE;
-        diag->code = status;
+        diag->status = status;
+        diag->code = MAELYS_DATALOG_DIAG_OPERATION_REJECTED;
         snprintf(diag->phase, sizeof(diag->phase), "input");
         va_list args;
         va_start(args, format);
@@ -291,8 +292,8 @@ maelys_datalog_status_t maelys_datalog_input_edb_create(maelys_datalog_input_edb
 
 maelys_datalog_status_t maelys_datalog_input_edb_add_facts(
     maelys_datalog_input_edb_t *edb, const maelys_datalog_fact_t *facts,
-    size_t count, maelys_datalog_public_diagnostic_t *diag) {
-    maelys_datalog_public_diagnostic_clear(diag);
+    size_t count, maelys_datalog_diagnostic_t *diag) {
+    { maelys_datalog_status_t ds = maelys_datalog_diagnostic_clear(diag); if (ds) return ds; }
     if (!edb || (!facts && count))
         return input_error(diag, MAELYS_DATALOG_STATUS_INVALID_ARGUMENT,
                            "An input EDB and a non-NULL batch for nonzero fact_count are required.");
@@ -369,8 +370,8 @@ maelys_datalog_status_t maelys_datalog_input_edb_add_facts(
 maelys_datalog_status_t maelys_datalog_input_edb_add_fact(
     maelys_datalog_input_edb_t *edb, const char *predicate,
     const maelys_datalog_value_t *terms, size_t arity,
-    maelys_datalog_public_diagnostic_t *diag) {
-    maelys_datalog_public_diagnostic_clear(diag);
+    maelys_datalog_diagnostic_t *diag) {
+    { maelys_datalog_status_t ds = maelys_datalog_diagnostic_clear(diag); if (ds) return ds; }
     if (arity > MAELYS_DATALOG_MAX_TERMS || (!terms && arity))
         return input_error(diag, MAELYS_DATALOG_STATUS_INVALID_ARGUMENT,
                            "Terms are required for nonzero arity; maximum arity is %u.",
@@ -427,10 +428,10 @@ maelys_datalog_status_t maelys_datalog_input_edb_free(maelys_datalog_input_edb_t
 }
 maelys_datalog_status_t maelys_datalog_session_solve_edb(
     maelys_datalog_session_t *session, const maelys_datalog_input_edb_t *edb,
-    maelys_datalog_result_t **out, maelys_datalog_public_diagnostic_t *diag) {
+    maelys_datalog_result_t **out, maelys_datalog_diagnostic_t *diag) {
     if (!edb) {
         if (out) *out = NULL;
-        maelys_datalog_public_diagnostic_clear(diag);
+        { maelys_datalog_status_t ds = maelys_datalog_diagnostic_clear(diag); if (ds) return ds; }
         return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
     }
     return maelys_datalog_session_solve(session, edb->facts, edb->count, out, diag);

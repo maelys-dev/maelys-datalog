@@ -117,12 +117,34 @@ class Diagnostic:
     """Native diagnostic, distinct from the operation's status code."""
 
     source: int = 0
+    status: int = 0
     code: int = 0
+    present: int = 0
     line: int = 0
     column: int = 0
     phase: str = ""
     message: str = ""
     hint: str = ""
+    file: str = ""
+    predicate: str = ""
+    arity: int = 0
+    observed_count: int = 0
+    limit: int = 0
+    depth: int = 0
+    depth_limit: int = 0
+    rule_id: int = 0
+    comparison_result: int = 0
+    expected_kind: int = 0
+    lhs_kind: int = 0
+    rhs_kind: int = 0
+    comparison_op: int = 0
+    limit_kind: int = 0
+    term_index: int = 0
+    expected_arity: int = 0
+    observed_arity: int = 0
+    token: str = ""
+    field: str = ""
+    domain: str = ""
 
 
 class MaelysDatalogError(RuntimeError):
@@ -143,12 +165,11 @@ def _text(c_string) -> str:
 def _check(status: int, step: str, diagnostic=None) -> None:
     if status == lib.MAELYS_DATALOG_STATUS_OK:
         return
-    detail = Diagnostic(
-        source=int(diagnostic.source), code=int(diagnostic.code),
-        line=int(diagnostic.line), column=int(diagnostic.column),
-        phase=_text(diagnostic.phase), message=_text(diagnostic.message),
-        hint=_text(diagnostic.hint),
-    ) if diagnostic is not None else Diagnostic()
+    detail = Diagnostic(**{
+        name: _text(getattr(diagnostic, name)) if isinstance(field.default, str)
+        else int(getattr(diagnostic, name))
+        for name, field in Diagnostic.__dataclass_fields__.items()
+    }) if diagnostic is not None else Diagnostic()
     raise MaelysDatalogError(
         int(status), detail.message or f"{step}: {_text(lib.maelys_datalog_status_name(status))}",
         detail.hint, diagnostic=detail,
@@ -204,7 +225,7 @@ class Engine:
     """Owns Python rulesets; native domain registration remains process-wide."""
 
     def __init__(self) -> None:
-        if int(lib.MAELYS_DATALOG_PUBLIC_API_VERSION) != 1:
+        if int(lib.MAELYS_DATALOG_PUBLIC_API_VERSION) != 2:
             raise RuntimeError("python-next requires the Maelys Datalog opaque API v1")
         self._closed = False
         self._thread = threading.current_thread()
@@ -266,7 +287,8 @@ class Engine:
         source_bytes = source.encode("utf-8")
         source_buffer = ffi.new("char[]", source_bytes)
         out = ffi.new("maelys_datalog_policy_t **")
-        diagnostic = ffi.new("maelys_datalog_public_diagnostic_t *")
+        diagnostic = ffi.new("maelys_datalog_diagnostic_t *")
+        lib.maelys_datalog_diagnostic_init(diagnostic, ffi.sizeof("maelys_datalog_diagnostic_t"))
         with _REGISTRY_LOCK:
             _check(
                 lib.maelys_datalog_policy_load_inline(
@@ -300,7 +322,8 @@ class Engine:
         if allow_undeclared_policy_atoms:
             flags |= int(lib.MAELYS_DATALOG_PUBLIC_ALLOW_UNDECLARED_POLICY_ATOMS)
         out = ffi.new("maelys_datalog_policy_t **")
-        diagnostic = ffi.new("maelys_datalog_public_diagnostic_t *")
+        diagnostic = ffi.new("maelys_datalog_diagnostic_t *")
+        lib.maelys_datalog_diagnostic_init(diagnostic, ffi.sizeof("maelys_datalog_diagnostic_t"))
         with _REGISTRY_LOCK:
             _check(lib.maelys_datalog_policy_load_manifest(
                 _name(os.fspath(path), "manifest path"), flags, out, diagnostic,
@@ -474,7 +497,8 @@ class Session:
         if not isinstance(edb, Edb) or edb.ruleset is not self.ruleset or edb._closed:
             raise RuntimeError("EDB belongs to another or closed Ruleset")
         result_out = ffi.new("maelys_datalog_result_t **")
-        diagnostic = ffi.new("maelys_datalog_public_diagnostic_t *")
+        diagnostic = ffi.new("maelys_datalog_diagnostic_t *")
+        lib.maelys_datalog_diagnostic_init(diagnostic, ffi.sizeof("maelys_datalog_diagnostic_t"))
         _check(lib.maelys_datalog_session_solve_edb(
             self._session, edb._edb, result_out, diagnostic,
         ), "solve", diagnostic)
@@ -563,7 +587,8 @@ class Edb:
         for index, value in enumerate(normalized):
             _fill_value(native[index], value, keepers)
         self._require_mutable()
-        diagnostic = ffi.new("maelys_datalog_public_diagnostic_t *")
+        diagnostic = ffi.new("maelys_datalog_diagnostic_t *")
+        lib.maelys_datalog_diagnostic_init(diagnostic, ffi.sizeof("maelys_datalog_diagnostic_t"))
         _check(lib.maelys_datalog_input_edb_add_fact(
             self._edb, name, native, len(normalized), diagnostic), "add input fact", diagnostic)
 
@@ -600,7 +625,8 @@ class Edb:
             for term_index, term in enumerate(terms):
                 _fill_value(native[index].terms[term_index], term, keepers)
         self._require_mutable()
-        diagnostic = ffi.new("maelys_datalog_public_diagnostic_t *")
+        diagnostic = ffi.new("maelys_datalog_diagnostic_t *")
+        lib.maelys_datalog_diagnostic_init(diagnostic, ffi.sizeof("maelys_datalog_diagnostic_t"))
         _check(lib.maelys_datalog_input_edb_add_facts(
             self._edb, native, len(staged), diagnostic), "add input batch", diagnostic)
 

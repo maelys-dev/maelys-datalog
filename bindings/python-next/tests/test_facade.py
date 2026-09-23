@@ -189,7 +189,9 @@ class FacadeTest(unittest.TestCase):
         # decision. Extension SDK authoring callbacks are a separate surface.
         coverage = {
             "status_name": "error formatting", "limit_get": "Engine.limits",
-            "public_diagnostic_clear": "CFFI diagnostic utility",
+            "diagnostic_clear": "CFFI diagnostic utility",
+            "diagnostic_init": "CFFI diagnostic protocol",
+            "diag_code_name": "CFFI diagnostic utility",
             "domain_register": "Engine.register_domain",
             "policy_load_inline": "Engine.load_inline_ruleset",
             "policy_load_manifest": "Engine.load_manifest",
@@ -540,6 +542,8 @@ class FacadeTest(unittest.TestCase):
             with self.assertRaises(MaelysDatalogError) as failure:
                 self.engine.load_manifest(path)
             self.assertEqual(failure.exception.diagnostic.source, 1)
+            self.assertEqual(failure.exception.diagnostic.status, failure.exception.status)
+            self.assertNotEqual(failure.exception.diagnostic.present, 0)
             self.assertNotEqual(failure.exception.diagnostic.code, 0)
 
 

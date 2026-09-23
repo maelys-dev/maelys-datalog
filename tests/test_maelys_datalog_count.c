@@ -43,7 +43,7 @@ static int setup(void) {
     return 0;
 }
 static maelys_datalog_status_t load(const char *source, maelys_datalog_policy_t **out) {
-    maelys_datalog_public_diagnostic_t d;
+    maelys_datalog_diagnostic_t d = MAELYS_DATALOG_DIAGNOSTIC_INIT;
     maelys_datalog_status_t rc = maelys_datalog_policy_load_inline(
         "aggregates", "count.test", source, strlen(source), out, &d);
     if (rc) fprintf(stderr, "load %d: %s [%s]\n", rc, d.message, source);
@@ -64,7 +64,7 @@ static int present(maelys_datalog_result_t *r, const char *p, size_t n,
 }
 static int solve(maelys_datalog_session_t *s, const maelys_datalog_fact_t *f,
     size_t n, maelys_datalog_result_t **out) {
-    maelys_datalog_public_diagnostic_t d;
+    maelys_datalog_diagnostic_t d = MAELYS_DATALOG_DIAGNOSTIC_INIT;
     int rc = maelys_datalog_session_solve(s, f, n, out, &d);
     if (rc) fprintf(stderr, "solve %d: %s\n", rc, d.message);
     REQUIRE(rc == 0); return 0;
@@ -184,7 +184,7 @@ static int binding_and_syntax_rejections(void) {
     };
     for (size_t i=0;i<sizeof(invalid)/sizeof(invalid[0]);++i) {
         maelys_datalog_policy_t *p = (void *)(uintptr_t)1;
-        maelys_datalog_public_diagnostic_t d;
+        maelys_datalog_diagnostic_t d = MAELYS_DATALOG_DIAGNOSTIC_INIT;
         int rc = maelys_datalog_policy_load_inline("aggregates","bad",invalid[i],strlen(invalid[i]),&p,&d);
         if (!rc) fprintf(stderr,"unexpected acceptance: %s\n",invalid[i]);
         REQUIRE(rc != 0 && p == NULL);
@@ -234,7 +234,7 @@ static int backend_gate_and_ir(void) {
 }
 static const maelys_datalog_program_t *roundtrip_source;
 static maelys_datalog_status_t lower_count(const char *source, size_t length,
-    maelys_datalog_program_builder_t *builder, maelys_datalog_public_diagnostic_t *diag) {
+    maelys_datalog_program_builder_t *builder, maelys_datalog_diagnostic_t *diag) {
     (void)length; (void)diag;
     maelys_datalog_ir_rule_t r;
     maelys_datalog_status_t rc = maelys_datalog_program_rule(roundtrip_source,0,&r);

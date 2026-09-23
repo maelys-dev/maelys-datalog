@@ -138,7 +138,7 @@ static maelys_datalog_status_t prepare(const maelys_datalog_program_t *program, 
 }
 static maelys_datalog_status_t solve(void *state, const maelys_datalog_fact_t *inputs,
                                      size_t input_count, maelys_datalog_backend_output_t *output,
-                                     void **out_result, maelys_datalog_public_diagnostic_t *diag) {
+                                     void **out_result, maelys_datalog_diagnostic_t *diag) {
     (void)diag;
     *out_result = NULL;
     naive_t *s = state;

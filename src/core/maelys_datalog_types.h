@@ -3,6 +3,7 @@
 #define MAELYS_DATALOG_TYPES_H
 
 #include <stdbool.h>
+#include "maelys/datalog_details.h"
 #include <stddef.h>
 #include <stdint.h>
 
@@ -260,30 +261,15 @@ typedef struct {
     MAELYS_DATALOG_MAX_PROOF_NODES
 #define MAELYS_DATALOG_MAX_EXPLANATION_PREMISES \
     (MAELYS_DATALOG_MAX_PROOF_NODES * MAELYS_DATALOG_MAX_BODY_LITERALS)
-#define MAELYS_DATALOG_EXPLANATION_NO_STEP UINT16_MAX
 
-typedef enum {
-    MAELYS_DATALOG_EXPLANATION_PREMISE_POSITIVE_FACT = 1,
-    MAELYS_DATALOG_EXPLANATION_PREMISE_NEGATED_ABSENCE = 2,
-    MAELYS_DATALOG_EXPLANATION_PREMISE_COMPARISON_TRUE = 3,
-    MAELYS_DATALOG_EXPLANATION_PREMISE_FILTER_TRUE = 4,
-    MAELYS_DATALOG_EXPLANATION_PREMISE_COUNT = 5,
-    MAELYS_DATALOG_EXPLANATION_PREMISE_MIN = 6,
-    MAELYS_DATALOG_EXPLANATION_PREMISE_MAX = 7,
-    MAELYS_DATALOG_EXPLANATION_PREMISE_SUM = 8
-} maelys_datalog_explanation_premise_kind_t;
+
 
 static inline int maelys_datalog_premise_is_aggregate(unsigned kind) {
     return kind >= MAELYS_DATALOG_EXPLANATION_PREMISE_COUNT &&
            kind <= MAELYS_DATALOG_EXPLANATION_PREMISE_SUM;
 }
 
-typedef enum {
-    MAELYS_DATALOG_EXPLANATION_ORIGIN_POLICY_FACT = 1,
-    MAELYS_DATALOG_EXPLANATION_ORIGIN_EDB = 2,
-    MAELYS_DATALOG_EXPLANATION_ORIGIN_IDB = 3,
-    MAELYS_DATALOG_EXPLANATION_ORIGIN_NOT_APPLICABLE = 4
-} maelys_datalog_explanation_origin_t;
+
 
 /* A single premise of a canonical derivation, in the rule body's lexical
  * position `body_index`.
@@ -385,38 +371,13 @@ _Static_assert(sizeof(maelys_datalog_explanation_t) <= 65536u,
     MAELYS_DATALOG_MAX_BODY_LITERALS
 #define MAELYS_DATALOG_MAX_WHY_FALSE_SUBSTITUTIONS_PER_RULE 4096u
 
-typedef enum {
-    MAELYS_DATALOG_WHY_FALSE_STATUS_NOT_APPLICABLE = 1,
-    MAELYS_DATALOG_WHY_FALSE_STATUS_COMPLETE = 2,
-    MAELYS_DATALOG_WHY_FALSE_STATUS_TRUNCATED = 3
-} maelys_datalog_why_false_status_t;
 
-typedef enum {
-    MAELYS_DATALOG_WHY_FALSE_SUMMARY_NONE = 0,
-    MAELYS_DATALOG_WHY_FALSE_SUMMARY_NO_CANDIDATE_RULE = 1
-} maelys_datalog_why_false_summary_t;
 
-typedef enum {
-    MAELYS_DATALOG_WHY_FALSE_OBSTACLE_POSITIVE_NO_MATCH = 1,
-    MAELYS_DATALOG_WHY_FALSE_OBSTACLE_NEGATIVE_CONTRADICTED = 2,
-    MAELYS_DATALOG_WHY_FALSE_OBSTACLE_COMPARISON_FALSE = 3,
-    MAELYS_DATALOG_WHY_FALSE_OBSTACLE_RECURSIVE_NO_BASE_SUPPORT = 4,
-    MAELYS_DATALOG_WHY_FALSE_OBSTACLE_FILTER_FALSE = 5,
-    MAELYS_DATALOG_WHY_FALSE_OBSTACLE_COUNT_MISMATCH = 6,
-    MAELYS_DATALOG_WHY_FALSE_OBSTACLE_MIN_MISMATCH = 7,
-    MAELYS_DATALOG_WHY_FALSE_OBSTACLE_MAX_MISMATCH = 8,
-    MAELYS_DATALOG_WHY_FALSE_OBSTACLE_SUM_MISMATCH = 9,
-    MAELYS_DATALOG_WHY_FALSE_OBSTACLE_MIN_EMPTY = 10,
-    MAELYS_DATALOG_WHY_FALSE_OBSTACLE_MAX_EMPTY = 11
-} maelys_datalog_why_false_obstacle_kind_t;
 
-typedef enum {
-    MAELYS_DATALOG_WHY_FALSE_LIMIT_CANDIDATE_RULES = 1u << 0,
-    MAELYS_DATALOG_WHY_FALSE_LIMIT_SUBSTITUTIONS = 1u << 1,
-    MAELYS_DATALOG_WHY_FALSE_LIMIT_DEPTH = 1u << 2,
-    MAELYS_DATALOG_WHY_FALSE_LIMIT_DIAGNOSTICS = 1u << 3,
-    MAELYS_DATALOG_WHY_FALSE_LIMIT_FILTER_COST = 1u << 4
-} maelys_datalog_why_false_limit_t;
+
+
+
+
 
 typedef struct {
     size_t max_candidate_rules;
@@ -481,12 +442,7 @@ typedef struct {
         diagnostics[MAELYS_DATALOG_MAX_WHY_FALSE_DIAGNOSTICS];
 } maelys_datalog_why_false_explanation_t;
 
-typedef struct {
-    size_t evaluations;
-    size_t matches;
-    size_t non_matches;
-    size_t cost_units;
-} maelys_datalog_filter_statistics_t;
+
 
 _Static_assert(sizeof(maelys_datalog_why_false_explanation_t) <= 65536u,
                "public Why-false explanation exceeds 64 KiB bound");

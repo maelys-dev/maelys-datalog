@@ -5,7 +5,7 @@
  * New consumers should include <maelys/datalog.h>, whose handles are opaque
  * and whose CMake installation does not expose implementation headers. This
  * historical surface is source-breaking in 0.10.0: implementation types now
- * carry internal_ names. New application and extension code uses maelys/*.h. */
+ * carry internal_ names. New application and extension code uses the headers under maelys/. */
 
 /* Version macros live in the generated header (single source: VERSION).
  * Regenerate with scripts/generate-version-header.sh; never edit either

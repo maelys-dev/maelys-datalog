@@ -25,7 +25,8 @@ static int copy_bounded(char *destination, size_t capacity, const char *source) 
 
 maelys_result_t maelys_datalog_domain_registry_register(const maelys_datalog_domain_def_t *def) {
     if (!def || !def->domain_name) return MAELYS_ERR_INVALID_ARGUMENT;
-    int has_callback = (def->install_predicates != NULL);
+    int has_callback = (def->install_predicates != NULL || def->installer != NULL);
+    if (def->install_predicates && def->installer) return MAELYS_ERR_INVALID_ARGUMENT;
     int has_table = (def->predicates != NULL && def->predicate_count > 0u);
     if (has_callback == has_table) return MAELYS_ERR_INVALID_ARGUMENT;
     if (has_callback && (def->predicates != NULL || def->predicate_count != 0u)) {
@@ -51,6 +52,7 @@ maelys_result_t maelys_datalog_domain_registry_register(const maelys_datalog_dom
     }
     candidate.def.domain_name = candidate.domain_name;
     candidate.def.install_predicates = def->install_predicates;
+    candidate.def.installer = def->installer;
     if (def->description) {
         if (!copy_bounded(candidate.description, sizeof(candidate.description), def->description)) {
             return MAELYS_ERR_INVALID_FIELD;
@@ -100,11 +102,31 @@ const maelys_datalog_domain_entry_t *maelys_datalog_domain_registry_find(const c
     return NULL;
 }
 
+struct maelys_datalog_domain_builder {
+    maelys_datalog_predicate_registry_t *registry;
+    maelys_datalog_status_t error;
+};
+maelys_datalog_status_t maelys_datalog_domain_builder_add(
+    maelys_datalog_domain_builder_t *b, const maelys_datalog_predicate_t *p) {
+    if (!b) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
+    if (b->error) return b->error;
+    if (!p || !p->name || (p->flags & ~15u))
+        return b->error = MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
+    return b->error = (maelys_datalog_status_t)maelys_datalog_predicate_registry_add_domain(b->registry, p->name, p->arity, p->flags);
+}
+
 maelys_result_t maelys_datalog_domain_registry_install(const char *domain_name,
                                                        maelys_datalog_predicate_registry_t *registry) {
     const maelys_datalog_domain_entry_t *domain = maelys_datalog_domain_registry_find(domain_name);
-    if (!domain || (!domain->install_predicates && !domain->predicates)) return MAELYS_ERR_UNSUPPORTED;
-    if (domain->install_predicates) {
+    if (!domain || (!domain->install_predicates && !domain->installer && !domain->predicates)) return MAELYS_ERR_UNSUPPORTED;
+    if (domain->installer) {
+        maelys_datalog_domain_builder_t builder = {registry, MAELYS_DATALOG_STATUS_OK};
+        maelys_datalog_status_t rc = domain->installer(&builder);
+        if (builder.error) rc = builder.error;
+        if (rc > MAELYS_DATALOG_STATUS_OK || rc < MAELYS_DATALOG_STATUS_STORAGE_TOO_SMALL)
+            rc = MAELYS_DATALOG_STATUS_INTERNAL;
+        if (rc) return (maelys_result_t)rc;
+    } else if (domain->install_predicates) {
         maelys_result_t rc = domain->install_predicates(registry);
         if (rc != MAELYS_OK) return rc;
     } else {

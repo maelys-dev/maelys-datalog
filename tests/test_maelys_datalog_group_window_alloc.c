@@ -62,7 +62,7 @@ static void rejected_unchanged(maelys_datalog_group_window_t *w,
     unsigned char header[sizeof(*w)]; memcpy(header,w,sizeof(*w));
     unsigned char *committed=(unsigned char *)w+layout.start+w->active*layout.stride;
     memcpy(bank,committed,layout.stride);
-    uint32_t id=UINT32_MAX; maelys_datalog_public_diagnostic_t d;
+    uint32_t id=UINT32_MAX; maelys_datalog_diagnostic_t d = MAELYS_DATALOG_DIAGNOSTIC_INIT;
     assert(maelys_datalog_group_window_push(w,facts,n,&id,&d)==expected);
     assert(id==UINT32_MAX && !memcmp(header,w,sizeof(*w)) && !memcmp(bank,committed,layout.stride));
     free(bank);

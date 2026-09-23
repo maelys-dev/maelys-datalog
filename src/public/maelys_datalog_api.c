@@ -67,15 +67,10 @@ const char *maelys_datalog_status_name(maelys_datalog_status_t status) {
     }
 }
 
-void maelys_datalog_public_diagnostic_clear(
-    maelys_datalog_public_diagnostic_t *diagnostic) {
-    if (diagnostic) memset(diagnostic, 0, sizeof(*diagnostic));
-}
-
 static int public_predicates_match(
     const maelys_datalog_domain_entry_t *existing,
     const maelys_datalog_domain_t *candidate) {
-    if (!existing || !candidate || existing->install_predicates ||
+    if (!existing || !candidate || existing->install_predicates || existing->installer ||
         existing->predicate_count != candidate->predicate_count ||
         existing->atom_count != candidate->atom_count) {
         return 0;
@@ -142,8 +137,28 @@ static maelys_datalog_status_t allocate_policy(
     if (!out_policy || !out_allocated) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
     maelys_datalog_policy_t *policy = calloc(1u, sizeof(*policy));
     if (!policy) return MAELYS_DATALOG_STATUS_INTERNAL;
+    policy->owns_storage = 1;
     *out_allocated = policy;
     return MAELYS_DATALOG_STATUS_OK;
+}
+
+maelys_datalog_status_t maelys_datalog_policy_storage_requirements(size_t *bytes, size_t *alignment) {
+    if (!bytes || !alignment) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
+    *bytes = sizeof(maelys_datalog_policy_t); *alignment = _Alignof(maelys_datalog_policy_t);
+    return MAELYS_DATALOG_STATUS_OK;
+}
+static maelys_datalog_status_t policy_storage(void *storage, size_t bytes,
+    maelys_datalog_policy_t **out, maelys_datalog_policy_t **candidate) {
+    if (out) *out = NULL;
+    if (!out || !storage || (uintptr_t)storage % _Alignof(maelys_datalog_policy_t))
+        return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
+    if (bytes < sizeof(maelys_datalog_policy_t)) return MAELYS_DATALOG_STATUS_STORAGE_TOO_SMALL;
+    memset(storage, 0, sizeof(maelys_datalog_policy_t)); *candidate = storage;
+    return MAELYS_DATALOG_STATUS_OK;
+}
+static void discard_policy(maelys_datalog_policy_t *p) {
+    if (p->owns_storage) free(p);
+    else memset(p, 0, sizeof(*p));
 }
 
 maelys_datalog_status_t maelys_datalog_policy_load_inline(
@@ -152,29 +167,33 @@ maelys_datalog_status_t maelys_datalog_policy_load_inline(
     const char *source,
     size_t source_length,
     maelys_datalog_policy_t **out_policy,
-    maelys_datalog_public_diagnostic_t *out_diagnostic) {
+    maelys_datalog_diagnostic_t *out_diagnostic) {
     return maelys_datalog_policy_load_frontend(domain, policy_id, source, source_length,
         NULL, out_policy, out_diagnostic);
 }
 
-static maelys_datalog_status_t policy_load_in(maelys_datalog_context_t *context,
+static maelys_datalog_status_t policy_load_in(void *storage, size_t bytes, maelys_datalog_context_t *context,
     const char *domain, const char *policy_id, const char *source, size_t source_length,
     const maelys_datalog_frontend_t *frontend, maelys_datalog_policy_t **out_policy,
-    maelys_datalog_public_diagnostic_t *out_diagnostic) {
-    maelys_datalog_public_diagnostic_clear(out_diagnostic);
+    maelys_datalog_diagnostic_t *out_diagnostic) {
+    if (out_policy) *out_policy = NULL;
+    { maelys_datalog_status_t ds = maelys_datalog_diagnostic_clear(out_diagnostic); if (ds) return ds; }
     maelys_datalog_policy_t *policy = NULL;
-    maelys_datalog_status_t rc = allocate_policy(out_policy, &policy);
+    if (out_policy) *out_policy = NULL;
+    maelys_datalog_status_t rc = storage ? policy_storage(storage, bytes, out_policy, &policy) : allocate_policy(out_policy, &policy);
     if (rc != MAELYS_DATALOG_STATUS_OK) return rc;
     maelys_result_t status = maelys_datalog_compile_frontend(domain, policy_id, source,
         source_length, frontend, context, &policy->set.policies[0], out_diagnostic);
     if (status != MAELYS_OK) {
+        if (out_diagnostic) out_diagnostic->status = (maelys_datalog_status_t)status;
         if (out_diagnostic && out_diagnostic->source == MAELYS_DATALOG_DIAGNOSTIC_NONE) {
             out_diagnostic->source = MAELYS_DATALOG_DIAGNOSTIC_LOAD;
-            out_diagnostic->code = status;
+            out_diagnostic->status = (maelys_datalog_status_t)status;
+            out_diagnostic->code = MAELYS_DATALOG_DIAG_OPERATION_REJECTED;
             snprintf(out_diagnostic->phase, sizeof(out_diagnostic->phase), "frontend");
             snprintf(out_diagnostic->message, sizeof(out_diagnostic->message), "frontend compilation failed");
         }
-        memset(policy, 0, sizeof(*policy)); free(policy);
+        discard_policy(policy);
         return public_status(status);
     }
     policy->set.policy_count = 1u;
@@ -186,27 +205,28 @@ static maelys_datalog_status_t policy_load_in(maelys_datalog_context_t *context,
 maelys_datalog_status_t maelys_datalog_policy_load_frontend(
     const char *domain, const char *policy_id, const char *source, size_t length,
     const maelys_datalog_frontend_t *frontend, maelys_datalog_policy_t **out,
-    maelys_datalog_public_diagnostic_t *diag) {
-    return policy_load_in(NULL, domain, policy_id, source, length, frontend, out, diag);
+    maelys_datalog_diagnostic_t *diag) {
+    return policy_load_in(NULL, 0, NULL, domain, policy_id, source, length, frontend, out, diag);
 }
 maelys_datalog_status_t maelys_datalog_context_load_inline(maelys_datalog_context_t *context,
     const char *frontend_name, const char *domain, const char *policy_id, const char *source,
-    size_t length, maelys_datalog_policy_t **out, maelys_datalog_public_diagnostic_t *diag) {
+    size_t length, maelys_datalog_policy_t **out, maelys_datalog_diagnostic_t *diag) {
     if (out) *out = NULL;
-    maelys_datalog_public_diagnostic_clear(diag);
+    { maelys_datalog_status_t ds = maelys_datalog_diagnostic_clear(diag); if (ds) return ds; }
     if (!context || !out) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
     if (!maelys_datalog_context_is_sealed(context)) return MAELYS_DATALOG_STATUS_INVALID_STATE;
     const maelys_datalog_frontend_t *frontend = maelys_datalog_context_frontend(context, frontend_name);
     if (!frontend) return MAELYS_DATALOG_STATUS_NOT_FOUND;
-    return policy_load_in(context, domain, policy_id, source, length, frontend, out, diag);
+    return policy_load_in(NULL, 0, context, domain, policy_id, source, length, frontend, out, diag);
 }
 
 maelys_datalog_status_t maelys_datalog_policy_load_manifest(
     const char *manifest_path,
     unsigned flags,
     maelys_datalog_policy_t **out_policy,
-    maelys_datalog_public_diagnostic_t *out_diagnostic) {
-    maelys_datalog_public_diagnostic_clear(out_diagnostic);
+    maelys_datalog_diagnostic_t *out_diagnostic) {
+    if (out_policy) *out_policy = NULL;
+    { maelys_datalog_status_t ds = maelys_datalog_diagnostic_clear(out_diagnostic); if (ds) return ds; }
     const unsigned supported_flags =
         MAELYS_DATALOG_PUBLIC_ALLOW_TEST_ONLY |
         MAELYS_DATALOG_PUBLIC_ALLOW_UNDECLARED_POLICY_ATOMS;
@@ -229,7 +249,7 @@ maelys_datalog_status_t maelys_datalog_policy_load_manifest(
     maelys_result_t status = maelys_datalog_manifest_load_ex(
         manifest_path, manifest_flags, &policy->set, &diagnostic);
     if (status != MAELYS_OK) {
-        maelys_datalog_copy_load_diagnostic(out_diagnostic, &diagnostic);
+        maelys_datalog_copy_load_diagnostic(out_diagnostic, &diagnostic, status);
         memset(policy, 0, sizeof(*policy));
         free(policy);
         return public_status(status);
@@ -262,10 +282,86 @@ maelys_datalog_status_t maelys_datalog_policy_fingerprint(
 
 maelys_datalog_status_t maelys_datalog_policy_free(maelys_datalog_policy_t *policy) {
     if (!policy) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
+    if (!policy->set.policy_count) return MAELYS_DATALOG_STATUS_INVALID_STATE;
     for (size_t i = 0; i < policy->set.policy_count; ++i)
         maelys_datalog_context_release(policy->set.policies[i].modules);
     maelys_datalog_policy_set_clear(&policy->set);
-    memset(policy, 0, sizeof(*policy));
-    free(policy);
+    discard_policy(policy);
     return MAELYS_DATALOG_STATUS_OK;
+}
+
+static maelys_datalog_status_t load_manifest_text(void *storage, size_t bytes,
+    const char *json, size_t length, const maelys_datalog_policy_bundle_entry_t *bundle,
+    size_t count, unsigned flags, maelys_datalog_policy_t **out,
+    maelys_datalog_diagnostic_t *diag) {
+    if (out) *out = NULL;
+    maelys_datalog_status_t ds = maelys_datalog_diagnostic_clear(diag);
+    if (ds) return ds;
+    if (!json || !length || (!bundle && count) || !out ||
+        (flags & ~(MAELYS_DATALOG_PUBLIC_ALLOW_TEST_ONLY | MAELYS_DATALOG_PUBLIC_ALLOW_UNDECLARED_POLICY_ATOMS)))
+        return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
+    maelys_datalog_policy_t *policy = NULL;
+    ds = storage ? policy_storage(storage, bytes, out, &policy) : allocate_policy(out, &policy);
+    if (ds) return ds;
+    maelys_datalog_internal_diagnostic_t detail = {0};
+    maelys_result_t rc = maelys_datalog_manifest_load_from_text(json, length, bundle, count,
+        flags, &policy->set, &detail);
+    if (rc) {
+        maelys_datalog_copy_load_diagnostic(diag, &detail, rc);
+        discard_policy(policy);
+        return (maelys_datalog_status_t)rc;
+    }
+    *out = policy;
+    return MAELYS_DATALOG_STATUS_OK;
+}
+
+maelys_datalog_status_t maelys_datalog_domain_register_advanced(
+    const maelys_datalog_domain_t *d, const char *description, maelys_datalog_domain_installer_t installer) {
+    if (!d || !d->name || !d->name[0] || (description && strlen(description) >= 256u) ||
+        (installer && (d->predicates || d->predicate_count)) || (!installer && !d->predicate_count))
+        return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
+    const maelys_datalog_domain_entry_t *old = maelys_datalog_domain_registry_find(d->name);
+    if (old) {
+        if (old->installer != installer || old->install_predicates ||
+            strcmp(old->description ? old->description : "", description ? description : "") ||
+            old->atom_count != d->atom_count || (d->atom_count && !d->atoms))
+            return MAELYS_DATALOG_STATUS_INVALID_FIELD;
+        for (size_t i = 0; i < d->atom_count; ++i)
+            if (!d->atoms[i] || strcmp(old->atoms[i], d->atoms[i])) return MAELYS_DATALOG_STATUS_INVALID_FIELD;
+        return (installer || public_predicates_match(old, d)) ? MAELYS_DATALOG_STATUS_OK : MAELYS_DATALOG_STATUS_INVALID_FIELD;
+    }
+    if (d->predicate_count > MAELYS_DATALOG_MAX_PREDICATES || d->atom_count > MAELYS_DATALOG_MAX_ATOMS ||
+        (d->atom_count && !d->atoms) || (!installer && !d->predicates))
+        return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
+    for (size_t i = 0; i < d->predicate_count; ++i) {
+        const maelys_datalog_predicate_t *p = &d->predicates[i];
+        if (!p->name) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
+        if (!p->name[0] || strnlen(p->name, 64u) >= 64u || p->arity > MAELYS_DATALOG_MAX_ARITY)
+            return MAELYS_DATALOG_STATUS_INVALID_FIELD;
+    }
+    maelys_datalog_domain_def_t native = {0};
+    native.domain_name = d->name; native.predicates = d->predicates; native.predicate_count = d->predicate_count;
+    native.atoms = d->atoms; native.atom_count = d->atom_count;
+    native.description = description && description[0] ? description : NULL; native.installer = installer;
+    return (maelys_datalog_status_t)maelys_datalog_domain_registry_register(&native);
+}
+
+maelys_datalog_status_t maelys_datalog_policy_load_frontend_in(void *storage, size_t bytes,
+    const char *domain, const char *id, const char *source, size_t length,
+    const maelys_datalog_frontend_t *frontend, maelys_datalog_policy_t **out, maelys_datalog_diagnostic_t *diag) {
+    if (out) *out = NULL;
+    if (!storage) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
+    return policy_load_in(storage, bytes, NULL, domain, id, source, length, frontend, out, diag);
+}
+maelys_datalog_status_t maelys_datalog_policy_load_manifest_text_in(void *storage, size_t bytes,
+    const char *json, size_t length, const maelys_datalog_policy_bundle_entry_t *bundle, size_t count,
+    unsigned flags, maelys_datalog_policy_t **out, maelys_datalog_diagnostic_t *diag) {
+    if (out) *out = NULL;
+    if (!storage) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
+    return load_manifest_text(storage, bytes, json, length, bundle, count, flags, out, diag);
+}
+maelys_datalog_status_t maelys_datalog_policy_load_manifest_text(
+    const char *json, size_t length, const maelys_datalog_policy_bundle_entry_t *bundle, size_t count,
+    unsigned flags, maelys_datalog_policy_t **out, maelys_datalog_diagnostic_t *diag) {
+    return load_manifest_text(NULL, 0, json, length, bundle, count, flags, out, diag);
 }

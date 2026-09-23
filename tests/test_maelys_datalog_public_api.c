@@ -69,7 +69,7 @@ static int test_public_api_complete_lifecycle(void) {
     TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK, register_domain(domain_name), "%d");
 
     maelys_datalog_policy_t *policy = NULL;
-    maelys_datalog_public_diagnostic_t diagnostic;
+    maelys_datalog_diagnostic_t diagnostic = MAELYS_DATALOG_DIAGNOSTIC_INIT;
     TEST_ASSERT_EQUAL(
         MAELYS_DATALOG_STATUS_OK,
         maelys_datalog_policy_load_inline(
@@ -252,7 +252,7 @@ static maelys_datalog_status_t load_manifest_source_mode(
     const char *mode,
     unsigned flags,
     maelys_datalog_policy_t **out_policy,
-    maelys_datalog_public_diagnostic_t *out_diagnostic) {
+    maelys_datalog_diagnostic_t *out_diagnostic) {
     char directory[] = "/tmp/maelys-public-atoms-XXXXXX";
     if (!mkdtemp(directory)) return MAELYS_DATALOG_STATUS_IO;
     char source_path[256];
@@ -291,7 +291,7 @@ static maelys_datalog_status_t load_manifest_source_mode(
 
 static maelys_datalog_status_t load_manifest_source(
     const char *domain, const char *source, const char *sha, unsigned flags,
-    maelys_datalog_policy_t **out, maelys_datalog_public_diagnostic_t *diag) {
+    maelys_datalog_policy_t **out, maelys_datalog_diagnostic_t *diag) {
     return load_manifest_source_mode(domain, source, sha, "enforce", flags, out, diag);
 }
 
@@ -343,7 +343,7 @@ static int test_public_api_loading_permissions(void) {
         for (size_t test_only = 0; test_only < 2u; ++test_only) {
             for (size_t local = 0; local < 2u; ++local) {
                 maelys_datalog_policy_t *policy = (maelys_datalog_policy_t *)(uintptr_t)1u;
-                maelys_datalog_public_diagnostic_t diag;
+                maelys_datalog_diagnostic_t diag = MAELYS_DATALOG_DIAGNOSTIC_INIT;
                 const int denied_mode = test_only && !(permissions[i] &
                     MAELYS_DATALOG_PUBLIC_ALLOW_TEST_ONLY);
                 const int denied_atom = local && !(permissions[i] &
@@ -391,7 +391,7 @@ static int test_public_api_loading_permissions(void) {
     TEST_ASSERT_EQUAL_STRING(fingerprints[0], fingerprints[1]);
     /* Both permissions still preserve SHA and predicate validation. */
     maelys_datalog_policy_t *policy = (maelys_datalog_policy_t *)(uintptr_t)1u;
-    maelys_datalog_public_diagnostic_t diag;
+    maelys_datalog_diagnostic_t diag = MAELYS_DATALOG_DIAGNOSTIC_INIT;
     TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_INVALID_FIELD,
         load_manifest_source_mode(domain, sources[0], hashes[1], "test_only",
                                   permissions[3], &policy, &diag), "%d");
@@ -482,7 +482,7 @@ static int test_public_api_policy_atom_modes(void) {
     TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK, register_domain(domain), "%d");
 
     maelys_datalog_policy_t *policy = (maelys_datalog_policy_t *)(uintptr_t)1u;
-    maelys_datalog_public_diagnostic_t diagnostic;
+    maelys_datalog_diagnostic_t diagnostic = MAELYS_DATALOG_DIAGNOSTIC_INIT;
     TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_INVALID_FIELD,
         maelys_datalog_policy_load_inline(domain, "inline-before", source,
             strlen(source), &policy, &diagnostic), "%d");
@@ -637,7 +637,7 @@ static int test_public_api_policy_atom_limits_and_filter_separation(void) {
         "%d");
     if (policy) (void)maelys_datalog_policy_free(policy);
     policy = (maelys_datalog_policy_t *)(uintptr_t)1u;
-    maelys_datalog_public_diagnostic_t diagnostic;
+    maelys_datalog_diagnostic_t diagnostic = MAELYS_DATALOG_DIAGNOSTIC_INIT;
     TEST_ASSERT_EQUAL(
         MAELYS_DATALOG_STATUS_PAYLOAD_TOO_LARGE,
         load_manifest_source(
@@ -814,7 +814,7 @@ static int test_public_api_manifest_selects_nonzero_policy(void) {
     TEST_ASSERT_TRUE(write_bytes(manifest_path, manifest, strlen(manifest)));
 
     maelys_datalog_policy_t *policy = NULL;
-    maelys_datalog_public_diagnostic_t diagnostic;
+    maelys_datalog_diagnostic_t diagnostic = MAELYS_DATALOG_DIAGNOSTIC_INIT;
     TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK,
                       maelys_datalog_policy_load_manifest(
                           manifest_path, 0u, &policy, &diagnostic), "%d");
@@ -846,8 +846,10 @@ static int test_public_api_errors_are_atomic_and_diagnostic(void) {
     TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK, register_domain(domain), "%d");
     const char invalid_source[] = "allow(X) :- missing(X).\n";
     maelys_datalog_policy_t *policy = (maelys_datalog_policy_t *)(uintptr_t)1u;
-    maelys_datalog_public_diagnostic_t diagnostic;
+    maelys_datalog_diagnostic_t diagnostic = MAELYS_DATALOG_DIAGNOSTIC_INIT;
     memset(&diagnostic, 0x7f, sizeof(diagnostic));
+    diagnostic.struct_size = sizeof(diagnostic);
+    diagnostic.abi_version = MAELYS_DATALOG_DIAGNOSTIC_ABI_VERSION;
     TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_INVALID_FIELD,
                       maelys_datalog_policy_load_inline(
                           domain, "invalid", invalid_source, strlen(invalid_source),
@@ -980,7 +982,7 @@ static int test_public_api_input_diagnostics_and_retry(void) {
         fact("observed", (maelys_datalog_value_t){.kind = (maelys_datalog_value_kind_t)99}),
     };
     maelys_datalog_result_t *rejected = NULL;
-    maelys_datalog_public_diagnostic_t rejection;
+    maelys_datalog_diagnostic_t rejection = MAELYS_DATALOG_DIAGNOSTIC_INIT;
     TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_INVALID_FIELD,
         maelys_datalog_session_solve(session, competing, 2u, &rejected, &rejection), "%d");
     TEST_ASSERT_NULL(rejected);
@@ -1014,12 +1016,13 @@ static int test_public_api_input_diagnostics_and_retry(void) {
     for (size_t i = 0u; i < sizeof(bad) / sizeof(bad[0]); ++i) {
         maelys_datalog_fact_t inputs[] = {fact("observed", symbol_value("stale")), bad[i]};
         maelys_datalog_result_t *result = NULL;
-        maelys_datalog_public_diagnostic_t diag;
+        maelys_datalog_diagnostic_t diag = MAELYS_DATALOG_DIAGNOSTIC_INIT;
         TEST_ASSERT_EQUAL(statuses[i],
                           maelys_datalog_session_solve(session, inputs, 2u, &result, &diag), "%d");
         TEST_ASSERT_NULL(result);
         TEST_ASSERT_EQUAL(MAELYS_DATALOG_DIAGNOSTIC_SOLVE, diag.source, "%d");
-        TEST_ASSERT_EQUAL((int)statuses[i], diag.code, "%d");
+        TEST_ASSERT_EQUAL(statuses[i], diag.status, "%d");
+        TEST_ASSERT_EQUAL(MAELYS_DATALOG_DIAG_OPERATION_REJECTED, diag.code, "%d");
         TEST_ASSERT_EQUAL_STRING("input", diag.phase);
         TEST_ASSERT_NOT_NULL(strstr(diag.message, "index 1"));
         TEST_ASSERT_NOT_NULL(strstr(diag.message, reasons[i]));
@@ -1063,7 +1066,7 @@ static int test_public_api_capacity_diagnostics(void) {
     TEST_ASSERT_NOT_NULL(strings);
     if (!inputs || !strings) { free(inputs); free(strings); (void)maelys_datalog_session_free(session); TEST_END(); }
     maelys_datalog_result_t *result = NULL;
-    maelys_datalog_public_diagnostic_t diag;
+    maelys_datalog_diagnostic_t diag = MAELYS_DATALOG_DIAGNOSTIC_INIT;
     TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_PAYLOAD_TOO_LARGE,
                       maelys_datalog_session_solve(session, inputs, edb_limit + 1u, &result, &diag), "%d");
     TEST_ASSERT_NULL(result);
@@ -1236,7 +1239,7 @@ static int test_public_api_opaque_session_config(void) {
 static int test_public_api_owned_input_edb(void) {
     TEST_BEGIN();
     maelys_datalog_input_edb_t *edb = NULL;
-    maelys_datalog_public_diagnostic_t diag;
+    maelys_datalog_diagnostic_t diag = MAELYS_DATALOG_DIAGNOSTIC_INIT;
     size_t count = 99u, limit = 0u, string_limit = 0u;
     TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_INVALID_ARGUMENT,
                       maelys_datalog_input_edb_create(NULL), "%d");

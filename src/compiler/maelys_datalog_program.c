@@ -54,32 +54,84 @@ maelys_datalog_status_t maelys_datalog_callback_status(maelys_datalog_status_t s
                ? s
                : MAELYS_DATALOG_STATUS_INTERNAL;
 }
-void maelys_datalog_copy_load_diagnostic(maelys_datalog_public_diagnostic_t *out,
-                                         const maelys_datalog_internal_diagnostic_t *in) {
-    if (!out || !in)
-        return;
-    memset(out, 0, sizeof(*out));
+void maelys_datalog_copy_load_diagnostic(maelys_datalog_diagnostic_t *out,
+    const maelys_datalog_internal_diagnostic_t *in, maelys_result_t status) {
+    if (!out || !in || maelys_datalog_diagnostic_clear(out)) return;
     out->source = MAELYS_DATALOG_DIAGNOSTIC_LOAD;
+    out->status = (maelys_datalog_status_t)status;
     out->code = in->code;
-    out->line = in->line;
-    out->column = in->column;
-    snprintf(out->phase, sizeof(out->phase), "%s", in->phase);
-    snprintf(out->message, sizeof(out->message), "%s", in->message);
-    snprintf(out->hint, sizeof(out->hint), "%s", in->hint);
+    out->line = in->line; out->column = in->column;
+#define COPY_TEXT(member) snprintf(out->member, sizeof(out->member), "%s", in->member)
+    COPY_TEXT(phase); COPY_TEXT(message); COPY_TEXT(hint); COPY_TEXT(file);
+    COPY_TEXT(predicate); COPY_TEXT(token); COPY_TEXT(field); COPY_TEXT(domain);
+#undef COPY_TEXT
+    if (in->file[0] || in->line || in->column) out->present |= MAELYS_DATALOG_DIAGNOSTIC_LOCATION;
+    if (in->predicate[0]) { out->present |= MAELYS_DATALOG_DIAGNOSTIC_PREDICATE; out->arity = in->arity; }
+    if (in->limit || in->count) {
+        out->present |= MAELYS_DATALOG_DIAGNOSTIC_CAPACITY;
+        out->observed_count = in->count; out->limit = in->limit;
+        if (in->code == MAELYS_DATALOG_DIAG_PARSER_RULE_BODY_LITERAL_OVERFLOW)
+            out->limit_kind = MAELYS_DATALOG_LIMIT_MAX_BODY_LITERALS;
+    }
+    if (in->token[0] || in->field[0] || in->domain[0]) out->present |= MAELYS_DATALOG_DIAGNOSTIC_CONTEXT;
+    if (in->code == MAELYS_DATALOG_DIAG_PARSER_ARITY_MISMATCH &&
+        in->expected_arity != in->observed_arity) {
+        out->present |= MAELYS_DATALOG_DIAGNOSTIC_ARITY;
+        out->expected_arity = in->expected_arity; out->observed_arity = in->observed_arity;
+    }
+    if (in->compare_result) {
+        out->present |= MAELYS_DATALOG_DIAGNOSTIC_COMPARISON;
+        out->comparison_result = in->compare_result; out->expected_kind = in->expected_kind;
+        out->lhs_kind = in->observed_lhs_kind; out->rhs_kind = in->observed_rhs_kind;
+        out->comparison_op = in->failed_op; out->term_index = in->term_index;
+    }
 }
-void maelys_datalog_copy_solve_diagnostic(maelys_datalog_public_diagnostic_t *out,
-                                          const maelys_datalog_internal_solve_diagnostic_t *in) {
-    if (!out || !in)
-        return;
-    memset(out, 0, sizeof(*out));
+void maelys_datalog_copy_solve_diagnostic(maelys_datalog_diagnostic_t *out,
+    const maelys_datalog_internal_solve_diagnostic_t *in,
+    const maelys_datalog_internal_ruleset_t *ruleset, maelys_result_t status) {
+    if (!out || !in || maelys_datalog_diagnostic_clear(out)) return;
     out->source = MAELYS_DATALOG_DIAGNOSTIC_SOLVE;
-    out->code = in->category;
+    out->status = (maelys_datalog_status_t)status;
+    static const maelys_datalog_diag_code_t codes[] = {
+        MAELYS_DATALOG_DIAG_OPERATION_REJECTED,
+        MAELYS_DATALOG_DIAG_SOLVE_MAX_DEPTH, MAELYS_DATALOG_DIAG_SOLVE_IDB_OVERFLOW,
+        MAELYS_DATALOG_DIAG_SOLVE_COMPARISON_TYPE_ERROR, MAELYS_DATALOG_DIAG_SOLVE_FILTER_ERROR,
+        MAELYS_DATALOG_DIAG_SOLVE_MALFORMED_FACT, MAELYS_DATALOG_DIAG_SOLVE_MALFORMED_EDB,
+        MAELYS_DATALOG_DIAG_SOLVE_INVALID_STATE, MAELYS_DATALOG_DIAG_SOLVE_INVALID_ARGUMENT,
+        MAELYS_DATALOG_DIAG_SOLVE_INTERNAL_ERROR
+    };
+    out->code = (unsigned)in->category < sizeof(codes)/sizeof(codes[0]) ? codes[in->category] : MAELYS_DATALOG_DIAG_SOLVE_INTERNAL_ERROR;
     snprintf(out->phase, sizeof(out->phase), "solve");
-    snprintf(out->message, sizeof(out->message), "%s",
-             maelys_datalog_solve_diagnostic_category_name(in->category));
+    snprintf(out->message, sizeof(out->message), "%s", maelys_datalog_solve_diagnostic_category_name(in->category));
+    const maelys_datalog_predicate_entry_t *pred = ruleset ? maelys_datalog_predicate_registry_get(&ruleset->registry, in->predicate_id) : NULL;
+    if (pred) {
+        out->present |= MAELYS_DATALOG_DIAGNOSTIC_PREDICATE;
+        snprintf(out->predicate, sizeof(out->predicate), "%s", pred->name); out->arity = pred->arity;
+    }
+    if (in->rule_id != UINT16_MAX && ruleset && in->rule_id < ruleset->rule_count) {
+        out->present |= MAELYS_DATALOG_DIAGNOSTIC_RULE; out->rule_id = in->rule_id;
+    }
+    if (in->depth_limit) {
+        out->present |= MAELYS_DATALOG_DIAGNOSTIC_DEPTH;
+        out->depth = in->depth; out->depth_limit = in->depth_limit;
+    }
+    if (in->capacity || in->count_observed) {
+        out->present |= MAELYS_DATALOG_DIAGNOSTIC_CAPACITY;
+        out->observed_count = in->count_observed; out->limit = in->capacity;
+        out->limit_kind = (maelys_datalog_limit_t)in->limit_kind;
+    }
+    if (in->category == MAELYS_DATALOG_SOLVE_DIAG_COMPARISON_TYPE_ERROR) {
+        out->present |= MAELYS_DATALOG_DIAGNOSTIC_COMPARISON;
+        out->lhs_kind = in->lhs_kind; out->rhs_kind = in->rhs_kind;
+        out->comparison_op = in->comparison_op; out->term_index = in->term_index;
+    }
+    if (in->category == MAELYS_DATALOG_SOLVE_DIAG_MALFORMED_FACT) {
+        out->present |= MAELYS_DATALOG_DIAGNOSTIC_ARITY;
+        out->expected_arity = in->arity_expected; out->observed_arity = in->arity_observed;
+    }
 }
 
-static maelys_result_t export_term(const maelys_datalog_internal_ruleset_t *r,
+maelys_result_t maelys_datalog_export_ir_term(const maelys_datalog_internal_ruleset_t *r,
                                    const maelys_datalog_internal_term_t *in, maelys_datalog_ir_term_t *out) {
     memset(out, 0, sizeof(*out));
     out->kind = (maelys_datalog_ir_term_kind_t)in->kind;
@@ -101,7 +153,7 @@ static maelys_result_t export_term(const maelys_datalog_internal_ruleset_t *r,
     }
     return MAELYS_OK;
 }
-static maelys_result_t export_atom(const maelys_datalog_internal_ruleset_t *r,
+maelys_result_t maelys_datalog_export_ir_atom(const maelys_datalog_internal_ruleset_t *r,
                                    const maelys_datalog_internal_fact_t *in, maelys_datalog_ir_atom_t *out) {
     memset(out, 0, sizeof(*out));
     const maelys_datalog_predicate_entry_t *d =
@@ -111,7 +163,7 @@ static maelys_result_t export_atom(const maelys_datalog_internal_ruleset_t *r,
     out->predicate = d->name;
     out->arity = in->arity;
     for (size_t i = 0; i < in->arity; ++i) {
-        maelys_result_t rc = export_term(r, &in->terms[i], &out->terms[i]);
+        maelys_result_t rc = maelys_datalog_export_ir_term(r, &in->terms[i], &out->terms[i]);
         if (rc != MAELYS_OK)
             return rc;
     }
@@ -121,7 +173,7 @@ maelys_result_t maelys_datalog_export_fact(const maelys_datalog_internal_ruleset
                                            const maelys_datalog_internal_fact_t *in,
                                            maelys_datalog_fact_t *out) {
     maelys_datalog_ir_atom_t a;
-    maelys_result_t rc = export_atom(r, in, &a);
+    maelys_result_t rc = maelys_datalog_export_ir_atom(r, in, &a);
     if (rc != MAELYS_OK)
         return rc;
     memset(out, 0, sizeof(*out));
@@ -339,7 +391,7 @@ maelys_datalog_status_t maelys_datalog_program_fact(const maelys_datalog_program
     if (index >= p->ruleset->fact_count)
         return MAELYS_DATALOG_STATUS_NOT_FOUND;
     maelys_datalog_ir_atom_t a;
-    maelys_result_t rc = export_atom(p->ruleset, &p->ruleset->facts[index], &a);
+    maelys_result_t rc = maelys_datalog_export_ir_atom(p->ruleset, &p->ruleset->facts[index], &a);
     if (rc == MAELYS_OK)
         *out = a;
     return (maelys_datalog_status_t)rc;
@@ -353,7 +405,7 @@ maelys_datalog_status_t maelys_datalog_program_rule(const maelys_datalog_program
     const maelys_datalog_internal_ruleset_t *r = p->ruleset;
     const maelys_datalog_rule_t *in = &r->rules[index];
     maelys_datalog_ir_rule_t rule = {0};
-    maelys_result_t rc = export_atom(r, &in->head, &rule.head);
+    maelys_result_t rc = maelys_datalog_export_ir_atom(r, &in->head, &rule.head);
     if (rc != MAELYS_OK)
         return (maelys_datalog_status_t)rc;
     rule.body_count = in->body_count;
@@ -366,7 +418,7 @@ maelys_datalog_status_t maelys_datalog_program_rule(const maelys_datalog_program
         b->left = a->left == UINT8_MAX ? UINT32_MAX : a->left;
         b->right = a->right == UINT8_MAX ? UINT32_MAX : a->right;
         if (a->kind <= MAELYS_DATALOG_ARITH_EXPR_VAR) {
-            rc = export_term(r, &a->term, &b->term);
+            rc = maelys_datalog_export_ir_term(r, &a->term, &b->term);
             if (rc != MAELYS_OK)
                 return (maelys_datalog_status_t)rc;
         }
@@ -378,11 +430,11 @@ maelys_datalog_status_t maelys_datalog_program_rule(const maelys_datalog_program
         b->lhs_expression = b->rhs_expression = UINT32_MAX;
         if (a->kind == MAELYS_DATALOG_LITERAL_ATOM ||
             a->kind == MAELYS_DATALOG_LITERAL_NEGATED_ATOM)
-            rc = export_atom(r, &a->atom, &b->atom);
+            rc = maelys_datalog_export_ir_atom(r, &a->atom, &b->atom);
         else if (maelys_datalog_literal_is_aggregate(a->kind)) {
-            rc = export_atom(r, &a->atom, &b->atom);
-            if (rc == MAELYS_OK) rc = export_term(r, &a->lhs, &b->lhs);
-            if (rc == MAELYS_OK) rc = export_term(r, &a->rhs, &b->rhs);
+            rc = maelys_datalog_export_ir_atom(r, &a->atom, &b->atom);
+            if (rc == MAELYS_OK) rc = maelys_datalog_export_ir_term(r, &a->lhs, &b->lhs);
+            if (rc == MAELYS_OK) rc = maelys_datalog_export_ir_term(r, &a->rhs, &b->rhs);
         } else if (a->kind == MAELYS_DATALOG_LITERAL_COMPARISON) {
             b->comparison = (maelys_datalog_ir_comparison_t)a->op;
             b->has_arithmetic = a->has_arith_expr;
@@ -390,9 +442,9 @@ maelys_datalog_status_t maelys_datalog_program_rule(const maelys_datalog_program
                 b->lhs_expression = a->lhs_expr_root;
                 b->rhs_expression = a->rhs_expr_root;
             } else {
-                rc = export_term(r, &a->lhs, &b->lhs);
+                rc = maelys_datalog_export_ir_term(r, &a->lhs, &b->lhs);
                 if (rc == MAELYS_OK)
-                    rc = export_term(r, &a->rhs, &b->rhs);
+                    rc = maelys_datalog_export_ir_term(r, &a->rhs, &b->rhs);
             }
         } else if (a->kind == MAELYS_DATALOG_LITERAL_FILTER) {
             const maelys_datalog_filter_definition_t *d =
@@ -404,7 +456,7 @@ maelys_datalog_status_t maelys_datalog_program_rule(const maelys_datalog_program
             b->filter_semantic_id = d->semantic_id;
             b->pattern = r->filter_pattern_pool + f->pattern_offset;
             b->pattern_length = f->pattern_length;
-            rc = export_term(r, &a->filter_value, &b->filter_value);
+            rc = maelys_datalog_export_ir_term(r, &a->filter_value, &b->filter_value);
         } else
             rc = MAELYS_ERR_INVALID_STATE;
         if (rc != MAELYS_OK)
@@ -593,12 +645,12 @@ maelys_datalog_status_t maelys_datalog_program_add_rule(maelys_datalog_program_b
 
 static maelys_datalog_status_t datalog_lower(const char *source, size_t length,
                                              maelys_datalog_program_builder_t *builder,
-                                             maelys_datalog_public_diagnostic_t *out) {
+                                             maelys_datalog_diagnostic_t *out) {
     maelys_datalog_internal_diagnostic_t diag = {0};
     maelys_result_t rc = maelys_datalog_parse_only(builder->ruleset, source, length, "inline", 0,
                                                    builder->parse_origin, &diag);
     if (rc != MAELYS_OK)
-        maelys_datalog_copy_load_diagnostic(out, &diag);
+        maelys_datalog_copy_load_diagnostic(out, &diag, rc);
     return (maelys_datalog_status_t)rc;
 }
 const maelys_datalog_frontend_t *maelys_datalog_frontend_datalog(void) {
@@ -612,7 +664,7 @@ maelys_result_t maelys_datalog_compile_frontend(const char *domain, const char *
                                                 const maelys_datalog_frontend_t *frontend,
                                                 maelys_datalog_context_t *context,
                                                 maelys_datalog_internal_ruleset_t *r,
-                                                maelys_datalog_public_diagnostic_t *out) {
+                                                maelys_datalog_diagnostic_t *out) {
     if (!frontend)
         frontend = maelys_datalog_frontend_datalog();
     if (!r || !domain || !policy_id || !source || !length || !domain[0] || !policy_id[0] ||
@@ -625,14 +677,14 @@ maelys_result_t maelys_datalog_compile_frontend(const char *domain, const char *
         maelys_datalog_internal_diagnostic_set(&diag, MAELYS_DATALOG_DIAG_MANIFEST_UNKNOWN_DOMAIN,
             "manifest", "inline", 0, 0, "unknown policy domain",
             "install a domain registry or disable the policy");
-        maelys_datalog_copy_load_diagnostic(out, &diag);
+        maelys_datalog_copy_load_diagnostic(out, &diag, MAELYS_ERR_UNSUPPORTED);
         return MAELYS_ERR_UNSUPPORTED;
     }
     if (!maelys_utf8_validate((const unsigned char *)source, length)) {
         maelys_datalog_internal_diagnostic_set(&diag, MAELYS_DATALOG_DIAG_LEXER_INVALID_UTF8,
             "manifest", "inline", 0, 0, "invalid UTF-8 in policy text",
             "ensure the policy text is valid UTF-8");
-        maelys_datalog_copy_load_diagnostic(out, &diag);
+        maelys_datalog_copy_load_diagnostic(out, &diag, MAELYS_ERR_INVALID_FIELD);
         return MAELYS_ERR_INVALID_FIELD;
     }
     maelys_result_t rc =
@@ -657,7 +709,7 @@ maelys_result_t maelys_datalog_compile_frontend(const char *domain, const char *
         return (maelys_result_t)status;
     rc = maelys_datalog_validate_program(r, "inline", &origin, &diag);
     if (rc != MAELYS_OK) {
-        maelys_datalog_copy_load_diagnostic(out, &diag);
+        maelys_datalog_copy_load_diagnostic(out, &diag, rc);
         return rc;
     }
     /* Identity follows the descriptor the host selected, never a name the

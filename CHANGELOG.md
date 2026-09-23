@@ -9,6 +9,12 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 
+- Advanced operations on the existing application handles: in-memory manifest
+  bundles, caller-owned policy storage, bounded domain installers, composed
+  session backend/context configuration, reference structured explanations,
+  filter statistics and the decision-precedence helper. Caller-owned policy
+  storage does not imply a heap-free loader or session constructor.
+
 - `MAELYS_DATALOG_DOMAIN_NO_ATOMS` and `MAELYS_DATALOG_DOMAIN_WITH_ATOMS`
   initialize public domain declarations in C and C++, deriving counts from
   fixed-size arrays. Registration remains explicit; no allocation, exported
@@ -16,6 +22,14 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
   not restrict request EDB symbols or change loading permissions.
 
 ### Changed
+
+- **0.10.0 migration:** the common diagnostic has an explicit size/version
+  initialization protocol, separate status and precise code, independent detail
+  sections and owned bounded text. Consumer API 2, frontend/program ABI 2 and
+  backend ABI 4 reject older callback contracts before invocation. The private
+  solver diagnostic remains compact. This ABI 4 does not introduce deltas or
+  freeze the future resource contract; subsequent incompatible changes need a
+  different version. Recompile C/CFFI consumers; no compatibility alias remains.
 
 - Share application declarations as `maelys_datalog_value_t`, `fact_t`,
   `predicate_t`, `domain_t`, `term_view_t` and `fact_view_t` (all with the

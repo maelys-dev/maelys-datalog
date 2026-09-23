@@ -3,7 +3,7 @@
 #define MAELYS_DATALOG_DOMAIN_REGISTRY_H
 
 #include <stddef.h>
-#include "maelys/datalog.h"
+#include "maelys/datalog_advanced.h"
 
 #include "src/core/maelys_datalog_predicate_registry.h"
 
@@ -22,6 +22,7 @@ typedef struct {
     size_t atom_count;
     const char *description;
     maelys_result_t (*install_predicates)(maelys_datalog_predicate_registry_t *registry);
+    maelys_datalog_domain_installer_t installer;
 } maelys_datalog_domain_def_t;
 
 /* Private stored view returned by find. All referenced bytes belong to the
@@ -34,6 +35,7 @@ typedef struct {
     size_t atom_count;
     const char *description;
     maelys_result_t (*install_predicates)(maelys_datalog_predicate_registry_t *registry);
+    maelys_datalog_domain_installer_t installer;
 } maelys_datalog_domain_entry_t;
 
 maelys_result_t maelys_datalog_domain_registry_register(const maelys_datalog_domain_def_t *def);

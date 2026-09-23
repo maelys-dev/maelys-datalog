@@ -40,13 +40,15 @@ static void spaces(const char *s, size_t end, size_t *i) {
     while (*i < end && (s[*i] == ' ' || s[*i] == '\t' || s[*i] == '\r'))
         ++*i;
 }
-static maelys_datalog_status_t failure(maelys_datalog_public_diagnostic_t *diag,
+static maelys_datalog_status_t failure(maelys_datalog_diagnostic_t *diag,
                                        maelys_datalog_status_t rc, size_t line, size_t column,
                                        const char *message) {
     if (diag) {
-        memset(diag, 0, sizeof(*diag));
+        (void)maelys_datalog_diagnostic_clear(diag);
         diag->source = MAELYS_DATALOG_DIAGNOSTIC_LOAD;
-        diag->code = rc;
+        diag->status = rc;
+        diag->code = MAELYS_DATALOG_DIAG_OPERATION_REJECTED;
+        diag->present = MAELYS_DATALOG_DIAGNOSTIC_LOCATION;
         diag->line = line;
         diag->column = column;
         snprintf(diag->phase, sizeof(diag->phase), "permit");
@@ -81,7 +83,7 @@ static maelys_datalog_status_t emit(maelys_datalog_program_builder_t *builder, c
 }
 static maelys_datalog_status_t lower(const char *source, size_t length,
                                      maelys_datalog_program_builder_t *builder,
-                                     maelys_datalog_public_diagnostic_t *diag) {
+                                     maelys_datalog_diagnostic_t *diag) {
     if (!source || !builder)
         return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
     size_t begin = 0, line = 1;

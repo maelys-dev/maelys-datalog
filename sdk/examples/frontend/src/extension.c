@@ -27,7 +27,7 @@ static int name(const char *s, size_t end, size_t *i, char out[64]) {
 }
 static maelys_datalog_status_t lower(const char *source, size_t length,
                                      maelys_datalog_program_builder_t *builder,
-                                     maelys_datalog_public_diagnostic_t *diag) {
+                                     maelys_datalog_diagnostic_t *diag) {
     size_t line = 1, begin = 0;
     while (begin < length) {
         size_t end = begin;
@@ -52,9 +52,11 @@ static maelys_datalog_status_t lower(const char *source, size_t length,
             }
             if (!valid) {
                 if (diag) {
-                    memset(diag, 0, sizeof(*diag));
+                    (void)maelys_datalog_diagnostic_clear(diag);
                     diag->source = MAELYS_DATALOG_DIAGNOSTIC_LOAD;
-                    diag->code = MAELYS_DATALOG_STATUS_INVALID_FIELD;
+                    diag->status = MAELYS_DATALOG_STATUS_INVALID_FIELD;
+                    diag->code = MAELYS_DATALOG_DIAG_OPERATION_REJECTED;
+                    diag->present = MAELYS_DATALOG_DIAGNOSTIC_LOCATION;
                     diag->line = line;
                     diag->column = column;
                     snprintf(diag->phase, sizeof(diag->phase), "arrow");
