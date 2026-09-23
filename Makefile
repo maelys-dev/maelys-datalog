@@ -29,7 +29,7 @@ TEST_BINS = $(TEST_SRCS:tests/%.c=$(BUILD_DIR)/tests/%)
 TEST_CFLAGS = $(CFLAGS) -DMAELYS_TESTING
 
 $(BUILD_DIR)/tests/test_maelys_datalog_materialization: TEST_CFLAGS += -UNDEBUG
-$(BUILD_DIR)/tests/test_maelys_datalog_window: TEST_CFLAGS += -UNDEBUG
+$(BUILD_DIR)/tests/test_maelys_datalog_window $(BUILD_DIR)/tests/test_maelys_datalog_group_window: TEST_CFLAGS += -UNDEBUG
 ENGINE_HEADERS = $(wildcard include/maelys/*.h src/core/*.h src/compiler/*.h src/public/*.h src/registry/*.h modules/standard/*.h)
 
 $(OBJ_DIR)/%.o: %.c $(ENGINE_HEADERS)
@@ -66,6 +66,9 @@ $(BUILD_DIR)/tests/test_maelys_datalog_hot_path_alloc $(BUILD_DIR)/tests/test_ma
 
 $(BUILD_DIR)/tests/test_maelys_datalog_session_explanations: tests/test_maelys_datalog_session_explanations.c tests/fixtures/allocation_guard.h $(SRCS) $(ENGINE_HEADERS) | $(BUILD_DIR)/tests
 	$(CC) $(TEST_CFLAGS) -UNDEBUG -include tests/fixtures/allocation_guard.h $(filter-out src/runtime/maelys_datalog_runtime.c,$(SRCS)) $< -o $@
+
+$(BUILD_DIR)/tests/test_maelys_datalog_group_window_alloc: tests/test_maelys_datalog_group_window_alloc.c tests/fixtures/allocation_guard.h $(SRCS) $(ENGINE_HEADERS) | $(BUILD_DIR)/tests
+	$(CC) $(TEST_CFLAGS) -UNDEBUG -include tests/fixtures/allocation_guard.h $(filter-out src/runtime/maelys_datalog_group_window.c,$(SRCS)) $< -o $@
 
 $(BUILD_DIR)/tests/test_maelys_datalog_window_alloc: tests/test_maelys_datalog_window_alloc.c tests/fixtures/allocation_guard.h $(SRCS) $(ENGINE_HEADERS) | $(BUILD_DIR)/tests
 	$(CC) $(TEST_CFLAGS) -UNDEBUG -include tests/fixtures/allocation_guard.h $(filter-out src/runtime/maelys_datalog_window.c,$(SRCS)) $< -o $@
