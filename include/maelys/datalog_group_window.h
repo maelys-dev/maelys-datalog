@@ -71,7 +71,7 @@ MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_group_window_init(
     const maelys_datalog_group_window_capacities_t *capacities, uint32_t first_group,
     maelys_datalog_session_t *session_a, maelys_datalog_session_t *session_b,
     maelys_datalog_group_window_t **out_window,
-    maelys_datalog_public_diagnostic_t *out_diagnostic);
+    maelys_datalog_diagnostic_t *out_diagnostic);
 
 /* A whole group is one transaction. NULL facts is valid only at count zero.
  * Retain the suffix (expire first if full), copy/validate contributions, build
@@ -89,7 +89,7 @@ MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_group_window_init(
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_group_window_push(
     maelys_datalog_group_window_t *window,
     const maelys_datalog_fact_t *facts, size_t fact_count,
-    uint32_t *out_group_id, maelys_datalog_public_diagnostic_t *out_diagnostic);
+    uint32_t *out_group_id, maelys_datalog_diagnostic_t *out_diagnostic);
 
 /* All views/results are borrowed and valid until successful push/free. Failure
  * preserves them. Do NOT result_free the borrowed result or modify these views.

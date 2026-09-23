@@ -55,7 +55,7 @@ static int setup(void) {
 }
 
 static int open_session(maelys_datalog_session_t **out) {
-    maelys_datalog_public_diagnostic_t diagnostic;
+    maelys_datalog_diagnostic_t diagnostic = MAELYS_DATALOG_DIAGNOSTIC_INIT;
     maelys_datalog_policy_t *policy = NULL;
     maelys_datalog_status_t rc = maelys_datalog_policy_load_inline(
         "same_generation", "same_generation.test",
@@ -71,7 +71,7 @@ static int open_session(maelys_datalog_session_t **out) {
 
 static int solve_parents(maelys_datalog_session_t *session,
                          maelys_datalog_result_t **out) {
-    maelys_datalog_public_diagnostic_t diagnostic;
+    maelys_datalog_diagnostic_t diagnostic = MAELYS_DATALOG_DIAGNOSTIC_INIT;
     maelys_datalog_fact_t facts[sizeof(k_parent) / sizeof(k_parent[0])];
     memset(facts, 0, sizeof(facts));
     for (size_t i = 0; i < sizeof(facts) / sizeof(facts[0]); i++) {

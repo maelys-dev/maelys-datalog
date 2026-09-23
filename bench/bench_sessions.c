@@ -1,4 +1,4 @@
-#include "bench/types_compat.h"
+#include "types_compat.h" /* Driver-owned diagnostic protocol on both revisions. */
 /* SPDX-License-Identifier: MPL-2.0 */
 /* Public facade only. Time solve_edb, excluding append, query/check and release.
  * Inert-policy cost is a common-cost control, not an isolated materialization timer. */
@@ -154,7 +154,7 @@ int main(int argc, char **argv) {
 #endif
             double samples[SAMPLES]; uint64_t digest = 0;
             for (unsigned sample = 0; sample < SAMPLES + WARMUP; ++sample) {
-                maelys_datalog_result_t *result; maelys_datalog_public_diagnostic_t diagnostic;
+                maelys_datalog_result_t *result; maelys_bench_diagnostic_t diagnostic = MAELYS_BENCH_DIAGNOSTIC_INIT;
 #ifdef MAELYS_BENCH_COUNT
                 /* --collect-atstart=no: count one solve after the same 50
                  * warmups, excluding setup, clocks, oracle and release. */

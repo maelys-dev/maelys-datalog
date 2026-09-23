@@ -74,7 +74,7 @@ static model_group own_group(uint32_t id,const maelys_datalog_fact_t *facts,size
 }
 static void sessions(fixture *f,const char *rules) {
     memset(f,0,sizeof(*f)); maelys_datalog_policy_t *p=NULL;
-    maelys_datalog_public_diagnostic_t d;
+    maelys_datalog_diagnostic_t d = MAELYS_DATALOG_DIAGNOSTIC_INIT;
     int rc=maelys_datalog_policy_load_inline("group_window","group.window",rules,strlen(rules),&p,&d);
     if(rc) { fprintf(stderr,"load %d: %s\n",rc,d.message); abort(); }
     OK(maelys_datalog_session_create(p,0,&f->a)); OK(maelys_datalog_session_create(p,0,&f->b));
@@ -191,7 +191,7 @@ static void reject(fixture *f,const maelys_datalog_fact_t *facts,size_t n,int ex
     maelys_datalog_group_window_usage_t before={0},after={0};
     maelys_datalog_result_t *r=result(f); uint32_t id=123;
     OK(maelys_datalog_group_window_state(f->w,&before));
-    maelys_datalog_public_diagnostic_t diag;
+    maelys_datalog_diagnostic_t diag = MAELYS_DATALOG_DIAGNOSTIC_INIT;
     int rc=maelys_datalog_group_window_push(f->w,facts,n,&id,&diag);
     if(rc!=expected) { fprintf(stderr,"reject: expected %d got %d: %s\n",expected,rc,diag.message); abort(); }
     OK(maelys_datalog_group_window_state(f->w,&after));
@@ -362,7 +362,7 @@ static void admission(void) {
 static unsigned fault_phase,reentries;
 static maelys_datalog_group_window_t *callback_window;
 static maelys_datalog_status_t injected_solve(void *state,const maelys_datalog_fact_t *facts,
-    size_t count,maelys_datalog_backend_output_t *out,void **r,maelys_datalog_public_diagnostic_t *diag) {
+    size_t count,maelys_datalog_backend_output_t *out,void **r,maelys_datalog_diagnostic_t *diag) {
     if(callback_window) {
         maelys_datalog_group_window_usage_t u;
         assert(maelys_datalog_group_window_state(callback_window,&u)==MAELYS_DATALOG_STATUS_INVALID_STATE);
@@ -372,7 +372,7 @@ static maelys_datalog_status_t injected_solve(void *state,const maelys_datalog_f
     maelys_datalog_status_t rc=0;
     if(fault_phase!=1) rc=maelys_datalog_backend_reference()->solve(state,facts,count,out,r,diag);
     if(!rc && fault_phase) {
-        if(diag) { diag->code=MAELYS_DATALOG_STATUS_INTERNAL; strcpy(diag->message,"Injected backend failure"); }
+        if(diag) { diag->status=MAELYS_DATALOG_STATUS_INTERNAL; diag->code=MAELYS_DATALOG_DIAG_OPERATION_REJECTED; strcpy(diag->message,"Injected backend failure"); }
         return MAELYS_DATALOG_STATUS_INTERNAL;
     }
     return rc;

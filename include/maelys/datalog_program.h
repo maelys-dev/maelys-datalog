@@ -6,7 +6,7 @@
 extern "C" {
 #endif
 
-#define MAELYS_DATALOG_PROGRAM_ABI_VERSION 1u
+#define MAELYS_DATALOG_PROGRAM_ABI_VERSION 2u
 #define MAELYS_DATALOG_IR_MAX_BODY 8u
 #define MAELYS_DATALOG_IR_MAX_EXPRESSIONS 32u
 #define MAELYS_DATALOG_IR_MAX_VARIABLES 32u
@@ -145,7 +145,7 @@ typedef struct {
     const char *name;
     const char *semantic_id;
     maelys_datalog_status_t (*lower)(const char *, size_t, maelys_datalog_program_builder_t *,
-                                     maelys_datalog_public_diagnostic_t *);
+                                     maelys_datalog_diagnostic_t *);
 } maelys_datalog_frontend_t;
 
 /* Explicit per-load selection, not a mutable global grammar. Frontends are
@@ -155,7 +155,7 @@ MAELYS_DATALOG_API const maelys_datalog_frontend_t *maelys_datalog_frontend_data
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_policy_load_frontend(
     const char *domain, const char *policy_id, const char *source, size_t source_length,
     const maelys_datalog_frontend_t *, maelys_datalog_policy_t **,
-    maelys_datalog_public_diagnostic_t *);
+    maelys_datalog_diagnostic_t *);
 
 #ifdef __cplusplus
 }

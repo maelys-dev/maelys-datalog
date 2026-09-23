@@ -51,7 +51,7 @@ MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_context_free(maelys_da
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_context_load_inline(
     maelys_datalog_context_t *, const char *frontend_name, const char *domain,
     const char *policy_id, const char *source, size_t source_length, maelys_datalog_policy_t **,
-    maelys_datalog_public_diagnostic_t *);
+    maelys_datalog_diagnostic_t *);
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_context_session_create(
     maelys_datalog_context_t *, const maelys_datalog_policy_t *, size_t policy_index,
     const char *backend_name, uint64_t required_capabilities, uint64_t work_limit,

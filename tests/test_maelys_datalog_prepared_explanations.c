@@ -5,7 +5,7 @@
 #undef realloc
 #undef free
 #undef memset
-#include "maelys/datalog_backend.h"
+#include "maelys/datalog_advanced.h"
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
@@ -90,6 +90,14 @@ static void bounded_case(const char *source, const char *expected_status) {
     maelys_datalog_prepared_explanation_t *p;
     OK(maelys_datalog_result_prepare_explanation(result, MAELYS_DATALOG_EXPLAIN_FALSE,
         "allow", &alice, 1, storage, bytes, &p));
+    maelys_datalog_explanation_info_t info;
+    OK(maelys_datalog_prepared_explanation_info(p, &info));
+    for (size_t i = 0; i < info.diagnostic_count; ++i) {
+        maelys_datalog_explanation_obstacle_view_t obstacle;
+        OK(maelys_datalog_prepared_explanation_obstacle(p, i, &obstacle));
+    }
+    maelys_datalog_filter_statistics_t statistics;
+    OK(maelys_datalog_result_filter_statistics(result, &statistics));
     OK(maelys_datalog_prepared_explanation_write_text(p, text, sizeof(text)));
     assert(!strcmp(text, expected));
     OK(maelys_datalog_prepared_explanation_release(p));

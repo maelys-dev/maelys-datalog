@@ -17,6 +17,7 @@ cp "$root/tests/fixtures/explanation_storage.c" "$scratch/"
 cp "$root/tests/test_maelys_datalog_modules.c" "$scratch/"
 cp "$root/tests/test_maelys_datalog_compiler.c" "$scratch/"
 cp "$root/tests/test_maelys_datalog_context.c" "$scratch/"
+cp "$root/tests/test_maelys_datalog_advanced.c" "$scratch/"
 cp "$root/tests/test_maelys_datalog_window.c" "$scratch/"
 cp "$root/tests/test_maelys_datalog_group_window.c" "$scratch/"
 cp "$root/examples/multi_fact_window.c" "$scratch/"
@@ -29,7 +30,7 @@ unset CPATH C_INCLUDE_PATH CPLUS_INCLUDE_PATH LIBRARY_PATH
 cc="${CC:-cc}"
 cxx="${CXX:-c++}"
 flags=(-std=c11 -Wall -Wextra -Werror -I"$prefix/include")
-for header in datalog.h datalog_builders.h datalog_module.h datalog_program.h datalog_backend.h datalog_extension.h datalog_window.h datalog_group_window.h; do
+for header in datalog_advanced.h datalog_details.h datalog.h datalog_builders.h datalog_module.h datalog_program.h datalog_backend.h datalog_extension.h datalog_window.h datalog_group_window.h; do
   "$cc" "${flags[@]}" -DSDK_HEADER="\"maelys/$header\"" -fsyntax-only sdk_header.c
   "$cxx" -x c++ -std=c++17 -Wall -Wextra -Werror -I"$prefix/include" \
     -DSDK_HEADER="\"maelys/$header\"" -fsyntax-only sdk_header.c
@@ -42,7 +43,7 @@ done
   -I"$prefix/include" explanation_storage.c -o storage-cpp
 ./storage-cpp
 echo 'installed SDK explanation storage: C11/C++17 static/local aligned arrays PASS'
-for handle in policy session result session_config input_edb prepared_explanation program program_builder context window group_window; do
+for handle in domain_builder policy session result session_config input_edb prepared_explanation program program_builder context window group_window; do
   for language in c c++; do
     compiler="$cc"; standard=c11
     if [[ "$language" == c++ ]]; then compiler="$cxx"; standard=c++17; fi
@@ -56,7 +57,7 @@ for handle in policy session result session_config input_edb prepared_explanatio
     fi
   done
 done
-echo 'installed SDK headers: C11/C++17 PASS; eleven opaque layouts rejected in both languages'
+echo 'installed SDK headers: C11/C++17 PASS; twelve opaque layouts rejected in both languages'
 for provider in exact_match arrow_frontend naive_backend; do
   "$cc" "${flags[@]}" -c "$provider.c" -o "$provider.o"
 done
@@ -87,6 +88,8 @@ for linkage in static shared; do
   fi
   "$cc" "${flags[@]}" public_api_consumer.c "${libs[@]}" -o facade
   ./facade
+  "$cc" "${flags[@]}" -UNDEBUG test_maelys_datalog_advanced.c "${libs[@]}" -o advanced
+  ./advanced
   "$cc" "${flags[@]}" -UNDEBUG -Wvla -pedantic-errors \
     test_maelys_datalog_predicate_builders.c "${libs[@]}" -o declarations
   ./declarations

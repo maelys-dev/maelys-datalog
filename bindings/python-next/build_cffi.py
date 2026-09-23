@@ -102,14 +102,27 @@ int maelys_datalog_session_create_configured(
     const maelys_datalog_session_config_t *, maelys_datalog_session_t **);
 int maelys_datalog_session_execution_fingerprint(const maelys_datalog_session_t *, char[65]);
 typedef struct {
+    size_t struct_size;
+    unsigned int abi_version;
     int source;
+    int status;
     int code;
     size_t line;
     size_t column;
     char phase[32];
     char message[256];
     char hint[256];
-} maelys_datalog_public_diagnostic_t;
+    uint64_t present;
+    char file[256], predicate[96];
+    size_t arity, observed_count, limit, depth, depth_limit, rule_id;
+    unsigned int comparison_result, expected_kind, lhs_kind, rhs_kind, comparison_op;
+    int limit_kind;
+    size_t term_index, expected_arity, observed_arity;
+    char token[96], field[96], domain[96];
+    ...;
+} maelys_datalog_diagnostic_t;
+int maelys_datalog_diagnostic_init(void *, size_t);
+const char *maelys_datalog_diag_code_name(int);
 typedef struct {
     const char *name;
     size_t arity;
@@ -150,19 +163,19 @@ typedef struct {
 
 const char *maelys_datalog_status_name(int status);
 int maelys_datalog_limit_get(int limit, size_t *out_value);
-void maelys_datalog_public_diagnostic_clear(
-    maelys_datalog_public_diagnostic_t *diagnostic);
+int maelys_datalog_diagnostic_clear(
+    maelys_datalog_diagnostic_t *diagnostic);
 int maelys_datalog_domain_register(
     const maelys_datalog_domain_t *domain);
 int maelys_datalog_policy_load_inline(
     const char *domain, const char *policy_id,
     const char *source, size_t source_length,
     maelys_datalog_policy_t **out_policy,
-    maelys_datalog_public_diagnostic_t *out_diagnostic);
+    maelys_datalog_diagnostic_t *out_diagnostic);
 int maelys_datalog_policy_free(maelys_datalog_policy_t *policy);
 int maelys_datalog_policy_load_manifest(
     const char *, unsigned, maelys_datalog_policy_t **,
-    maelys_datalog_public_diagnostic_t *);
+    maelys_datalog_diagnostic_t *);
 int maelys_datalog_policy_count(const maelys_datalog_policy_t *, size_t *);
 int maelys_datalog_policy_fingerprint(const maelys_datalog_policy_t *, char[65]);
 int maelys_datalog_session_fingerprint(const maelys_datalog_session_t *, char[65]);
@@ -173,7 +186,7 @@ int maelys_datalog_session_solve(
     maelys_datalog_session_t *session,
     const maelys_datalog_fact_t *facts, size_t fact_count,
     maelys_datalog_result_t **out_result,
-    maelys_datalog_public_diagnostic_t *out_diagnostic);
+    maelys_datalog_diagnostic_t *out_diagnostic);
 int maelys_datalog_session_free(maelys_datalog_session_t *session);
 int maelys_datalog_input_edb_create(maelys_datalog_input_edb_t **);
 int maelys_datalog_input_edb_storage_requirements(size_t, size_t, size_t *, size_t *);
@@ -181,10 +194,10 @@ int maelys_datalog_input_edb_init(void *, size_t, size_t, size_t, maelys_datalog
 int maelys_datalog_input_edb_create_with_capacity(size_t, size_t, maelys_datalog_input_edb_t **);
 int maelys_datalog_input_edb_add_fact(
     maelys_datalog_input_edb_t *, const char *, const maelys_datalog_value_t *,
-    size_t, maelys_datalog_public_diagnostic_t *);
+    size_t, maelys_datalog_diagnostic_t *);
 int maelys_datalog_input_edb_add_facts(
     maelys_datalog_input_edb_t *, const maelys_datalog_fact_t *,
-    size_t, maelys_datalog_public_diagnostic_t *);
+    size_t, maelys_datalog_diagnostic_t *);
 int maelys_datalog_input_edb_count(const maelys_datalog_input_edb_t *, size_t *);
 int maelys_datalog_input_edb_text_usage(const maelys_datalog_input_edb_t *, size_t *, size_t *);
 int maelys_datalog_input_edb_view(const maelys_datalog_input_edb_t *,
@@ -193,7 +206,7 @@ int maelys_datalog_input_edb_clear(maelys_datalog_input_edb_t *);
 int maelys_datalog_input_edb_free(maelys_datalog_input_edb_t *);
 int maelys_datalog_session_solve_edb(
     maelys_datalog_session_t *, const maelys_datalog_input_edb_t *,
-    maelys_datalog_result_t **, maelys_datalog_public_diagnostic_t *);
+    maelys_datalog_result_t **, maelys_datalog_diagnostic_t *);
 int maelys_datalog_result_query(
     const maelys_datalog_result_t *result, const char *predicate,
     const maelys_datalog_value_t *terms, size_t arity,

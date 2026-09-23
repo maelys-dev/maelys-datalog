@@ -50,7 +50,7 @@ typedef struct {
 static void sessions(fixture *f, const char *s) {
     memset(f, 0, sizeof(*f));
     maelys_datalog_policy_t *p = NULL;
-    maelys_datalog_public_diagnostic_t d;
+    maelys_datalog_diagnostic_t d = MAELYS_DATALOG_DIAGNOSTIC_INIT;
     int rc = maelys_datalog_policy_load_inline("window", "window.test", s, strlen(s), &p, &d);
     if (rc) { fprintf(stderr, "load: %d %s\n", rc, d.message); abort(); }
     OK(maelys_datalog_session_create(p, 0, &f->a));
@@ -137,7 +137,7 @@ static void rejected(fixture *f, const char *p, const maelys_datalog_value_t *v,
     maelys_datalog_fact_t *copy=malloc((count+1)*sizeof(*copy)); assert(copy);
     memcpy(copy,before,count*sizeof(*copy));
     OK(maelys_datalog_window_state(f->w,&count,&next));
-    uint32_t got=UINT32_MAX; maelys_datalog_public_diagnostic_t d;
+    uint32_t got=UINT32_MAX; maelys_datalog_diagnostic_t d = MAELYS_DATALOG_DIAGNOSTIC_INIT;
     assert(maelys_datalog_window_push(f->w,p,v,n,&got,&d)==expected);
     assert(got==UINT32_MAX && d.source==MAELYS_DATALOG_DIAGNOSTIC_SOLVE && d.message[0]);
     OK(maelys_datalog_window_events(f->w,&after,&after_count));
@@ -326,13 +326,13 @@ static unsigned fault_phase;
 static maelys_datalog_status_t injected_solve(void *state,
     const maelys_datalog_fact_t *facts, size_t count,
     maelys_datalog_backend_output_t *output, void **out_result,
-    maelys_datalog_public_diagnostic_t *diag) {
+    maelys_datalog_diagnostic_t *diag) {
     maelys_datalog_status_t rc=MAELYS_DATALOG_STATUS_OK;
     if (fault_phase!=1) rc=maelys_datalog_backend_reference()->solve(state,facts,count,output,out_result,diag);
     if (!rc && fault_phase) {
         if (diag) {
             diag->source=MAELYS_DATALOG_DIAGNOSTIC_SOLVE;
-            diag->code=MAELYS_DATALOG_STATUS_INTERNAL;
+            diag->status=MAELYS_DATALOG_STATUS_INTERNAL; diag->code=MAELYS_DATALOG_DIAG_OPERATION_REJECTED;
             strcpy(diag->message,"Injected backend failure");
         }
         return MAELYS_DATALOG_STATUS_INTERNAL;
@@ -379,7 +379,7 @@ static void closed_window(fixture *f) {
     maelys_datalog_result_t *r=NULL;
     const maelys_datalog_fact_t *events=NULL;
     maelys_datalog_value_t v[]={integer(0),integer(1)};
-    maelys_datalog_public_diagnostic_t diag;
+    maelys_datalog_diagnostic_t diag = MAELYS_DATALOG_DIAGNOSTIC_INIT;
     /* Push first: the regression dereferenced freed sessions before returning. */
     assert(maelys_datalog_window_push(f->w,"event",v,2,&id,&diag)==MAELYS_DATALOG_STATUS_INVALID_STATE);
     assert(id==789 && !strcmp(diag.phase,"window") && strstr(diag.message,"closed"));

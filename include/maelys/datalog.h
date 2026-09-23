@@ -7,6 +7,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include "datalog_details.h"
 
 /* Stable load diagnostic codes, shared with the legacy API. Append only. */
 typedef enum {
@@ -43,7 +44,17 @@ typedef enum {
     MAELYS_DATALOG_DIAG_RUNTIME_INVALID_FILTER,
     MAELYS_DATALOG_DIAG_REGISTRY_CONFLICT,
     MAELYS_DATALOG_DIAG_REGISTRY_MUTATION_AFTER_FREEZE,
-    MAELYS_DATALOG_DIAG_MALFORMED_PROGRAM
+    MAELYS_DATALOG_DIAG_MALFORMED_PROGRAM,
+    MAELYS_DATALOG_DIAG_OPERATION_REJECTED = 256,
+    MAELYS_DATALOG_DIAG_SOLVE_MAX_DEPTH = 513,
+    MAELYS_DATALOG_DIAG_SOLVE_IDB_OVERFLOW,
+    MAELYS_DATALOG_DIAG_SOLVE_COMPARISON_TYPE_ERROR,
+    MAELYS_DATALOG_DIAG_SOLVE_FILTER_ERROR,
+    MAELYS_DATALOG_DIAG_SOLVE_MALFORMED_FACT,
+    MAELYS_DATALOG_DIAG_SOLVE_MALFORMED_EDB,
+    MAELYS_DATALOG_DIAG_SOLVE_INVALID_STATE,
+    MAELYS_DATALOG_DIAG_SOLVE_INVALID_ARGUMENT,
+    MAELYS_DATALOG_DIAG_SOLVE_INTERNAL_ERROR
 } maelys_datalog_diag_code_t;
 
 #if defined(_WIN32) && defined(MAELYS_DATALOG_SHARED)
@@ -60,7 +71,7 @@ typedef enum {
 extern "C" {
 #endif
 
-#define MAELYS_DATALOG_PUBLIC_API_VERSION 1u
+#define MAELYS_DATALOG_PUBLIC_API_VERSION 2u
 #define MAELYS_DATALOG_PUBLIC_MAX_TERMS 4u
 #define MAELYS_DATALOG_PUBLIC_FINGERPRINT_BYTES 65u
 /* Independent optional manifest-loading permissions, combined with |.
@@ -130,15 +141,70 @@ typedef enum {
     MAELYS_DATALOG_DIAGNOSTIC_SOLVE = 2
 } maelys_datalog_diagnostic_source_t;
 
+/* Append-only identifiers for capacities of the loaded library, not current
+ * occupancy. Scalar queries keep this surface extensible without struct growth. */
+typedef enum {
+    MAELYS_DATALOG_LIMIT_MAX_SYMBOLS = 1,
+    MAELYS_DATALOG_LIMIT_STRING_POOL_BYTES,
+    MAELYS_DATALOG_LIMIT_MAX_PREDICATES,
+    MAELYS_DATALOG_LIMIT_MAX_RULES,
+    MAELYS_DATALOG_LIMIT_MAX_ARITY,
+    MAELYS_DATALOG_LIMIT_MAX_BODY_LITERALS,
+    MAELYS_DATALOG_LIMIT_MAX_DEPTH,
+    MAELYS_DATALOG_LIMIT_MAX_EDB_FACTS,
+    MAELYS_DATALOG_LIMIT_MAX_IDB_FACTS,
+    MAELYS_DATALOG_LIMIT_MAX_FACTS_PER_PRED,
+    MAELYS_DATALOG_LIMIT_MAX_STRING_BYTES,
+    MAELYS_DATALOG_LIMIT_INPUT_EDB_TEXT_BYTES
+} maelys_datalog_limit_t;
+
+/* Diagnostics own all text. Initialize before passing to ANY producer. A v1
+ * producer requires sizeof(v1) and natural alignment; it refuses smaller sizes
+ * and unknown versions before writing payload or invoking callbacks. Larger
+ * same-version storage is accepted, but only the known v1 object is written.
+ * Future versions must preserve this size/version prefix AND its alignment or
+ * use a new entry point. A size alone never authorizes reading unknown fields.
+ * source == NONE means no detail was supplied; use the function return status.
+ * Each present section is independent: capacity, predicate and depth coexist. */
+#define MAELYS_DATALOG_DIAGNOSTIC_ABI_VERSION 1u
+#define MAELYS_DATALOG_DIAGNOSTIC_LOCATION (UINT64_C(1) << 0)
+#define MAELYS_DATALOG_DIAGNOSTIC_PREDICATE (UINT64_C(1) << 1)
+#define MAELYS_DATALOG_DIAGNOSTIC_CAPACITY (UINT64_C(1) << 2)
+#define MAELYS_DATALOG_DIAGNOSTIC_DEPTH (UINT64_C(1) << 3)
+#define MAELYS_DATALOG_DIAGNOSTIC_COMPARISON (UINT64_C(1) << 4)
+#define MAELYS_DATALOG_DIAGNOSTIC_ARITY (UINT64_C(1) << 5)
+#define MAELYS_DATALOG_DIAGNOSTIC_RULE (UINT64_C(1) << 6)
+#define MAELYS_DATALOG_DIAGNOSTIC_CONTEXT (UINT64_C(1) << 7)
 typedef struct {
+    size_t struct_size;
+    uint32_t abi_version;
     maelys_datalog_diagnostic_source_t source;
-    int code;
-    size_t line;
-    size_t column;
-    char phase[32];
-    char message[256];
-    char hint[256];
-} maelys_datalog_public_diagnostic_t;
+    maelys_datalog_status_t status;
+    maelys_datalog_diag_code_t code;
+    uint64_t present;
+    size_t line, column;
+    char phase[32], message[256], hint[256];
+    char file[256], predicate[96];
+    size_t arity, observed_count, limit, depth, depth_limit, rule_id;
+    unsigned comparison_result, expected_kind, lhs_kind, rhs_kind, comparison_op;
+    maelys_datalog_limit_t limit_kind; /* 0 when the producer cannot identify the budget. */
+    size_t term_index, expected_arity, observed_arity;
+    char token[96], field[96], domain[96];
+} maelys_datalog_diagnostic_t;
+static inline maelys_datalog_diagnostic_t maelys_datalog_diagnostic_initializer(void) {
+#ifdef __cplusplus
+    maelys_datalog_diagnostic_t d = {};
+#else
+    maelys_datalog_diagnostic_t d = {0};
+#endif
+    d.struct_size = sizeof(d);
+    d.abi_version = MAELYS_DATALOG_DIAGNOSTIC_ABI_VERSION;
+    return d;
+}
+#define MAELYS_DATALOG_DIAGNOSTIC_INIT maelys_datalog_diagnostic_initializer()
+MAELYS_DATALOG_API const char *maelys_datalog_diag_code_name(maelys_datalog_diag_code_t);
+MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_diagnostic_init(
+    void *storage, size_t storage_bytes);
 
 /* Common predicate declaration for stable and low-level domain registration.
  * Registration copies name synchronously into bounded storage (63 bytes plus
@@ -197,23 +263,6 @@ typedef struct maelys_datalog_result maelys_datalog_result_t;
 typedef struct maelys_datalog_session_config maelys_datalog_session_config_t;
 typedef struct maelys_datalog_input_edb maelys_datalog_input_edb_t;
 
-/* Append-only identifiers for capacities of the loaded library, not current
- * occupancy. Scalar queries keep this surface extensible without struct growth. */
-typedef enum {
-    MAELYS_DATALOG_LIMIT_MAX_SYMBOLS = 1,
-    MAELYS_DATALOG_LIMIT_STRING_POOL_BYTES,
-    MAELYS_DATALOG_LIMIT_MAX_PREDICATES,
-    MAELYS_DATALOG_LIMIT_MAX_RULES,
-    MAELYS_DATALOG_LIMIT_MAX_ARITY,
-    MAELYS_DATALOG_LIMIT_MAX_BODY_LITERALS,
-    MAELYS_DATALOG_LIMIT_MAX_DEPTH,
-    MAELYS_DATALOG_LIMIT_MAX_EDB_FACTS,
-    MAELYS_DATALOG_LIMIT_MAX_IDB_FACTS,
-    MAELYS_DATALOG_LIMIT_MAX_FACTS_PER_PRED,
-    MAELYS_DATALOG_LIMIT_MAX_STRING_BYTES,
-    MAELYS_DATALOG_LIMIT_INPUT_EDB_TEXT_BYTES
-} maelys_datalog_limit_t;
-
 /* Unknown identifiers return UNSUPPORTED; NULL out_value returns
  * INVALID_ARGUMENT. On failure the output is unchanged. */
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_limit_get(
@@ -221,8 +270,8 @@ MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_limit_get(
 
 MAELYS_DATALOG_API const char *maelys_datalog_status_name(
     maelys_datalog_status_t status);
-MAELYS_DATALOG_API void maelys_datalog_public_diagnostic_clear(
-    maelys_datalog_public_diagnostic_t *diagnostic);
+MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_diagnostic_clear(
+    maelys_datalog_diagnostic_t *diagnostic);
 
 /* atoms belongs to the registered domain, not to a manifest. It authorizes
  * symbolic constants in Datalog predicate arguments; it creates no facts.
@@ -243,7 +292,7 @@ MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_policy_load_inline(
     const char *source,
     size_t source_length,
     maelys_datalog_policy_t **out_policy,
-    maelys_datalog_public_diagnostic_t *out_diagnostic);
+    maelys_datalog_diagnostic_t *out_diagnostic);
 
 /* flags is a set of independent permissions, not ordered strict/permissive modes:
  * - ALLOW_NONE: no optional permissions. An enabled test_only entry fails the
@@ -260,7 +309,7 @@ MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_policy_load_manifest(
     const char *manifest_path,
     unsigned flags,
     maelys_datalog_policy_t **out_policy,
-    maelys_datalog_public_diagnostic_t *out_diagnostic);
+    maelys_datalog_diagnostic_t *out_diagnostic);
 
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_policy_count(
     const maelys_datalog_policy_t *policy,
@@ -306,7 +355,7 @@ MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_session_config_get_wor
  * session workspace ranges may not overlap (INVALID_STATE). Reusing a config
  * with borrowed storage cannot create a second live session using that range.
  * Config destruction does not release borrowed storage. No fallback allocation.
- * ABI 3 has no bound for custom backends: this mode supports only the canonical
+ * ABI 4 has no bound for custom backends: this mode supports only the canonical
  * reference backend, not copied/wrapped descriptors. Other backends are not
  * configurable through session_create_configured. Custom filter callbacks keep
  * their own allocation contract. The mask/storage choice changes no fingerprint.
@@ -355,7 +404,7 @@ MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_session_solve(
     const maelys_datalog_fact_t *facts,
     size_t fact_count,
     maelys_datalog_result_t **out_result,
-    maelys_datalog_public_diagnostic_t *out_diagnostic);
+    maelys_datalog_diagnostic_t *out_diagnostic);
 /* Thread-confined input buffer; independent of policies and sessions.
  * Storage requirements are queried from the loaded library, not hardcoded.
  * fact_capacity must be 1..MAX_EDB_FACTS; text_capacity is 0..INPUT_EDB_TEXT_BYTES.
@@ -411,10 +460,10 @@ MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_input_edb_create(
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_input_edb_add_fact(
     maelys_datalog_input_edb_t *edb, const char *predicate,
     const maelys_datalog_value_t *terms, size_t arity,
-    maelys_datalog_public_diagnostic_t *out_diagnostic);
+    maelys_datalog_diagnostic_t *out_diagnostic);
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_input_edb_add_facts(
     maelys_datalog_input_edb_t *edb, const maelys_datalog_fact_t *facts,
-    size_t fact_count, maelys_datalog_public_diagnostic_t *out_diagnostic);
+    size_t fact_count, maelys_datalog_diagnostic_t *out_diagnostic);
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_input_edb_count(
     const maelys_datalog_input_edb_t *edb, size_t *out_count);
 /* O(1) occupancy of the buffer's interned predicate/symbol text, including NULs,
@@ -441,7 +490,7 @@ MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_input_edb_free(
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_session_solve_edb(
     maelys_datalog_session_t *session, const maelys_datalog_input_edb_t *edb,
     maelys_datalog_result_t **out_result,
-    maelys_datalog_public_diagnostic_t *out_diagnostic);
+    maelys_datalog_diagnostic_t *out_diagnostic);
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_session_free(
     maelys_datalog_session_t *session);
 
@@ -532,7 +581,7 @@ typedef enum {
 /* Reference backend only: a per-kind upper bound for every result of this
  * library's build profile, including the opaque handle and alignment padding.
  * Available before solving; independent of request facts. Other backends
- * (including copied/wrapped reference descriptors) return UNSUPPORTED: ABI 3
+ * (including copied/wrapped reference descriptors) return UNSUPPORTED: ABI 4
  * provides only per-result requirements. This is caller-storage size, not a
  * bound on text length or total stack usage. Alignment <= alignof(max_align_t).
  * Errors leave outputs unchanged; NULL outputs/invalid kind -> INVALID_ARGUMENT,

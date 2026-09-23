@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: MPL-2.0 */
 #include SDK_HEADER
+#include <maelys/datalog.h> /* permissions are declared by the base API */
 #ifdef __cplusplus
 #define SDK_ASSERT static_assert
 #else

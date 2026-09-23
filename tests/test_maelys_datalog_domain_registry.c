@@ -144,7 +144,7 @@ static int test_callback_atoms_validate_policy_source(void) {
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_domain_registry_register(&def), "%d");
     const char source[] = "allowed(\"alice\").";
     maelys_datalog_policy_t *policy = NULL;
-    maelys_datalog_public_diagnostic_t diagnostic;
+    maelys_datalog_diagnostic_t diagnostic = MAELYS_DATALOG_DIAGNOSTIC_INIT;
     TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK,
                       maelys_datalog_policy_load_inline(def.domain_name, "callback_policy",
                           source, strlen(source), &policy, &diagnostic), "%d");

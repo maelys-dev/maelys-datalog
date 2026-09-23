@@ -5,5 +5,6 @@
 #include "src/manifest/maelys_datalog_manifest.h"
 struct maelys_datalog_policy {
     maelys_datalog_internal_policy_set_t set;
+    int owns_storage;
 };
 #endif

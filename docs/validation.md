@@ -345,3 +345,18 @@ Linux AFL++ variant is available through `make -f Makefile.afl afl-smoke-linux`.
 
 CI runs this matrix on Linux/macOS for native/SDK/Python, and on Linux for
 WASM and fuzz. Its verdict is separate from independent engineering acceptance.
+
+
+## Common application API migration
+
+`test_maelys_datalog_advanced` covers diagnostic boundary sentinels and old
+callback rejection, deferred domain installation and sticky errors, structured
+positive/negative and aggregate views, result leases, caller-owned policy
+storage/reuse, multi-policy buffer loading and retained-context configuration.
+It is also compiled outside the source tree against the installed static and
+shared SDK. `test_maelys_datalog_diagnostic_export` checks independent simultaneous
+capacity/predicate/depth/rule details without enlarging the compact solver
+working diagnostic. Prepared-explanation allocation guards exercise the new
+structured accessors and filter statistics with all engine allocators disabled.
+The SDK checks include the new headers in C11 and C++17. Legacy CFFI consumers
+are recompiled; Python-next initializes the size/version protocol explicitly.

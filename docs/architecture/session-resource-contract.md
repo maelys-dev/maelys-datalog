@@ -1,5 +1,12 @@
 # Session resource contract — design for the incremental backend
 
+> 0.10.0 migration note: the common diagnostic now uses consumer API 2,
+> frontend/program ABI 2 and backend ABI 4. Snapshot materialization is unchanged.
+> References below to the original ABI 3 constraints describe the snapshot
+> protocol on which this design was based. The future incompatible resource/
+> delta contract must receive a distinct ABI identifier; it is not this ABI 4.
+> See [the migration contract](../api-type-migration.md).
+
 Status: design requirements, 2026-09-22. This document specifies the target
 contract for session capacities and memory modes. It does **not** describe an
 implemented API, introduce new C declarations, raise current limits, or freeze

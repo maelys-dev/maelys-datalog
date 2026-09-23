@@ -115,7 +115,7 @@ int main(void) {
     release_failure_target=w->result;
     maelys_datalog_value_t proposed=integer(1);
     rejected_unchanged(w,"event",&proposed,1,MAELYS_DATALOG_STATUS_INVALID_ARGUMENT,input_bytes);
-    maelys_datalog_public_diagnostic_t diag;
+    maelys_datalog_diagnostic_t diag = MAELYS_DATALOG_DIAGNOSTIC_INIT;
     assert(maelys_datalog_window_push(w,"event",&proposed,1,NULL,&diag)==MAELYS_DATALOG_STATUS_INVALID_ARGUMENT);
     assert(strstr(diag.message,"could not be released") && !strstr(diag.message,"explanations"));
     release_failure_target=NULL;

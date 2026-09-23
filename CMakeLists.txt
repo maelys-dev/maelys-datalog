@@ -61,7 +61,7 @@ install(TARGETS maelys_datalog maelys_datalog_shared
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
-install(FILES include/maelys/datalog.h include/maelys/datalog_builders.h include/maelys/datalog_module.h
+install(FILES include/maelys/datalog_advanced.h include/maelys/datalog_details.h include/maelys/datalog.h include/maelys/datalog_builders.h include/maelys/datalog_module.h
     include/maelys/datalog_program.h include/maelys/datalog_backend.h include/maelys/datalog_extension.h
     include/maelys/datalog_window.h include/maelys/datalog_group_window.h
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/maelys)

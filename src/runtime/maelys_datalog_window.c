@@ -14,12 +14,13 @@ struct maelys_datalog_window {
     int busy;
 };
 
-static maelys_datalog_status_t window_error(maelys_datalog_public_diagnostic_t *d,
+static maelys_datalog_status_t window_error(maelys_datalog_diagnostic_t *d,
     maelys_datalog_status_t rc, const char *message) {
     if (d) {
-        maelys_datalog_public_diagnostic_clear(d);
+        { maelys_datalog_status_t ds = maelys_datalog_diagnostic_clear(d); if (ds) return ds; }
         d->source = MAELYS_DATALOG_DIAGNOSTIC_SOLVE;
-        d->code = rc;
+        d->status = rc;
+        d->code = MAELYS_DATALOG_DIAG_OPERATION_REJECTED;
         snprintf(d->phase, sizeof(d->phase), "window");
         snprintf(d->message, sizeof(d->message), "%s", message);
         snprintf(d->hint, sizeof(d->hint), "No window transaction was published; the occurrence cursor did not advance.");
@@ -56,9 +57,9 @@ maelys_datalog_status_t maelys_datalog_window_storage_requirements(
 maelys_datalog_status_t maelys_datalog_window_init(
     void *storage, size_t storage_bytes, size_t n, size_t text, uint32_t first,
     maelys_datalog_session_t *a, maelys_datalog_session_t *b,
-    maelys_datalog_window_t **out, maelys_datalog_public_diagnostic_t *diag) {
+    maelys_datalog_window_t **out, maelys_datalog_diagnostic_t *diag) {
     if (out) *out = NULL;
-    maelys_datalog_public_diagnostic_clear(diag);
+    { maelys_datalog_status_t ds = maelys_datalog_diagnostic_clear(diag); if (ds) return ds; }
     size_t bytes, alignment, offset, stride;
     if (!out || !storage || !a || !b || a == b || first > INT32_MAX)
         return window_error(diag, MAELYS_DATALOG_STATUS_INVALID_ARGUMENT, "Two distinct sessions, storage and a nonnegative int32 occurrence ID are required.");
@@ -97,8 +98,8 @@ maelys_datalog_status_t maelys_datalog_window_init(
 maelys_datalog_status_t maelys_datalog_window_push(
     maelys_datalog_window_t *w, const char *predicate,
     const maelys_datalog_value_t *values, size_t count,
-    uint32_t *occurrence, maelys_datalog_public_diagnostic_t *diag) {
-    maelys_datalog_public_diagnostic_clear(diag);
+    uint32_t *occurrence, maelys_datalog_diagnostic_t *diag) {
+    { maelys_datalog_status_t ds = maelys_datalog_diagnostic_clear(diag); if (ds) return ds; }
     if (!w || !predicate || count >= MAELYS_DATALOG_PUBLIC_MAX_TERMS || (!values && count))
         return window_error(diag, MAELYS_DATALOG_STATUS_INVALID_ARGUMENT, "An event needs a predicate and at most three payload values.");
     if (!w->result) return window_error(diag, MAELYS_DATALOG_STATUS_INVALID_STATE, "Window is closed.");

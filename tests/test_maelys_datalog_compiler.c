@@ -42,7 +42,7 @@ static maelys_datalog_session_options_t options(const maelys_datalog_backend_t *
 }
 static maelys_datalog_status_t load(const char *source, const maelys_datalog_frontend_t *frontend,
                                     maelys_datalog_policy_t **out,
-                                    maelys_datalog_public_diagnostic_t *diag) {
+                                    maelys_datalog_diagnostic_t *diag) {
     return maelys_datalog_policy_load_frontend("compiler", "compiler.test", source, strlen(source),
                                                frontend, out, diag);
 }
@@ -151,7 +151,7 @@ static int frontend_and_backend_cross_product(void) {
 
 static maelys_datalog_status_t fixture_lower(const char *source, size_t length,
                                              maelys_datalog_program_builder_t *b,
-                                             maelys_datalog_public_diagnostic_t *diag) {
+                                             maelys_datalog_diagnostic_t *diag) {
     (void)length;
     (void)diag;
     maelys_datalog_ir_rule_t r = {0};
@@ -240,7 +240,7 @@ static maelys_datalog_status_t fixture_lower(const char *source, size_t length,
     (void)maelys_datalog_program_add_rule(b, &r);
     return MAELYS_DATALOG_STATUS_OK;
 }
-static const maelys_datalog_frontend_t fixture = {1u, sizeof(fixture), "fixture", "test.fixture.v1",
+static const maelys_datalog_frontend_t fixture = {MAELYS_DATALOG_PROGRAM_ABI_VERSION, sizeof(fixture), "fixture", "test.fixture.v1",
                                                   fixture_lower};
 static int common_validation(void) {
     const char *invalid[] = {
@@ -251,14 +251,14 @@ static int common_validation(void) {
         "filter_type"};
     for (size_t i = 0; i < sizeof(invalid) / sizeof(invalid[0]); ++i) {
         maelys_datalog_policy_t *p = (void *)(uintptr_t)1;
-        maelys_datalog_public_diagnostic_t d;
+        maelys_datalog_diagnostic_t d = MAELYS_DATALOG_DIAGNOSTIC_INIT;
         CHECK(load(invalid[i], &fixture, &p, &d) != MAELYS_DATALOG_STATUS_OK);
         CHECK(p == NULL && d.source == MAELYS_DATALOG_DIAGNOSTIC_LOAD);
         if (!strcmp(invalid[i], "unsafe"))
             CHECK(d.line == 3 && d.column == 2);
     }
     maelys_datalog_policy_t *p = NULL;
-    maelys_datalog_public_diagnostic_t d;
+    maelys_datalog_diagnostic_t d = MAELYS_DATALOG_DIAGNOSTIC_INIT;
     CHECK(load("# comment\nallow ? seed\n", example_arrow_frontend(), &p, &d) ==
           MAELYS_DATALOG_STATUS_INVALID_FIELD);
     CHECK(p == NULL && d.line == 2 && d.column == 1 && !strcmp(d.phase, "arrow"));
@@ -442,7 +442,7 @@ static int compiled_identity(void) {
 static const maelys_datalog_program_t *roundtrip_program;
 static maelys_datalog_status_t roundtrip_lower(const char *source, size_t length,
                                                maelys_datalog_program_builder_t *builder,
-                                               maelys_datalog_public_diagnostic_t *diag) {
+                                               maelys_datalog_diagnostic_t *diag) {
     (void)source;
     (void)length;
     (void)diag;
@@ -472,12 +472,12 @@ static int ir_roundtrip(void) {
     const char *sources[] = {"base(\"alice\"). base(7). base(true). allow(X) :- base(X), seed(X).",
                              "base(\"alice\"). allow(X) :- base(X), seed(N), N + 1 > 2, "
                              "not(blocked(X)), starts_with(X, \"a\")."};
-    const maelys_datalog_frontend_t f = {1, sizeof(f), "roundtrip", "test.roundtrip.v1",
+    const maelys_datalog_frontend_t f = {MAELYS_DATALOG_PROGRAM_ABI_VERSION, sizeof(f), "roundtrip", "test.roundtrip.v1",
                                          roundtrip_lower};
     for (size_t i = 0; i < 2; ++i) {
         maelys_datalog_policy_t *p;
         maelys_datalog_session_t *original, *copy;
-        maelys_datalog_public_diagnostic_t diagnostic;
+        maelys_datalog_diagnostic_t diagnostic = MAELYS_DATALOG_DIAGNOSTIC_INIT;
         maelys_datalog_status_t loaded = load(sources[i], NULL, &p, &diagnostic);
         if (loaded)
             fprintf(stderr, "roundtrip %zu: %s (%s)\n", i, diagnostic.message, diagnostic.hint);
@@ -533,7 +533,7 @@ static void fake_destroy_result(void *state, void *result) {
 }
 static maelys_datalog_status_t bad_emit(void *state, const maelys_datalog_fact_t *facts,
                                         size_t count, maelys_datalog_backend_output_t *out,
-                                        void **result, maelys_datalog_public_diagnostic_t *diag) {
+                                        void **result, maelys_datalog_diagnostic_t *diag) {
     (void)state;
     (void)facts;
     (void)count;
@@ -547,7 +547,7 @@ static maelys_datalog_status_t ignored_budget(void *state,
                                               const maelys_datalog_fact_t *facts,
                                               size_t count, maelys_datalog_backend_output_t *out,
                                               void **result,
-                                              maelys_datalog_public_diagnostic_t *diag) {
+                                              maelys_datalog_diagnostic_t *diag) {
     (void)state;
     (void)facts;
     (void)count;
@@ -560,7 +560,7 @@ static maelys_datalog_status_t partial_failure(void *state,
                                                const maelys_datalog_fact_t *facts,
                                                size_t count, maelys_datalog_backend_output_t *out,
                                                void **result,
-                                               maelys_datalog_public_diagnostic_t *diag) {
+                                               maelys_datalog_diagnostic_t *diag) {
     (void)state;
     (void)facts;
     (void)count;
@@ -573,7 +573,7 @@ static maelys_datalog_status_t partial_failure(void *state,
 static maelys_datalog_status_t forged_symbol(void *state, const maelys_datalog_fact_t *facts,
                                              size_t count, maelys_datalog_backend_output_t *out,
                                              void **result,
-                                             maelys_datalog_public_diagnostic_t *diag) {
+                                             maelys_datalog_diagnostic_t *diag) {
     (void)state;
     (void)facts;
     (void)count;
@@ -607,7 +607,7 @@ static maelys_datalog_status_t filter_prepare(const maelys_datalog_program_t *p,
 static maelys_datalog_status_t filter_solve(void *state, const maelys_datalog_fact_t *facts,
                                             size_t count, maelys_datalog_backend_output_t *out,
                                             void **result,
-                                            maelys_datalog_public_diagnostic_t *diag) {
+                                            maelys_datalog_diagnostic_t *diag) {
     (void)result;
     (void)diag;
     const maelys_datalog_ir_rule_t *r = state;
@@ -676,7 +676,7 @@ static int backend_failures_are_atomic(void) {
     CHECK(s == NULL && destroys == before + 1);
     maelys_datalog_status_t (*callbacks[])(void *, const maelys_datalog_fact_t *, size_t,
                                            maelys_datalog_backend_output_t *, void **,
-                                           maelys_datalog_public_diagnostic_t *) = {
+                                           maelys_datalog_diagnostic_t *) = {
         bad_emit, ignored_budget, partial_failure, forged_symbol};
     maelys_datalog_status_t expected[] = {
         MAELYS_DATALOG_STATUS_INVALID_FIELD, MAELYS_DATALOG_STATUS_PAYLOAD_TOO_LARGE,
@@ -729,7 +729,7 @@ static size_t reference_solve_calls;
 static maelys_datalog_status_t
 counted_reference_solve(void *state, const maelys_datalog_fact_t *facts, size_t count,
                         maelys_datalog_backend_output_t *output, void **result,
-                        maelys_datalog_public_diagnostic_t *diag) {
+                        maelys_datalog_diagnostic_t *diag) {
     ++reference_solve_calls;
     return maelys_datalog_backend_reference()->solve(state, facts, count, output, result, diag);
 }
@@ -737,7 +737,7 @@ static int why_false_backend_contract(void) {
     maelys_datalog_policy_t *policy;
     OK(load("allow(X) :- seed(X), extra(X).", NULL, &policy, NULL));
     maelys_datalog_backend_t backend = *maelys_datalog_backend_reference();
-    CHECK(backend.abi_version == 3 && (backend.capabilities & MAELYS_DATALOG_CAP_EXPLAIN_FALSE));
+    CHECK(backend.abi_version == MAELYS_DATALOG_BACKEND_ABI_VERSION && (backend.capabilities & MAELYS_DATALOG_CAP_EXPLAIN_FALSE));
     backend.solve = counted_reference_solve;
     maelys_datalog_session_options_t o = options(&backend);
     o.required_capabilities = MAELYS_DATALOG_CAP_EXPLAIN_FALSE;
@@ -803,7 +803,7 @@ static int why_false_backend_contract(void) {
     CHECK(maelys_datalog_session_create_ex(policy, 0, &o, &session) ==
           MAELYS_DATALOG_STATUS_INVALID_ARGUMENT);
     OK(maelys_datalog_policy_free(policy));
-    maelys_datalog_public_diagnostic_t diag;
+    maelys_datalog_diagnostic_t diag = MAELYS_DATALOG_DIAGNOSTIC_INIT;
     CHECK(load("base_head", &fixture, &policy, &diag) == MAELYS_DATALOG_STATUS_INVALID_FIELD);
     CHECK(!policy && diag.code == MAELYS_DATALOG_DIAG_MALFORMED_PROGRAM && diag.line == 3 &&
           diag.column == 2);

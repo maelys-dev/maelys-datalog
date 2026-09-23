@@ -107,6 +107,37 @@ const char *maelys_datalog_diag_code_name(maelys_datalog_diag_code_t code) {
         case MAELYS_DATALOG_DIAG_REGISTRY_CONFLICT: return "registry_conflict";
         case MAELYS_DATALOG_DIAG_REGISTRY_MUTATION_AFTER_FREEZE: return "registry_mutation_after_freeze";
         case MAELYS_DATALOG_DIAG_MALFORMED_PROGRAM: return "malformed_program";
+        case MAELYS_DATALOG_DIAG_OPERATION_REJECTED: return "operation_rejected";
+        case MAELYS_DATALOG_DIAG_SOLVE_MAX_DEPTH: return "solve_max_depth";
+        case MAELYS_DATALOG_DIAG_SOLVE_IDB_OVERFLOW: return "solve_idb_overflow";
+        case MAELYS_DATALOG_DIAG_SOLVE_COMPARISON_TYPE_ERROR: return "solve_comparison_type_error";
+        case MAELYS_DATALOG_DIAG_SOLVE_FILTER_ERROR: return "solve_filter_error";
+        case MAELYS_DATALOG_DIAG_SOLVE_MALFORMED_FACT: return "solve_malformed_fact";
+        case MAELYS_DATALOG_DIAG_SOLVE_MALFORMED_EDB: return "solve_malformed_edb";
+        case MAELYS_DATALOG_DIAG_SOLVE_INVALID_STATE: return "solve_invalid_state";
+        case MAELYS_DATALOG_DIAG_SOLVE_INVALID_ARGUMENT: return "solve_invalid_argument";
+        case MAELYS_DATALOG_DIAG_SOLVE_INTERNAL_ERROR: return "solve_internal_error";
         default: return "unknown";
     }
+}
+
+maelys_datalog_status_t maelys_datalog_diagnostic_init(void *storage, size_t bytes) {
+    if (!storage || (uintptr_t)storage % _Alignof(maelys_datalog_diagnostic_t))
+        return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
+    if (bytes < sizeof(maelys_datalog_diagnostic_t))
+        return MAELYS_DATALOG_STATUS_STORAGE_TOO_SMALL;
+    maelys_datalog_diagnostic_t *d = storage;
+    memset(d, 0, sizeof(*d));
+    d->struct_size = bytes;
+    d->abi_version = MAELYS_DATALOG_DIAGNOSTIC_ABI_VERSION;
+    return MAELYS_DATALOG_STATUS_OK;
+}
+maelys_datalog_status_t maelys_datalog_diagnostic_clear(maelys_datalog_diagnostic_t *d) {
+    if (!d) return MAELYS_DATALOG_STATUS_OK;
+    if ((uintptr_t)d % _Alignof(maelys_datalog_diagnostic_t))
+        return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
+    if (d->struct_size < sizeof(*d)) return MAELYS_DATALOG_STATUS_STORAGE_TOO_SMALL;
+    if (d->abi_version != MAELYS_DATALOG_DIAGNOSTIC_ABI_VERSION)
+        return MAELYS_DATALOG_STATUS_UNSUPPORTED;
+    return maelys_datalog_diagnostic_init(d, d->struct_size);
 }

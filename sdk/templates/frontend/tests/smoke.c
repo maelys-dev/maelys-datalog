@@ -13,7 +13,7 @@
 int main(void)
 {
     maelys_datalog_extension_t extension = starter_frontend_declaration();
-    maelys_datalog_public_diagnostic_t diagnostic = {0};
+    maelys_datalog_diagnostic_t diagnostic = MAELYS_DATALOG_DIAGNOSTIC_INIT;
     CHECK(extension.frontends[0].lower("", 0, NULL, &diagnostic)
           == MAELYS_DATALOG_STATUS_UNSUPPORTED);
 

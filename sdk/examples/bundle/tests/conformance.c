@@ -142,7 +142,7 @@ static int syntax_and_validation(void) {
                          "permit \"alice\"\npermit bob"};
     for (size_t i = 0; i < sizeof(bad) / sizeof(bad[0]); ++i) {
         maelys_datalog_policy_t *p = NULL;
-        maelys_datalog_public_diagnostic_t diag;
+        maelys_datalog_diagnostic_t diag = MAELYS_DATALOG_DIAGNOSTIC_INIT;
         MC_REQUIRE(maelys_datalog_context_load_inline(c, "permit", "bundle_example", "syntax",
                                                       bad[i], strlen(bad[i]), &p, &diag) ==
                    MAELYS_DATALOG_STATUS_INVALID_FIELD);
@@ -150,7 +150,7 @@ static int syntax_and_validation(void) {
         MC_REQUIRE(!strcmp(diag.phase, "permit"));
     }
     maelys_datalog_policy_t *p = NULL;
-    maelys_datalog_public_diagnostic_t diag;
+    maelys_datalog_diagnostic_t diag = MAELYS_DATALOG_DIAGNOSTIC_INIT;
     const char *source = "permit \"alice\"";
     MC_REQUIRE(maelys_datalog_context_load_inline(c, "permit", "bundle_bad_domain", "invalid_ir",
                                                   source, strlen(source), &p,

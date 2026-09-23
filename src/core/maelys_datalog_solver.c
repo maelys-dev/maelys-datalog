@@ -273,6 +273,8 @@ const char *maelys_datalog_solve_diagnostic_category_name(
 static void solve_once_diag_clear(maelys_datalog_internal_solve_diagnostic_t *diag) {
     if (!diag) return;
     memset(diag, 0, sizeof(*diag));
+    diag->predicate_id = UINT16_MAX;
+    diag->rule_id = UINT16_MAX;
 }
 
 static void solve_once_diag_base(maelys_datalog_internal_solve_diagnostic_t *diag,

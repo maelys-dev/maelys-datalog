@@ -15,7 +15,7 @@ static maelys_datalog_status_t prepare_program(
 static maelys_datalog_status_t solve_program(
     void *state, const maelys_datalog_fact_t *inputs, size_t count,
     maelys_datalog_backend_output_t *output, void **result,
-    maelys_datalog_public_diagnostic_t *diagnostic)
+    maelys_datalog_diagnostic_t *diagnostic)
 {
     (void)state;
     (void)inputs;
@@ -25,7 +25,7 @@ static maelys_datalog_status_t solve_program(
         return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
     *result = NULL;
     if (diagnostic)
-        *diagnostic = (maelys_datalog_public_diagnostic_t){0};
+        (void)maelys_datalog_diagnostic_clear(diagnostic);
     /* TODO: charge work and emit the complete IDB, never a partial success. */
     return MAELYS_DATALOG_STATUS_UNSUPPORTED;
 }

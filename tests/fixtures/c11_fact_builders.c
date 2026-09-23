@@ -9,11 +9,11 @@
 #elif defined(TEST_BATCH)
 #define BUILD(a, b, ...) MAELYS_DATALOG_ADD_FACTS(a, b, MAELYS_DATALOG_FACT(__VA_ARGS__))
 #define INPUT_TYPE maelys_datalog_input_edb_t
-#define OUTPUT_TYPE maelys_datalog_public_diagnostic_t
+#define OUTPUT_TYPE maelys_datalog_diagnostic_t
 #else
 #define BUILD(a, b, ...) MAELYS_DATALOG_ADD_FACT(a, b, __VA_ARGS__)
 #define INPUT_TYPE maelys_datalog_input_edb_t
-#define OUTPUT_TYPE maelys_datalog_public_diagnostic_t
+#define OUTPUT_TYPE maelys_datalog_diagnostic_t
 #endif
 
 const maelys_datalog_value_t c_symbol = MAELYS_DATALOG_SYMBOL("alice");

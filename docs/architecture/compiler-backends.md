@@ -1,5 +1,12 @@
 # Compiler and solver extension contracts
 
+> 0.10.0 migration note: the common diagnostic now uses consumer API 2,
+> frontend/program ABI 2 and backend ABI 4. Snapshot materialization is unchanged.
+> References below to the original ABI 3 constraints describe the snapshot
+> protocol on which this design was based. The future incompatible resource/
+> delta contract must receive a distinct ABI identifier; it is not this ABI 4.
+> See [the migration contract](../api-type-migration.md).
+
 The MPL core includes a complete standard Datalog frontend and reference solver.
 The alpha C SDK has two independent extension points: source-language frontends
 and execution backends. Neither needs private engine headers. The filter/planner
