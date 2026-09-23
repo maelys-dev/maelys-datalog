@@ -371,7 +371,10 @@ Prepared-session reuse tests poison inactive fact/index/pointer payload, alterna
 full duplicate-heavy symbolic batches, indexed integer batches, tiny and empty
 inputs, and compare results/proofs byte-for-byte with the independent fresh EDB
 construction path. Borrowed-pointer cleanup covers the live scratch beyond the
-index. Late rejection restores empty facts/scratch and the exact prepared symbol
+index. Three consecutive integer-only transactions (40, 40, then 60 distinct
+facts) exercise index reuse without a symbol-pointer cleanup between them; each
+must derive exactly the current values and match the fresh facts/proofs oracle.
+Late rejection restores empty facts/scratch and the exact prepared symbol
 table, and a subsequent solve succeeds. Normal success only resets metadata and
 the scratch span needed to drop pointers and initialize the index; inactive facts
 are retained until overwritten, with no secure-erasure guarantee or new storage.

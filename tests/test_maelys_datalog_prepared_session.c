@@ -1122,6 +1122,64 @@ static int test_result_symbol_text_read_only(void) {
     TEST_END();
 }
 
+static int test_reuse_resets_index_without_symbols(void) {
+    TEST_BEGIN();
+    static maelys_datalog_internal_ruleset_t source, oracle;
+    static maelys_datalog_internal_fact_t oracle_pool[MAELYS_DATALOG_MAX_EDB_FACTS];
+    static const size_t counts[] = {40u, 40u, 60u};
+    maelys_datalog_fact_t facts[60];
+    memset(&source, 0, sizeof(source));
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_ruleset_init(
+        &source, "prepared.integer-index", "reuse", k_fingerprint, 1), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_predicate_registry_add_domain(
+        &source.registry, "e", 1u, MAELYS_DATALOG_PRED_KIND_EDB), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_predicate_registry_add_domain(
+        &source.registry, "out", 1u,
+        MAELYS_DATALOG_PRED_KIND_IDB | MAELYS_DATALOG_PRED_KIND_QUERY), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_predicate_registry_freeze(&source.registry), "%d");
+    const char policy[] = "out(X) :- e(X).";
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_parse_ruleset(&source, policy, strlen(policy)), "%d");
+    maelys_datalog_internal_prepared_session_t *session = NULL;
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_prepared_session_create(&source, &session), "%d");
+    /* Every batch populates the insertion index. With no symbols, no pointer
+     * cleanup can accidentally clear it for the next batch. Do not reset or
+     * poison the session between these successful transactions. Repeat the
+     * same values to revisit occupied buckets, then grow the set. */
+    for (size_t pass = 0u; pass < sizeof(counts) / sizeof(counts[0]); ++pass) {
+        for (size_t i = 0u; i < counts[pass]; ++i) {
+            facts[i] = (maelys_datalog_fact_t){.predicate = "e", .arity = 1u};
+            facts[i].terms[0] = integer_term((long long)i);
+        }
+        maelys_datalog_internal_solve_result_t *actual = NULL, *expected = NULL;
+        /* Store the status: the assertion macro re-evaluates failing arguments,
+         * which would retry the transaction after its failure cleanup. */
+        maelys_result_t status = maelys_datalog_prepared_session_solve(
+            session, facts, counts[pass], &actual);
+        if (status != MAELYS_OK) {
+            TEST_FAIL_FMT("Integer-only transaction %zu (%zu facts) failed: %d",
+                          pass + 1u, counts[pass], (int)status);
+            maelys_datalog_prepared_session_destroy(session);
+            TEST_END();
+        }
+        TEST_ASSERT_EQUAL(MAELYS_OK, solve_fresh_canonical(
+            &source, facts, counts[pass], &oracle, oracle_pool, &expected), "%d");
+        TEST_ASSERT_TRUE(results_byte_identical(actual, expected));
+        const maelys_datalog_internal_fact_t *derived = NULL;
+        size_t derived_count = 0u;
+        TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_test_solve_result_idb_facts(
+            actual, &derived, &derived_count), "%d");
+        TEST_ASSERT_EQUAL(counts[pass], derived_count, "%zu");
+        for (size_t i = 0u; i < derived_count; ++i) {
+            TEST_ASSERT_EQUAL(MAELYS_DATALOG_TERM_INT, derived[i].terms[0].kind, "%d");
+            TEST_ASSERT_EQUAL((long long)i, derived[i].terms[0].as.integer, "%lld");
+        }
+        maelys_datalog_solve_result_free(actual);
+        maelys_datalog_solve_result_free(expected);
+    }
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_prepared_session_destroy(session), "%d");
+    TEST_END();
+}
+
 static int test_reuse_ignores_inactive_payload(void) {
     TEST_BEGIN();
     static maelys_datalog_internal_ruleset_t source, oracle;
@@ -1186,6 +1244,8 @@ static int test_reuse_ignores_inactive_payload(void) {
 
 int main(int argc, char **argv) {
     test_case_t cases[] = {
+        {"prepared_session/reuse_resets_index_without_symbols",
+         TEST_MODE_NON_BLOCKING, test_reuse_resets_index_without_symbols},
         {"prepared_session/reuse_ignores_inactive_payload",
          TEST_MODE_NON_BLOCKING, test_reuse_ignores_inactive_payload},
         {"prepared_session/order_independent_results_and_why_true",
