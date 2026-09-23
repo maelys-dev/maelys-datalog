@@ -20,9 +20,10 @@ REFERENCE = .0994
 # brings their timings below the floor. These do not replace the full matrix.
 CONTROLS = (("SMALL", ("derive", "permuted", "symbol", "31")),
             ("SMALL", ("derive", "sorted", "integer", "31")),
-            ("LARGE", ("inert", "permuted", "integer", "maximum")))
-CACHE_FLAGS = ["--cache-sim=yes", "--I1=32768,8,64", "--D1=32768,8,64", "--LL=8388608,16,64"]
-EVENTS = ("Ir", "Dr", "Dw", "I1mr", "D1mr", "D1mw", "ILmr", "DLmr", "DLmw")
+            ("LARGE", ("inert", "permuted", "integer", "maximum")),
+            ("LARGE", ("inert", "duplicate", "integer", "maximum")))
+CACHE_FLAGS = ["--cache-sim=yes", "--branch-sim=yes", "--I1=32768,8,64", "--D1=32768,8,64", "--LL=8388608,16,64"]
+EVENTS = ("Ir", "Dr", "Dw", "I1mr", "D1mr", "D1mw", "ILmr", "DLmr", "DLmw", "Bc", "Bcm", "Bi", "Bim")
 
 
 def events(path):
@@ -111,7 +112,7 @@ def run(root, workspace, controls=()):
           "session rows above this named reference add a case for Callgrind. "
           "This does not apply that solver measurement as a universal acceptance threshold.\n")
     if controls:
-        print("Predeclared A2 controls are counted regardless of their new classification: " +
+        print("Predeclared controls are counted regardless of their new classification: " +
               "; ".join(p + " / " + " / ".join(k) for p, k in controls) + ".\n")
     print("| Profile / case | Metric | A µs | B µs | Change | A/A floor | Above reference |\n"
           "| --- | --- | ---: | ---: | ---: | ---: | --- |")
@@ -127,7 +128,8 @@ def run(root, workspace, controls=()):
           "the selected case: 50 uncounted warmups, then one counted solve_edb, twice per revision. "
           "Setup, clocks, oracle checks and release are excluded. This isolated driver changes "
           "binary layout and prior case history; no timing is inferred from its runs. "
-          "Cache simulation stays active during warmup. Fixed simulated I1/D1: "
+          "Cache and branch simulation stay active during warmup. Branch predictions use "
+          "Valgrind's model, not the measured CPU's predictor. Fixed simulated I1/D1: "
           "32 KiB, 8-way, 64-byte lines; LL: 8 MiB, 16-way, 64-byte lines. "
           "Dw counts memory-write references, not bytes; D1mw/DLmw are simulated misses, "
           "not measured hardware traffic or cycle costs. See "
@@ -135,7 +137,7 @@ def run(root, workspace, controls=()):
     (output / "valgrind-version.txt").write_text(subprocess.check_output(["valgrind", "--version"], text=True))
     for ordinal, ((profile, key), digest) in enumerate(sorted(selection.items())):
         print(f"## {profile} / {' / '.join(key)}\n")
-        values, costs, cache_counts, writes = {}, {}, {}, {}
+        values, costs, cache_counts, writes, simulated = {}, {}, {}, {}, {}
         for role in ("A", "B"):
             revision = meta["base" if role == "A" else "head"]
             binary = workspace / f"bin-{role}-{profile}" / "sessions-counts"
@@ -161,6 +163,14 @@ def run(root, workspace, controls=()):
                     subprocess.run(["callgrind_annotate", "--auto=no", "--threshold=100", "--show=Dw", "--sort=Dw", f"{prefix}.out"],
                                    stdout=stream, check=True, timeout=60)
                 writes[role, repeat] = functions(annotation, exclude_insertion=False)
+                for event in ("I1mr", "ILmr", "Bcm", "Bim"):
+                    annotation = prefix.with_suffix(f".{event}.txt")
+                    with annotation.open("w") as stream:
+                        subprocess.run(["callgrind_annotate", "--auto=no", "--threshold=100",
+                                        f"--show={event}", f"--sort={event}", f"{prefix}.out"],
+                                       stdout=stream, check=True, timeout=60)
+                    simulated[event, role, repeat] = (functions(annotation, exclude_insertion=False)
+                        if cache_counts[role, repeat][event] else {})
         print("| Revision | Ir run 1 | Ir run 2 | Repeated function counts identical |\n| --- | ---: | ---: | --- |")
         for role in ("A", "B"):
             print(f"| {role} | {values[role, 1]} | {values[role, 2]} | {costs[role, 1] == costs[role, 2]} |")
@@ -171,8 +181,8 @@ def run(root, workspace, controls=()):
         for name in sorted(a.keys() | b.keys()):
             if a.get(name, 0) != b.get(name, 0):
                 print(f"| {name} | {a.get(name, 0)} | {b.get(name, 0)} | {b.get(name, 0)-a.get(name, 0):+d} |")
-        print("\n| Write/miss event | A run 1 | A run 2 | B run 1 | B run 2 |\n| --- | ---: | ---: | ---: | ---: |")
-        for event in ("Dw", "D1mw", "DLmw"):
+        print("\n| Read/write/cache/branch event | A run 1 | A run 2 | B run 1 | B run 2 |\n| --- | ---: | ---: | ---: | ---: |")
+        for event in EVENTS[1:]:
             counts = [cache_counts[role, repeat][event] for role in ("A", "B") for repeat in (1, 2)]
             print("| " + event + " | " + " | ".join(map(str, counts)) + " |")
         print("\nRepeated per-function write counts identical: " + str(all(writes[r, 1] == writes[r, 2] for r in ("A", "B"))) + ".\n")
@@ -181,6 +191,22 @@ def run(root, workspace, controls=()):
         for name in sorted(a.keys() | b.keys()):
             if a.get(name, 0) != b.get(name, 0):
                 print(f"| {name} | {a.get(name, 0)} | {b.get(name, 0)} | {b.get(name, 0)-a.get(name, 0):+d} |")
+        print("\nSimulated events not attributed to listed functions (summary minus exclusive rows); "
+              "retain these instead of assigning them to a function:\n")
+        print("| Event | A run 1 | A run 2 | B run 1 | B run 2 |\n| --- | ---: | ---: | ---: | ---: |")
+        for event in ("I1mr", "ILmr", "Bcm", "Bim"):
+            remainder = [cache_counts[role, repeat][event] - sum(simulated[event, role, repeat].values())
+                         for role in ("A", "B") for repeat in (1, 2)]
+            print("| " + event + " | " + " | ".join(map(str, remainder)) + " |")
+        print("\n| Changed function, simulated event | Event | A | B | B−A | Repeats identical |\n"
+              "| --- | --- | ---: | ---: | ---: | --- |")
+        for event in ("I1mr", "ILmr", "Bcm", "Bim"):
+            a, b = simulated[event, "A", 1], simulated[event, "B", 1]
+            identical = all(simulated[event, role, 1] == simulated[event, role, 2] for role in ("A", "B"))
+            for name in sorted(a.keys() | b.keys()):
+                if a.get(name, 0) != b.get(name, 0):
+                    print(f"| {name} | {event} | {a.get(name, 0)} | {b.get(name, 0)} | "
+                          f"{b.get(name, 0)-a.get(name, 0):+d} | {identical} |")
         print()
 
 

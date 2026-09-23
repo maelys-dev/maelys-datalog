@@ -58,6 +58,17 @@ class SolverLayoutTest(unittest.TestCase):
             path.write_text("sample,elapsed_us,result\n0,10,17\n")
             with self.assertRaisesRegex(ValueError, "inventory"): timing(path)
 
+    def test_zero_cache_cost_rows_without_percentages(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "ILmr.txt"
+            path.write_text("1 (100.0%) PROGRAM TOTALS\n"
+                            "0    /src/solver.c:solve_once [binary]\n"
+                            ".    ???:(below main) [binary]\n")
+            self.assertEqual(functions(path), {"solve_once": 0, "(below main)": 0})
+            path.write_text("1 (100.0%) PROGRAM TOTALS\n")
+            with self.assertRaisesRegex(ValueError, "missing function costs"):
+                functions(path)
+
     def write_layout(self, path, base=32):
         values = {"sizeof.ruleset": 351960, "alignof.ruleset": 8,
                   "address_mod64.ruleset": base}

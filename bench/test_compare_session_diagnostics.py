@@ -43,7 +43,7 @@ class SessionDiagnosticsTest(unittest.TestCase):
                     binary, summary, raw = map(Path, command[index:index+3])
                     key = command[index+3:]
                     role = binary.parent.name.split("-")[1]
-                    out.write_text("events: Ir Dr Dw I1mr D1mr D1mw ILmr DLmr DLmw\nsummary: 10000 200 100 1 2 3 1 1 2\n")
+                    out.write_text("events: Ir Dr Dw I1mr D1mr D1mw ILmr DLmr DLmw Bc Bcm Bi Bim\nsummary: 10000 200 100 1 2 3 1 1 2 200 3 2 1\n")
                     row = dict(zip(("policy", "order", "values", "size"), key), profile="SMALL",
                                commit=meta["base" if role == "A" else "head"], samples="1",
                                result_digest="0123456789abcdef", min_us="0.000000", median_us="0.000000", p95_us="0.000000")
@@ -51,15 +51,22 @@ class SessionDiagnosticsTest(unittest.TestCase):
                         with path.open("w", newline="") as f:
                             w = csv.DictWriter(f, data); w.writeheader(); w.writerow(data)
                 else:
-                    kwargs["stdout"].write("10,000 (100.0%) src/edb.c:maelys_datalog_edb_add_fact [binary]\n")
+                    event = next(c.split("=", 1)[1] for c in command if c.startswith("--show="))
+                    cost = {"Ir":10000, "Dw":100, "I1mr":1, "ILmr":0, "Bcm":3, "Bim":1}[event]
+                    kwargs["stdout"].write(f"{cost} " + ("(100.0%) " if cost else "") +
+                                           "src/edb.c:maelys_datalog_edb_add_fact [binary]\n")
             output = io.StringIO()
             with patch("diagnose_sessions.subprocess.check_output", return_value="synthetic valgrind\n"), patch("diagnose_sessions.subprocess.run", side_effect=fake_run), contextlib.redirect_stdout(output):
                 run(root, root, controls=(("SMALL", ("inert", "sorted", "integer", "31")),))
             self.assertEqual(sum(c[0] == "valgrind" for c in calls), 8)
             self.assertEqual({c[-1] for c in calls if c[0] == "valgrind"}, {"31", "33"})
             self.assertTrue(all("--cache-sim=yes" in c for c in calls if c[0] == "valgrind"))
+            self.assertTrue(all("--branch-sim=yes" in c for c in calls if c[0] == "valgrind"))
+            for event in ("I1mr", "ILmr", "Bc", "Bcm", "Bi", "Bim"):
+                self.assertIn(f"| {event} |", output.getvalue())
             self.assertIn("2 distinct cases selected", output.getvalue())
             self.assertIn("| no |", output.getvalue())
+            self.assertIn("| ILmr | 1 | 1 | 1 | 1 |", output.getvalue())
             prefix = root / "session-counts/001-SMALL-A-1"
             path = prefix.with_suffix(".csv")
             path.write_text(path.read_text().replace("0123456789abcdef", "ffffffffffffffff"))
@@ -69,11 +76,12 @@ class SessionDiagnosticsTest(unittest.TestCase):
     def test_trailing_zero_costs_are_implicit(self):
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "counts"
-            path.write_text("events: Ir Dr Dw I1mr D1mr D1mw ILmr DLmr DLmw\nsummary: 10000 200 100 1 2 3 1\n")
+            path.write_text("events: Ir Dr Dw I1mr D1mr D1mw ILmr DLmr DLmw Bc Bcm Bi Bim\nsummary: 10000 200 100 1 2 3 1\n")
             counts = events(path)
+            self.assertEqual((counts["Bc"], counts["Bcm"], counts["Bi"], counts["Bim"]), (0, 0, 0, 0))
             self.assertEqual((counts["Ir"],counts["Dw"],counts["D1mw"],counts["DLmr"],counts["DLmw"]),
                              (10000,100,3,0,0))
-            path.write_text(path.read_text().replace("summary: 10000 200 100 1 2 3 1", "summary: 1 2 3 4 5 6 7 8 9 10"))
+            path.write_text(path.read_text().replace("summary: 10000 200 100 1 2 3 1", "summary: 1 2 3 4 5 6 7 8 9 10 11 12 13 14"))
             with self.assertRaisesRegex(ValueError, "events"):
                 events(path)
 
