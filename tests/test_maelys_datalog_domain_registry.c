@@ -7,7 +7,7 @@
 #include <stdio.h>
 #include <string.h>
 
-static const maelys_datalog_predicate_def_t *find_def(const maelys_datalog_predicate_registry_t *registry,
+static const maelys_datalog_predicate_entry_t *find_def(const maelys_datalog_predicate_registry_t *registry,
                                                       const char *name,
                                                       size_t arity) {
     maelys_datalog_predicate_id_t pid = 0;
@@ -29,15 +29,15 @@ static maelys_result_t install_callback_test_predicates(maelys_datalog_predicate
                                                         MAELYS_DATALOG_PRED_KIND_EDB);
 }
 
-static const maelys_datalog_predicate_def_t k_static_table_a[] = {
-    {.name = "static_safe", .arity = 1, .kind_flags = MAELYS_DATALOG_PRED_KIND_EDB},
+static const maelys_datalog_public_predicate_t k_static_table_a[] = {
+    {.name = "static_safe", .arity = 1, .flags = MAELYS_DATALOG_PRED_KIND_EDB},
     {.name = "static_allow",
      .arity = 1,
-     .kind_flags = MAELYS_DATALOG_PRED_KIND_IDB | MAELYS_DATALOG_PRED_KIND_QUERY},
+     .flags = MAELYS_DATALOG_PRED_KIND_IDB | MAELYS_DATALOG_PRED_KIND_QUERY},
 };
 
-static const maelys_datalog_predicate_def_t k_static_table_b[] = {
-    {.name = "static_blocked", .arity = 1, .kind_flags = MAELYS_DATALOG_PRED_KIND_EDB},
+static const maelys_datalog_public_predicate_t k_static_table_b[] = {
+    {.name = "static_blocked", .arity = 1, .flags = MAELYS_DATALOG_PRED_KIND_EDB},
 };
 
 static maelys_result_t install_callback_error(maelys_datalog_predicate_registry_t *registry) {
@@ -62,8 +62,8 @@ static maelys_result_t register_callback_atoms(void) {
 
 static int test_callback_and_table_install_same_atoms(void) {
     TEST_BEGIN();
-    const maelys_datalog_predicate_def_t predicates[] = {
-        {.name = "callback_pred", .arity = 1u, .kind_flags = MAELYS_DATALOG_PRED_KIND_EDB},
+    const maelys_datalog_public_predicate_t predicates[] = {
+        {.name = "callback_pred", .arity = 1u, .flags = MAELYS_DATALOG_PRED_KIND_EDB},
     };
     const char *atoms[] = {"alice", "bob", "alice"};
     const maelys_datalog_domain_def_t table = {
@@ -168,7 +168,7 @@ static int test_example_domains_install_returns_ok(void) {
 static int test_graph_domain_registered(void) {
     TEST_BEGIN();
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_example_domains_install(), "%d");
-    const maelys_datalog_domain_def_t *def = maelys_datalog_domain_registry_find("graph");
+    const maelys_datalog_domain_entry_t *def = maelys_datalog_domain_registry_find("graph");
     TEST_ASSERT_NOT_NULL(def);
     TEST_ASSERT_EQUAL_STRING("graph", def->domain_name);
     TEST_ASSERT_NOT_NULL(def->install_predicates);
@@ -178,7 +178,7 @@ static int test_graph_domain_registered(void) {
 static int test_decision_domain_registered(void) {
     TEST_BEGIN();
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_example_domains_install(), "%d");
-    const maelys_datalog_domain_def_t *def = maelys_datalog_domain_registry_find("decision");
+    const maelys_datalog_domain_entry_t *def = maelys_datalog_domain_registry_find("decision");
     TEST_ASSERT_NOT_NULL(def);
     TEST_ASSERT_EQUAL_STRING("decision", def->domain_name);
     TEST_ASSERT_NOT_NULL(def->install_predicates);
@@ -207,7 +207,7 @@ static int test_graph_edge_is_edb(void) {
     TEST_BEGIN();
     maelys_datalog_predicate_registry_t registry;
     TEST_ASSERT_EQUAL(MAELYS_OK, install_domain("graph", &registry), "%d");
-    const maelys_datalog_predicate_def_t *def = find_def(&registry, "edge", 2);
+    const maelys_datalog_predicate_entry_t *def = find_def(&registry, "edge", 2);
     TEST_ASSERT_NOT_NULL(def);
     TEST_ASSERT_TRUE(def->kind_flags & MAELYS_DATALOG_PRED_KIND_EDB);
     TEST_ASSERT_FALSE(def->kind_flags & MAELYS_DATALOG_PRED_KIND_POLICY_FACT);
@@ -218,7 +218,7 @@ static int test_graph_source_is_policy_fact(void) {
     TEST_BEGIN();
     maelys_datalog_predicate_registry_t registry;
     TEST_ASSERT_EQUAL(MAELYS_OK, install_domain("graph", &registry), "%d");
-    const maelys_datalog_predicate_def_t *def = find_def(&registry, "source", 1);
+    const maelys_datalog_predicate_entry_t *def = find_def(&registry, "source", 1);
     TEST_ASSERT_NOT_NULL(def);
     TEST_ASSERT_TRUE(def->kind_flags & MAELYS_DATALOG_PRED_KIND_POLICY_FACT);
     TEST_ASSERT_FALSE(def->kind_flags & MAELYS_DATALOG_PRED_KIND_EDB);
@@ -229,7 +229,7 @@ static int test_graph_path_is_idb(void) {
     TEST_BEGIN();
     maelys_datalog_predicate_registry_t registry;
     TEST_ASSERT_EQUAL(MAELYS_OK, install_domain("graph", &registry), "%d");
-    const maelys_datalog_predicate_def_t *def = find_def(&registry, "path", 2);
+    const maelys_datalog_predicate_entry_t *def = find_def(&registry, "path", 2);
     TEST_ASSERT_NOT_NULL(def);
     TEST_ASSERT_TRUE(def->kind_flags & MAELYS_DATALOG_PRED_KIND_IDB);
     TEST_ASSERT_FALSE(def->kind_flags & MAELYS_DATALOG_PRED_KIND_QUERY);
@@ -240,7 +240,7 @@ static int test_graph_reachable_is_query_idb(void) {
     TEST_BEGIN();
     maelys_datalog_predicate_registry_t registry;
     TEST_ASSERT_EQUAL(MAELYS_OK, install_domain("graph", &registry), "%d");
-    const maelys_datalog_predicate_def_t *def = find_def(&registry, "reachable", 1);
+    const maelys_datalog_predicate_entry_t *def = find_def(&registry, "reachable", 1);
     TEST_ASSERT_NOT_NULL(def);
     TEST_ASSERT_TRUE(def->kind_flags & MAELYS_DATALOG_PRED_KIND_IDB);
     TEST_ASSERT_TRUE(def->kind_flags & MAELYS_DATALOG_PRED_KIND_QUERY);
@@ -251,7 +251,7 @@ static int test_decision_safe_is_policy_fact(void) {
     TEST_BEGIN();
     maelys_datalog_predicate_registry_t registry;
     TEST_ASSERT_EQUAL(MAELYS_OK, install_domain("decision", &registry), "%d");
-    const maelys_datalog_predicate_def_t *def = find_def(&registry, "safe", 1);
+    const maelys_datalog_predicate_entry_t *def = find_def(&registry, "safe", 1);
     TEST_ASSERT_NOT_NULL(def);
     TEST_ASSERT_TRUE(def->kind_flags & MAELYS_DATALOG_PRED_KIND_POLICY_FACT);
     TEST_ASSERT_FALSE(def->kind_flags & MAELYS_DATALOG_PRED_KIND_EDB);
@@ -262,7 +262,7 @@ static int test_decision_blocked_is_edb(void) {
     TEST_BEGIN();
     maelys_datalog_predicate_registry_t registry;
     TEST_ASSERT_EQUAL(MAELYS_OK, install_domain("decision", &registry), "%d");
-    const maelys_datalog_predicate_def_t *def = find_def(&registry, "blocked", 1);
+    const maelys_datalog_predicate_entry_t *def = find_def(&registry, "blocked", 1);
     TEST_ASSERT_NOT_NULL(def);
     TEST_ASSERT_TRUE(def->kind_flags & MAELYS_DATALOG_PRED_KIND_EDB);
     TEST_ASSERT_FALSE(def->kind_flags & MAELYS_DATALOG_PRED_KIND_POLICY_FACT);
@@ -273,7 +273,7 @@ static int test_decision_allow_is_query_idb(void) {
     TEST_BEGIN();
     maelys_datalog_predicate_registry_t registry;
     TEST_ASSERT_EQUAL(MAELYS_OK, install_domain("decision", &registry), "%d");
-    const maelys_datalog_predicate_def_t *def = find_def(&registry, "allow", 1);
+    const maelys_datalog_predicate_entry_t *def = find_def(&registry, "allow", 1);
     TEST_ASSERT_NOT_NULL(def);
     TEST_ASSERT_TRUE(def->kind_flags & MAELYS_DATALOG_PRED_KIND_IDB);
     TEST_ASSERT_TRUE(def->kind_flags & MAELYS_DATALOG_PRED_KIND_QUERY);
@@ -284,7 +284,7 @@ static int test_decision_deny_is_query_idb(void) {
     TEST_BEGIN();
     maelys_datalog_predicate_registry_t registry;
     TEST_ASSERT_EQUAL(MAELYS_OK, install_domain("decision", &registry), "%d");
-    const maelys_datalog_predicate_def_t *def = find_def(&registry, "deny", 1);
+    const maelys_datalog_predicate_entry_t *def = find_def(&registry, "deny", 1);
     TEST_ASSERT_NOT_NULL(def);
     TEST_ASSERT_TRUE(def->kind_flags & MAELYS_DATALOG_PRED_KIND_IDB);
     TEST_ASSERT_TRUE(def->kind_flags & MAELYS_DATALOG_PRED_KIND_QUERY);
@@ -295,7 +295,7 @@ static int test_decision_reduce_is_query_idb(void) {
     TEST_BEGIN();
     maelys_datalog_predicate_registry_t registry;
     TEST_ASSERT_EQUAL(MAELYS_OK, install_domain("decision", &registry), "%d");
-    const maelys_datalog_predicate_def_t *def = find_def(&registry, "reduce", 1);
+    const maelys_datalog_predicate_entry_t *def = find_def(&registry, "reduce", 1);
     TEST_ASSERT_NOT_NULL(def);
     TEST_ASSERT_TRUE(def->kind_flags & MAELYS_DATALOG_PRED_KIND_IDB);
     TEST_ASSERT_TRUE(def->kind_flags & MAELYS_DATALOG_PRED_KIND_QUERY);
@@ -324,7 +324,7 @@ static int test_domain_registry_static_table_basic(void) {
         .install_predicates = NULL,
     };
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_domain_registry_register(&def), "%d");
-    const maelys_datalog_domain_def_t *registered = maelys_datalog_domain_registry_find("static_basic_domain");
+    const maelys_datalog_domain_entry_t *registered = maelys_datalog_domain_registry_find("static_basic_domain");
     TEST_ASSERT_NOT_NULL(registered);
     TEST_ASSERT_NULL(registered->install_predicates);
     TEST_ASSERT_NOT_NULL(registered->predicates);
@@ -386,8 +386,8 @@ static int test_domain_registry_static_table_install(void) {
     maelys_datalog_predicate_registry_t registry;
     maelys_datalog_predicate_registry_init_core(&registry);
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_domain_registry_install("static_install_domain", &registry), "%d");
-    const maelys_datalog_predicate_def_t *safe = find_def(&registry, "static_safe", 1);
-    const maelys_datalog_predicate_def_t *allow = find_def(&registry, "static_allow", 1);
+    const maelys_datalog_predicate_entry_t *safe = find_def(&registry, "static_safe", 1);
+    const maelys_datalog_predicate_entry_t *allow = find_def(&registry, "static_allow", 1);
     TEST_ASSERT_NOT_NULL(safe);
     TEST_ASSERT_TRUE(safe->kind_flags & MAELYS_DATALOG_PRED_KIND_EDB);
     TEST_ASSERT_NOT_NULL(allow);

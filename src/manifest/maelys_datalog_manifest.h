@@ -74,13 +74,12 @@ maelys_result_t maelys_datalog_load_policy_inline(
  * Register a domain from a static predicate table, then load a single inline
  * policy for that domain.
  *
- * domain_name and predicates are stored by pointer in the global domain
- * registry and must remain valid for as long as the registry may reference
- * them. This API is intended for C static tables, tests, examples, embedded C,
- * and WASM builds where the table is compiled into the module.
+ * Registration synchronously copies domain_name and the predicate declarations
+ * into bounded engine-owned storage. Caller strings and tables need only remain
+ * valid for this call; no heap allocation is needed for registration.
  */
 maelys_result_t maelys_datalog_load_policy_inline_with_static_domain(
-    const maelys_datalog_predicate_def_t *predicates,
+    const maelys_datalog_public_predicate_t *predicates,
     size_t predicate_count,
     const char *domain_name,
     const char *policy_id,

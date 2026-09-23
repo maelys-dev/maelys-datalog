@@ -7,14 +7,16 @@
 #include "common/maelys_errors.h"
 #include "src/core/maelys_datalog_types.h"
 
+/* Private owned storage, never an input declaration. Keep the inline name
+ * and layout independent of the public pointer-based declaration. */
 typedef struct {
     char name[64];
     size_t arity;
     unsigned kind_flags;
-} maelys_datalog_predicate_def_t;
+} maelys_datalog_predicate_entry_t;
 
 typedef struct {
-    maelys_datalog_predicate_def_t defs[MAELYS_DATALOG_MAX_PREDICATES];
+    maelys_datalog_predicate_entry_t defs[MAELYS_DATALOG_MAX_PREDICATES];
     size_t count;
     char atoms[MAELYS_DATALOG_MAX_ATOMS][64];
     size_t atom_count;
@@ -50,7 +52,7 @@ int maelys_datalog_predicate_registry_find(const maelys_datalog_predicate_regist
                                            const char *name,
                                            size_t arity,
                                            maelys_datalog_predicate_id_t *out_id);
-const maelys_datalog_predicate_def_t *maelys_datalog_predicate_registry_get(
+const maelys_datalog_predicate_entry_t *maelys_datalog_predicate_registry_get(
     const maelys_datalog_predicate_registry_t *registry,
     maelys_datalog_predicate_id_t id);
 

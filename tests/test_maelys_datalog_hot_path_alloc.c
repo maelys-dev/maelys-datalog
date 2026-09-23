@@ -7,6 +7,7 @@
 #undef memset
 #include "maelys/datalog.h"
 #include "src/core/maelys_datalog_solver.h"
+#include "src/core/maelys_datalog_domain_registry.h"
 #include "src/core/maelys_datalog_ruleset.h"
 #include "src/core/maelys_datalog_edb.h"
 #include <assert.h>
@@ -136,6 +137,93 @@ static void aggregate_without_allocator(unsigned op) {
     assert(maelys_datalog_policy_free(policy) == 0);
 }
 
+/* Same declaration through both entry points, with all engine allocation
+ * forbidden. Run last: the final cases deliberately exhaust the global slots. */
+static void predicate_declarations_without_allocator(void) {
+    char low_name[] = "decl_owned_low", public_name[] = "decl_owned_public";
+    char name[] = "edge", atom[] = "alice", description[] = "owned metadata";
+    const char *atoms[] = {atom};
+    maelys_datalog_public_predicate_t declarations[] = {
+        {name, 2u, MAELYS_DATALOG_PREDICATE_EDB},
+    };
+    maelys_datalog_domain_def_t low = {
+        .domain_name = low_name, .predicates = declarations, .predicate_count = 1u,
+        .atoms = atoms, .atom_count = 1u, .description = description,
+    };
+    maelys_datalog_public_domain_t public = {public_name, declarations, 1u, atoms, 1u};
+    forbidden = 1;
+    assert(maelys_datalog_domain_registry_register(&low) == MAELYS_OK);
+    assert(maelys_datalog_domain_register(&public) == MAELYS_DATALOG_STATUS_OK);
+    assert(maelys_datalog_domain_register(&public) == MAELYS_DATALOG_STATUS_OK);
+    declarations[0].arity = 1u;
+    assert(maelys_datalog_domain_register(&public) == MAELYS_DATALOG_STATUS_INVALID_FIELD);
+    declarations[0].flags = 0u;
+    memset(name, 'x', sizeof(name) - 1u);
+    memset(atom, 'x', sizeof(atom) - 1u);
+    memset(description, 'x', sizeof(description) - 1u);
+    memset(low_name, 'x', sizeof(low_name) - 1u);
+    memset(public_name, 'x', sizeof(public_name) - 1u);
+    const maelys_datalog_domain_entry_t *owned = maelys_datalog_domain_registry_find("decl_owned_low");
+    assert(owned && strcmp(owned->description, "owned metadata") == 0);
+    assert(strcmp(owned->predicates[0].name, "edge") == 0);
+    assert(owned->predicates[0].arity == 2u && owned->predicates[0].kind_flags == MAELYS_DATALOG_PREDICATE_EDB);
+    assert(strcmp(owned->atoms[0], "alice") == 0);
+    maelys_datalog_predicate_registry_t a, b;
+    maelys_datalog_predicate_registry_init(&a);
+    maelys_datalog_predicate_registry_init(&b);
+    assert(maelys_datalog_domain_registry_install("decl_owned_low", &a) == MAELYS_OK);
+    assert(maelys_datalog_domain_registry_install("decl_owned_public", &b) == MAELYS_OK);
+    assert(memcmp(&a, &b, sizeof(a)) == 0);
+
+    char long_name[65]; memset(long_name, 'p', 64u); long_name[64] = '\0';
+    maelys_datalog_public_predicate_t batch[] = {{"first", 1u, MAELYS_DATALOG_PREDICATE_EDB},
+                                               {long_name, 1u, MAELYS_DATALOG_PREDICATE_EDB}};
+    low = (maelys_datalog_domain_def_t){.domain_name="decl_retry", .predicates=batch, .predicate_count=2u};
+    public = (maelys_datalog_public_domain_t){"decl_retry_public", batch, 2u, NULL, 0u};
+    assert(maelys_datalog_domain_registry_register(&low) == MAELYS_ERR_INVALID_FIELD);
+    assert(maelys_datalog_domain_register(&public) == MAELYS_DATALOG_STATUS_INVALID_FIELD);
+    assert(!maelys_datalog_domain_registry_find(low.domain_name));
+    assert(!maelys_datalog_domain_registry_find(public.name));
+    batch[1].name = NULL;
+    assert(maelys_datalog_domain_registry_register(&low) == MAELYS_ERR_INVALID_FIELD);
+    assert(maelys_datalog_domain_register(&public) == MAELYS_DATALOG_STATUS_INVALID_ARGUMENT);
+    batch[1].name = "";
+    assert(maelys_datalog_domain_registry_register(&low) == MAELYS_ERR_INVALID_FIELD);
+    assert(maelys_datalog_domain_register(&public) == MAELYS_DATALOG_STATUS_INVALID_FIELD);
+    batch[1].name = long_name; long_name[63] = '\0';
+    assert(maelys_datalog_domain_registry_register(&low) == MAELYS_OK);
+    assert(maelys_datalog_domain_register(&public) == MAELYS_DATALOG_STATUS_OK);
+    memset(long_name, 'x', 63u);
+    assert(maelys_datalog_domain_registry_find("decl_retry")->predicates[1].name[0] == 'p');
+
+    char names[MAELYS_DATALOG_MAX_PREDICATES][16];
+    maelys_datalog_public_predicate_t full[MAELYS_DATALOG_MAX_PREDICATES];
+    for (size_t i = 0; i < MAELYS_DATALOG_MAX_PREDICATES; ++i) {
+        snprintf(names[i], sizeof(names[i]), "p%zu", i);
+        full[i] = (maelys_datalog_public_predicate_t){names[i], 1u, MAELYS_DATALOG_PREDICATE_EDB};
+    }
+    low = (maelys_datalog_domain_def_t){.domain_name="decl_full", .predicates=full,
+        .predicate_count=MAELYS_DATALOG_MAX_PREDICATES + 1u};
+    assert(maelys_datalog_domain_registry_register(&low) == MAELYS_ERR_PAYLOAD_TOO_LARGE);
+    --low.predicate_count;
+    assert(maelys_datalog_domain_registry_register(&low) == MAELYS_OK);
+    maelys_datalog_predicate_registry_init(&a);
+    assert(maelys_datalog_domain_registry_install(low.domain_name, &a) == MAELYS_OK);
+    assert(a.count == MAELYS_DATALOG_MAX_PREDICATES);
+    maelys_result_t rc = MAELYS_OK;
+    for (size_t i = 0; i <= MAELYS_DATALOG_MAX_REGISTERED_DOMAINS && rc == MAELYS_OK; ++i) {
+        char domain[32]; snprintf(domain, sizeof(domain), "decl_capacity_%zu", i);
+        low.domain_name = domain; low.predicate_count = 1u;
+        rc = maelys_datalog_domain_registry_register(&low);
+    }
+    assert(rc == MAELYS_ERR_PAYLOAD_TOO_LARGE);
+    low.domain_name = "decl_owned_low";
+    assert(maelys_datalog_domain_registry_register(&low) == MAELYS_OK);
+    assert(strcmp(owned->predicates[0].name, "edge") == 0);
+    assert(attempts == 0u && hot_frees == 0u);
+    forbidden = 0;
+}
+
 int main(void) {
     const maelys_datalog_public_predicate_t predicates[] = {
         {"seed", 1, MAELYS_DATALOG_PREDICATE_EDB},
@@ -260,6 +348,7 @@ int main(void) {
     assert(maelys_datalog_session_free(filtered) == 0);
     assert(maelys_datalog_policy_free(filter_policy) == 0);
     assert(maelys_datalog_policy_free(policy) == 0);
+    predicate_declarations_without_allocator();
     printf("reference hot path: 40 repeated transactions, zero allocator calls; %zu constructor failure points checked\n", create_allocations);
     printf("release reset: owned=0 bytes, reusable maximum=%zu bytes (budget=4096, both profiles)\n", max_release_bytes);
     return 0;

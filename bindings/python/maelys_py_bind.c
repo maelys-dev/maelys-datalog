@@ -22,8 +22,8 @@ _Static_assert(sizeof(((maelys_py_term_t *)0)->value) == sizeof(int64_t),
                "maelys_py_term_t.value must stay int64_t");
 _Static_assert(offsetof(maelys_py_term_t, kind) < offsetof(maelys_py_term_t, value),
                "maelys_py_term_t field order changed");
-_Static_assert(sizeof(((maelys_py_predicate_def_t *)0)->arity) == sizeof(size_t),
-               "maelys_py_predicate_def_t.arity must stay size_t");
+_Static_assert(sizeof(((maelys_datalog_public_predicate_t *)0)->arity) == sizeof(size_t),
+               "maelys_datalog_public_predicate_t.arity must stay size_t");
 
 struct maelys_py_engine {
     maelys_datalog_build_limits_t limits;
@@ -47,50 +47,19 @@ struct maelys_py_result {
     maelys_datalog_solve_result_t *result;
 };
 
-#define MAELYS_PY_MAX_DOMAINS MAELYS_DATALOG_MAX_REGISTERED_DOMAINS
-
-typedef struct {
-    char domain_name[MAELYS_DATALOG_INLINE_MAX_DOMAIN_LEN + 1u];
-    maelys_datalog_predicate_def_t predicates[MAELYS_DATALOG_MAX_PREDICATES];
-    size_t predicate_count;
-    maelys_datalog_domain_def_t def;
-} maelys_py_domain_slot_t;
-
-/* No static scratch for transient enumeration buffers: callers own those
- * buffers. Durable static storage is required for registered domain
- * definitions because the native domain registry is process-wide, unbounded in
- * lifetime, and stores raw pointers rather than deep-copying. */
-static maelys_py_domain_slot_t s_py_domains[MAELYS_PY_MAX_DOMAINS];
-static size_t s_py_domain_count = 0u;
-
-static size_t bounded_strlen(const char *s, size_t max_len_plus_one) {
-    if (!s) return 0u;
-    size_t n = 0u;
-    while (n < max_len_plus_one && s[n]) n++;
-    return n;
-}
-
-static int copy_cstr_bounded(char *dst, size_t dst_size, const char *src) {
-    if (!dst || dst_size == 0u || !src || !*src) return 0;
-    size_t len = bounded_strlen(src, dst_size);
-    if (len >= dst_size) return 0;
-    memcpy(dst, src, len + 1u);
-    return 1;
-}
-
-static int py_predicates_equal(const maelys_datalog_domain_def_t *domain,
-                               const maelys_py_predicate_def_t *predicates,
+static int py_predicates_equal(const maelys_datalog_domain_entry_t *domain,
+                               const maelys_datalog_public_predicate_t *predicates,
                                size_t predicate_count) {
     if (!domain || !domain->predicates || !predicates ||
         domain->predicate_count != predicate_count) {
         return 0;
     }
     for (size_t i = 0u; i < predicate_count; i++) {
-        const maelys_datalog_predicate_def_t *a = &domain->predicates[i];
-        const maelys_py_predicate_def_t *b = &predicates[i];
+        const maelys_datalog_predicate_entry_t *a = &domain->predicates[i];
+        const maelys_datalog_public_predicate_t *b = &predicates[i];
         if (!b->name || strcmp(a->name, b->name) != 0 ||
             a->arity != b->arity ||
-            a->kind_flags != b->kind_flags) {
+            a->kind_flags != b->flags) {
             return 0;
         }
     }
@@ -159,10 +128,10 @@ void maelys_py_get_abi_layout(maelys_py_abi_layout_t *out) {
     out->term_size = sizeof(maelys_py_term_t);
     out->term_kind_offset = offsetof(maelys_py_term_t, kind);
     out->term_value_offset = offsetof(maelys_py_term_t, value);
-    out->predicate_def_size = sizeof(maelys_py_predicate_def_t);
-    out->predicate_def_name_offset = offsetof(maelys_py_predicate_def_t, name);
-    out->predicate_def_arity_offset = offsetof(maelys_py_predicate_def_t, arity);
-    out->predicate_def_kind_flags_offset = offsetof(maelys_py_predicate_def_t, kind_flags);
+    out->predicate_def_size = sizeof(maelys_datalog_public_predicate_t);
+    out->predicate_def_name_offset = offsetof(maelys_datalog_public_predicate_t, name);
+    out->predicate_def_arity_offset = offsetof(maelys_datalog_public_predicate_t, arity);
+    out->predicate_def_flags_offset = offsetof(maelys_datalog_public_predicate_t, flags);
 }
 
 void maelys_py_get_abi_constants(maelys_py_abi_constants_t *out) {
@@ -185,7 +154,7 @@ void maelys_py_get_abi_constants(maelys_py_abi_constants_t *out) {
 }
 
 int maelys_py_find_domain(const char *domain_name,
-                          maelys_py_predicate_def_t *out_predicates,
+                          maelys_datalog_public_predicate_t *out_predicates,
                           size_t out_capacity,
                           size_t *out_count,
                           int *out_found,
@@ -197,7 +166,7 @@ int maelys_py_find_domain(const char *domain_name,
     *out_count = 0u;
     *out_found = 0;
     *out_inspectable = 0;
-    const maelys_datalog_domain_def_t *domain =
+    const maelys_datalog_domain_entry_t *domain =
         maelys_datalog_domain_registry_find(domain_name);
     if (!domain) return (int)MAELYS_OK;
     *out_found = 1;
@@ -212,19 +181,19 @@ int maelys_py_find_domain(const char *domain_name,
     for (size_t i = 0u; i < n; i++) {
         out_predicates[i].name = domain->predicates[i].name;
         out_predicates[i].arity = domain->predicates[i].arity;
-        out_predicates[i].kind_flags = domain->predicates[i].kind_flags;
+        out_predicates[i].flags = domain->predicates[i].kind_flags;
     }
     return (int)MAELYS_OK;
 }
 
 int maelys_py_register_domain(const char *domain_name,
-                              const maelys_py_predicate_def_t *predicates,
+                              const maelys_datalog_public_predicate_t *predicates,
                               size_t predicate_count) {
     if (!domain_name || !predicates || predicate_count == 0u ||
         predicate_count > MAELYS_DATALOG_MAX_PREDICATES) {
         return (int)MAELYS_ERR_INVALID_ARGUMENT;
     }
-    const maelys_datalog_domain_def_t *existing =
+    const maelys_datalog_domain_entry_t *existing =
         maelys_datalog_domain_registry_find(domain_name);
     if (existing) {
         if (existing->install_predicates) return (int)MAELYS_ERR_UNSUPPORTED;
@@ -232,34 +201,12 @@ int maelys_py_register_domain(const char *domain_name,
                    ? (int)MAELYS_OK
                    : (int)MAELYS_ERR_INVALID_FIELD;
     }
-    if (s_py_domain_count >= MAELYS_PY_MAX_DOMAINS) {
-        return (int)MAELYS_ERR_PAYLOAD_TOO_LARGE;
-    }
-
-    maelys_py_domain_slot_t *slot = &s_py_domains[s_py_domain_count];
-    memset(slot, 0, sizeof(*slot));
-    if (!copy_cstr_bounded(slot->domain_name, sizeof(slot->domain_name), domain_name)) {
-        return (int)MAELYS_ERR_INVALID_FIELD;
-    }
-    for (size_t i = 0u; i < predicate_count; i++) {
-        if (!copy_cstr_bounded(slot->predicates[i].name,
-                               sizeof(slot->predicates[i].name),
-                               predicates[i].name)) {
-            return (int)MAELYS_ERR_INVALID_FIELD;
-        }
-        slot->predicates[i].arity = predicates[i].arity;
-        slot->predicates[i].kind_flags = predicates[i].kind_flags;
-    }
-    slot->predicate_count = predicate_count;
-    slot->def.domain_name = slot->domain_name;
-    slot->def.predicates = slot->predicates;
-    slot->def.predicate_count = slot->predicate_count;
-    slot->def.description = NULL;
-    slot->def.install_predicates = NULL;
-
-    maelys_result_t rc = maelys_datalog_domain_registry_register(&slot->def);
-    if (rc == MAELYS_OK) s_py_domain_count++;
-    return (int)rc;
+    const maelys_datalog_domain_def_t declaration = {
+        .domain_name = domain_name,
+        .predicates = predicates,
+        .predicate_count = predicate_count,
+    };
+    return (int)maelys_datalog_domain_registry_register(&declaration);
 }
 
 int maelys_py_load_inline_ruleset(maelys_py_engine_t *engine,

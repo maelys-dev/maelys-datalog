@@ -187,7 +187,7 @@ maelys_datalog_status_t maelys_datalog_backend_emit(maelys_datalog_backend_outpu
     if (!maelys_datalog_predicate_registry_find(&r->registry, in->predicate, in->arity,
                                                 &fact.predicate_id))
         return output_fail(out, MAELYS_DATALOG_STATUS_INVALID_FIELD);
-    const maelys_datalog_predicate_def_t *d =
+    const maelys_datalog_predicate_entry_t *d =
         maelys_datalog_predicate_registry_get(&r->registry, fact.predicate_id);
     if (!(d->kind_flags & MAELYS_DATALOG_PRED_KIND_IDB) ||
         (d->kind_flags & (MAELYS_DATALOG_PRED_KIND_EDB | MAELYS_DATALOG_PRED_KIND_POLICY_FACT)))

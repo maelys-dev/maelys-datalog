@@ -39,12 +39,12 @@ typedef struct {
 } maelys_datalog_build_limits_t;
 
 typedef struct { int32_t kind; int64_t value; } maelys_py_term_t;
-typedef struct { const char *name; size_t arity; unsigned kind_flags; } maelys_py_predicate_def_t;
+typedef struct { const char *name; size_t arity; unsigned flags; } maelys_datalog_public_predicate_t;
 
 typedef struct {
     size_t term_size, term_kind_offset, term_value_offset;
     size_t predicate_def_size, predicate_def_name_offset,
-           predicate_def_arity_offset, predicate_def_kind_flags_offset;
+           predicate_def_arity_offset, predicate_def_flags_offset;
 } maelys_py_abi_layout_t;
 
 typedef struct {
@@ -61,10 +61,10 @@ int maelys_py_get_build_limits(maelys_datalog_build_limits_t *out);
 void maelys_py_get_abi_layout(maelys_py_abi_layout_t *out);
 void maelys_py_get_abi_constants(maelys_py_abi_constants_t *out);
 int maelys_py_register_domain(const char *domain_name,
-                              const maelys_py_predicate_def_t *predicates,
+                              const maelys_datalog_public_predicate_t *predicates,
                               size_t predicate_count);
 int maelys_py_find_domain(const char *domain_name,
-                          maelys_py_predicate_def_t *out_predicates,
+                          maelys_datalog_public_predicate_t *out_predicates,
                           size_t out_capacity,
                           size_t *out_count,
                           int *out_found,
@@ -136,7 +136,7 @@ else:
 ffibuilder.set_source(
     "maelys_datalog._maelys_cffi",
     '#include "bindings/python/maelys_py_bind.h"',
-    include_dirs=[str(ROOT)],
+    include_dirs=[str(ROOT), str(ROOT / "include")],
     library_dirs=[str(PACKAGE_DIR)],
     libraries=["maelys_py_bind"],
     extra_compile_args=_split_flags(os.environ.get("MAELYS_PY_CFLAGS")),

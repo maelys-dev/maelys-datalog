@@ -878,7 +878,7 @@ static maelys_result_t parse_clause(parser_t *p) {
                                     &head_has_anonymous);
     if (rc != MAELYS_OK) return rc;
     if (p->tok.kind == MAELYS_DATALOG_TOKEN_DOT) {
-        const maelys_datalog_predicate_def_t *def =
+        const maelys_datalog_predicate_entry_t *def =
             maelys_datalog_predicate_registry_get(&p->ruleset->registry, head.predicate_id);
         if (!def || !(def->kind_flags & MAELYS_DATALOG_PRED_KIND_POLICY_FACT)) {
             parser_diag(p,
@@ -924,7 +924,7 @@ static maelys_result_t parse_clause(parser_t *p) {
                     MAELYS_DATALOG_DIAG_PARSER_ANONYMOUS_VARIABLE_IN_HEAD,
                     "anonymous variable is not allowed in rule heads",
                     "use named head variables bound by positive body atoms");
-        const maelys_datalog_predicate_def_t *def =
+        const maelys_datalog_predicate_entry_t *def =
             maelys_datalog_predicate_registry_get(&p->ruleset->registry, head.predicate_id);
         if (def) maelys_datalog_diagnostic_set_predicate(p->diag, def->name, def->arity);
         return MAELYS_ERR_INVALID_FIELD;
@@ -945,7 +945,7 @@ static maelys_result_t parse_clause(parser_t *p) {
     first->head = head;
     for (;;) {
         if (first->body_count >= MAELYS_DATALOG_MAX_BODY_LITERALS) {
-            const maelys_datalog_predicate_def_t *def =
+            const maelys_datalog_predicate_entry_t *def =
                 maelys_datalog_predicate_registry_get(&p->ruleset->registry, head.predicate_id);
             parser_diag(p,
                         MAELYS_DATALOG_DIAG_PARSER_RULE_BODY_LITERAL_OVERFLOW,

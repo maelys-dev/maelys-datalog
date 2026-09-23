@@ -104,7 +104,7 @@ static maelys_result_t export_term(const maelys_datalog_ruleset_t *r,
 static maelys_result_t export_atom(const maelys_datalog_ruleset_t *r,
                                    const maelys_datalog_fact_t *in, maelys_datalog_ir_atom_t *out) {
     memset(out, 0, sizeof(*out));
-    const maelys_datalog_predicate_def_t *d =
+    const maelys_datalog_predicate_entry_t *d =
         maelys_datalog_predicate_registry_get(&r->registry, in->predicate_id);
     if (!d || in->arity != d->arity || in->arity > MAELYS_DATALOG_MAX_TERMS)
         return MAELYS_ERR_INVALID_STATE;
@@ -328,7 +328,7 @@ maelys_datalog_status_t maelys_datalog_program_predicate(const maelys_datalog_pr
         return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
     if (index >= p->ruleset->registry.count)
         return MAELYS_DATALOG_STATUS_NOT_FOUND;
-    const maelys_datalog_predicate_def_t *d = &p->ruleset->registry.defs[index];
+    const maelys_datalog_predicate_entry_t *d = &p->ruleset->registry.defs[index];
     *out = (maelys_datalog_public_predicate_t){d->name, d->arity, d->kind_flags};
     return MAELYS_DATALOG_STATUS_OK;
 }

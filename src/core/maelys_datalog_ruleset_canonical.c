@@ -36,7 +36,7 @@ static maelys_result_t canonical_printf(maelys_sha256_ctx_t *ctx, const char *fm
     return MAELYS_OK;
 }
 
-static const maelys_datalog_predicate_def_t *canonical_predicate_def(
+static const maelys_datalog_predicate_entry_t *canonical_predicate_def(
     const maelys_datalog_ruleset_t *ruleset,
     maelys_datalog_predicate_id_t id) {
     if (!ruleset || id >= ruleset->registry.count || id >= MAELYS_DATALOG_MAX_PREDICATES) return NULL;
@@ -89,7 +89,7 @@ static maelys_result_t canonical_stream_atom(maelys_sha256_ctx_t *ctx,
     if (!ctx || !ruleset || !prefix || !atom || atom->arity > MAELYS_DATALOG_MAX_TERMS) {
         return MAELYS_ERR_INVALID_ARGUMENT;
     }
-    const maelys_datalog_predicate_def_t *def = canonical_predicate_def(ruleset, atom->predicate_id);
+    const maelys_datalog_predicate_entry_t *def = canonical_predicate_def(ruleset, atom->predicate_id);
     if (!def) return MAELYS_ERR_INVALID_STATE;
     maelys_result_t rc = canonical_printf(ctx, "%s%s/%u(", prefix, def->name, (unsigned)atom->arity);
     if (rc != MAELYS_OK) return rc;
@@ -219,7 +219,7 @@ static maelys_result_t ruleset_stream_canonical(maelys_sha256_ctx_t *ctx,
     if (rc != MAELYS_OK) return rc;
 
     for (size_t i = 0; i < ruleset->registry.count; i++) {
-        const maelys_datalog_predicate_def_t *def = &ruleset->registry.defs[i];
+        const maelys_datalog_predicate_entry_t *def = &ruleset->registry.defs[i];
         rc = canonical_printf(ctx, "pred=%s/%zu/%u\n", def->name, def->arity, def->kind_flags);
         if (rc != MAELYS_OK) return rc;
     }
@@ -239,7 +239,7 @@ static maelys_result_t ruleset_stream_canonical(maelys_sha256_ctx_t *ctx,
         }
     }
     for (size_t i = 0; i < ruleset->registry.count; i++) {
-        const maelys_datalog_predicate_def_t *def = &ruleset->registry.defs[i];
+        const maelys_datalog_predicate_entry_t *def = &ruleset->registry.defs[i];
         if ((def->kind_flags & MAELYS_DATALOG_PRED_KIND_QUERY) &&
             (def->kind_flags & MAELYS_DATALOG_PRED_KIND_IDB)) {
             rc = canonical_printf(ctx, "query=%s/%zu\n", def->name, def->arity);

@@ -36,7 +36,7 @@ typedef enum {
 } wasm_edb_state_t;
 
 static char s_domain_name[MAELYS_DATALOG_INLINE_MAX_DOMAIN_LEN + 1u];
-static maelys_datalog_predicate_def_t s_predicates[MAELYS_DATALOG_MAX_PREDICATES];
+static maelys_datalog_predicate_entry_t s_predicates[MAELYS_DATALOG_MAX_PREDICATES];
 static size_t s_pred_count;
 static int s_building;
 static int s_has_committed;
@@ -224,9 +224,14 @@ maelys_result_t maelys_datalog_wasm_domain_commit(void) {
         return MAELYS_ERR_INVALID_ARGUMENT;
     }
 
+    maelys_datalog_public_predicate_t declarations[MAELYS_DATALOG_MAX_PREDICATES];
+    for (size_t i = 0; i < s_pred_count; ++i) {
+        declarations[i] = (maelys_datalog_public_predicate_t){
+            s_predicates[i].name, s_predicates[i].arity, s_predicates[i].kind_flags};
+    }
     maelys_datalog_domain_def_t def = {
         .domain_name = s_domain_name,
-        .predicates = s_predicates,
+        .predicates = declarations,
         .predicate_count = s_pred_count,
         .description = "WASM dynamic domain",
         .install_predicates = NULL,

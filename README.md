@@ -193,6 +193,13 @@ New integrations use the opaque, installed C API:
 The legacy `include/maelys_datalog.h` umbrella remains available for alpha
 compatibility. New modules must not depend on its internal engine types.
 
+In the next minor release (unreleased), stable and low-level predicate tables
+both use `maelys_datalog_public_predicate_t` (`name`, `arity`, `flags`). Domain
+registration copies names into bounded owned storage; pointer declarations do
+not require heap allocation. The old low-level and Python-shim C predicate
+declarations are removed without aliases. See the
+[complete migration contract](docs/architecture/predicate-declarations.md).
+
 Declaration initializers, added in 0.7.0, keep common predicate roles explicit:
 
 ```c

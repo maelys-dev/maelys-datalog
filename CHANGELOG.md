@@ -15,6 +15,19 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
   symbol, layout or backend ABI change. An empty policy-source vocabulary does
   not restrict request EDB symbols or change loading permissions.
 
+### Changed
+
+- Unify predicate declarations on `maelys_datalog_public_predicate_t` for stable
+  and low-level domains, inline domain loading, and the Python C shim. Remove
+  `maelys_datalog_predicate_def_t` and `maelys_py_predicate_def_t` without aliases;
+  migrate declarations from `kind_flags` to `flags` and rebuild low-level/CFFI
+  consumers together. This source/binary break in the advanced interfaces targets
+  0.10.0. Stable C layouts, backend ABI 3 and program ABI 1 remain unchanged.
+- Separate declarations from private owned registry entries, retaining inline
+  bounded names and existing registry/ruleset layouts. Registration copies input
+  strings synchronously without allocation. The legacy Python shim no longer
+  reserves a redundant process-wide domain table; the Wasm builder keeps owned
+  staged names and constructs bounded declaration views only during commit.
 ## 0.9.1 — 2026-09-23
 
 One fix on the low-level domain registry. No public surface, behavior,

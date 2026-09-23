@@ -43,11 +43,11 @@ static const char k_zero_hash[65] =
 
 static const char k_conflict_domain[] = "corpus_registry_conflict";
 static const char k_conflict_policy_id[] = "corpus_registry_conflict_policy";
-static const maelys_datalog_predicate_def_t k_conflict_domain_table[] = {
-    {.name = "safe", .arity = 1, .kind_flags = MAELYS_DATALOG_PRED_KIND_EDB},
+static const maelys_datalog_public_predicate_t k_conflict_domain_table[] = {
+    {.name = "safe", .arity = 1, .flags = MAELYS_DATALOG_PRED_KIND_EDB},
     {.name = "allow",
      .arity = 1,
-     .kind_flags = MAELYS_DATALOG_PRED_KIND_IDB | MAELYS_DATALOG_PRED_KIND_QUERY},
+     .flags = MAELYS_DATALOG_PRED_KIND_IDB | MAELYS_DATALOG_PRED_KIND_QUERY},
 };
 
 static int add_predicate(maelys_datalog_ruleset_t *ruleset,

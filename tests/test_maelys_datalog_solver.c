@@ -74,7 +74,7 @@ static int init_solver_test_ruleset(maelys_datalog_ruleset_t *r) {
     if (rc != MAELYS_OK) return rc;
     rc = maelys_datalog_example_domains_install();
     if (rc != MAELYS_OK) return rc;
-    static const maelys_datalog_predicate_def_t test_defs[] = {
+    static const maelys_datalog_public_predicate_t test_defs[] = {
         {"parent", 2, MAELYS_DATALOG_PRED_KIND_EDB},
         {"q", 2, MAELYS_DATALOG_PRED_KIND_EDB},
         {"r", 2, MAELYS_DATALOG_PRED_KIND_EDB},
@@ -115,7 +115,7 @@ static int init_solver_test_ruleset(maelys_datalog_ruleset_t *r) {
     };
     for (size_t i = 0; i < sizeof(test_defs) / sizeof(test_defs[0]); i++) {
         rc = maelys_datalog_predicate_registry_add_domain(
-            &r->registry, test_defs[i].name, test_defs[i].arity, test_defs[i].kind_flags);
+            &r->registry, test_defs[i].name, test_defs[i].arity, test_defs[i].flags);
         if (rc != MAELYS_OK) return rc;
     }
     static const char *const atoms[] = {
@@ -1533,7 +1533,7 @@ static int test_datalog_backend_runtime_facts_remain_edb(void) {
     for (size_t i = 0; i < sizeof(runtime_names) / sizeof(runtime_names[0]); i++) {
         maelys_datalog_predicate_id_t pid = 0;
         TEST_ASSERT_TRUE(maelys_datalog_predicate_registry_find(&r.registry, runtime_names[i], 2, &pid));
-        const maelys_datalog_predicate_def_t *def =
+        const maelys_datalog_predicate_entry_t *def =
             maelys_datalog_predicate_registry_get(&r.registry, pid);
         TEST_ASSERT_NOT_NULL(def);
         TEST_ASSERT_TRUE(def->kind_flags & MAELYS_DATALOG_PRED_KIND_EDB);
@@ -1542,7 +1542,7 @@ static int test_datalog_backend_runtime_facts_remain_edb(void) {
     maelys_datalog_predicate_id_t tuple_pid = 0;
     TEST_ASSERT_TRUE(maelys_datalog_predicate_registry_find(&r.registry, "allowed_backend_tuple", 3,
                                                             &tuple_pid));
-    const maelys_datalog_predicate_def_t *tuple_def =
+    const maelys_datalog_predicate_entry_t *tuple_def =
         maelys_datalog_predicate_registry_get(&r.registry, tuple_pid);
     TEST_ASSERT_NOT_NULL(tuple_def);
     TEST_ASSERT_EQUAL((size_t)3u, tuple_def->arity, "%zu");

@@ -273,7 +273,7 @@ static void explain_fact_rejection(
                       index, fact->predicate, fact->arity);
         return;
     }
-    const maelys_datalog_predicate_def_t *def = maelys_datalog_predicate_registry_get(registry, pid);
+    const maelys_datalog_predicate_entry_t *def = maelys_datalog_predicate_registry_get(registry, pid);
     if (def->kind_flags & MAELYS_DATALOG_PRED_KIND_POLICY_FACT) {
         input_message(message, message_capacity,
                       "Invalid fact at index %zu: %.63s is a policy-fact predicate; runtime input is forbidden.",

@@ -50,7 +50,7 @@ static void vars_in_arith_expr(const maelys_datalog_rule_t *rule, uint8_t root, 
 static maelys_result_t validate_rule_impl(validation_context_t *p,
                                           const maelys_datalog_rule_t *rule) {
     maelys_datalog_ruleset_t *r = p->ruleset;
-    const maelys_datalog_predicate_def_t *head_def =
+    const maelys_datalog_predicate_entry_t *head_def =
         maelys_datalog_predicate_registry_get(&r->registry, rule->head.predicate_id);
     uint32_t head_vars = 0;
     uint32_t body_vars = 0;
@@ -272,7 +272,7 @@ static int valid_term(const maelys_datalog_ruleset_t *r, const maelys_datalog_te
 }
 static int valid_atom(const maelys_datalog_ruleset_t *r, const maelys_datalog_fact_t *a,
                       int variables) {
-    const maelys_datalog_predicate_def_t *d =
+    const maelys_datalog_predicate_entry_t *d =
         maelys_datalog_predicate_registry_get(&r->registry, a->predicate_id);
     if (!d || a->arity > MAELYS_DATALOG_MAX_TERMS || a->arity != d->arity)
         return 0;
@@ -434,7 +434,7 @@ static maelys_result_t validate_program_impl(maelys_datalog_ruleset_t *r, const 
     for (size_t i = 0; i < r->fact_count; ++i) {
         if (!valid_atom(r, &r->facts[i], 0))
             goto malformed;
-        const maelys_datalog_predicate_def_t *d =
+        const maelys_datalog_predicate_entry_t *d =
             maelys_datalog_predicate_registry_get(&r->registry, r->facts[i].predicate_id);
         if (!(d->kind_flags & MAELYS_DATALOG_PRED_KIND_POLICY_FACT))
             goto malformed;
@@ -447,7 +447,7 @@ static maelys_result_t validate_program_impl(maelys_datalog_ruleset_t *r, const 
             rule->body_count > MAELYS_DATALOG_MAX_BODY_LITERALS || !valid_atom(r, &rule->head, 1) ||
             !valid_expressions(r, rule))
             goto malformed;
-        const maelys_datalog_predicate_def_t *head =
+        const maelys_datalog_predicate_entry_t *head =
             maelys_datalog_predicate_registry_get(&r->registry, rule->head.predicate_id);
         if (!(head->kind_flags & MAELYS_DATALOG_PRED_KIND_IDB) ||
             (head->kind_flags & (MAELYS_DATALOG_PRED_KIND_EDB | MAELYS_DATALOG_PRED_KIND_POLICY_FACT))) {

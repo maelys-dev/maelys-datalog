@@ -144,7 +144,7 @@ static void wr_quoted(fmt_writer_t *w, const unsigned char *bytes, size_t len) {
 
 /* Bounded predicate-name length: the name field is NUL-terminated inside its
  * declared capacity; returns 0 on a missing NUL (invalid vocabulary). */
-static int predicate_name_span(const maelys_datalog_predicate_def_t *def,
+static int predicate_name_span(const maelys_datalog_predicate_entry_t *def,
                                size_t *out_len) {
     const void *nul = memchr(def->name, '\0', sizeof(def->name));
     if (nul == NULL) return 0;
@@ -192,7 +192,7 @@ static void wr_term(fmt_writer_t *w,
 static void wr_fact(fmt_writer_t *w,
                     const maelys_datalog_ruleset_t *ruleset,
                     const maelys_datalog_fact_t *fact) {
-    const maelys_datalog_predicate_def_t *def =
+    const maelys_datalog_predicate_entry_t *def =
         maelys_datalog_predicate_registry_get(&ruleset->registry, fact->predicate_id);
     size_t name_len = 0;
     if (def == NULL || !predicate_name_span(def, &name_len)) {
@@ -420,7 +420,7 @@ static maelys_result_t validate_term(const maelys_datalog_ruleset_t *ruleset,
 
 static maelys_result_t validate_fact(const maelys_datalog_ruleset_t *ruleset,
                                      const maelys_datalog_fact_t *fact) {
-    const maelys_datalog_predicate_def_t *def =
+    const maelys_datalog_predicate_entry_t *def =
         maelys_datalog_predicate_registry_get(&ruleset->registry, fact->predicate_id);
     size_t name_len = 0;
     if (def == NULL) return MAELYS_ERR_INVALID_FIELD;
@@ -505,7 +505,7 @@ static maelys_result_t validate_premise(const maelys_datalog_ruleset_t *ruleset,
     case MAELYS_DATALOG_EXPLANATION_PREMISE_COUNT: {
         const maelys_datalog_fact_t stored_pattern = count_premise_pattern(premise);
         const maelys_datalog_fact_t *pattern = &stored_pattern;
-        const maelys_datalog_predicate_def_t *def =
+        const maelys_datalog_predicate_entry_t *def =
             maelys_datalog_predicate_registry_get(&ruleset->registry, pattern->predicate_id);
         const unsigned projected = premise->as.count.projected_variable;
         size_t name_length;
@@ -734,7 +734,7 @@ static maelys_result_t validate_why_false(const maelys_datalog_ruleset_t *r,
                 return MAELYS_ERR_INVALID_FIELD;
         } else {
             const maelys_datalog_why_false_pattern_t *p = &o->pattern;
-            const maelys_datalog_predicate_def_t *pred =
+            const maelys_datalog_predicate_entry_t *pred =
                 maelys_datalog_predicate_registry_get(&r->registry, p->predicate_id);
             size_t length;
             if (!pred || !predicate_name_span(pred, &length) ||
@@ -876,7 +876,7 @@ static void emit_why_false_text(const maelys_datalog_ruleset_t *r,
                 wr_u64(w, r->rules[d->rule_id - 1u].body[o->body_index].lhs.as.variable);
             }
             const maelys_datalog_why_false_pattern_t *p = &o->pattern;
-            const maelys_datalog_predicate_def_t *pred =
+            const maelys_datalog_predicate_entry_t *pred =
                 maelys_datalog_predicate_registry_get(&r->registry, p->predicate_id);
             WR_LIT(w, " pattern=");
             wr_quoted(w, (const unsigned char *)pred->name, strlen(pred->name));
