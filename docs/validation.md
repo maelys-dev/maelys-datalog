@@ -311,6 +311,9 @@ limits through `MAELYS_DATALOG_EXPECT_PROFILE`. New inodes avoid stale Mach-O
 signature pages when switching builds. Ground-query origins, exact Why-true
 text, truncation, raw-term ownership, domain conflict/reuse, and intentional V1
 API/lifecycle changes are covered alongside the former Python-next suite.
+`test_sdk_admission.py` preserves the current layouts but changes the SDK API
+version to 1 or 3 in independent copies: compilation must fail at the explicit
+API 2 guard. Removing that guard makes both negative controls fail.
 
 ```sh
 for profile in small large; do

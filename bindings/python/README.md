@@ -47,7 +47,9 @@ into a fresh prefix, copies the Python package and tests outside the repository,
 clears ambient C include/library search paths, and compiles and tests there.
 There is no checkout fallback or optional parity skip. Tests verify the loaded
 profile, known expected facts/text, ownership, errors, input atomicity, prepared
-sessions and explanations on SMALL/LARGE. The domain registry is process-wide
+sessions and explanations on SMALL/LARGE. Negative compilation controls reject
+API 1 and 3 while retaining the same layouts, so they exercise the version guard
+itself. The domain registry is process-wide
 and bounded, so tests and applications reuse identical declarations.
 
 ## Migration from V1 (0.10.0)
