@@ -7,6 +7,12 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## 0.9.0 — 2026-09-23
+
+Multi-fact event windows: one group may contribute several facts, shared
+facts survive until their last contributing group expires. Consumer API v1,
+backend ABI 3 and program ABI 1 layouts remain unchanged.
+
 ### Added
 
 - Native multi-fact event windows in `<maelys/datalog_group_window.h>`, with
@@ -21,8 +27,8 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
   borrowed sessions. Rejection preserves committed bytes and views; closed
   handles reject before accessing returned sessions. Allocation guards, generated
   independent FIFO/set oracles and installed static/shared consumers cover both
-  SMALL and LARGE. This additive native API targets the next minor release;
-  existing single-fact windows and backend ABI 3 remain unchanged.
+  SMALL and LARGE. Existing single-fact windows and backend ABI 3
+  remain unchanged.
 
 ## 0.8.0 — 2026-09-23
 

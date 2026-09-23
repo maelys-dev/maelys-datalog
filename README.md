@@ -47,7 +47,7 @@ The reference engine recomputes each supplied snapshot. See the
 [aggregate contract](docs/specifications/maelys-datalog-v2/aggregates.md) for
 binding, capability negotiation and explanation semantics.
 
-## Retain multi-fact events (unreleased)
+## Retain multi-fact events (0.9.0)
 
 The native [`datalog_group_window.h` adapter](docs/architecture/multi-fact-window.md)
 retains N groups of complete typed facts and recomputes their union. A shared fact
