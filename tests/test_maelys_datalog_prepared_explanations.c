@@ -316,6 +316,12 @@ int main(void) {
         assert(maelys_datalog_result_prepare_explanation(result, kind, "allow", &missing, 1, storage[i], bytes[i], &sentinel) == MAELYS_DATALOG_STATUS_NOT_FOUND);
         assert(maelys_datalog_result_prepare_explanation(result, kind, "seed", value, 1, storage[i], bytes[i], &sentinel) != 0);
         OK(maelys_datalog_result_prepare_explanation(result, kind, "allow", value, 1, storage[i], bytes[i], &p[i]));
+        /* A wrapped reference descriptor remains foreign: text support does
+         * not grant permission to interpret the backend's workspace. */
+        maelys_datalog_explanation_info_t unsupported_info;
+        maelys_datalog_filter_statistics_t unsupported_stats;
+        assert(maelys_datalog_prepared_explanation_info(p[i], &unsupported_info) == MAELYS_DATALOG_STATUS_UNSUPPORTED);
+        assert(maelys_datalog_result_filter_statistics(result, &unsupported_stats) == MAELYS_DATALOG_STATUS_UNSUPPORTED);
         assert(maelys_datalog_result_prepare_explanation(result, kind, "allow", value, 1, storage[i], bytes[i], &sentinel) == MAELYS_DATALOG_STATUS_INVALID_STATE);
         OK(maelys_datalog_prepared_explanation_text_size(p[i], &needed));
         assert(needed == strlen(expected[i]));
