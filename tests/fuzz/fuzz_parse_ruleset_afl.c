@@ -5,7 +5,7 @@
  *
  * Setup mirrors the deterministic corpus runner and the C35-TER libFuzzer
  * target:
- *   ruleset_init -> add predicates -> register atoms -> freeze -> parse -> clear
+ *   ruleset_init -> add predicates -> register atoms -> freeze -> parse -> bounded solve -> clear
  *
  * AFL++ persistent mode uses __AFL_LOOP to reduce fork overhead.
  * FUZZ_ATOMS are registered before parsing so string constants such as
@@ -19,6 +19,8 @@
 #include "include/maelys_datalog.h"
 #include "src/core/maelys_datalog_parser.h"
 #include "src/core/maelys_datalog_predicate_registry.h"
+
+#include "tests/helpers/solve_validated_seed.h"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -123,12 +125,13 @@ int main(int argc, char **argv) {
             abort();
         }
 
-        (void)maelys_datalog_parse_ruleset_ex(&ruleset,
+        maelys_result_t rc = maelys_datalog_parse_ruleset_ex(&ruleset,
                                               (const char *)buf,
                                               size,
                                               "afl",
                                               &diag);
 
+        if (rc == MAELYS_OK) solve_validated_seed(&ruleset);
         maelys_datalog_ruleset_clear(&ruleset);
     }
 

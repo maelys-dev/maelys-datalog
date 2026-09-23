@@ -66,7 +66,7 @@ if [[ ! -f "$libdir/libmaelys_datalog.a" ]]; then libdir="$prefix/lib64"; fi
 # Test-only pipeline counters compile to nothing outside MAELYS_TESTING; the
 # installed libraries must not carry their symbol.
 for library in "$libdir/libmaelys_datalog.a" "$libdir"/libmaelys_datalog_shared.*; do
-  if nm -g "$library" 2>/dev/null | grep -q maelys_datalog_pipeline_counts; then
+  if nm -g "$library" 2>/dev/null | grep -Eq 'maelys_datalog_(pipeline_counts|base_lookup_counts)'; then
     echo "FAIL: test instrumentation symbol in $library" >&2; exit 1
   fi
 done

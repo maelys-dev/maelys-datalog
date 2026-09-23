@@ -1,5 +1,6 @@
 #include "src/core/maelys_datalog_solver.h"
 #include "src/core/maelys_datalog_solver_internal.h"
+#include "src/core/maelys_datalog_solver_testing.h"
 #include "src/core/maelys_datalog_query_internal.h"
 #include "src/registry/maelys_datalog_modules_internal.h"
 
@@ -99,6 +100,9 @@ struct maelys_datalog_solve_result {
     uint32_t active_stratum;
     int stratified;
     uint16_t premise_pool_count;
+    /* Per-rule application scratch, using the two bytes before the witness
+     * mask. Derivation recurses over literals of that same rule, not rules. */
+    uint16_t head_may_be_in_base;
     uint32_t witness_filled_mask;
     maelys_datalog_deny_reason_t failure_reason;
     maelys_result_t failure_error;
@@ -133,6 +137,14 @@ struct maelys_datalog_solve_result {
     uint8_t node_has_premises[MAELYS_DATALOG_MAX_PROOF_NODES];
     maelys_datalog_explanation_premise_t witness_slots[MAELYS_DATALOG_MAX_BODY_LITERALS];
 };
+
+_Static_assert(offsetof(struct maelys_datalog_solve_result, witness_filled_mask) ==
+                   offsetof(struct maelys_datalog_solve_result, premise_pool_count) + 4u,
+               "head membership scratch must fit the existing witness alignment gap");
+
+#ifdef MAELYS_TESTING
+_Thread_local maelys_datalog_base_lookup_counts_t maelys_datalog_base_lookup_counts;
+#endif
 
 maelys_datalog_internal_solve_result_t *maelys_datalog_solve_workspace_create(void) {
     maelys_datalog_internal_solve_result_t *result = calloc(1u, sizeof(*result));
@@ -1004,13 +1016,37 @@ static int solve_once_evaluate_comparison_literal(maelys_datalog_internal_solve_
     return 2;
 }
 
+/* Classify once per rule application, before enumerating bindings. Validated
+ * IDB heads cannot occur in normal EDB/policy inputs. Inspect actual predicate
+ * presence anyway: the still-supported low-level API can construct those
+ * arrays directly, even while retaining program_validated. Do not turn that
+ * flag or registry kinds alone into a new admission requirement here. */
+static uint16_t solve_once_head_may_be_in_base(
+    const maelys_datalog_internal_solve_result_t *result, const maelys_datalog_rule_t *rule) {
+#ifdef MAELYS_TESTING
+    ++maelys_datalog_base_lookup_counts.rule_checks;
+    if (result->edb_full_scan_reference) return 1;
+#endif
+    const maelys_datalog_predicate_id_t pid = rule->head.predicate_id;
+    if (pid >= MAELYS_DATALOG_MAX_PREDICATES) return 1; /* Existing diagnostic wins. */
+    if (result->edb_ranges[pid].count) return 1;
+    for (size_t i = 0; i < result->ruleset->fact_count; ++i) {
+        if (result->ruleset->facts[i].predicate_id == pid) return 1;
+    }
+    return 0;
+}
+
 static int solve_once_fact_in_base(const maelys_datalog_internal_solve_result_t *result,
                                    const maelys_datalog_internal_fact_t *fact) {
     if (!result || !fact) return 0;
-    if (result->ruleset && solve_once_fact_in_slice(result->ruleset->facts, result->ruleset->fact_count, fact)) {
-        return 1;
-    }
-    return solve_once_fact_in_slice(result->edb_snapshot.facts, result->edb_snapshot.count, fact);
+    const int found =
+        solve_once_fact_in_slice(result->ruleset->facts, result->ruleset->fact_count, fact) ||
+        maelys_datalog_fact_set_contains(&result->edb_snapshot, fact);
+#ifdef MAELYS_TESTING
+    ++maelys_datalog_base_lookup_counts.lookups;
+    maelys_datalog_base_lookup_counts.hits += (size_t)found;
+#endif
+    return found;
 }
 
 /* Public explanations promise byte-identical output. Copying these nested
@@ -1242,7 +1278,23 @@ static int solve_once_append_idb_merge(maelys_datalog_internal_solve_result_t *r
         solve_once_set_invalid_fact(result, &result->ruleset->registry, fact);
         return 0;
     }
-    if (solve_once_fact_in_base(result, fact)) return 1;
+    const int in_base = result->head_may_be_in_base && solve_once_fact_in_base(result, fact);
+#ifdef MAELYS_TESTING
+    /* Independent historical oracle, including for skipped lookups. Never
+     * built into the measured production binaries. Abort even under NDEBUG. */
+    const int historical =
+        solve_once_fact_in_slice(result->ruleset->facts, result->ruleset->fact_count, fact) ||
+        solve_once_fact_in_slice(result->edb_snapshot.facts, result->edb_snapshot.count, fact);
+    ++maelys_datalog_base_lookup_counts.audits;
+    maelys_datalog_base_lookup_counts.audit_hits += (size_t)historical;
+    maelys_datalog_base_lookup_counts.skips += !result->head_may_be_in_base;
+    if (result->ruleset->program_validated) {
+        ++maelys_datalog_base_lookup_counts.validated_audits;
+        maelys_datalog_base_lookup_counts.validated_hits += (size_t)historical;
+    }
+    if (in_base != historical) abort();
+#endif
+    if (in_base) return 1;
     /* [0, idb_current_end) includes base/current/delta accepted facts.
      * [idb_current_end, idb_merge_end) is the current merge window.
      * idb_delta is included in the accepted current prefix, so a separate
@@ -2083,6 +2135,7 @@ static int solve_once_derive_recursive(const maelys_datalog_internal_ruleset_t *
     if (literal_index == 0) {
         /* Outermost entry for this rule application: start a fresh witness. */
         result->witness_filled_mask = 0u;
+        result->head_may_be_in_base = solve_once_head_may_be_in_base(result, rule);
     }
     if (literal_index == rule->body_count) {
         maelys_datalog_internal_fact_t fact;
@@ -2356,6 +2409,7 @@ static int solve_once_derive_ordered(const maelys_datalog_internal_ruleset_t *ru
     if (order_pos == 0) {
         /* Outermost entry for this rule application: start a fresh witness. */
         result->witness_filled_mask = 0u;
+        result->head_may_be_in_base = solve_once_head_may_be_in_base(result, rule);
     }
     if (order_pos == join_order_count) {
         maelys_datalog_internal_fact_t fact;

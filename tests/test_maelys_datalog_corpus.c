@@ -1,4 +1,5 @@
 #include "helpers/test_framework.h"
+#include "helpers/solve_validated_seed.h"
 
 #include "common/maelys_sha256.h"
 #include "src/core/maelys_datalog_diagnostic.h"
@@ -338,6 +339,7 @@ static int run_corpus_file(const char *path)
         }
     }
 
+    if (api_rc == MAELYS_OK) solve_validated_seed(&ruleset);
     maelys_datalog_ruleset_clear(&ruleset);
     free(buf);
     return 0;

@@ -32,7 +32,7 @@ AFL_SRCS  = tests/fuzz/fuzz_parse_ruleset_afl.c
 AFL_BIN   = $(BUILD)/fuzz_parse_ruleset_afl
 
 AFL_CFLAGS = \
-	-Wall -Wextra -g -O1 -I. -Iinclude \
+	-Wall -Wextra -g -O1 -I. -Iinclude -DMAELYS_TESTING \
 	-fsanitize=address,undefined \
 	-fno-omit-frame-pointer
 

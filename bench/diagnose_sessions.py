@@ -16,12 +16,14 @@ from compare_sessions import CASES, KEY, PASSES, load, report as session_report
 from report_solver_layout import functions
 
 REFERENCE = .0994
-# Prior A2 regressions, declared before replay; retain them even if the fix
-# brings their timings below the floor. These do not replace the full matrix.
+# Prior A2 regressions and P1 derivation controls, declared before replay;
+# retain them even if their timings improve or fall below the floor. These do not replace the full matrix.
 CONTROLS = (("SMALL", ("derive", "permuted", "symbol", "31")),
             ("SMALL", ("derive", "sorted", "integer", "31")),
             ("LARGE", ("inert", "permuted", "integer", "maximum")),
-            ("LARGE", ("inert", "duplicate", "integer", "maximum")))
+            ("LARGE", ("inert", "duplicate", "integer", "maximum")),
+            ("LARGE", ("derive", "strided", "integer", "256")),
+            ("LARGE", ("derive", "sorted", "symbol", "maximum")))
 CACHE_FLAGS = ["--cache-sim=yes", "--branch-sim=yes", "--I1=32768,8,64", "--D1=32768,8,64", "--LL=8388608,16,64"]
 EVENTS = ("Ir", "Dr", "Dw", "I1mr", "D1mr", "D1mw", "ILmr", "DLmr", "DLmw", "Bc", "Bcm", "Bi", "Bim")
 
