@@ -32,6 +32,15 @@ Its implementation remains deferred until a named consumer and target define
 the required deployment boundary. The requirements below preserve that design
 option without adding it to the current incremental milestone.
 
+The public full-recompute reference is now implemented by the
+[last-N window](https://github.com/maelys-dev/maelys-datalog/blob/da68395032c0a417c10e52ef52e058b20340ddc2/docs/architecture/last-n-window.md),
+merged in #91 at `da68395`. It borrows two matching sessions and commits expiry,
+the new event, the result and the occurrence cursor together. This baseline is
+not the private incremental experiment and does not implement session resource
+negotiation. Its snapshot vocabulary can renew within the existing limits; the
+fixed-dictionary restriction below belongs to private R1, not this public adapter.
+The adapter is on main and awaits a published SDK; VERSION remains 0.7.1.
+
 ## Scope and ownership
 
 A resource contract belongs to the whole session: host input validation and
@@ -383,7 +392,7 @@ programs or use an explicitly permitted full-recompute path; it must not maintai
 them as if they were monotone. Aggregates keep their existing snapshot semantics:
 replacement removes the old tuple and inserts the new one atomically.
 
-## Persistent vocabulary and the first window adapter
+## Persistent vocabulary and private R1
 
 A persistent backend that accepts ongoing symbol churn must define reclamation
 of both symbol entries and text storage. Program vocabulary remains rooted;
@@ -393,30 +402,33 @@ preserve typed values and identity validity and be transactional. Merely raising
 `MAX_SYMBOLS`, or reclaiming slots while leaking their text, does not meet the
 long-stream requirement.
 
-The first experiment avoids that implementation dependency: its window adapter
-uses **integer occurrence IDs** and a declared, bounded symbolic dictionary fixed
-at initialization, including program vocabulary. A new persistent symbol outside
-that dictionary is rejected atomically before persistent interning/publication. This applies
-to every field, not just occurrence IDs: arbitrary log messages, addresses encoded
+The first private experiment avoids that implementation dependency: R1's input
+schema requires **integer occurrence IDs** and a declared, bounded symbolic
+dictionary fixed at initialization, including program vocabulary. A new persistent
+symbol outside that dictionary must be rejected atomically before persistent
+interning/publication. This applies to every field, not just occurrence IDs:
+arbitrary log messages, addresses encoded
 as strings and other changing payloads can otherwise reproduce the same leak.
 This restricted input schema is explicit prototype scope, not a language change
 or a claim to support arbitrary string streams. The original payload can remain
 outside the engine under a separately bounded collector contract; it is not
 silently hashed or coerced into a supposedly equivalent Datalog value.
 
-Occurrence IDs are distinct native integer values in the admitted range. For the
-initial adapter, use a monotonically increasing ID and reject exhaustion before
-commit; no wraparound or reuse of `event_number modulo N`. At the current engine
+Occurrence IDs are distinct native integer values in the admitted range. Like the
+public reference window, R1 must use a monotonically increasing ID and reject
+exhaustion before commit; no wraparound or reuse of `event_number modulo N`. At the current engine
 boundary the maximum integer is 2,147,483,647. Test exhaustion near that limit
 without processing billions of events. A future reuse/epoch scheme needs its own
 identity/reference contract. Expiration alone does not prove an ID is unreferenced.
 
-Integer occurrences remove per-event symbol growth, not all symbol maintenance.
-Supporting changing symbolic payloads later requires a validated reclamation or
-transactional reconstruction strategy, including remapping snapshot IDs and text
-ownership. Repeated windows must exercise more than 512 distinct occurrence IDs
-with a stable dictionary in the first experiment; symbol-churn tests belong to
-the later feature that actually accepts such churn.
+Integer occurrences remove symbol growth caused by occurrence names, not all
+symbol maintenance. Supporting changing symbolic payloads in persistent state
+requires a validated reclamation or transactional reconstruction strategy,
+including remapping snapshot IDs and text ownership. Repeated windows must
+exercise more than 512 distinct occurrence IDs with a stable dictionary in R1;
+persistent symbol-churn tests belong to the later feature that accepts such churn.
+The public reference already tests changing payload strings across complete
+snapshot recomputations. That evidence does not qualify persistent reclamation.
 
 ## Observable, bounded fallback
 
@@ -449,8 +461,11 @@ expiration order and any mapping from one event to several facts. N events is
 not necessarily N facts, nor a bound on derived facts. A retained dependency
 outside the last N events needs a separate budget and property-preservation
 contract; truncating it is not exact analysis of the original execution.
-The initial adapter uses the integer occurrence IDs and fixed symbolic dictionary
-specified above. This choice does not specialize the pure engine to a trace format.
+The public reference adapter admits one fact per event, with a generated integer
+occurrence ID, and rebuilds complete snapshots. Private R1's input schema adds the
+fixed symbolic dictionary specified above. Neither choice specializes the pure
+engine to a trace format; the general multi-fact collector case is not implemented
+by the initial public adapter.
 
 Window capacity, collection batch size and overflow/backpressure behavior must
 match the accepted session contract. A rejected engine transaction must not make

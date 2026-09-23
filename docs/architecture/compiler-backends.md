@@ -237,6 +237,9 @@ Backend ABI 4 ships as one break, together with the first non-reference backend
   keep persistent symbol reclamation outside that first milestone; the current
   append-only symbol table cannot support indefinite symbolic churn. Publication
   gates for new memory modes/artifacts apply only when those features are offered.
+  The fixed dictionary belongs to private R1. The public last-N reference adapter
+  rebuilds complete snapshots and can renew its vocabulary within snapshot bounds;
+  that behavior does not establish reclamation in persistent backend state.
 
 Invariants that do not move: one live result per session, canonical public IDs
 for the same input and stable IDs during a result's lifetime, the reference
