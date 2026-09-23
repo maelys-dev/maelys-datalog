@@ -10,6 +10,8 @@ prefix="$scratch/prefix"
 cmake --install "$build" --prefix "$prefix"
 cp "$root/tests/fixtures/public_api_consumer.c" "$scratch/"
 cp "$root/tests/fixtures/sdk_header.c" "$scratch/"
+cp "$root/tests/fixtures/cpp_fact_builders.cpp" "$scratch/"
+cp "$root/tests/test_maelys_datalog_predicate_builders.c" "$scratch/"
 cp "$root/tests/fixtures/opaque_handle.c" "$scratch/"
 cp "$root/tests/fixtures/explanation_storage.c" "$scratch/"
 cp "$root/tests/test_maelys_datalog_modules.c" "$scratch/"
@@ -32,6 +34,8 @@ for header in datalog.h datalog_builders.h datalog_module.h datalog_program.h da
   "$cxx" -x c++ -std=c++17 -Wall -Wextra -Werror -I"$prefix/include" \
     -DSDK_HEADER="\"maelys/$header\"" -fsyntax-only sdk_header.c
 done
+"$cxx" -std=c++17 -Wall -Wextra -Werror -pedantic-errors -I"$prefix/include" \
+  -fsyntax-only cpp_fact_builders.cpp
 "$cc" "${flags[@]}" -Wvla -pedantic-errors explanation_storage.c -o storage-c
 ./storage-c
 "$cxx" -x c++ -std=c++17 -Wall -Wextra -Werror -Wvla -pedantic-errors \
@@ -83,6 +87,9 @@ for linkage in static shared; do
   fi
   "$cc" "${flags[@]}" public_api_consumer.c "${libs[@]}" -o facade
   ./facade
+  "$cc" "${flags[@]}" -UNDEBUG -Wvla -pedantic-errors \
+    test_maelys_datalog_predicate_builders.c "${libs[@]}" -o declarations
+  ./declarations
   "$cc" "${flags[@]}" -UNDEBUG test_maelys_datalog_window.c "${libs[@]}" -o window
   ./window
   "$cc" "${flags[@]}" -UNDEBUG test_maelys_datalog_group_window.c "${libs[@]}" -o group-window

@@ -228,6 +228,34 @@ inject policy facts or derived facts. The ordinary struct initializer remains
 available. The existing C11 `MAELYS_DATALOG_QUERY(result, ...)` is different:
 it executes a membership query; it does not declare a predicate.
 
+Domain initializers (unreleased) also derive the counts from fixed-size arrays:
+
+```c
+static const maelys_datalog_public_domain_t domain =
+    MAELYS_DATALOG_DOMAIN_NO_ATOMS("documents", predicates);
+
+/* Or declare the strings that may appear in policy source: */
+static const char *const atoms[] = {"confidential", "restricted"};
+static const maelys_datalog_public_domain_t domain_with_atoms =
+    MAELYS_DATALOG_DOMAIN_WITH_ATOMS("classified_documents", predicates, atoms);
+
+/* Registration stays explicit: check its status. */
+maelys_datalog_status_t rc = maelys_datalog_domain_register(&domain);
+```
+
+Both macros initialize `maelys_datalog_public_domain_t` in C and C++ without
+allocating, copying or registering anything. Pass actual, nonempty fixed-size
+arrays, never pointers, function array parameters or VLAs: their counts use
+`sizeof`, and the macros do not enforce this precondition. Dynamic tables,
+explicit counts and domains without predicates retain the ordinary struct
+initializer. The descriptor borrows names, tables and strings until registration
+returns; successful registration owns copies.
+
+`NO_ATOMS` replaces `NULL, 0u` for the policy-source vocabulary. It still permits
+request EDB symbols such as `blocked("mallory")`; a variable-only policy such as
+`blocked(User)` needs no declared string for `User`. It is independent of
+`MAELYS_DATALOG_PUBLIC_ALLOW_NONE`, which names loading permissions.
+
 The C11 fact builders introduced in 0.4.0, included automatically from the separate
 installed `<maelys/datalog_builders.h>`, simplify input without
 changing the ABI. Given a successfully initialized `edb` and a diagnostic:

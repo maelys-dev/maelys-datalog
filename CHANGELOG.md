@@ -7,6 +7,14 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+
+- `MAELYS_DATALOG_DOMAIN_NO_ATOMS` and `MAELYS_DATALOG_DOMAIN_WITH_ATOMS`
+  initialize public domain declarations in C and C++, deriving counts from
+  fixed-size arrays. Registration remains explicit; no allocation, exported
+  symbol, layout or backend ABI change. An empty policy-source vocabulary does
+  not restrict request EDB symbols or change loading permissions.
+
 ### Changed
 
 - Unify predicate declarations on `maelys_datalog_public_predicate_t` for stable
@@ -20,6 +28,10 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
   strings synchronously without allocation. The legacy Python shim no longer
   reserves a redundant process-wide domain table; the Wasm builder keeps owned
   staged names and constructs bounded declaration views only during commit.
+## 0.9.1 — 2026-09-23
+
+One fix on the low-level domain registry. No public surface, behavior,
+identity or ABI change for declarative consumers.
 
 ### Fixed
 
