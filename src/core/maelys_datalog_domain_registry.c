@@ -104,13 +104,16 @@ maelys_result_t maelys_datalog_domain_registry_install(const char *domain_name,
                                                        maelys_datalog_predicate_registry_t *registry) {
     const maelys_datalog_domain_def_t *domain = maelys_datalog_domain_registry_find(domain_name);
     if (!domain || (!domain->install_predicates && !domain->predicates)) return MAELYS_ERR_UNSUPPORTED;
-    if (domain->install_predicates) return domain->install_predicates(registry);
-    for (size_t i = 0; i < domain->predicate_count; i++) {
-        maelys_result_t rc = maelys_datalog_predicate_registry_add_domain(registry,
-                                                                          domain->predicates[i].name,
-                                                                          domain->predicates[i].arity,
-                                                                          domain->predicates[i].kind_flags);
+    if (domain->install_predicates) {
+        maelys_result_t rc = domain->install_predicates(registry);
         if (rc != MAELYS_OK) return rc;
+    } else {
+        for (size_t i = 0; i < domain->predicate_count; i++) {
+            maelys_result_t rc = maelys_datalog_predicate_registry_add_domain(
+                registry, domain->predicates[i].name,
+                domain->predicates[i].arity, domain->predicates[i].kind_flags);
+            if (rc != MAELYS_OK) return rc;
+        }
     }
     for (size_t i = 0; i < domain->atom_count; i++) {
         maelys_result_t rc = maelys_datalog_predicate_registry_add_atom(

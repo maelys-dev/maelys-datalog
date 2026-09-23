@@ -7,6 +7,14 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Low-level domains now install their declared `atoms` after a successful
+  `install_predicates` callback, as table-based domains already do. Callback
+  failures stop installation; atom installation errors are propagated. Previously
+  the callback path returned early and silently ignored the atom table. Stable
+  consumer types and backend ABI 3 layouts are unchanged.
+
 ## 0.9.0 — 2026-09-23
 
 Multi-fact event windows: one group may contribute several facts, shared

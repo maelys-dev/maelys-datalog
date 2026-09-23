@@ -143,6 +143,9 @@ typedef struct {
     unsigned flags;
 } maelys_datalog_public_predicate_t;
 
+/* Stable declarative vocabulary, copied by domain_register. Predicates and
+ * policy-source atoms are explicit; internal registry callbacks and metadata
+ * are not part of this consumer contract. This is not a low-level struct alias. */
 typedef struct {
     const char *name;
     const maelys_datalog_public_predicate_t *predicates;

@@ -2,6 +2,7 @@
 #include "src/core/maelys_datalog_domain_registry.h"
 #include "src/core/maelys_datalog_predicate_registry.h"
 #include "tests/helpers/test_framework.h"
+#include "maelys/datalog.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -38,6 +39,125 @@ static const maelys_datalog_predicate_def_t k_static_table_a[] = {
 static const maelys_datalog_predicate_def_t k_static_table_b[] = {
     {.name = "static_blocked", .arity = 1, .kind_flags = MAELYS_DATALOG_PRED_KIND_EDB},
 };
+
+static maelys_result_t install_callback_error(maelys_datalog_predicate_registry_t *registry) {
+    (void)registry;
+    return MAELYS_ERR_TIMEOUT;
+}
+
+static maelys_result_t register_callback_atoms(void) {
+    /* Registration must own the atom bytes, including on the callback path. */
+    char atom[] = "alice";
+    const char *atoms[] = {atom, "bob", "alice"};
+    const maelys_datalog_domain_def_t def = {
+        .domain_name = "callback_atoms",
+        .atoms = atoms,
+        .atom_count = 3u,
+        .install_predicates = install_callback_test_predicates,
+    };
+    maelys_result_t rc = maelys_datalog_domain_registry_register(&def);
+    memset(atom, 'x', sizeof(atom) - 1u);
+    return rc;
+}
+
+static int test_callback_and_table_install_same_atoms(void) {
+    TEST_BEGIN();
+    const maelys_datalog_predicate_def_t predicates[] = {
+        {.name = "callback_pred", .arity = 1u, .kind_flags = MAELYS_DATALOG_PRED_KIND_EDB},
+    };
+    const char *atoms[] = {"alice", "bob", "alice"};
+    const maelys_datalog_domain_def_t table = {
+        .domain_name = "table_atoms",
+        .predicates = predicates,
+        .predicate_count = 1u,
+        .atoms = atoms,
+        .atom_count = 3u,
+    };
+    TEST_ASSERT_EQUAL(MAELYS_OK, register_callback_atoms(), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_domain_registry_register(&table), "%d");
+    maelys_datalog_predicate_registry_t callback_registry, table_registry;
+    maelys_datalog_predicate_registry_init_core(&callback_registry);
+    maelys_datalog_predicate_registry_init_core(&table_registry);
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_domain_registry_install("callback_atoms", &callback_registry), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_domain_registry_install("table_atoms", &table_registry), "%d");
+    TEST_ASSERT_NOT_NULL(find_def(&callback_registry, "callback_pred", 1u));
+    TEST_ASSERT_EQUAL((size_t)2u, callback_registry.atom_count, "%zu");
+    TEST_ASSERT_TRUE(maelys_datalog_predicate_registry_atom_allowed(&callback_registry, "alice"));
+    TEST_ASSERT_TRUE(maelys_datalog_predicate_registry_atom_allowed(&callback_registry, "bob"));
+    TEST_ASSERT_FALSE(maelys_datalog_predicate_registry_atom_allowed(&callback_registry, "carol"));
+    TEST_ASSERT_EQUAL(0, memcmp(&table_registry, &callback_registry, sizeof(table_registry)), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_domain_registry_install("callback_atoms", &callback_registry), "%d");
+    TEST_ASSERT_EQUAL(0, memcmp(&table_registry, &callback_registry, sizeof(table_registry)), "%d");
+    TEST_END();
+}
+
+static int test_callback_error_skips_declared_atoms(void) {
+    TEST_BEGIN();
+    const char *atoms[] = {"alice"};
+    const maelys_datalog_domain_def_t def = {
+        .domain_name = "callback_error_atoms",
+        .atoms = atoms,
+        .atom_count = 1u,
+        .install_predicates = install_callback_error,
+    };
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_domain_registry_register(&def), "%d");
+    maelys_datalog_predicate_registry_t registry;
+    maelys_datalog_predicate_registry_init_core(&registry);
+    TEST_ASSERT_EQUAL(MAELYS_ERR_TIMEOUT, maelys_datalog_domain_registry_install(def.domain_name, &registry), "%d");
+    TEST_ASSERT_EQUAL((size_t)0u, registry.atom_count, "%zu");
+    TEST_END();
+}
+
+static int test_callback_propagates_atom_capacity_error(void) {
+    TEST_BEGIN();
+    TEST_ASSERT_EQUAL(MAELYS_OK, register_callback_atoms(), "%d");
+    maelys_datalog_predicate_registry_t registry;
+    maelys_datalog_predicate_registry_init_core(&registry);
+    for (size_t i = 0u; i < MAELYS_DATALOG_MAX_ATOMS; i++) {
+        char atom[64];
+        snprintf(atom, sizeof(atom), "reserved_%zu", i);
+        TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_predicate_registry_add_atom(&registry, atom), "%d");
+    }
+    TEST_ASSERT_EQUAL(MAELYS_ERR_PAYLOAD_TOO_LARGE,
+                      maelys_datalog_domain_registry_install("callback_atoms", &registry), "%d");
+    TEST_ASSERT_NOT_NULL(find_def(&registry, "callback_pred", 1u));
+    TEST_ASSERT_EQUAL((size_t)MAELYS_DATALOG_MAX_ATOMS, registry.atom_count, "%zu");
+    TEST_ASSERT_FALSE(maelys_datalog_predicate_registry_atom_allowed(&registry, "alice"));
+    TEST_END();
+}
+
+static maelys_result_t install_callback_policy_predicates(maelys_datalog_predicate_registry_t *registry) {
+    return maelys_datalog_predicate_registry_add_domain(
+        registry, "allowed", 1u,
+        MAELYS_DATALOG_PRED_KIND_POLICY_FACT | MAELYS_DATALOG_PRED_KIND_QUERY);
+}
+
+static int test_callback_atoms_validate_policy_source(void) {
+    TEST_BEGIN();
+    const char *atoms[] = {"alice"};
+    const maelys_datalog_domain_def_t def = {
+        .domain_name = "callback_policy_atoms",
+        .atoms = atoms,
+        .atom_count = 1u,
+        .install_predicates = install_callback_policy_predicates,
+    };
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_domain_registry_register(&def), "%d");
+    const char source[] = "allowed(\"alice\").";
+    maelys_datalog_policy_t *policy = NULL;
+    maelys_datalog_public_diagnostic_t diagnostic;
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK,
+                      maelys_datalog_policy_load_inline(def.domain_name, "callback_policy",
+                          source, strlen(source), &policy, &diagnostic), "%d");
+    TEST_ASSERT_NOT_NULL(policy);
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_OK, maelys_datalog_policy_free(policy), "%d");
+    policy = NULL;
+    const char undeclared[] = "allowed(\"carol\").";
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_INVALID_FIELD,
+                      maelys_datalog_policy_load_inline(def.domain_name, "callback_policy",
+                          undeclared, strlen(undeclared), &policy, &diagnostic), "%d");
+    TEST_ASSERT_NULL(policy);
+    TEST_END();
+}
 
 static int test_example_domains_install_returns_ok(void) {
     TEST_BEGIN();
@@ -367,6 +487,10 @@ static int test_standalone_domain_registry_has_no_parent_paths(void) {
 
 int main(int argc, char **argv) {
     test_case_t cases[] = {
+        {"maelys_datalog_domain_registry/callback_and_table_install_same_atoms", TEST_MODE_NON_BLOCKING, test_callback_and_table_install_same_atoms},
+        {"maelys_datalog_domain_registry/callback_error_skips_declared_atoms", TEST_MODE_NON_BLOCKING, test_callback_error_skips_declared_atoms},
+        {"maelys_datalog_domain_registry/callback_propagates_atom_capacity_error", TEST_MODE_NON_BLOCKING, test_callback_propagates_atom_capacity_error},
+        {"maelys_datalog_domain_registry/callback_atoms_validate_policy_source", TEST_MODE_NON_BLOCKING, test_callback_atoms_validate_policy_source},
         {"maelys_datalog_domain_registry/example_domains_install_returns_ok", TEST_MODE_NON_BLOCKING, test_example_domains_install_returns_ok},
         {"maelys_datalog_domain_registry/graph_domain_registered", TEST_MODE_NON_BLOCKING, test_graph_domain_registered},
         {"maelys_datalog_domain_registry/decision_domain_registered", TEST_MODE_NON_BLOCKING, test_decision_domain_registered},
