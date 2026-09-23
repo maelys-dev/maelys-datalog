@@ -213,6 +213,33 @@ Backend ABI 4 ships as one break, together with the first non-reference backend
 - A named backend registry reachable from the opaque facade, so Python-next and
   the WASM binding can select a backend by name. C context registration and
   selection already exist; the remaining work is coherent binding exposure.
+- A [session resource contract](session-resource-contract.md), agreed by the
+  host and backend before initialization: effective capacities, checked storage
+  planning, immutable session budgets/memory policy, transaction peaks and
+  observable bounded fallback. This is a design requirement, not an ABI 3 option
+  or a frozen ABI 4 layout. Smaller quotas and genuinely capacity-sized storage
+  are separate steps.
+  The consumer selects a predefined capacity profile and an explicit memory mode,
+  independently of solver choice where that combination is supported. Fixed
+  storage may be compact or very large; elastic blocks/pools grow only under their
+  accepted cap/growth/retention policy, with stable references and atomic failure.
+  Strict native no-heap is a separate artifact qualification track, stronger than
+  today's execution guarantee after creation; it requires caller-owned storage,
+  bounded loading or compilation, and an audited build/provider set. It is not a
+  third memory mode or a prerequisite for the incremental prototype. Static arenas
+  require sizing metadata before execution, not only a runtime query. Compact builds need not
+  include the largest representation or elastic storage; fixed storage never
+  silently switches to elastic mode. These new modes remain design requirements.
+  The first private experiment has one existing LARGE profile, fixed memory and
+  one candidate backend, checked against the reference oracle. Its gate covers
+  transactions, identities, exact rollback, observed fallback and generated
+  differential sequences. Integer occurrence IDs and a fixed declared dictionary
+  keep persistent symbol reclamation outside that first milestone; the current
+  append-only symbol table cannot support indefinite symbolic churn. Publication
+  gates for new memory modes/artifacts apply only when those features are offered.
+  The fixed dictionary belongs to private R1. The public last-N reference adapter
+  rebuilds complete snapshots and can renew its vocabulary within snapshot bounds;
+  that behavior does not establish reclamation in persistent backend state.
 
 Invariants that do not move: one live result per session, canonical public IDs
 for the same input and stable IDs during a result's lifetime, the reference
@@ -230,6 +257,11 @@ kind switches must reject or implement the new alternative. See
 [the aggregate contract](../specifications/maelys-datalog-v2/aggregates.md).
 
 ## Budgets and shared filters
+
+Current limits below describe ABI 3. The
+[target resource contract](session-resource-contract.md) also budgets persistent
+incremental state and the whole transaction; it is not implemented by the
+existing `work_limit` or input-buffer capacity setters.
 
 `backend_charge` is cooperative. Charge before bounded units of work; work units
 are algorithm-specific, not comparable benchmarks or a wall-clock deadline.
