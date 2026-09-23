@@ -12,7 +12,7 @@
 static const char k_zero_sha[] =
     "0000000000000000000000000000000000000000000000000000000000000000";
 
-static maelys_result_t add_predicate(maelys_datalog_ruleset_t *ruleset,
+static maelys_result_t add_predicate(maelys_datalog_internal_ruleset_t *ruleset,
                                      const char *name,
                                      size_t arity,
                                      unsigned kind_flags) {
@@ -22,7 +22,7 @@ static maelys_result_t add_predicate(maelys_datalog_ruleset_t *ruleset,
                                                         kind_flags);
 }
 
-static maelys_result_t init_ruleset_base(maelys_datalog_ruleset_t *ruleset,
+static maelys_result_t init_ruleset_base(maelys_datalog_internal_ruleset_t *ruleset,
                                          const char *policy_id) {
     memset(ruleset, 0, sizeof(*ruleset));
     return maelys_datalog_ruleset_init(ruleset,
@@ -32,27 +32,27 @@ static maelys_result_t init_ruleset_base(maelys_datalog_ruleset_t *ruleset,
                                        1);
 }
 
-static maelys_datalog_term_t symbol_term(maelys_datalog_ruleset_t *ruleset,
+static maelys_datalog_internal_term_t symbol_term(maelys_datalog_internal_ruleset_t *ruleset,
                                          const char *text) {
     maelys_datalog_symbol_id_t id = 0;
     (void)maelys_datalog_symbol_intern(&ruleset->symbols, text, strlen(text), &id);
-    maelys_datalog_term_t term = {.kind = MAELYS_DATALOG_TERM_SYMBOL};
+    maelys_datalog_internal_term_t term = {.kind = MAELYS_DATALOG_TERM_SYMBOL};
     term.as.symbol = id;
     return term;
 }
 
-static void add_symbol_pair(maelys_datalog_ruleset_t *ruleset,
-                            maelys_datalog_edb_t *edb,
+static void add_symbol_pair(maelys_datalog_internal_ruleset_t *ruleset,
+                            maelys_datalog_internal_edb_t *edb,
                             const char *predicate,
                             const char *lhs,
                             const char *rhs) {
-    maelys_datalog_term_t terms[2];
+    maelys_datalog_internal_term_t terms[2];
     terms[0] = symbol_term(ruleset, lhs);
     terms[1] = symbol_term(ruleset, rhs);
     (void)maelys_datalog_edb_add_fact(edb, predicate, terms, 2u);
 }
 
-static maelys_result_t init_access_ruleset(maelys_datalog_ruleset_t *ruleset) {
+static maelys_result_t init_access_ruleset(maelys_datalog_internal_ruleset_t *ruleset) {
     maelys_result_t rc = init_ruleset_base(ruleset, "determinism.access");
     if (rc != MAELYS_OK) return rc;
     rc = add_predicate(ruleset, "owns", 2u, MAELYS_DATALOG_PRED_KIND_EDB);
@@ -77,7 +77,7 @@ static maelys_result_t init_access_ruleset(maelys_datalog_ruleset_t *ruleset) {
     return maelys_datalog_parse_ruleset(ruleset, src, strlen(src));
 }
 
-static maelys_result_t init_path_ruleset(maelys_datalog_ruleset_t *ruleset) {
+static maelys_result_t init_path_ruleset(maelys_datalog_internal_ruleset_t *ruleset) {
     maelys_result_t rc = init_ruleset_base(ruleset, "determinism.path");
     if (rc != MAELYS_OK) return rc;
     rc = add_predicate(ruleset, "edge", 2u, MAELYS_DATALOG_PRED_KIND_EDB);
@@ -100,9 +100,9 @@ static maelys_result_t init_path_ruleset(maelys_datalog_ruleset_t *ruleset) {
     return maelys_datalog_parse_ruleset(ruleset, src, strlen(src));
 }
 
-static maelys_result_t init_access_edb(maelys_datalog_ruleset_t *ruleset,
-                                       maelys_datalog_edb_t *edb,
-                                       maelys_datalog_fact_t *facts,
+static maelys_result_t init_access_edb(maelys_datalog_internal_ruleset_t *ruleset,
+                                       maelys_datalog_internal_edb_t *edb,
+                                       maelys_datalog_internal_fact_t *facts,
                                        size_t fact_capacity) {
     return maelys_datalog_edb_init(edb,
                                    facts,
@@ -111,13 +111,13 @@ static maelys_result_t init_access_edb(maelys_datalog_ruleset_t *ruleset,
                                    &ruleset->registry);
 }
 
-static maelys_result_t query_symbol_pair(maelys_datalog_ruleset_t *ruleset,
-                                         const maelys_datalog_solve_result_t *result,
+static maelys_result_t query_symbol_pair(maelys_datalog_internal_ruleset_t *ruleset,
+                                         const maelys_datalog_internal_solve_result_t *result,
                                          const char *predicate,
                                          const char *lhs,
                                          const char *rhs,
                                          bool *out_present) {
-    maelys_datalog_term_t terms[2];
+    maelys_datalog_internal_term_t terms[2];
     terms[0] = symbol_term(ruleset, lhs);
     terms[1] = symbol_term(ruleset, rhs);
     return maelys_datalog_query_solved_ground_fact(result,
@@ -127,25 +127,25 @@ static maelys_result_t query_symbol_pair(maelys_datalog_ruleset_t *ruleset,
                                                    out_present);
 }
 
-static int query_allow_pair(maelys_datalog_ruleset_t *ruleset,
-                            const maelys_datalog_solve_result_t *result,
+static int query_allow_pair(maelys_datalog_internal_ruleset_t *ruleset,
+                            const maelys_datalog_internal_solve_result_t *result,
                             const char *user,
                             const char *doc,
                             bool *out_present) {
     return query_symbol_pair(ruleset, result, "allow", user, doc, out_present);
 }
 
-static int query_path_pair(maelys_datalog_ruleset_t *ruleset,
-                           const maelys_datalog_solve_result_t *result,
+static int query_path_pair(maelys_datalog_internal_ruleset_t *ruleset,
+                           const maelys_datalog_internal_solve_result_t *result,
                            const char *from,
                            const char *to,
                            bool *out_present) {
     return query_symbol_pair(ruleset, result, "path", from, to, out_present);
 }
 
-static int build_access_edb_with_alice_and_mallory(maelys_datalog_ruleset_t *ruleset,
-                                                   maelys_datalog_edb_t *edb,
-                                                   maelys_datalog_fact_t *facts,
+static int build_access_edb_with_alice_and_mallory(maelys_datalog_internal_ruleset_t *ruleset,
+                                                   maelys_datalog_internal_edb_t *edb,
+                                                   maelys_datalog_internal_fact_t *facts,
                                                    size_t fact_capacity) {
     if (init_access_edb(ruleset, edb, facts, fact_capacity) != MAELYS_OK) return 0;
     add_symbol_pair(ruleset, edb, "owns", "alice", "doc.pdf");
@@ -153,8 +153,8 @@ static int build_access_edb_with_alice_and_mallory(maelys_datalog_ruleset_t *rul
     return maelys_datalog_edb_finalize(edb) == MAELYS_OK;
 }
 
-static int compare_facts_visible(const maelys_datalog_fact_t *lhs,
-                                 const maelys_datalog_fact_t *rhs) {
+static int compare_facts_visible(const maelys_datalog_internal_fact_t *lhs,
+                                 const maelys_datalog_internal_fact_t *rhs) {
     return maelys_datalog_fact_equals(lhs, rhs);
 }
 
@@ -180,7 +180,7 @@ static int compare_proofs_visible(const maelys_datalog_proof_tree_t *lhs,
 }
 
 static maelys_result_t init_or_equivalence_ruleset(
-    maelys_datalog_ruleset_t *ruleset,
+    maelys_datalog_internal_ruleset_t *ruleset,
     const char *source) {
     maelys_result_t rc = init_ruleset_base(ruleset, "determinism.or");
     if (rc != MAELYS_OK) return rc;
@@ -210,9 +210,9 @@ static maelys_result_t init_or_equivalence_ruleset(
 }
 
 static maelys_result_t build_or_equivalence_edb(
-    maelys_datalog_ruleset_t *ruleset,
-    maelys_datalog_edb_t *edb,
-    maelys_datalog_fact_t *facts,
+    maelys_datalog_internal_ruleset_t *ruleset,
+    maelys_datalog_internal_edb_t *edb,
+    maelys_datalog_internal_fact_t *facts,
     size_t capacity) {
     maelys_result_t rc =
         maelys_datalog_edb_init(edb,
@@ -223,7 +223,7 @@ static maelys_result_t build_or_equivalence_edb(
     if (rc != MAELYS_OK) return rc;
     add_symbol_pair(ruleset, edb, "owns", "alice", "doc.pdf");
     add_symbol_pair(ruleset, edb, "delegated", "bob", "doc.pdf");
-    maelys_datalog_term_t mallory = symbol_term(ruleset, "mallory");
+    maelys_datalog_internal_term_t mallory = symbol_term(ruleset, "mallory");
     rc = maelys_datalog_edb_add_fact(edb, "blocked", &mallory, 1u);
     if (rc != MAELYS_OK) return rc;
     return maelys_datalog_edb_finalize(edb);
@@ -236,8 +236,8 @@ static int test_determinism_or_matches_manual_rules_sha_results_and_proof(void) 
     static const char manual_source[] =
         "allow(U, D) :- owns(U, D), not(blocked(U)).\n"
         "allow(U, D) :- delegated(U, D), not(blocked(U)).\n";
-    maelys_datalog_ruleset_t or_ruleset;
-    maelys_datalog_ruleset_t manual_ruleset;
+    maelys_datalog_internal_ruleset_t or_ruleset;
+    maelys_datalog_internal_ruleset_t manual_ruleset;
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       init_or_equivalence_ruleset(&or_ruleset, or_source),
                       "%d");
@@ -255,10 +255,10 @@ static int test_determinism_or_matches_manual_rules_sha_results_and_proof(void) 
                           "%d");
     }
 
-    maelys_datalog_fact_t or_edb_facts[4];
-    maelys_datalog_fact_t manual_edb_facts[4];
-    maelys_datalog_edb_t or_edb;
-    maelys_datalog_edb_t manual_edb;
+    maelys_datalog_internal_fact_t or_edb_facts[4];
+    maelys_datalog_internal_fact_t manual_edb_facts[4];
+    maelys_datalog_internal_edb_t or_edb;
+    maelys_datalog_internal_edb_t manual_edb;
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       build_or_equivalence_edb(&or_ruleset,
                                                &or_edb,
@@ -272,8 +272,8 @@ static int test_determinism_or_matches_manual_rules_sha_results_and_proof(void) 
                                                4u),
                       "%d");
 
-    maelys_datalog_solve_result_t *or_result = NULL;
-    maelys_datalog_solve_result_t *manual_result = NULL;
+    maelys_datalog_internal_solve_result_t *or_result = NULL;
+    maelys_datalog_internal_solve_result_t *manual_result = NULL;
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       maelys_datalog_solve_once(&or_ruleset, &or_edb, &or_result),
                       "%d");
@@ -296,8 +296,8 @@ static int test_determinism_or_matches_manual_rules_sha_results_and_proof(void) 
                       "%d");
     TEST_ASSERT_EQUAL(manual_derived_count, or_derived_count, "%zu");
 
-    maelys_datalog_fact_t or_facts[4];
-    maelys_datalog_fact_t manual_facts[4];
+    maelys_datalog_internal_fact_t or_facts[4];
+    maelys_datalog_internal_fact_t manual_facts[4];
     size_t or_count = 0;
     size_t manual_count = 0;
     TEST_ASSERT_EQUAL(
@@ -342,16 +342,16 @@ static int test_determinism_or_matches_manual_rules_sha_results_and_proof(void) 
 
 static int test_determinism_repeated_solve_same_result(void) {
     TEST_BEGIN();
-    maelys_datalog_ruleset_t ruleset;
+    maelys_datalog_internal_ruleset_t ruleset;
     TEST_ASSERT_EQUAL(MAELYS_OK, init_access_ruleset(&ruleset), "%d");
-    maelys_datalog_fact_t facts[4];
-    maelys_datalog_edb_t edb;
+    maelys_datalog_internal_fact_t facts[4];
+    maelys_datalog_internal_edb_t edb;
     TEST_ASSERT_TRUE(build_access_edb_with_alice_and_mallory(&ruleset,
                                                              &edb,
                                                              facts,
                                                              4u));
 
-    maelys_datalog_solve_result_t *result1 = NULL;
+    maelys_datalog_internal_solve_result_t *result1 = NULL;
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_solve_once(&ruleset, &edb, &result1), "%d");
     bool alice1 = false;
     bool mallory1 = true;
@@ -361,7 +361,7 @@ static int test_determinism_repeated_solve_same_result(void) {
     TEST_ASSERT_FALSE(mallory1);
     maelys_datalog_solve_result_free(result1);
 
-    maelys_datalog_solve_result_t *result2 = NULL;
+    maelys_datalog_internal_solve_result_t *result2 = NULL;
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_solve_once(&ruleset, &edb, &result2), "%d");
     bool alice2 = false;
     bool mallory2 = true;
@@ -377,11 +377,11 @@ static int test_determinism_repeated_solve_same_result(void) {
 }
 
 static int solve_path_with_order(int reverse_order,
-                                 maelys_datalog_ruleset_t *ruleset,
-                                 maelys_datalog_edb_t *edb,
-                                 maelys_datalog_fact_t *facts,
+                                 maelys_datalog_internal_ruleset_t *ruleset,
+                                 maelys_datalog_internal_edb_t *edb,
+                                 maelys_datalog_internal_fact_t *facts,
                                  size_t fact_capacity,
-                                 maelys_datalog_solve_result_t **out_result) {
+                                 maelys_datalog_internal_solve_result_t **out_result) {
     if (init_path_ruleset(ruleset) != MAELYS_OK) return 0;
     if (maelys_datalog_edb_init(edb, facts, fact_capacity, &ruleset->symbols, &ruleset->registry) != MAELYS_OK) {
         return 0;
@@ -401,10 +401,10 @@ static int solve_path_with_order(int reverse_order,
 
 static int test_determinism_edb_order_a_b_c(void) {
     TEST_BEGIN();
-    maelys_datalog_ruleset_t ruleset;
-    maelys_datalog_fact_t facts[8];
-    maelys_datalog_edb_t edb;
-    maelys_datalog_solve_result_t *result = NULL;
+    maelys_datalog_internal_ruleset_t ruleset;
+    maelys_datalog_internal_fact_t facts[8];
+    maelys_datalog_internal_edb_t edb;
+    maelys_datalog_internal_solve_result_t *result = NULL;
     TEST_ASSERT_TRUE(solve_path_with_order(0, &ruleset, &edb, facts, 8u, &result));
     bool present = false;
     TEST_ASSERT_EQUAL(MAELYS_OK, query_path_pair(&ruleset, result, "a", "c", &present), "%d");
@@ -416,10 +416,10 @@ static int test_determinism_edb_order_a_b_c(void) {
 
 static int test_determinism_edb_order_c_b_a(void) {
     TEST_BEGIN();
-    maelys_datalog_ruleset_t ruleset;
-    maelys_datalog_fact_t facts[8];
-    maelys_datalog_edb_t edb;
-    maelys_datalog_solve_result_t *result = NULL;
+    maelys_datalog_internal_ruleset_t ruleset;
+    maelys_datalog_internal_fact_t facts[8];
+    maelys_datalog_internal_edb_t edb;
+    maelys_datalog_internal_solve_result_t *result = NULL;
     TEST_ASSERT_TRUE(solve_path_with_order(1, &ruleset, &edb, facts, 8u, &result));
     bool present = false;
     TEST_ASSERT_EQUAL(MAELYS_OK, query_path_pair(&ruleset, result, "a", "c", &present), "%d");
@@ -431,14 +431,14 @@ static int test_determinism_edb_order_c_b_a(void) {
 
 static int test_determinism_edb_order_compare(void) {
     TEST_BEGIN();
-    maelys_datalog_ruleset_t ruleset_a;
-    maelys_datalog_ruleset_t ruleset_b;
-    maelys_datalog_fact_t facts_a[8];
-    maelys_datalog_fact_t facts_b[8];
-    maelys_datalog_edb_t edb_a;
-    maelys_datalog_edb_t edb_b;
-    maelys_datalog_solve_result_t *result_a = NULL;
-    maelys_datalog_solve_result_t *result_b = NULL;
+    maelys_datalog_internal_ruleset_t ruleset_a;
+    maelys_datalog_internal_ruleset_t ruleset_b;
+    maelys_datalog_internal_fact_t facts_a[8];
+    maelys_datalog_internal_fact_t facts_b[8];
+    maelys_datalog_internal_edb_t edb_a;
+    maelys_datalog_internal_edb_t edb_b;
+    maelys_datalog_internal_solve_result_t *result_a = NULL;
+    maelys_datalog_internal_solve_result_t *result_b = NULL;
     TEST_ASSERT_TRUE(solve_path_with_order(0, &ruleset_a, &edb_a, facts_a, 8u, &result_a));
     TEST_ASSERT_TRUE(solve_path_with_order(1, &ruleset_b, &edb_b, facts_b, 8u, &result_b));
     static const char *const lhs[] = {"a", "a", "b", "c"};
@@ -486,15 +486,15 @@ static int test_determinism_symbol_intern_distinct_strings_distinct_ids(void) {
 
 static int test_determinism_multi_request_isolation(void) {
     TEST_BEGIN();
-    maelys_datalog_ruleset_t ruleset;
+    maelys_datalog_internal_ruleset_t ruleset;
     TEST_ASSERT_EQUAL(MAELYS_OK, init_access_ruleset(&ruleset), "%d");
-    maelys_datalog_fact_t facts[4];
-    maelys_datalog_edb_t edb;
+    maelys_datalog_internal_fact_t facts[4];
+    maelys_datalog_internal_edb_t edb;
     TEST_ASSERT_EQUAL(MAELYS_OK, init_access_edb(&ruleset, &edb, facts, 4u), "%d");
 
     add_symbol_pair(&ruleset, &edb, "owns", "alice", "doc.pdf");
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_finalize(&edb), "%d");
-    maelys_datalog_solve_result_t *result1 = NULL;
+    maelys_datalog_internal_solve_result_t *result1 = NULL;
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_solve_once(&ruleset, &edb, &result1), "%d");
     bool present = false;
     TEST_ASSERT_EQUAL(MAELYS_OK, query_allow_pair(&ruleset, result1, "alice", "doc.pdf", &present), "%d");
@@ -504,7 +504,7 @@ static int test_determinism_multi_request_isolation(void) {
     maelys_datalog_edb_clear(&edb);
     add_symbol_pair(&ruleset, &edb, "owns", "bob", "other.pdf");
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_finalize(&edb), "%d");
-    maelys_datalog_solve_result_t *result2 = NULL;
+    maelys_datalog_internal_solve_result_t *result2 = NULL;
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_solve_once(&ruleset, &edb, &result2), "%d");
     bool alice_present = true;
     bool bob_present = false;
@@ -519,15 +519,15 @@ static int test_determinism_multi_request_isolation(void) {
 
 static int test_determinism_same_edb_after_clear_reuse(void) {
     TEST_BEGIN();
-    maelys_datalog_ruleset_t ruleset;
+    maelys_datalog_internal_ruleset_t ruleset;
     TEST_ASSERT_EQUAL(MAELYS_OK, init_access_ruleset(&ruleset), "%d");
-    maelys_datalog_fact_t facts[4];
-    maelys_datalog_edb_t edb;
+    maelys_datalog_internal_fact_t facts[4];
+    maelys_datalog_internal_edb_t edb;
     TEST_ASSERT_EQUAL(MAELYS_OK, init_access_edb(&ruleset, &edb, facts, 4u), "%d");
 
     add_symbol_pair(&ruleset, &edb, "owns", "alice", "doc.pdf");
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_finalize(&edb), "%d");
-    maelys_datalog_solve_result_t *result1 = NULL;
+    maelys_datalog_internal_solve_result_t *result1 = NULL;
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_solve_once(&ruleset, &edb, &result1), "%d");
     bool alice1 = false;
     bool mallory1 = true;
@@ -538,7 +538,7 @@ static int test_determinism_same_edb_after_clear_reuse(void) {
     maelys_datalog_edb_clear(&edb);
     add_symbol_pair(&ruleset, &edb, "owns", "alice", "doc.pdf");
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_finalize(&edb), "%d");
-    maelys_datalog_solve_result_t *result2 = NULL;
+    maelys_datalog_internal_solve_result_t *result2 = NULL;
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_solve_once(&ruleset, &edb, &result2), "%d");
     bool alice2 = false;
     bool mallory2 = true;
@@ -555,16 +555,16 @@ static int test_determinism_same_edb_after_clear_reuse(void) {
 
 static int test_determinism_proof_tree_node_count_stable(void) {
     TEST_BEGIN();
-    maelys_datalog_ruleset_t ruleset;
+    maelys_datalog_internal_ruleset_t ruleset;
     TEST_ASSERT_EQUAL(MAELYS_OK, init_access_ruleset(&ruleset), "%d");
-    maelys_datalog_fact_t facts[4];
-    maelys_datalog_edb_t edb;
+    maelys_datalog_internal_fact_t facts[4];
+    maelys_datalog_internal_edb_t edb;
     TEST_ASSERT_TRUE(build_access_edb_with_alice_and_mallory(&ruleset,
                                                              &edb,
                                                              facts,
                                                              4u));
-    maelys_datalog_solve_result_t *result1 = NULL;
-    maelys_datalog_solve_result_t *result2 = NULL;
+    maelys_datalog_internal_solve_result_t *result1 = NULL;
+    maelys_datalog_internal_solve_result_t *result2 = NULL;
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_solve_once(&ruleset, &edb, &result1), "%d");
     const maelys_datalog_proof_tree_t *proof1 = maelys_datalog_solve_result_proof(result1);
     TEST_ASSERT_NOT_NULL(proof1);
@@ -581,16 +581,16 @@ static int test_determinism_proof_tree_node_count_stable(void) {
 
 static int test_determinism_proof_visible_metadata_stable(void) {
     TEST_BEGIN();
-    maelys_datalog_ruleset_t ruleset;
+    maelys_datalog_internal_ruleset_t ruleset;
     TEST_ASSERT_EQUAL(MAELYS_OK, init_access_ruleset(&ruleset), "%d");
-    maelys_datalog_fact_t facts[4];
-    maelys_datalog_edb_t edb;
+    maelys_datalog_internal_fact_t facts[4];
+    maelys_datalog_internal_edb_t edb;
     TEST_ASSERT_TRUE(build_access_edb_with_alice_and_mallory(&ruleset,
                                                              &edb,
                                                              facts,
                                                              4u));
-    maelys_datalog_solve_result_t *result1 = NULL;
-    maelys_datalog_solve_result_t *result2 = NULL;
+    maelys_datalog_internal_solve_result_t *result1 = NULL;
+    maelys_datalog_internal_solve_result_t *result2 = NULL;
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_solve_once(&ruleset, &edb, &result1), "%d");
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_solve_once(&ruleset, &edb, &result2), "%d");
     const maelys_datalog_proof_tree_t *proof1 = maelys_datalog_solve_result_proof(result1);
@@ -606,7 +606,7 @@ static int test_determinism_proof_visible_metadata_stable(void) {
 
 static int test_determinism_c44_canonical_sha_fixture(void) {
     TEST_BEGIN();
-    maelys_datalog_ruleset_t ruleset;
+    maelys_datalog_internal_ruleset_t ruleset;
     memset(&ruleset, 0, sizeof(ruleset));
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       maelys_datalog_ruleset_init(&ruleset,
@@ -649,11 +649,11 @@ static int test_determinism_c44_canonical_sha_fixture(void) {
 static maelys_datalog_explanation_t g_det_exp_a;
 static maelys_datalog_explanation_t g_det_exp_b;
 
-static int det_make_fact2(maelys_datalog_ruleset_t *ruleset,
+static int det_make_fact2(maelys_datalog_internal_ruleset_t *ruleset,
                           const char *predicate,
                           const char *a,
                           const char *b,
-                          maelys_datalog_fact_t *out) {
+                          maelys_datalog_internal_fact_t *out) {
     memset(out, 0, sizeof(*out));
     if (!maelys_datalog_predicate_registry_find(&ruleset->registry, predicate, 2u, &out->predicate_id)) {
         return 0;
@@ -673,25 +673,25 @@ static int test_determinism_or_and_manual_explanation_byte_identical(void) {
     static const char manual_source[] =
         "allow(U, D) :- owns(U, D), not(blocked(U)).\n"
         "allow(U, D) :- delegated(U, D), not(blocked(U)).\n";
-    maelys_datalog_ruleset_t or_ruleset;
-    maelys_datalog_ruleset_t manual_ruleset;
+    maelys_datalog_internal_ruleset_t or_ruleset;
+    maelys_datalog_internal_ruleset_t manual_ruleset;
     TEST_ASSERT_EQUAL(MAELYS_OK, init_or_equivalence_ruleset(&or_ruleset, or_source), "%d");
     TEST_ASSERT_EQUAL(MAELYS_OK, init_or_equivalence_ruleset(&manual_ruleset, manual_source), "%d");
 
-    maelys_datalog_fact_t or_facts[4];
-    maelys_datalog_fact_t manual_facts[4];
-    maelys_datalog_edb_t or_edb;
-    maelys_datalog_edb_t manual_edb;
+    maelys_datalog_internal_fact_t or_facts[4];
+    maelys_datalog_internal_fact_t manual_facts[4];
+    maelys_datalog_internal_edb_t or_edb;
+    maelys_datalog_internal_edb_t manual_edb;
     TEST_ASSERT_EQUAL(MAELYS_OK, build_or_equivalence_edb(&or_ruleset, &or_edb, or_facts, 4u), "%d");
     TEST_ASSERT_EQUAL(MAELYS_OK, build_or_equivalence_edb(&manual_ruleset, &manual_edb, manual_facts, 4u), "%d");
 
-    maelys_datalog_solve_result_t *or_result = NULL;
-    maelys_datalog_solve_result_t *manual_result = NULL;
+    maelys_datalog_internal_solve_result_t *or_result = NULL;
+    maelys_datalog_internal_solve_result_t *manual_result = NULL;
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_solve_once(&or_ruleset, &or_edb, &or_result), "%d");
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_solve_once(&manual_ruleset, &manual_edb, &manual_result), "%d");
 
-    maelys_datalog_fact_t or_target;
-    maelys_datalog_fact_t manual_target;
+    maelys_datalog_internal_fact_t or_target;
+    maelys_datalog_internal_fact_t manual_target;
     TEST_ASSERT_TRUE(det_make_fact2(&or_ruleset, "allow", "alice", "doc.pdf", &or_target));
     TEST_ASSERT_TRUE(det_make_fact2(&manual_ruleset, "allow", "alice", "doc.pdf", &manual_target));
 
@@ -725,25 +725,25 @@ static int test_determinism_or_and_manual_explanation_text_byte_identical(void) 
     static const char manual_source[] =
         "allow(U, D) :- owns(U, D), not(blocked(U)).\n"
         "allow(U, D) :- delegated(U, D), not(blocked(U)).\n";
-    maelys_datalog_ruleset_t or_ruleset;
-    maelys_datalog_ruleset_t manual_ruleset;
+    maelys_datalog_internal_ruleset_t or_ruleset;
+    maelys_datalog_internal_ruleset_t manual_ruleset;
     TEST_ASSERT_EQUAL(MAELYS_OK, init_or_equivalence_ruleset(&or_ruleset, or_source), "%d");
     TEST_ASSERT_EQUAL(MAELYS_OK, init_or_equivalence_ruleset(&manual_ruleset, manual_source), "%d");
 
-    maelys_datalog_fact_t or_facts[4];
-    maelys_datalog_fact_t manual_facts[4];
-    maelys_datalog_edb_t or_edb;
-    maelys_datalog_edb_t manual_edb;
+    maelys_datalog_internal_fact_t or_facts[4];
+    maelys_datalog_internal_fact_t manual_facts[4];
+    maelys_datalog_internal_edb_t or_edb;
+    maelys_datalog_internal_edb_t manual_edb;
     TEST_ASSERT_EQUAL(MAELYS_OK, build_or_equivalence_edb(&or_ruleset, &or_edb, or_facts, 4u), "%d");
     TEST_ASSERT_EQUAL(MAELYS_OK, build_or_equivalence_edb(&manual_ruleset, &manual_edb, manual_facts, 4u), "%d");
 
-    maelys_datalog_solve_result_t *or_result = NULL;
-    maelys_datalog_solve_result_t *manual_result = NULL;
+    maelys_datalog_internal_solve_result_t *or_result = NULL;
+    maelys_datalog_internal_solve_result_t *manual_result = NULL;
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_solve_once(&or_ruleset, &or_edb, &or_result), "%d");
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_solve_once(&manual_ruleset, &manual_edb, &manual_result), "%d");
 
-    maelys_datalog_fact_t or_target;
-    maelys_datalog_fact_t manual_target;
+    maelys_datalog_internal_fact_t or_target;
+    maelys_datalog_internal_fact_t manual_target;
     TEST_ASSERT_TRUE(det_make_fact2(&or_ruleset, "allow", "alice", "doc.pdf", &or_target));
     TEST_ASSERT_TRUE(det_make_fact2(&manual_ruleset, "allow", "alice", "doc.pdf", &manual_target));
 
@@ -787,14 +787,14 @@ static int test_determinism_explanation_stable_across_repeated_solves(void) {
     static const char source[] =
         "allow(U, D) :- owns(U, D), not(blocked(U)).\n";
     for (int iteration = 0; iteration < 2; iteration++) {
-        maelys_datalog_ruleset_t ruleset;
+        maelys_datalog_internal_ruleset_t ruleset;
         TEST_ASSERT_EQUAL(MAELYS_OK, init_or_equivalence_ruleset(&ruleset, source), "%d");
-        maelys_datalog_fact_t facts[4];
-        maelys_datalog_edb_t edb;
+        maelys_datalog_internal_fact_t facts[4];
+        maelys_datalog_internal_edb_t edb;
         TEST_ASSERT_EQUAL(MAELYS_OK, build_or_equivalence_edb(&ruleset, &edb, facts, 4u), "%d");
-        maelys_datalog_solve_result_t *result = NULL;
+        maelys_datalog_internal_solve_result_t *result = NULL;
         TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_solve_once(&ruleset, &edb, &result), "%d");
-        maelys_datalog_fact_t target;
+        maelys_datalog_internal_fact_t target;
         TEST_ASSERT_TRUE(det_make_fact2(&ruleset, "allow", "alice", "doc.pdf", &target));
         maelys_datalog_explanation_t *slot = (iteration == 0) ? &g_det_exp_a : &g_det_exp_b;
         memset(slot, (iteration == 0) ? 0xa5 : 0x5a, sizeof(*slot));

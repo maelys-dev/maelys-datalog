@@ -13,7 +13,7 @@ typedef struct maelys_datalog_backend_output maelys_datalog_backend_output_t;
  * validates and deduplicates facts. Derived symbols must already belong to the
  * input/program vocabulary. A failed solve exposes no partial result. */
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_backend_emit(
-    maelys_datalog_backend_output_t *, const maelys_datalog_public_fact_t *);
+    maelys_datalog_backend_output_t *, const maelys_datalog_fact_t *);
 /* Cooperative per-backend work units, not comparable across algorithms and
  * not a sandbox or a wall-clock deadline. Charge before bounded units of work.
  * A charge/emit/filter error remains fatal even if the backend ignores it. */
@@ -34,7 +34,7 @@ typedef struct {
     uint64_t capabilities;
     maelys_datalog_status_t (*prepare)(const maelys_datalog_program_t *, void **out_state);
     maelys_datalog_status_t (*solve)(void *state,
-                                     const maelys_datalog_public_fact_t *canonical_inputs,
+                                     const maelys_datalog_fact_t *canonical_inputs,
                                      size_t input_count, maelys_datalog_backend_output_t *,
                                      void **out_result_state, maelys_datalog_public_diagnostic_t *);
     /* ABI 3 replaces the two direct-text callbacks with caller-owned storage.
@@ -57,7 +57,7 @@ typedef struct {
         size_t *out_bytes, size_t *out_alignment);
     maelys_datalog_status_t (*explanation_prepare)(
         void *state, void *result_state, maelys_datalog_explanation_kind_t,
-        const char *, const maelys_datalog_public_value_t *, size_t,
+        const char *, const maelys_datalog_value_t *, size_t,
         void *storage, size_t storage_bytes, size_t *out_text_size);
     maelys_datalog_status_t (*explanation_write_text)(
         void *state, void *result_state, maelys_datalog_explanation_kind_t,

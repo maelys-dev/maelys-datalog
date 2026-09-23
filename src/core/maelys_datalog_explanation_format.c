@@ -153,7 +153,7 @@ static int predicate_name_span(const maelys_datalog_predicate_entry_t *def,
 }
 
 static void wr_symbol(fmt_writer_t *w,
-                      const maelys_datalog_ruleset_t *ruleset,
+                      const maelys_datalog_internal_ruleset_t *ruleset,
                       maelys_datalog_symbol_id_t id) {
     /* Validation already proved the id; symbol_text re-validates before any
      * id - 1 indexing. The exact byte length comes from entries[id - 1].len. */
@@ -163,8 +163,8 @@ static void wr_symbol(fmt_writer_t *w,
 }
 
 static void wr_term(fmt_writer_t *w,
-                    const maelys_datalog_ruleset_t *ruleset,
-                    const maelys_datalog_term_t *term) {
+                    const maelys_datalog_internal_ruleset_t *ruleset,
+                    const maelys_datalog_internal_term_t *term) {
     switch (term->kind) {
     case MAELYS_DATALOG_TERM_SYMBOL:
         wr_symbol(w, ruleset, term->as.symbol);
@@ -190,8 +190,8 @@ static void wr_term(fmt_writer_t *w,
 }
 
 static void wr_fact(fmt_writer_t *w,
-                    const maelys_datalog_ruleset_t *ruleset,
-                    const maelys_datalog_fact_t *fact) {
+                    const maelys_datalog_internal_ruleset_t *ruleset,
+                    const maelys_datalog_internal_fact_t *fact) {
     const maelys_datalog_predicate_entry_t *def =
         maelys_datalog_predicate_registry_get(&ruleset->registry, fact->predicate_id);
     size_t name_len = 0;
@@ -208,8 +208,8 @@ static void wr_fact(fmt_writer_t *w,
     wr_byte(w, ')');
 }
 
-static maelys_datalog_fact_t count_premise_pattern(const maelys_datalog_explanation_premise_t *p) {
-    maelys_datalog_fact_t pattern = {0};
+static maelys_datalog_internal_fact_t count_premise_pattern(const maelys_datalog_explanation_premise_t *p) {
+    maelys_datalog_internal_fact_t pattern = {0};
     pattern.predicate_id = p->as.count.predicate_id;
     pattern.arity = p->as.count.arity;
     for (size_t i = 0; i < pattern.arity && i < MAELYS_DATALOG_MAX_TERMS; ++i)
@@ -295,7 +295,7 @@ static void wr_cmp_op(fmt_writer_t *w, uint8_t op) {
  * (ruleset, explanation) pair.
  * ==================================================================== */
 
-static void emit_explanation_text(const maelys_datalog_ruleset_t *ruleset,
+static void emit_explanation_text(const maelys_datalog_internal_ruleset_t *ruleset,
                                   const maelys_datalog_explanation_t *explanation,
                                   fmt_writer_t *w) {
     WR_LIT(w, "MAELYS-DATALOG-v2\ndocument=why-true\n");
@@ -346,7 +346,7 @@ static void emit_explanation_text(const maelys_datalog_ruleset_t *ruleset,
                 wr_term(w, ruleset, &premise->as.comparison.rhs);
             } else if (maelys_datalog_premise_is_aggregate(premise->kind)) {
                 WR_LIT(w, " pattern=");
-                maelys_datalog_fact_t pattern = count_premise_pattern(premise);
+                maelys_datalog_internal_fact_t pattern = count_premise_pattern(premise);
                 wr_fact(w, ruleset, &pattern);
                 WR_LIT(w, " projected=?");
                 wr_u64(w, premise->as.count.projected_variable);
@@ -398,8 +398,8 @@ static void emit_explanation_text(const maelys_datalog_ruleset_t *ruleset,
  * Strictly read-only on the ruleset and the explanation.
  * ==================================================================== */
 
-static maelys_result_t validate_term(const maelys_datalog_ruleset_t *ruleset,
-                                     const maelys_datalog_term_t *term) {
+static maelys_result_t validate_term(const maelys_datalog_internal_ruleset_t *ruleset,
+                                     const maelys_datalog_internal_term_t *term) {
     switch (term->kind) {
     case MAELYS_DATALOG_TERM_SYMBOL:
         /* Mandatory order: validity first; on failure return without ever
@@ -418,8 +418,8 @@ static maelys_result_t validate_term(const maelys_datalog_ruleset_t *ruleset,
     }
 }
 
-static maelys_result_t validate_fact(const maelys_datalog_ruleset_t *ruleset,
-                                     const maelys_datalog_fact_t *fact) {
+static maelys_result_t validate_fact(const maelys_datalog_internal_ruleset_t *ruleset,
+                                     const maelys_datalog_internal_fact_t *fact) {
     const maelys_datalog_predicate_entry_t *def =
         maelys_datalog_predicate_registry_get(&ruleset->registry, fact->predicate_id);
     size_t name_len = 0;
@@ -442,7 +442,7 @@ static int origin_is_store(uint8_t origin) {
            origin == (uint8_t)MAELYS_DATALOG_EXPLANATION_ORIGIN_IDB;
 }
 
-static maelys_result_t validate_premise(const maelys_datalog_ruleset_t *ruleset,
+static maelys_result_t validate_premise(const maelys_datalog_internal_ruleset_t *ruleset,
                                         const maelys_datalog_explanation_t *explanation,
                                         const maelys_datalog_explanation_premise_t *premise,
                                         uint16_t step_index,
@@ -503,8 +503,8 @@ static maelys_result_t validate_premise(const maelys_datalog_ruleset_t *ruleset,
     case MAELYS_DATALOG_EXPLANATION_PREMISE_MAX:
     case MAELYS_DATALOG_EXPLANATION_PREMISE_SUM:
     case MAELYS_DATALOG_EXPLANATION_PREMISE_COUNT: {
-        const maelys_datalog_fact_t stored_pattern = count_premise_pattern(premise);
-        const maelys_datalog_fact_t *pattern = &stored_pattern;
+        const maelys_datalog_internal_fact_t stored_pattern = count_premise_pattern(premise);
+        const maelys_datalog_internal_fact_t *pattern = &stored_pattern;
         const maelys_datalog_predicate_entry_t *def =
             maelys_datalog_predicate_registry_get(&ruleset->registry, pattern->predicate_id);
         const unsigned projected = premise->as.count.projected_variable;
@@ -517,7 +517,7 @@ static maelys_result_t validate_premise(const maelys_datalog_ruleset_t *ruleset,
             premise->as.count.value > MAELYS_DATALOG_MAX_INT) return MAELYS_ERR_INVALID_FIELD;
         int present = 0;
         for (size_t t = 0; t < pattern->arity; ++t) {
-            const maelys_datalog_term_t *term = &pattern->terms[t];
+            const maelys_datalog_internal_term_t *term = &pattern->terms[t];
             if (term->kind == MAELYS_DATALOG_TERM_VAR) {
                 if (term->as.variable >= MAELYS_DATALOG_MAX_RULE_VARIABLES ||
                     (term->as.variable < MAELYS_DATALOG_NAMED_VARIABLE_COUNT &&
@@ -555,7 +555,7 @@ static maelys_result_t validate_premise(const maelys_datalog_ruleset_t *ruleset,
     }
 }
 
-static maelys_result_t validate_explanation(const maelys_datalog_ruleset_t *ruleset,
+static maelys_result_t validate_explanation(const maelys_datalog_internal_ruleset_t *ruleset,
                                             const maelys_datalog_explanation_t *explanation) {
     const uint8_t found = explanation->found;
     const uint8_t truncated = explanation->truncated;
@@ -671,7 +671,7 @@ static const char *why_false_obstacle_name(unsigned kind) {
         return NULL;
     }
 }
-static maelys_result_t validate_why_false(const maelys_datalog_ruleset_t *r,
+static maelys_result_t validate_why_false(const maelys_datalog_internal_ruleset_t *r,
                                           const maelys_datalog_why_false_explanation_t *e) {
     if (validate_fact(r, &e->query) ||
         e->diagnostic_count > MAELYS_DATALOG_MAX_WHY_FALSE_DIAGNOSTICS ||
@@ -771,7 +771,7 @@ static void wr_why_false_limits(fmt_writer_t *w, unsigned hits) {
         first = 0;
     }
 }
-static void emit_why_false_text(const maelys_datalog_ruleset_t *r,
+static void emit_why_false_text(const maelys_datalog_internal_ruleset_t *r,
                                 const maelys_datalog_why_false_explanation_t *e, fmt_writer_t *w) {
     WR_LIT(w, "MAELYS-DATALOG-v2\ndocument=why-false\nstatus=");
     if (e->status == MAELYS_DATALOG_WHY_FALSE_STATUS_NOT_APPLICABLE)
@@ -896,7 +896,7 @@ static void emit_why_false_text(const maelys_datalog_ruleset_t *r,
     }
 }
 maelys_result_t
-maelys_datalog_format_why_false_text(const maelys_datalog_ruleset_t *r,
+maelys_datalog_format_why_false_text(const maelys_datalog_internal_ruleset_t *r,
                                      const maelys_datalog_why_false_explanation_t *e, char *text,
                                      size_t capacity, size_t *required) {
     if (!r || !e || !required || (!text && capacity))
@@ -925,7 +925,7 @@ maelys_datalog_format_why_false_text(const maelys_datalog_ruleset_t *r,
 }
 
 maelys_result_t maelys_datalog_format_explanation_text(
-    const maelys_datalog_ruleset_t *ruleset,
+    const maelys_datalog_internal_ruleset_t *ruleset,
     const maelys_datalog_explanation_t *explanation,
     char *out_text,
     size_t out_capacity,

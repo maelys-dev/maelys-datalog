@@ -1,3 +1,4 @@
+#include "bench/types_compat.h"
 /* SPDX-License-Identifier: MPL-2.0 */
 /* Reuse the unchanged fixture and payload; this is a disclosed, single-case
  * diagnostic, not a replacement for the complete historical benchmark. */
@@ -13,18 +14,18 @@ static void write_layout(FILE *out) {
     fprintf(out, "key,value\n");
 #define TYPE_LAYOUT(name, type) \
     fprintf(out, "sizeof." name ",%zu\nalignof." name ",%zu\n", sizeof(type), _Alignof(type))
-    TYPE_LAYOUT("ruleset", maelys_datalog_ruleset_t);
+    TYPE_LAYOUT("ruleset", maelys_bench_native_ruleset_t);
     TYPE_LAYOUT("literal", maelys_datalog_literal_t);
     TYPE_LAYOUT("rule", maelys_datalog_rule_t);
     TYPE_LAYOUT("premise", maelys_datalog_explanation_premise_t);
-    TYPE_LAYOUT("fact", maelys_datalog_fact_t);
+    TYPE_LAYOUT("fact", maelys_bench_native_fact_t);
     TYPE_LAYOUT("context", bench_ctx_t);
 #undef TYPE_LAYOUT
     fprintf(out, "offsetof.context.ruleset,%zu\naddress_mod64.ruleset,%" PRIuPTR "\n",
             offsetof(bench_ctx_t, ruleset), (uintptr_t)&s_bench_ctx.ruleset % 64u);
 #define FIELD_LAYOUT(member) \
     fprintf(out, "offsetof.ruleset." #member ",%zu\naddress_mod64.ruleset." #member ",%" PRIuPTR "\n", \
-            offsetof(maelys_datalog_ruleset_t, member), (uintptr_t)&s_bench_ctx.ruleset.member % 64u)
+            offsetof(maelys_bench_native_ruleset_t, member), (uintptr_t)&s_bench_ctx.ruleset.member % 64u)
     FIELD_LAYOUT(loaded);
     FIELD_LAYOUT(modules);
     FIELD_LAYOUT(policy_id);

@@ -11,7 +11,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-static maelys_result_t init_ruleset(maelys_datalog_ruleset_t *r) {
+static maelys_result_t init_ruleset(maelys_datalog_internal_ruleset_t *r) {
     memset(r, 0, sizeof(*r));
     return maelys_datalog_ruleset_init(r,
                                        "boundary.policy",
@@ -41,22 +41,22 @@ static void pred_name(char *buf, size_t cap, const char *prefix, size_t index) {
     snprintf(buf, cap, "%s%03zu", prefix, index);
 }
 
-static maelys_datalog_term_t int_term(long long value) {
-    maelys_datalog_term_t term;
+static maelys_datalog_internal_term_t int_term(long long value) {
+    maelys_datalog_internal_term_t term;
     memset(&term, 0, sizeof(term));
     term.kind = MAELYS_DATALOG_TERM_INT;
     term.as.integer = value;
     return term;
 }
 
-static maelys_result_t add_pred(maelys_datalog_ruleset_t *r,
+static maelys_result_t add_pred(maelys_datalog_internal_ruleset_t *r,
                                 const char *name,
                                 size_t arity,
                                 unsigned kind) {
     return maelys_datalog_predicate_registry_add_domain(&r->registry, name, arity, kind);
 }
 
-static maelys_result_t add_edb_preds(maelys_datalog_ruleset_t *r,
+static maelys_result_t add_edb_preds(maelys_datalog_internal_ruleset_t *r,
                                      const char *prefix,
                                      size_t count) {
     char name[64];
@@ -68,7 +68,7 @@ static maelys_result_t add_edb_preds(maelys_datalog_ruleset_t *r,
     return MAELYS_OK;
 }
 
-static int init_parse_fixture(maelys_datalog_ruleset_t *r,
+static int init_parse_fixture(maelys_datalog_internal_ruleset_t *r,
                               size_t edb_count,
                               size_t idb_count) {
     maelys_result_t rc = init_ruleset(r);
@@ -92,7 +92,7 @@ static int init_parse_fixture(maelys_datalog_ruleset_t *r,
 
 static int test_boundary_max_rules_at_limit(void) {
     TEST_BEGIN();
-    maelys_datalog_ruleset_t r;
+    maelys_datalog_internal_ruleset_t r;
     TEST_ASSERT_EQUAL(MAELYS_OK, init_parse_fixture(&r, 0u, 0u), "%d");
     char src[8192];
     size_t len = 0;
@@ -107,7 +107,7 @@ static int test_boundary_max_rules_at_limit(void) {
 
 static int test_boundary_max_rules_over_limit(void) {
     TEST_BEGIN();
-    maelys_datalog_ruleset_t r;
+    maelys_datalog_internal_ruleset_t r;
     TEST_ASSERT_EQUAL(MAELYS_OK, init_parse_fixture(&r, 0u, 0u), "%d");
     char src[8192];
     size_t len = 0;
@@ -125,7 +125,7 @@ static int test_boundary_max_rules_over_limit(void) {
 
 static int test_boundary_or_expansion_at_rule_limit(void) {
     TEST_BEGIN();
-    maelys_datalog_ruleset_t r;
+    maelys_datalog_internal_ruleset_t r;
     TEST_ASSERT_EQUAL(MAELYS_OK, init_parse_fixture(&r, 0u, 0u), "%d");
     char src[4096];
     size_t len = 0;
@@ -154,8 +154,8 @@ static int test_boundary_or_expansion_at_rule_limit(void) {
 
 static int test_boundary_or_expansion_over_limit_is_clause_atomic(void) {
     TEST_BEGIN();
-    maelys_datalog_ruleset_t r;
-    maelys_datalog_diagnostic_t diag;
+    maelys_datalog_internal_ruleset_t r;
+    maelys_datalog_internal_diagnostic_t diag;
     TEST_ASSERT_EQUAL(MAELYS_OK, init_parse_fixture(&r, 0u, 0u), "%d");
     char src[4096];
     size_t len = 0;
@@ -195,7 +195,7 @@ static int test_boundary_or_expansion_over_limit_is_clause_atomic(void) {
 
 static int test_boundary_max_body_literals_at_limit(void) {
     TEST_BEGIN();
-    maelys_datalog_ruleset_t r;
+    maelys_datalog_internal_ruleset_t r;
     TEST_ASSERT_EQUAL(MAELYS_OK, init_parse_fixture(&r, MAELYS_DATALOG_MAX_BODY_LITERALS, 0u), "%d");
     char src[512];
     size_t len = 0;
@@ -214,8 +214,8 @@ static int test_boundary_max_body_literals_at_limit(void) {
 
 static int test_boundary_max_body_literals_over_limit(void) {
     TEST_BEGIN();
-    maelys_datalog_ruleset_t r;
-    maelys_datalog_diagnostic_t diag;
+    maelys_datalog_internal_ruleset_t r;
+    maelys_datalog_internal_diagnostic_t diag;
     TEST_ASSERT_EQUAL(MAELYS_OK, init_parse_fixture(&r, MAELYS_DATALOG_MAX_BODY_LITERALS + 1u, 0u), "%d");
     char src[512];
     size_t len = 0;
@@ -238,7 +238,7 @@ static int test_boundary_max_body_literals_over_limit(void) {
 
 static int test_boundary_named_variables_at_limit(void) {
     TEST_BEGIN();
-    maelys_datalog_ruleset_t r;
+    maelys_datalog_internal_ruleset_t r;
     TEST_ASSERT_TRUE(MAELYS_DATALOG_NAMED_VARIABLE_COUNT < MAELYS_DATALOG_MAX_RULE_VARIABLES);
     TEST_ASSERT_EQUAL(MAELYS_OK, init_ruleset(&r), "%d");
     TEST_ASSERT_EQUAL(MAELYS_OK, add_pred(&r, "quad", 4u, MAELYS_DATALOG_PRED_KIND_EDB), "%d");
@@ -346,7 +346,7 @@ static int test_boundary_max_symbols_over_limit(void) {
     TEST_END();
 }
 
-static int init_edb_registry(maelys_datalog_ruleset_t *r, size_t edb_pred_count) {
+static int init_edb_registry(maelys_datalog_internal_ruleset_t *r, size_t edb_pred_count) {
     maelys_result_t rc = init_ruleset(r);
     if (rc != MAELYS_OK) return rc;
     rc = add_edb_preds(r, "e", edb_pred_count);
@@ -357,16 +357,16 @@ static int init_edb_registry(maelys_datalog_ruleset_t *r, size_t edb_pred_count)
 static int test_boundary_max_edb_facts_at_limit(void) {
     TEST_BEGIN();
     const size_t pred_count = MAELYS_DATALOG_MAX_EDB_FACTS / MAELYS_DATALOG_MAX_FACTS_PER_PRED;
-    maelys_datalog_ruleset_t r;
+    maelys_datalog_internal_ruleset_t r;
     TEST_ASSERT_EQUAL(MAELYS_OK, init_edb_registry(&r, pred_count), "%d");
-    maelys_datalog_fact_t pool[MAELYS_DATALOG_MAX_EDB_FACTS];
-    maelys_datalog_edb_t edb;
+    maelys_datalog_internal_fact_t pool[MAELYS_DATALOG_MAX_EDB_FACTS];
+    maelys_datalog_internal_edb_t edb;
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_init(&edb, pool, MAELYS_DATALOG_MAX_EDB_FACTS, &r.symbols, &r.registry), "%d");
     char name[64];
     for (size_t p = 0; p < pred_count; p++) {
         pred_name(name, sizeof(name), "e", p);
         for (size_t i = 0; i < MAELYS_DATALOG_MAX_FACTS_PER_PRED; i++) {
-            maelys_datalog_term_t term = int_term((long long)i);
+            maelys_datalog_internal_term_t term = int_term((long long)i);
             TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_add_fact(&edb, name, &term, 1u), "%d");
         }
     }
@@ -381,22 +381,22 @@ static int test_boundary_max_edb_facts_at_limit(void) {
 static int test_boundary_max_edb_facts_over_limit(void) {
     TEST_BEGIN();
     const size_t pred_count = MAELYS_DATALOG_MAX_EDB_FACTS / MAELYS_DATALOG_MAX_FACTS_PER_PRED;
-    maelys_datalog_ruleset_t r;
+    maelys_datalog_internal_ruleset_t r;
     TEST_ASSERT_EQUAL(MAELYS_OK, init_edb_registry(&r, pred_count + 1u), "%d");
-    maelys_datalog_fact_t pool[MAELYS_DATALOG_MAX_EDB_FACTS];
-    maelys_datalog_edb_t edb;
+    maelys_datalog_internal_fact_t pool[MAELYS_DATALOG_MAX_EDB_FACTS];
+    maelys_datalog_internal_edb_t edb;
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_init(&edb, pool, MAELYS_DATALOG_MAX_EDB_FACTS, &r.symbols, &r.registry), "%d");
     char name[64];
     for (size_t p = 0; p < pred_count; p++) {
         pred_name(name, sizeof(name), "e", p);
         for (size_t i = 0; i < MAELYS_DATALOG_MAX_FACTS_PER_PRED; i++) {
-            maelys_datalog_term_t term = int_term((long long)i);
+            maelys_datalog_internal_term_t term = int_term((long long)i);
             TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_add_fact(&edb, name, &term, 1u), "%d");
         }
     }
     size_t before = edb.fact_count;
     pred_name(name, sizeof(name), "e", pred_count);
-    maelys_datalog_term_t term = int_term(1000);
+    maelys_datalog_internal_term_t term = int_term(1000);
     TEST_ASSERT_EQUAL(MAELYS_ERR_PAYLOAD_TOO_LARGE, maelys_datalog_edb_add_fact(&edb, name, &term, 1u), "%d");
     TEST_ASSERT_EQUAL(before, edb.fact_count, "%zu");
     TEST_ASSERT_EQUAL((size_t)0u, r.symbols.count, "%zu");
@@ -408,13 +408,13 @@ static int test_boundary_max_edb_facts_over_limit(void) {
 
 static int test_boundary_max_facts_per_pred_at_limit(void) {
     TEST_BEGIN();
-    maelys_datalog_ruleset_t r;
+    maelys_datalog_internal_ruleset_t r;
     TEST_ASSERT_EQUAL(MAELYS_OK, init_edb_registry(&r, 1u), "%d");
-    maelys_datalog_fact_t pool[MAELYS_DATALOG_MAX_FACTS_PER_PRED + 1u];
-    maelys_datalog_edb_t edb;
+    maelys_datalog_internal_fact_t pool[MAELYS_DATALOG_MAX_FACTS_PER_PRED + 1u];
+    maelys_datalog_internal_edb_t edb;
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_init(&edb, pool, sizeof(pool) / sizeof(pool[0]), &r.symbols, &r.registry), "%d");
     for (size_t i = 0; i < MAELYS_DATALOG_MAX_FACTS_PER_PRED; i++) {
-        maelys_datalog_term_t term = int_term((long long)i);
+        maelys_datalog_internal_term_t term = int_term((long long)i);
         TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_add_fact(&edb, "e000", &term, 1u), "%d");
     }
     TEST_ASSERT_EQUAL((size_t)MAELYS_DATALOG_MAX_FACTS_PER_PRED, edb.fact_count, "%zu");
@@ -426,17 +426,17 @@ static int test_boundary_max_facts_per_pred_at_limit(void) {
 
 static int test_boundary_max_facts_per_pred_over_limit(void) {
     TEST_BEGIN();
-    maelys_datalog_ruleset_t r;
+    maelys_datalog_internal_ruleset_t r;
     TEST_ASSERT_EQUAL(MAELYS_OK, init_edb_registry(&r, 1u), "%d");
-    maelys_datalog_fact_t pool[MAELYS_DATALOG_MAX_FACTS_PER_PRED + 1u];
-    maelys_datalog_edb_t edb;
+    maelys_datalog_internal_fact_t pool[MAELYS_DATALOG_MAX_FACTS_PER_PRED + 1u];
+    maelys_datalog_internal_edb_t edb;
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_init(&edb, pool, sizeof(pool) / sizeof(pool[0]), &r.symbols, &r.registry), "%d");
     for (size_t i = 0; i < MAELYS_DATALOG_MAX_FACTS_PER_PRED; i++) {
-        maelys_datalog_term_t term = int_term((long long)i);
+        maelys_datalog_internal_term_t term = int_term((long long)i);
         TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_add_fact(&edb, "e000", &term, 1u), "%d");
     }
     size_t before = edb.fact_count;
-    maelys_datalog_term_t term = int_term(1000);
+    maelys_datalog_internal_term_t term = int_term(1000);
     TEST_ASSERT_EQUAL(MAELYS_ERR_PAYLOAD_TOO_LARGE, maelys_datalog_edb_add_fact(&edb, "e000", &term, 1u), "%d");
     TEST_ASSERT_EQUAL(before, edb.fact_count, "%zu");
     maelys_datalog_edb_clear(&edb);
@@ -447,14 +447,14 @@ static int test_boundary_max_facts_per_pred_over_limit(void) {
 
 static int test_boundary_max_arity_at_limit(void) {
     TEST_BEGIN();
-    maelys_datalog_ruleset_t r;
+    maelys_datalog_internal_ruleset_t r;
     TEST_ASSERT_EQUAL(MAELYS_OK, init_ruleset(&r), "%d");
     TEST_ASSERT_EQUAL(MAELYS_OK, add_pred(&r, "wide", MAELYS_DATALOG_MAX_ARITY, MAELYS_DATALOG_PRED_KIND_EDB), "%d");
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_predicate_registry_freeze(&r.registry), "%d");
-    maelys_datalog_fact_t pool[2];
-    maelys_datalog_edb_t edb;
+    maelys_datalog_internal_fact_t pool[2];
+    maelys_datalog_internal_edb_t edb;
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_init(&edb, pool, 2u, &r.symbols, &r.registry), "%d");
-    maelys_datalog_term_t terms[MAELYS_DATALOG_MAX_ARITY];
+    maelys_datalog_internal_term_t terms[MAELYS_DATALOG_MAX_ARITY];
     for (size_t i = 0; i < MAELYS_DATALOG_MAX_ARITY; i++) terms[i] = int_term((long long)i);
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_add_fact(&edb, "wide", terms, MAELYS_DATALOG_MAX_ARITY), "%d");
     TEST_ASSERT_EQUAL((size_t)1u, edb.fact_count, "%zu");
@@ -464,14 +464,14 @@ static int test_boundary_max_arity_at_limit(void) {
 
 static int test_boundary_max_arity_over_limit(void) {
     TEST_BEGIN();
-    maelys_datalog_ruleset_t r;
+    maelys_datalog_internal_ruleset_t r;
     TEST_ASSERT_EQUAL(MAELYS_OK, init_ruleset(&r), "%d");
     TEST_ASSERT_EQUAL(MAELYS_OK, add_pred(&r, "wide", MAELYS_DATALOG_MAX_ARITY, MAELYS_DATALOG_PRED_KIND_EDB), "%d");
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_predicate_registry_freeze(&r.registry), "%d");
-    maelys_datalog_fact_t pool[2];
-    maelys_datalog_edb_t edb;
+    maelys_datalog_internal_fact_t pool[2];
+    maelys_datalog_internal_edb_t edb;
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_init(&edb, pool, 2u, &r.symbols, &r.registry), "%d");
-    maelys_datalog_term_t terms[MAELYS_DATALOG_MAX_ARITY + 1u];
+    maelys_datalog_internal_term_t terms[MAELYS_DATALOG_MAX_ARITY + 1u];
     for (size_t i = 0; i < MAELYS_DATALOG_MAX_ARITY + 1u; i++) terms[i] = int_term((long long)i);
     TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_ARGUMENT,
                       maelys_datalog_edb_add_fact(&edb, "wide", terms, MAELYS_DATALOG_MAX_ARITY + 1u),
@@ -519,7 +519,7 @@ static int test_boundary_max_string_bytes_exact(void) {
 static int test_boundary_max_string_bytes_over(void) {
     TEST_BEGIN();
     size_t len = 0;
-    maelys_datalog_diagnostic_t diag;
+    maelys_datalog_internal_diagnostic_t diag;
     char *src = quoted_string_source(MAELYS_DATALOG_MAX_STRING_BYTES + 1u, &len);
     TEST_ASSERT_NOT_NULL(src);
     if (src) {
@@ -536,7 +536,7 @@ static int test_boundary_max_string_bytes_over(void) {
 
 static int test_boundary_idb_overflow_fails_closed(void) {
     TEST_BEGIN();
-    maelys_datalog_ruleset_t r;
+    maelys_datalog_internal_ruleset_t r;
     TEST_ASSERT_EQUAL(MAELYS_OK, init_ruleset(&r), "%d");
     TEST_ASSERT_EQUAL(MAELYS_OK, add_pred(&r, "seed", 1u, MAELYS_DATALOG_PRED_KIND_EDB), "%d");
     char name[64];
@@ -552,18 +552,18 @@ static int test_boundary_idb_overflow_fails_closed(void) {
         TEST_ASSERT_TRUE(ok);
     }
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_parse_ruleset(&r, src, len), "%d");
-    maelys_datalog_fact_t pool[MAELYS_DATALOG_MAX_FACTS_PER_PRED];
-    maelys_datalog_edb_t edb;
+    maelys_datalog_internal_fact_t pool[MAELYS_DATALOG_MAX_FACTS_PER_PRED];
+    maelys_datalog_internal_edb_t edb;
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_init(&edb, pool, MAELYS_DATALOG_MAX_FACTS_PER_PRED, &r.symbols, &r.registry), "%d");
     for (size_t i = 0; i < MAELYS_DATALOG_MAX_FACTS_PER_PRED; i++) {
-        maelys_datalog_term_t term = int_term((long long)i);
+        maelys_datalog_internal_term_t term = int_term((long long)i);
         TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_add_fact(&edb, "seed", &term, 1u), "%d");
     }
     TEST_ASSERT_EQUAL((size_t)MAELYS_DATALOG_MAX_FACTS_PER_PRED, edb.fact_count, "%zu");
     TEST_ASSERT_EQUAL((size_t)0u, r.symbols.count, "%zu");
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_finalize(&edb), "%d");
-    maelys_datalog_solve_result_t *result = NULL;
-    maelys_datalog_solve_diagnostic_t diag;
+    maelys_datalog_internal_solve_result_t *result = NULL;
+    maelys_datalog_internal_solve_diagnostic_t diag;
     TEST_ASSERT_EQUAL(MAELYS_ERR_PAYLOAD_TOO_LARGE,
                       maelys_datalog_solve_once_ex(&r, &edb, &result, &diag),
                       "%d");
@@ -576,8 +576,8 @@ static int test_boundary_idb_overflow_fails_closed(void) {
 
 static int test_boundary_diagnostic_fields_stable(void) {
     TEST_BEGIN();
-    maelys_datalog_ruleset_t r;
-    maelys_datalog_diagnostic_t diag;
+    maelys_datalog_internal_ruleset_t r;
+    maelys_datalog_internal_diagnostic_t diag;
     TEST_ASSERT_EQUAL(MAELYS_OK, init_ruleset(&r), "%d");
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_predicate_registry_freeze(&r.registry), "%d");
     char pred[96];

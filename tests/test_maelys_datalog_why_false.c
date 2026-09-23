@@ -10,7 +10,7 @@
  * oracle for the allocation-free workspace path, including truncated prefixes,
  * reordered symbol vocabularies, recursion, filters and all exploration limits. */
 static maelys_result_t compare_workspace_explanation(
-    const maelys_datalog_solve_result_t *result, const maelys_datalog_fact_t *fact,
+    const maelys_datalog_internal_solve_result_t *result, const maelys_datalog_internal_fact_t *fact,
     const maelys_datalog_why_false_limits_t *limits, maelys_datalog_why_false_explanation_t *out) {
     maelys_result_t rc = maelys_datalog_explain_absent_solved_fact(result, fact, limits, out);
     if (rc != MAELYS_OK) return rc;
@@ -30,20 +30,20 @@ static maelys_result_t compare_workspace_explanation(
 #define maelys_datalog_explain_absent_solved_fact compare_workspace_explanation
 
 maelys_result_t maelys_datalog_test_solve_result_idb_facts(
-    const maelys_datalog_solve_result_t *result,
-    const maelys_datalog_fact_t **out_facts,
+    const maelys_datalog_internal_solve_result_t *result,
+    const maelys_datalog_internal_fact_t **out_facts,
     size_t *out_count);
 maelys_result_t maelys_datalog_test_solve_result_idb_proof_indices(
-    const maelys_datalog_solve_result_t *result,
+    const maelys_datalog_internal_solve_result_t *result,
     const uint16_t **out_indices,
     size_t *out_count);
 static const char k_fingerprint[] =
     "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789";
 
 typedef struct {
-    maelys_datalog_ruleset_t ruleset;
-    maelys_datalog_prepared_session_t *session;
-    maelys_datalog_solve_result_t *result;
+    maelys_datalog_internal_ruleset_t ruleset;
+    maelys_datalog_internal_prepared_session_t *session;
+    maelys_datalog_internal_solve_result_t *result;
 } why_false_fixture_t;
 
 static maelys_datalog_why_false_limits_t generous_limits(void) {
@@ -57,13 +57,13 @@ static maelys_datalog_why_false_limits_t generous_limits(void) {
     return limits;
 }
 
-static maelys_result_t make_ruleset(maelys_datalog_ruleset_t *ruleset,
+static maelys_result_t make_ruleset(maelys_datalog_internal_ruleset_t *ruleset,
                                     const char *source) {
     memset(ruleset, 0, sizeof(*ruleset));
     maelys_result_t rc = maelys_datalog_ruleset_init(
         ruleset, "why.false", "authorization", k_fingerprint, 1);
     if (rc != MAELYS_OK) return rc;
-    static const maelys_datalog_public_predicate_t defs[] = {
+    static const maelys_datalog_predicate_t defs[] = {
         {"member", 2u, MAELYS_DATALOG_PRED_KIND_EDB},
         {"admin", 1u, MAELYS_DATALOG_PRED_KIND_EDB},
         {"blocked", 1u, MAELYS_DATALOG_PRED_KIND_EDB},
@@ -103,25 +103,25 @@ static maelys_result_t make_ruleset(maelys_datalog_ruleset_t *ruleset,
     return maelys_datalog_parse_ruleset(ruleset, source, strlen(source));
 }
 
-static maelys_datalog_input_term_t symbol_term(const char *value) {
-    maelys_datalog_input_term_t term;
+static maelys_datalog_value_t symbol_term(const char *value) {
+    maelys_datalog_value_t term;
     memset(&term, 0, sizeof(term));
-    term.kind = MAELYS_DATALOG_TERM_SYMBOL;
+    term.kind = MAELYS_DATALOG_VALUE_SYMBOL;
     term.as.symbol = value;
     return term;
 }
 
-static maelys_datalog_input_term_t integer_term(long long value) {
-    maelys_datalog_input_term_t term;
+static maelys_datalog_value_t integer_term(long long value) {
+    maelys_datalog_value_t term;
     memset(&term, 0, sizeof(term));
-    term.kind = MAELYS_DATALOG_TERM_INT;
+    term.kind = MAELYS_DATALOG_VALUE_INTEGER;
     term.as.integer = value;
     return term;
 }
 
-static maelys_datalog_input_fact_t unary_fact(const char *predicate,
+static maelys_datalog_fact_t unary_fact(const char *predicate,
                                               const char *value) {
-    maelys_datalog_input_fact_t fact;
+    maelys_datalog_fact_t fact;
     memset(&fact, 0, sizeof(fact));
     fact.predicate = predicate;
     fact.arity = 1u;
@@ -129,10 +129,10 @@ static maelys_datalog_input_fact_t unary_fact(const char *predicate,
     return fact;
 }
 
-static maelys_datalog_input_fact_t binary_symbols(const char *predicate,
+static maelys_datalog_fact_t binary_symbols(const char *predicate,
                                                    const char *left,
                                                    const char *right) {
-    maelys_datalog_input_fact_t fact;
+    maelys_datalog_fact_t fact;
     memset(&fact, 0, sizeof(fact));
     fact.predicate = predicate;
     fact.arity = 2u;
@@ -141,10 +141,10 @@ static maelys_datalog_input_fact_t binary_symbols(const char *predicate,
     return fact;
 }
 
-static maelys_datalog_input_fact_t symbol_integer(const char *predicate,
+static maelys_datalog_fact_t symbol_integer(const char *predicate,
                                                    const char *symbol,
                                                    long long integer) {
-    maelys_datalog_input_fact_t fact;
+    maelys_datalog_fact_t fact;
     memset(&fact, 0, sizeof(fact));
     fact.predicate = predicate;
     fact.arity = 2u;
@@ -156,7 +156,7 @@ static maelys_datalog_input_fact_t symbol_integer(const char *predicate,
 static maelys_result_t fixture_solve(
     why_false_fixture_t *fixture,
     const char *source,
-    const maelys_datalog_input_fact_t *facts,
+    const maelys_datalog_fact_t *facts,
     size_t fact_count) {
     memset(fixture, 0, sizeof(*fixture));
     maelys_result_t rc = make_ruleset(&fixture->ruleset, source);
@@ -169,12 +169,12 @@ static maelys_result_t fixture_solve(
 }
 
 static maelys_result_t solve_fresh_canonical(
-    const maelys_datalog_ruleset_t *source,
-    const maelys_datalog_input_fact_t *facts,
+    const maelys_datalog_internal_ruleset_t *source,
+    const maelys_datalog_fact_t *facts,
     size_t fact_count,
-    maelys_datalog_ruleset_t *ruleset,
-    maelys_datalog_fact_t fact_pool[MAELYS_DATALOG_MAX_EDB_FACTS],
-    maelys_datalog_solve_result_t **out_result) {
+    maelys_datalog_internal_ruleset_t *ruleset,
+    maelys_datalog_internal_fact_t fact_pool[MAELYS_DATALOG_MAX_EDB_FACTS],
+    maelys_datalog_internal_solve_result_t **out_result) {
     *ruleset = *source;
     static const char *const symbols[] = {"alice", "team"};
     for (size_t i = 0u; i < sizeof(symbols) / sizeof(symbols[0]); i++) {
@@ -183,7 +183,7 @@ static maelys_result_t solve_fresh_canonical(
             &ruleset->symbols, symbols[i], strlen(symbols[i]), &id);
         if (rc != MAELYS_OK) return rc;
     }
-    maelys_datalog_edb_t edb;
+    maelys_datalog_internal_edb_t edb;
     maelys_result_t rc = maelys_datalog_edb_init(
         &edb,
         fact_pool,
@@ -192,10 +192,10 @@ static maelys_result_t solve_fresh_canonical(
         &ruleset->registry);
     if (rc != MAELYS_OK) return rc;
     for (size_t i = 0u; i < fact_count; i++) {
-        maelys_datalog_term_t terms[MAELYS_DATALOG_MAX_TERMS];
+        maelys_datalog_internal_term_t terms[MAELYS_DATALOG_MAX_TERMS];
         memset(terms, 0, sizeof(terms));
         for (size_t term = 0u; term < facts[i].arity; term++) {
-            terms[term].kind = facts[i].terms[term].kind;
+            terms[term].kind = (maelys_datalog_internal_term_kind_t)facts[i].terms[term].kind;
             if (terms[term].kind == MAELYS_DATALOG_TERM_SYMBOL) {
                 int found = 0;
                 rc = maelys_datalog_symbol_lookup_readonly(
@@ -222,10 +222,10 @@ static maelys_result_t solve_fresh_canonical(
     return maelys_datalog_solve_once(ruleset, &edb, out_result);
 }
 
-static int ruleset_query(const maelys_datalog_ruleset_t *ruleset,
+static int ruleset_query(const maelys_datalog_internal_ruleset_t *ruleset,
                          const char *predicate,
                          const char *symbol,
-                         maelys_datalog_fact_t *out_fact) {
+                         maelys_datalog_internal_fact_t *out_fact) {
     memset(out_fact, 0, sizeof(*out_fact));
     if (!maelys_datalog_predicate_registry_find(
             &ruleset->registry,
@@ -259,7 +259,7 @@ static void fixture_clear(why_false_fixture_t *fixture) {
 static int fixture_query(why_false_fixture_t *fixture,
                          const char *predicate,
                          const char *symbol,
-                         maelys_datalog_fact_t *out_fact) {
+                         maelys_datalog_internal_fact_t *out_fact) {
     memset(out_fact, 0, sizeof(*out_fact));
     if (!maelys_datalog_predicate_registry_find(
             &fixture->ruleset.registry,
@@ -286,8 +286,8 @@ static maelys_datalog_why_false_explanation_t *new_explanation(void) {
 }
 
 typedef struct {
-    const maelys_datalog_ruleset_t *ruleset;
-    const maelys_datalog_prepared_session_t *session;
+    const maelys_datalog_internal_ruleset_t *ruleset;
+    const maelys_datalog_internal_prepared_session_t *session;
 } normalized_vocabulary_t;
 
 static const char *normalized_symbol_text(
@@ -319,9 +319,9 @@ static const char *normalized_symbol_text(
 
 static int normalized_term_equal(
     const normalized_vocabulary_t *left_vocabulary,
-    const maelys_datalog_term_t *left,
+    const maelys_datalog_internal_term_t *left,
     const normalized_vocabulary_t *right_vocabulary,
-    const maelys_datalog_term_t *right) {
+    const maelys_datalog_internal_term_t *right) {
     if (left->kind != right->kind) return 0;
     switch (left->kind) {
         case MAELYS_DATALOG_TERM_SYMBOL: {
@@ -344,9 +344,9 @@ static int normalized_term_equal(
 
 static int normalized_fact_equal(
     const normalized_vocabulary_t *left_vocabulary,
-    const maelys_datalog_fact_t *left,
+    const maelys_datalog_internal_fact_t *left,
     const normalized_vocabulary_t *right_vocabulary,
-    const maelys_datalog_fact_t *right) {
+    const maelys_datalog_internal_fact_t *right) {
     if (left->predicate_id != right->predicate_id ||
         left->arity != right->arity) {
         return 0;
@@ -479,14 +479,14 @@ static int test_negative_contradiction_with_positive_support(void) {
     why_false_fixture_t fixture;
     const char *source =
         "allow(U) :- member(U, G), admin(G), not(blocked(U)).";
-    maelys_datalog_input_fact_t facts[3] = {
+    maelys_datalog_fact_t facts[3] = {
         binary_symbols("member", "alice", "team"),
         unary_fact("admin", "team"),
         unary_fact("blocked", "alice"),
     };
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       fixture_solve(&fixture, source, facts, 3u), "%d");
-    maelys_datalog_fact_t query;
+    maelys_datalog_internal_fact_t query;
     TEST_ASSERT_TRUE(fixture_query(&fixture, "allow", "alice", &query));
     maelys_datalog_why_false_explanation_t *explanation = new_explanation();
     TEST_ASSERT_NOT_NULL(explanation);
@@ -516,10 +516,10 @@ static int test_positive_no_match_keeps_unbound_pattern(void) {
     TEST_BEGIN();
     why_false_fixture_t fixture;
     const char *source = "allow(U) :- member(U, G), admin(G).";
-    maelys_datalog_input_fact_t seed = unary_fact("observed", "alice");
+    maelys_datalog_fact_t seed = unary_fact("observed", "alice");
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       fixture_solve(&fixture, source, &seed, 1u), "%d");
-    maelys_datalog_fact_t query;
+    maelys_datalog_internal_fact_t query;
     TEST_ASSERT_TRUE(fixture_query(&fixture, "allow", "alice", &query));
     maelys_datalog_why_false_explanation_t *explanation = new_explanation();
     TEST_ASSERT_NOT_NULL(explanation);
@@ -546,10 +546,10 @@ static int test_comparison_false_uses_ground_operands(void) {
     TEST_BEGIN();
     why_false_fixture_t fixture;
     const char *source = "allow(U) :- score(U, S), S >= 10.";
-    maelys_datalog_input_fact_t fact = symbol_integer("score", "alice", 5);
+    maelys_datalog_fact_t fact = symbol_integer("score", "alice", 5);
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       fixture_solve(&fixture, source, &fact, 1u), "%d");
-    maelys_datalog_fact_t query;
+    maelys_datalog_internal_fact_t query;
     TEST_ASSERT_TRUE(fixture_query(&fixture, "allow", "alice", &query));
     maelys_datalog_why_false_explanation_t *explanation = new_explanation();
     TEST_ASSERT_NOT_NULL(explanation);
@@ -578,13 +578,13 @@ static int test_positive_support_can_come_from_materialized_idb(void) {
     const char *source =
         "helper(U) :- observed(U).\n"
         "allow(U) :- helper(U), not(blocked(U)).";
-    const maelys_datalog_input_fact_t facts[2] = {
+    const maelys_datalog_fact_t facts[2] = {
         unary_fact("observed", "alice"),
         unary_fact("blocked", "alice"),
     };
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       fixture_solve(&fixture, source, facts, 2u), "%d");
-    maelys_datalog_fact_t query;
+    maelys_datalog_internal_fact_t query;
     TEST_ASSERT_TRUE(fixture_query(&fixture, "allow", "alice", &query));
     maelys_datalog_why_false_explanation_t *explanation = new_explanation();
     TEST_ASSERT_NOT_NULL(explanation);
@@ -609,14 +609,14 @@ static int test_present_and_no_candidate_states(void) {
     const char *source =
         "trusted(\"alice\").\n"
         "allow(U) :- observed(U).";
-    maelys_datalog_input_fact_t fact = unary_fact("observed", "alice");
+    maelys_datalog_fact_t fact = unary_fact("observed", "alice");
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       fixture_solve(&fixture, source, &fact, 1u), "%d");
     const maelys_datalog_why_false_limits_t limits = generous_limits();
     maelys_datalog_why_false_explanation_t *explanation = new_explanation();
     TEST_ASSERT_NOT_NULL(explanation);
 
-    maelys_datalog_fact_t present;
+    maelys_datalog_internal_fact_t present;
     TEST_ASSERT_TRUE(fixture_query(&fixture, "allow", "alice", &present));
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       maelys_datalog_explain_absent_solved_fact(
@@ -626,7 +626,7 @@ static int test_present_and_no_candidate_states(void) {
     TEST_ASSERT_EQUAL(MAELYS_DATALOG_EXPLANATION_ORIGIN_IDB,
                       explanation->query_origin, "%u");
 
-    maelys_datalog_fact_t absent;
+    maelys_datalog_internal_fact_t absent;
     TEST_ASSERT_TRUE(fixture_query(&fixture, "deny", "alice", &absent));
     memset(explanation, 0, sizeof(*explanation));
     TEST_ASSERT_EQUAL(MAELYS_OK,
@@ -638,7 +638,7 @@ static int test_present_and_no_candidate_states(void) {
                       explanation->summary, "%u");
     TEST_ASSERT_EQUAL((size_t)0u, explanation->diagnostic_count, "%zu");
 
-    maelys_datalog_fact_t edb_present;
+    maelys_datalog_internal_fact_t edb_present;
     TEST_ASSERT_TRUE(fixture_query(&fixture, "observed", "alice", &edb_present));
     memset(explanation, 0, sizeof(*explanation));
     TEST_ASSERT_EQUAL(MAELYS_OK,
@@ -647,7 +647,7 @@ static int test_present_and_no_candidate_states(void) {
     TEST_ASSERT_EQUAL(MAELYS_DATALOG_EXPLANATION_ORIGIN_EDB,
                       explanation->query_origin, "%u");
 
-    maelys_datalog_fact_t policy_present;
+    maelys_datalog_internal_fact_t policy_present;
     TEST_ASSERT_TRUE(fixture_query(&fixture, "trusted", "alice", &policy_present));
     memset(explanation, 0, sizeof(*explanation));
     TEST_ASSERT_EQUAL(MAELYS_OK,
@@ -669,13 +669,13 @@ static int test_each_non_depth_limit_is_independently_observable(void) {
         "allow(U) :- member(U, G), admin(G).\n"
         "allow(U) :- missing_a(U).\n"
         "allow(U) :- missing_b(U).";
-    maelys_datalog_input_fact_t facts[2] = {
+    maelys_datalog_fact_t facts[2] = {
         binary_symbols("member", "alice", "a"),
         binary_symbols("member", "alice", "b"),
     };
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       fixture_solve(&fixture, source, facts, 2u), "%d");
-    maelys_datalog_fact_t query;
+    maelys_datalog_internal_fact_t query;
     TEST_ASSERT_TRUE(fixture_query(&fixture, "allow", "alice", &query));
     maelys_datalog_why_false_explanation_t *explanation = new_explanation();
     TEST_ASSERT_NOT_NULL(explanation);
@@ -725,13 +725,13 @@ static int test_public_order_does_not_follow_join_planner_score(void) {
      * the stable lexical-safe order and expose no planner-created support. */
     const char *source =
         "allow(U) :- not(blocked(U)), member(U, G).";
-    maelys_datalog_input_fact_t facts[2] = {
+    maelys_datalog_fact_t facts[2] = {
         unary_fact("blocked", "alice"),
         binary_symbols("member", "alice", "team"),
     };
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       fixture_solve(&fixture, source, facts, 2u), "%d");
-    maelys_datalog_fact_t query;
+    maelys_datalog_internal_fact_t query;
     TEST_ASSERT_TRUE(fixture_query(&fixture, "allow", "alice", &query));
     maelys_datalog_why_false_explanation_t *explanation = new_explanation();
     TEST_ASSERT_NOT_NULL(explanation);
@@ -757,13 +757,13 @@ static int test_executable_order_binds_before_earlier_obstacle(void) {
      * obstacle must retain body 0's original lexical identity. */
     const char *source =
         "allow(U) :- not(blocked(G)), member(U, G).";
-    maelys_datalog_input_fact_t facts[2] = {
+    maelys_datalog_fact_t facts[2] = {
         binary_symbols("member", "alice", "team"),
         unary_fact("blocked", "team"),
     };
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       fixture_solve(&fixture, source, facts, 2u), "%d");
-    maelys_datalog_fact_t query;
+    maelys_datalog_internal_fact_t query;
     TEST_ASSERT_TRUE(fixture_query(&fixture, "allow", "alice", &query));
     maelys_datalog_why_false_explanation_t *explanation = new_explanation();
     TEST_ASSERT_NOT_NULL(explanation);
@@ -794,10 +794,10 @@ static int test_public_order_uses_symbol_text_not_symbol_id(void) {
         "trusted(\"zeta\").\n"
         "trusted(\"alpha\").\n"
         "allow(U) :- observed(U), trusted(G), admin(G).";
-    maelys_datalog_input_fact_t fact = unary_fact("observed", "alice");
+    maelys_datalog_fact_t fact = unary_fact("observed", "alice");
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       fixture_solve(&fixture, source, &fact, 1u), "%d");
-    maelys_datalog_fact_t query;
+    maelys_datalog_internal_fact_t query;
     TEST_ASSERT_TRUE(fixture_query(&fixture, "allow", "alice", &query));
     maelys_datalog_why_false_explanation_t *explanation = new_explanation();
     TEST_ASSERT_NOT_NULL(explanation);
@@ -836,7 +836,7 @@ static int test_truncated_prefix_is_stable_across_symbol_vocabularies(void) {
         "trusted(\"alpha\").\n"
         "trusted(\"zeta\").\n"
         "allow(U) :- observed(U), trusted(G), admin(G).";
-    const maelys_datalog_input_fact_t fact =
+    const maelys_datalog_fact_t fact =
         unary_fact("observed", "alice");
     why_false_fixture_t first;
     why_false_fixture_t second;
@@ -845,8 +845,8 @@ static int test_truncated_prefix_is_stable_across_symbol_vocabularies(void) {
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       fixture_solve(&second, alpha_first, &fact, 1u), "%d");
 
-    maelys_datalog_fact_t first_query;
-    maelys_datalog_fact_t second_query;
+    maelys_datalog_internal_fact_t first_query;
+    maelys_datalog_internal_fact_t second_query;
     TEST_ASSERT_TRUE(fixture_query(&first, "allow", "alice", &first_query));
     TEST_ASSERT_TRUE(fixture_query(&second, "allow", "alice", &second_query));
     maelys_datalog_why_false_limits_t limits = generous_limits();
@@ -920,10 +920,10 @@ static int test_positive_cycle_and_depth_are_bounded(void) {
     const char *source =
         "allow(U) :- helper(U).\n"
         "helper(U) :- allow(U).";
-    maelys_datalog_input_fact_t seed = unary_fact("observed", "alice");
+    maelys_datalog_fact_t seed = unary_fact("observed", "alice");
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       fixture_solve(&fixture, source, &seed, 1u), "%d");
-    maelys_datalog_fact_t query;
+    maelys_datalog_internal_fact_t query;
     TEST_ASSERT_TRUE(fixture_query(&fixture, "allow", "alice", &query));
     maelys_datalog_why_false_explanation_t *explanation = new_explanation();
     TEST_ASSERT_NOT_NULL(explanation);
@@ -963,10 +963,10 @@ static int test_diagnostic_top_k_is_canonical(void) {
     const char *source =
         "allow(U) :- helper(U).\n"
         "helper(U) :- missing_a(U).";
-    const maelys_datalog_input_fact_t seed = unary_fact("observed", "alice");
+    const maelys_datalog_fact_t seed = unary_fact("observed", "alice");
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       fixture_solve(&fixture, source, &seed, 1u), "%d");
-    maelys_datalog_fact_t query;
+    maelys_datalog_internal_fact_t query;
     TEST_ASSERT_TRUE(fixture_query(&fixture, "allow", "alice", &query));
     maelys_datalog_why_false_explanation_t *explanation = new_explanation();
     TEST_ASSERT_NOT_NULL(explanation);
@@ -996,10 +996,10 @@ static int test_candidate_rule_bound_uses_available_canonical_frontier(void) {
         "allow(U) :- helper(U).\n"
         "allow(U) :- missing_a(U).\n"
         "helper(U) :- missing_b(U).";
-    const maelys_datalog_input_fact_t seed = unary_fact("observed", "alice");
+    const maelys_datalog_fact_t seed = unary_fact("observed", "alice");
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       fixture_solve(&fixture, source, &seed, 1u), "%d");
-    maelys_datalog_fact_t query;
+    maelys_datalog_internal_fact_t query;
     TEST_ASSERT_TRUE(fixture_query(&fixture, "allow", "alice", &query));
     maelys_datalog_why_false_explanation_t *explanation = new_explanation();
     TEST_ASSERT_NOT_NULL(explanation);
@@ -1031,7 +1031,7 @@ static int test_repeated_and_permuted_inputs_are_identical(void) {
     TEST_BEGIN();
     const char *source =
         "allow(U) :- member(U, G), admin(G), not(blocked(U)).";
-    const maelys_datalog_input_fact_t facts[3] = {
+    const maelys_datalog_fact_t facts[3] = {
         binary_symbols("member", "alice", "team"),
         unary_fact("admin", "team"),
         unary_fact("blocked", "alice"),
@@ -1040,14 +1040,14 @@ static int test_repeated_and_permuted_inputs_are_identical(void) {
         {0u, 1u, 2u}, {0u, 2u, 1u}, {1u, 0u, 2u},
         {1u, 2u, 0u}, {2u, 0u, 1u}, {2u, 1u, 0u},
     };
-    maelys_datalog_input_fact_t ordered[3];
+    maelys_datalog_fact_t ordered[3];
     for (size_t index = 0u; index < 3u; index++) {
         ordered[index] = facts[permutations[0][index]];
     }
     why_false_fixture_t first;
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       fixture_solve(&first, source, ordered, 3u), "%d");
-    maelys_datalog_fact_t first_query;
+    maelys_datalog_internal_fact_t first_query;
     TEST_ASSERT_TRUE(fixture_query(&first, "allow", "alice", &first_query));
     const maelys_datalog_why_false_limits_t limits = generous_limits();
     maelys_datalog_why_false_explanation_t *first_explanation = new_explanation();
@@ -1074,7 +1074,7 @@ static int test_repeated_and_permuted_inputs_are_identical(void) {
         why_false_fixture_t current;
         TEST_ASSERT_EQUAL(MAELYS_OK,
                           fixture_solve(&current, source, ordered, 3u), "%d");
-        maelys_datalog_fact_t current_query;
+        maelys_datalog_internal_fact_t current_query;
         TEST_ASSERT_TRUE(fixture_query(
             &current, "allow", "alice", &current_query));
         maelys_datalog_why_false_explanation_t *current_explanation =
@@ -1107,7 +1107,7 @@ static int test_fresh_and_prepared_explanations_are_identical(void) {
     why_false_fixture_t prepared;
     const char *source =
         "allow(U) :- member(U, G), admin(G), not(blocked(U)).";
-    maelys_datalog_input_fact_t facts[3] = {
+    maelys_datalog_fact_t facts[3] = {
         binary_symbols("member", "alice", "team"),
         unary_fact("admin", "team"),
         unary_fact("blocked", "alice"),
@@ -1115,11 +1115,11 @@ static int test_fresh_and_prepared_explanations_are_identical(void) {
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       fixture_solve(&prepared, source, facts, 3u), "%d");
 
-    maelys_datalog_ruleset_t *fresh_ruleset =
+    maelys_datalog_internal_ruleset_t *fresh_ruleset =
         malloc(sizeof(*fresh_ruleset));
-    maelys_datalog_fact_t *fresh_pool =
+    maelys_datalog_internal_fact_t *fresh_pool =
         calloc(MAELYS_DATALOG_MAX_EDB_FACTS, sizeof(*fresh_pool));
-    maelys_datalog_solve_result_t *fresh_result = NULL;
+    maelys_datalog_internal_solve_result_t *fresh_result = NULL;
     TEST_ASSERT_NOT_NULL(fresh_ruleset);
     TEST_ASSERT_NOT_NULL(fresh_pool);
     TEST_ASSERT_EQUAL(MAELYS_OK,
@@ -1130,8 +1130,8 @@ static int test_fresh_and_prepared_explanations_are_identical(void) {
                                             fresh_pool,
                                             &fresh_result), "%d");
 
-    maelys_datalog_fact_t prepared_query;
-    maelys_datalog_fact_t fresh_query;
+    maelys_datalog_internal_fact_t prepared_query;
+    maelys_datalog_internal_fact_t fresh_query;
     TEST_ASSERT_TRUE(fixture_query(
         &prepared, "allow", "alice", &prepared_query));
     TEST_ASSERT_TRUE(ruleset_query(
@@ -1179,7 +1179,7 @@ static int test_extraction_is_read_only_and_preserves_why_true(void) {
     why_false_fixture_t fixture;
     const char *source =
         "allow(U) :- member(U, G), admin(G), not(blocked(U)).";
-    maelys_datalog_input_fact_t facts[5] = {
+    maelys_datalog_fact_t facts[5] = {
         binary_symbols("member", "alice", "team"),
         binary_symbols("member", "bob", "team"),
         unary_fact("admin", "team"),
@@ -1189,8 +1189,8 @@ static int test_extraction_is_read_only_and_preserves_why_true(void) {
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       fixture_solve(&fixture, source, facts, 5u), "%d");
 
-    maelys_datalog_fact_t absent;
-    maelys_datalog_fact_t present;
+    maelys_datalog_internal_fact_t absent;
+    maelys_datalog_internal_fact_t present;
     TEST_ASSERT_TRUE(fixture_query(&fixture, "allow", "alice", &absent));
     TEST_ASSERT_TRUE(fixture_query(&fixture, "allow", "bob", &present));
 
@@ -1209,7 +1209,7 @@ static int test_extraction_is_read_only_and_preserves_why_true(void) {
     TEST_ASSERT_NOT_NULL(proof);
     memcpy(proof_before, proof, sizeof(*proof_before));
 
-    const maelys_datalog_fact_t *idb_before = NULL;
+    const maelys_datalog_internal_fact_t *idb_before = NULL;
     const uint16_t *indices_before = NULL;
     size_t idb_count = 0u;
     size_t index_count = 0u;
@@ -1219,7 +1219,7 @@ static int test_extraction_is_read_only_and_preserves_why_true(void) {
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       maelys_datalog_test_solve_result_idb_proof_indices(
                           fixture.result, &indices_before, &index_count), "%d");
-    maelys_datalog_fact_t *idb_snapshot =
+    maelys_datalog_internal_fact_t *idb_snapshot =
         malloc(idb_count * sizeof(*idb_snapshot));
     uint16_t *index_snapshot =
         malloc(index_count * sizeof(*index_snapshot));
@@ -1270,10 +1270,10 @@ static int test_invalid_limits_leave_output_untouched(void) {
     TEST_BEGIN();
     why_false_fixture_t fixture;
     const char *source = "allow(U) :- observed(U).";
-    maelys_datalog_input_fact_t fact = unary_fact("observed", "alice");
+    maelys_datalog_fact_t fact = unary_fact("observed", "alice");
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       fixture_solve(&fixture, source, &fact, 1u), "%d");
-    maelys_datalog_fact_t query;
+    maelys_datalog_internal_fact_t query;
     TEST_ASSERT_TRUE(fixture_query(&fixture, "allow", "alice", &query));
     maelys_datalog_why_false_explanation_t *explanation = new_explanation();
     maelys_datalog_why_false_explanation_t *sentinel = new_explanation();
@@ -1312,7 +1312,7 @@ static int test_query_and_whitelist_guards_leave_output_untouched(void) {
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       maelys_datalog_prepared_session_create(
                           &fixture.ruleset, &fixture.session), "%d");
-    const maelys_datalog_input_fact_t fact = unary_fact("observed", "alice");
+    const maelys_datalog_fact_t fact = unary_fact("observed", "alice");
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       maelys_datalog_prepared_session_solve(
                           fixture.session, &fact, 1u, &fixture.result), "%d");
@@ -1325,7 +1325,7 @@ static int test_query_and_whitelist_guards_leave_output_untouched(void) {
     memcpy(sentinel, explanation, sizeof(*sentinel));
     const maelys_datalog_why_false_limits_t limits = generous_limits();
 
-    maelys_datalog_fact_t query;
+    maelys_datalog_internal_fact_t query;
     TEST_ASSERT_TRUE(fixture_query(&fixture, "deny", "alice", &query));
     TEST_ASSERT_EQUAL(MAELYS_ERR_FORBIDDEN,
                       maelys_datalog_explain_absent_solved_fact(
@@ -1352,22 +1352,22 @@ static int test_unresolvable_symbol_fails_closed_and_preserves_output(void) {
     const char *source =
         "helper(U) :- observed(U).\n"
         "allow(\"alice\") :- helper(G), admin(G).";
-    const maelys_datalog_input_fact_t facts[2] = {
+    const maelys_datalog_fact_t facts[2] = {
         unary_fact("observed", "alpha"),
         unary_fact("observed", "zeta"),
     };
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       fixture_solve(&fixture, source, facts, 2u), "%d");
-    maelys_datalog_fact_t query;
+    maelys_datalog_internal_fact_t query;
     TEST_ASSERT_TRUE(fixture_query(&fixture, "allow", "alice", &query));
 
-    const maelys_datalog_fact_t *idb_facts = NULL;
+    const maelys_datalog_internal_fact_t *idb_facts = NULL;
     size_t idb_count = 0u;
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       maelys_datalog_test_solve_result_idb_facts(
                           fixture.result, &idb_facts, &idb_count), "%d");
     TEST_ASSERT_TRUE(idb_count >= 2u);
-    maelys_datalog_fact_t *mutable_idb = (maelys_datalog_fact_t *)idb_facts;
+    maelys_datalog_internal_fact_t *mutable_idb = (maelys_datalog_internal_fact_t *)idb_facts;
     const maelys_datalog_symbol_id_t saved = mutable_idb[0].terms[0].as.symbol;
     mutable_idb[0].terms[0].as.symbol = UINT32_MAX;
 
@@ -1394,7 +1394,7 @@ static int test_unresolvable_symbol_fails_closed_and_preserves_output(void) {
 static int test_filter_false_obstacle_and_cost_are_explicit(void) {
     TEST_BEGIN();
     why_false_fixture_t fixture;
-    const maelys_datalog_input_fact_t facts[] = {
+    const maelys_datalog_fact_t facts[] = {
         binary_symbols("member", "alice", "team"),
     };
     TEST_ASSERT_EQUAL(
@@ -1403,7 +1403,7 @@ static int test_filter_false_obstacle_and_cost_are_explicit(void) {
                       "allow(U) :- member(U, G), starts_with(U, \"z\").",
                       facts,
                       sizeof(facts) / sizeof(facts[0])), "%d");
-    maelys_datalog_fact_t query;
+    maelys_datalog_internal_fact_t query;
     TEST_ASSERT_TRUE(fixture_query(&fixture, "allow", "alice", &query));
     maelys_datalog_why_false_explanation_t *explanation = new_explanation();
     TEST_ASSERT_NOT_NULL(explanation);
@@ -1445,11 +1445,11 @@ static int test_filter_cost_last_admitted_then_truncated(void) {
         TEST_ASSERT_TRUE(strlen(source) + strlen(clause) < sizeof(source));
         (void)strcat(source, clause);
     }
-    maelys_datalog_input_fact_t fact = unary_fact("observed", value);
+    maelys_datalog_fact_t fact = unary_fact("observed", value);
     why_false_fixture_t fixture;
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       fixture_solve(&fixture, source, &fact, 1u), "%d");
-    maelys_datalog_fact_t query;
+    maelys_datalog_internal_fact_t query;
     TEST_ASSERT_TRUE(fixture_query(&fixture, "allow", value, &query));
     maelys_datalog_why_false_explanation_t *explanation = new_explanation();
     TEST_ASSERT_NOT_NULL(explanation);

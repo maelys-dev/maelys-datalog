@@ -9,33 +9,33 @@
 #include <stdio.h>
 #include <string.h>
 
-static maelys_datalog_term_t int_term(long long value) {
-    maelys_datalog_term_t t = {.kind = MAELYS_DATALOG_TERM_INT};
+static maelys_datalog_internal_term_t int_term(long long value) {
+    maelys_datalog_internal_term_t t = {.kind = MAELYS_DATALOG_TERM_INT};
     t.as.integer = value;
     return t;
 }
 
-static maelys_datalog_term_t symbol_term(maelys_datalog_symbol_id_t value) {
-    maelys_datalog_term_t t = {.kind = MAELYS_DATALOG_TERM_SYMBOL};
+static maelys_datalog_internal_term_t symbol_term(maelys_datalog_symbol_id_t value) {
+    maelys_datalog_internal_term_t t = {.kind = MAELYS_DATALOG_TERM_SYMBOL};
     t.as.symbol = value;
     return t;
 }
 
-static maelys_datalog_term_t bool_term(int value) {
-    maelys_datalog_term_t t = {.kind = MAELYS_DATALOG_TERM_BOOL};
+static maelys_datalog_internal_term_t bool_term(int value) {
+    maelys_datalog_internal_term_t t = {.kind = MAELYS_DATALOG_TERM_BOOL};
     t.as.boolean = value;
     return t;
 }
 
-static maelys_datalog_term_t var_term(unsigned value) {
-    maelys_datalog_term_t t = {.kind = MAELYS_DATALOG_TERM_VAR};
+static maelys_datalog_internal_term_t var_term(unsigned value) {
+    maelys_datalog_internal_term_t t = {.kind = MAELYS_DATALOG_TERM_VAR};
     t.as.variable = value;
     return t;
 }
 
-static maelys_datalog_fact_t fact(maelys_datalog_predicate_id_t predicate_id,
+static maelys_datalog_internal_fact_t fact(maelys_datalog_predicate_id_t predicate_id,
                                   long long value) {
-    maelys_datalog_fact_t f;
+    maelys_datalog_internal_fact_t f;
     memset(&f, 0, sizeof(f));
     f.predicate_id = predicate_id;
     f.arity = 1;
@@ -70,8 +70,8 @@ static int test_edb_intern_runtime_symbol_basic_idempotent(void) {
     init_runtime_symbol_registry(&reg);
     maelys_datalog_symbol_table_t sym;
     maelys_datalog_symbol_table_init(&sym);
-    maelys_datalog_fact_t pool[4];
-    maelys_datalog_edb_t edb;
+    maelys_datalog_internal_fact_t pool[4];
+    maelys_datalog_internal_edb_t edb;
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_init(&edb, pool, 4, &sym, &reg), "%d");
 
     maelys_datalog_symbol_id_t id1 = MAELYS_DATALOG_SYMBOL_ID_INVALID;
@@ -91,8 +91,8 @@ static int test_edb_preinterned_symbol_api_rejects_null_args(void) {
     init_runtime_symbol_registry(&reg);
     maelys_datalog_symbol_table_t sym;
     maelys_datalog_symbol_table_init(&sym);
-    maelys_datalog_fact_t pool[4];
-    maelys_datalog_edb_t edb;
+    maelys_datalog_internal_fact_t pool[4];
+    maelys_datalog_internal_edb_t edb;
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_init(&edb, pool, 4, &sym, &reg), "%d");
 
     maelys_datalog_symbol_id_t id = 0;
@@ -128,8 +128,8 @@ static int test_edb_add_symbol_id_rejects_invalid_ids(void) {
     init_runtime_symbol_registry(&reg);
     maelys_datalog_symbol_table_t sym;
     maelys_datalog_symbol_table_init(&sym);
-    maelys_datalog_fact_t pool[4];
-    maelys_datalog_edb_t edb;
+    maelys_datalog_internal_fact_t pool[4];
+    maelys_datalog_internal_edb_t edb;
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_init(&edb, pool, 4, &sym, &reg), "%d");
 
     maelys_datalog_symbol_id_t alice = MAELYS_DATALOG_SYMBOL_ID_INVALID;
@@ -152,8 +152,8 @@ static int test_edb_symbol_ids_validate_schema_before_write(void) {
     init_runtime_symbol_registry(&reg);
     maelys_datalog_symbol_table_t sym;
     maelys_datalog_symbol_table_init(&sym);
-    maelys_datalog_fact_t pool[4];
-    maelys_datalog_edb_t edb;
+    maelys_datalog_internal_fact_t pool[4];
+    maelys_datalog_internal_edb_t edb;
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_init(&edb, pool, 4, &sym, &reg), "%d");
 
     maelys_datalog_symbol_id_t alice = 0;
@@ -184,8 +184,8 @@ static int test_edb_intern_runtime_symbol_rejects_after_finalize(void) {
     init_runtime_symbol_registry(&reg);
     maelys_datalog_symbol_table_t sym;
     maelys_datalog_symbol_table_init(&sym);
-    maelys_datalog_fact_t pool[4];
-    maelys_datalog_edb_t edb;
+    maelys_datalog_internal_fact_t pool[4];
+    maelys_datalog_internal_edb_t edb;
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_init(&edb, pool, 4, &sym, &reg), "%d");
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_finalize(&edb), "%d");
     maelys_datalog_symbol_id_t id = 0;
@@ -205,8 +205,8 @@ static int test_edb_intern_runtime_symbol_capacity_transactional(void) {
     init_runtime_symbol_registry(&reg);
     maelys_datalog_symbol_table_t sym;
     maelys_datalog_symbol_table_init(&sym);
-    maelys_datalog_fact_t pool[4];
-    maelys_datalog_edb_t edb;
+    maelys_datalog_internal_fact_t pool[4];
+    maelys_datalog_internal_edb_t edb;
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_init(&edb, pool, 4, &sym, &reg), "%d");
 
     maelys_datalog_symbol_id_t first = 0;
@@ -240,8 +240,8 @@ static int test_edb_intern_runtime_symbol_deep_copies_input(void) {
     init_runtime_symbol_registry(&reg);
     maelys_datalog_symbol_table_t sym;
     maelys_datalog_symbol_table_init(&sym);
-    maelys_datalog_fact_t pool[4];
-    maelys_datalog_edb_t edb;
+    maelys_datalog_internal_fact_t pool[4];
+    maelys_datalog_internal_edb_t edb;
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_init(&edb, pool, 4, &sym, &reg), "%d");
 
     char tmp[32];
@@ -261,8 +261,8 @@ static int test_edb_symbol_id_boundaries_and_fresh_state(void) {
     init_runtime_symbol_registry(&reg);
     maelys_datalog_symbol_table_t sym;
     maelys_datalog_symbol_table_init(&sym);
-    maelys_datalog_fact_t pool[4];
-    maelys_datalog_edb_t edb;
+    maelys_datalog_internal_fact_t pool[4];
+    maelys_datalog_internal_edb_t edb;
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_init(&edb, pool, 4, &sym, &reg), "%d");
 
     maelys_datalog_symbol_id_t first = 0;
@@ -279,8 +279,8 @@ static int test_edb_symbol_id_boundaries_and_fresh_state(void) {
 
     maelys_datalog_symbol_table_t fresh_sym;
     maelys_datalog_symbol_table_init(&fresh_sym);
-    maelys_datalog_fact_t fresh_pool[4];
-    maelys_datalog_edb_t fresh_edb;
+    maelys_datalog_internal_fact_t fresh_pool[4];
+    maelys_datalog_internal_edb_t fresh_edb;
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_init(&fresh_edb, fresh_pool, 4, &fresh_sym, &reg), "%d");
     maelys_datalog_symbol_id_t fresh_id = 0;
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_intern_runtime_symbol(&fresh_edb, "alice", &fresh_id), "%d");
@@ -295,8 +295,8 @@ static int test_edb_batch_empty_noop_and_arg_guards(void) {
     init_runtime_symbol_registry(&reg);
     maelys_datalog_symbol_table_t sym;
     maelys_datalog_symbol_table_init(&sym);
-    maelys_datalog_fact_t pool[4];
-    maelys_datalog_edb_t edb;
+    maelys_datalog_internal_fact_t pool[4];
+    maelys_datalog_internal_edb_t edb;
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_init(&edb, pool, 4, &sym, &reg), "%d");
 
     TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_ARGUMENT,
@@ -322,8 +322,8 @@ static int test_edb_batch_success_unary_and_binary_order(void) {
     init_runtime_symbol_registry(&reg);
     maelys_datalog_symbol_table_t sym;
     maelys_datalog_symbol_table_init(&sym);
-    maelys_datalog_fact_t pool[8];
-    maelys_datalog_edb_t edb;
+    maelys_datalog_internal_fact_t pool[8];
+    maelys_datalog_internal_edb_t edb;
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_init(&edb, pool, 8, &sym, &reg), "%d");
 
     maelys_datalog_symbol_id_t alice = 0;
@@ -360,8 +360,8 @@ static int test_edb_batch_rejects_null_arrays_when_nonempty(void) {
     init_runtime_symbol_registry(&reg);
     maelys_datalog_symbol_table_t sym;
     maelys_datalog_symbol_table_init(&sym);
-    maelys_datalog_fact_t pool[4];
-    maelys_datalog_edb_t edb;
+    maelys_datalog_internal_fact_t pool[4];
+    maelys_datalog_internal_edb_t edb;
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_init(&edb, pool, 4, &sym, &reg), "%d");
 
     TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_ARGUMENT,
@@ -380,8 +380,8 @@ static int test_edb_batch_schema_and_kind_atomicity(void) {
     init_runtime_symbol_registry(&reg);
     maelys_datalog_symbol_table_t sym;
     maelys_datalog_symbol_table_init(&sym);
-    maelys_datalog_fact_t pool[8];
-    maelys_datalog_edb_t edb;
+    maelys_datalog_internal_fact_t pool[8];
+    maelys_datalog_internal_edb_t edb;
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_init(&edb, pool, 8, &sym, &reg), "%d");
 
     maelys_datalog_symbol_id_t alice = 0;
@@ -411,8 +411,8 @@ static int test_edb_batch_schema_and_kind_atomicity(void) {
     init_blocked_registry(&policy_reg);
     maelys_datalog_symbol_table_t policy_sym;
     maelys_datalog_symbol_table_init(&policy_sym);
-    maelys_datalog_fact_t policy_pool[4];
-    maelys_datalog_edb_t policy_edb;
+    maelys_datalog_internal_fact_t policy_pool[4];
+    maelys_datalog_internal_edb_t policy_edb;
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_init(&policy_edb, policy_pool, 4, &policy_sym, &policy_reg), "%d");
     maelys_datalog_symbol_id_t policy_id = 0;
     TEST_ASSERT_EQUAL(MAELYS_OK,
@@ -432,8 +432,8 @@ static int test_edb_batch_invalid_symbol_id_atomicity(void) {
     init_runtime_symbol_registry(&reg);
     maelys_datalog_symbol_table_t sym;
     maelys_datalog_symbol_table_init(&sym);
-    maelys_datalog_fact_t pool[8];
-    maelys_datalog_edb_t edb;
+    maelys_datalog_internal_fact_t pool[8];
+    maelys_datalog_internal_edb_t edb;
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_init(&edb, pool, 8, &sym, &reg), "%d");
 
     maelys_datalog_symbol_id_t alice = 0;
@@ -477,8 +477,8 @@ static int test_edb_batch_global_capacity_atomicity(void) {
     init_runtime_symbol_registry(&reg);
     maelys_datalog_symbol_table_t sym;
     maelys_datalog_symbol_table_init(&sym);
-    maelys_datalog_fact_t pool[2];
-    maelys_datalog_edb_t edb;
+    maelys_datalog_internal_fact_t pool[2];
+    maelys_datalog_internal_edb_t edb;
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_init(&edb, pool, 2, &sym, &reg), "%d");
 
     maelys_datalog_symbol_id_t alice = 0;
@@ -512,8 +512,8 @@ static int test_edb_batch_per_predicate_capacity_atomicity(void) {
     init_runtime_symbol_registry(&reg);
     maelys_datalog_symbol_table_t sym;
     maelys_datalog_symbol_table_init(&sym);
-    maelys_datalog_fact_t pool[MAELYS_DATALOG_MAX_FACTS_PER_PRED + 2u];
-    maelys_datalog_edb_t edb;
+    maelys_datalog_internal_fact_t pool[MAELYS_DATALOG_MAX_FACTS_PER_PRED + 2u];
+    maelys_datalog_internal_edb_t edb;
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       maelys_datalog_edb_init(&edb,
                                               pool,
@@ -576,8 +576,8 @@ static int test_edb_batch_immutable_and_overflow_guards(void) {
     init_runtime_symbol_registry(&reg);
     maelys_datalog_symbol_table_t sym;
     maelys_datalog_symbol_table_init(&sym);
-    maelys_datalog_fact_t pool[8];
-    maelys_datalog_edb_t edb;
+    maelys_datalog_internal_fact_t pool[8];
+    maelys_datalog_internal_edb_t edb;
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_init(&edb, pool, 8, &sym, &reg), "%d");
 
     maelys_datalog_symbol_id_t alice = 0;
@@ -618,8 +618,8 @@ static int test_edb_batch_duplicates_and_tight_capacity_semantics(void) {
     init_runtime_symbol_registry(&reg);
     maelys_datalog_symbol_table_t sym;
     maelys_datalog_symbol_table_init(&sym);
-    maelys_datalog_fact_t pool[4];
-    maelys_datalog_edb_t edb;
+    maelys_datalog_internal_fact_t pool[4];
+    maelys_datalog_internal_edb_t edb;
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_init(&edb, pool, 4, &sym, &reg), "%d");
 
     maelys_datalog_symbol_id_t alice = 0;
@@ -635,8 +635,8 @@ static int test_edb_batch_duplicates_and_tight_capacity_semantics(void) {
 
     maelys_datalog_symbol_table_t tight_sym;
     maelys_datalog_symbol_table_init(&tight_sym);
-    maelys_datalog_fact_t tight_pool[2];
-    maelys_datalog_edb_t tight_edb;
+    maelys_datalog_internal_fact_t tight_pool[2];
+    maelys_datalog_internal_edb_t tight_edb;
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_init(&tight_edb, tight_pool, 2, &tight_sym, &reg), "%d");
     maelys_datalog_symbol_id_t existing = 0;
     maelys_datalog_symbol_id_t repeated = 0;
@@ -657,8 +657,8 @@ static int test_edb_runtime_symbol_batch_empty_and_arg_guards(void) {
     init_runtime_symbol_registry(&reg);
     maelys_datalog_symbol_table_t sym;
     maelys_datalog_symbol_table_init(&sym);
-    maelys_datalog_fact_t pool[4];
-    maelys_datalog_edb_t edb;
+    maelys_datalog_internal_fact_t pool[4];
+    maelys_datalog_internal_edb_t edb;
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_init(&edb, pool, 4, &sym, &reg), "%d");
 
     const char *one_value[1] = {"alice"};
@@ -716,8 +716,8 @@ static int test_edb_runtime_symbol_batch_success_and_reuse(void) {
     init_runtime_symbol_registry(&reg);
     maelys_datalog_symbol_table_t sym;
     maelys_datalog_symbol_table_init(&sym);
-    maelys_datalog_fact_t pool[8];
-    maelys_datalog_edb_t edb;
+    maelys_datalog_internal_fact_t pool[8];
+    maelys_datalog_internal_edb_t edb;
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_init(&edb, pool, 8, &sym, &reg), "%d");
 
     const char *users[3] = {"alice", "bob", "alice"};
@@ -752,8 +752,8 @@ static int test_edb_runtime_symbol_batch_binary_uses_full_pair_capacity(void) {
     init_runtime_symbol_registry(&reg);
     maelys_datalog_symbol_table_t sym;
     maelys_datalog_symbol_table_init(&sym);
-    maelys_datalog_fact_t pool[MAELYS_DATALOG_MAX_FACTS_PER_PRED];
-    maelys_datalog_edb_t edb;
+    maelys_datalog_internal_fact_t pool[MAELYS_DATALOG_MAX_FACTS_PER_PRED];
+    maelys_datalog_internal_edb_t edb;
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       maelys_datalog_edb_init(&edb, pool, MAELYS_DATALOG_MAX_FACTS_PER_PRED, &sym, &reg),
                       "%d");
@@ -783,8 +783,8 @@ static int test_edb_runtime_symbol_batch_null_elements_keep_monotonic_interns(vo
     init_runtime_symbol_registry(&reg);
     maelys_datalog_symbol_table_t sym;
     maelys_datalog_symbol_table_init(&sym);
-    maelys_datalog_fact_t pool[8];
-    maelys_datalog_edb_t edb;
+    maelys_datalog_internal_fact_t pool[8];
+    maelys_datalog_internal_edb_t edb;
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_init(&edb, pool, 8, &sym, &reg), "%d");
 
     const char *values[3] = {"alice", NULL, "bob"};
@@ -817,8 +817,8 @@ static int test_edb_runtime_symbol_batch_prechecks_before_interning(void) {
     init_runtime_symbol_registry(&reg);
     maelys_datalog_symbol_table_t sym;
     maelys_datalog_symbol_table_init(&sym);
-    maelys_datalog_fact_t pool[1];
-    maelys_datalog_edb_t edb;
+    maelys_datalog_internal_fact_t pool[1];
+    maelys_datalog_internal_edb_t edb;
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_init(&edb, pool, 1, &sym, &reg), "%d");
 
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_add_runtime_symbol_fact(&edb, "user", "existing"), "%d");
@@ -846,8 +846,8 @@ static int test_edb_add_query_duplicate(void) {
     init_blocked_registry(&reg);
     maelys_datalog_symbol_table_t sym;
     maelys_datalog_symbol_table_init(&sym);
-    maelys_datalog_fact_t pool[4];
-    maelys_datalog_edb_t edb;
+    maelys_datalog_internal_fact_t pool[4];
+    maelys_datalog_internal_edb_t edb;
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_init(&edb, pool, 4, &sym, &reg), "%d");
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_add_atom_fact(&edb, "blocked", "proj-1"), "%d");
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_add_atom_fact(&edb, "blocked", "proj-1"), "%d");
@@ -864,8 +864,8 @@ static int test_edb_overflow_and_unknown_atom(void) {
     init_blocked_registry(&reg);
     maelys_datalog_symbol_table_t sym;
     maelys_datalog_symbol_table_init(&sym);
-    maelys_datalog_fact_t pool[1];
-    maelys_datalog_edb_t edb;
+    maelys_datalog_internal_fact_t pool[1];
+    maelys_datalog_internal_edb_t edb;
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_init(&edb, pool, 1, &sym, &reg), "%d");
     TEST_ASSERT_EQUAL(MAELYS_ERR_FORBIDDEN, maelys_datalog_edb_add_atom_fact(&edb, "blocked", "unsafe_root_shell"), "%d");
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_add_atom_fact(&edb, "blocked", "proj-1"), "%d");
@@ -879,14 +879,14 @@ static int test_datalog_edb_builder_rejects_policy_fact_emission(void) {
     init_blocked_registry(&reg);
     maelys_datalog_symbol_table_t sym;
     maelys_datalog_symbol_table_init(&sym);
-    maelys_datalog_fact_t pool[4];
-    maelys_datalog_edb_t edb;
+    maelys_datalog_internal_fact_t pool[4];
+    maelys_datalog_internal_edb_t edb;
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_init(&edb, pool, 4, &sym, &reg), "%d");
     TEST_ASSERT_EQUAL((size_t)0u, sym.count, "%zu");
     maelys_datalog_symbol_id_t safe_input = 0;
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_symbol_intern(&sym, "cli_pivot", strlen("cli_pivot"),
                                                               &safe_input), "%d");
-    maelys_datalog_term_t term = symbol_term(safe_input);
+    maelys_datalog_internal_term_t term = symbol_term(safe_input);
     TEST_ASSERT_EQUAL(MAELYS_ERR_FORBIDDEN,
                       maelys_datalog_edb_add_fact(&edb, "safe", &term, 1),
                       "%d");
@@ -901,12 +901,12 @@ static int test_datalog_edb_builder_accepts_edb_kind_emission(void) {
     init_blocked_registry(&reg);
     maelys_datalog_symbol_table_t sym;
     maelys_datalog_symbol_table_init(&sym);
-    maelys_datalog_fact_t pool[4];
-    maelys_datalog_edb_t edb;
+    maelys_datalog_internal_fact_t pool[4];
+    maelys_datalog_internal_edb_t edb;
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_init(&edb, pool, 4, &sym, &reg), "%d");
     maelys_datalog_symbol_id_t sid = 0;
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_symbol_intern(&sym, "cli_pivot", strlen("cli_pivot"), &sid), "%d");
-    maelys_datalog_term_t term = symbol_term(sid);
+    maelys_datalog_internal_term_t term = symbol_term(sid);
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_add_fact(&edb, "blocked", &term, 1), "%d");
     TEST_ASSERT_EQUAL((size_t)1u, edb.fact_count, "%zu");
     TEST_END();
@@ -918,10 +918,10 @@ static int test_datalog_edb_builder_rejects_idb_helper_emission(void) {
     init_blocked_registry(&reg);
     maelys_datalog_symbol_table_t sym;
     maelys_datalog_symbol_table_init(&sym);
-    maelys_datalog_fact_t pool[4];
-    maelys_datalog_edb_t edb;
+    maelys_datalog_internal_fact_t pool[4];
+    maelys_datalog_internal_edb_t edb;
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_init(&edb, pool, 4, &sym, &reg), "%d");
-    maelys_datalog_term_t term = int_term(1);
+    maelys_datalog_internal_term_t term = int_term(1);
     TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_FIELD,
                       maelys_datalog_edb_add_fact(&edb, "allow", &term, 1),
                       "%d");
@@ -934,7 +934,7 @@ static int test_datalog_edb_builder_rejects_idb_helper_emission(void) {
 
 static int test_maelys_datalog_fact_sort_canonical_order(void) {
     TEST_BEGIN();
-    maelys_datalog_fact_t pool[4] = {
+    maelys_datalog_internal_fact_t pool[4] = {
         fact(4, 2),
         fact(2, 9),
         fact(2, 1),
@@ -956,7 +956,7 @@ static int test_maelys_datalog_fact_sort_canonical_order(void) {
 
 static int test_maelys_datalog_fact_dedup_removes_duplicates(void) {
     TEST_BEGIN();
-    maelys_datalog_fact_t pool[4] = {
+    maelys_datalog_internal_fact_t pool[4] = {
         fact(2, 1),
         fact(2, 1),
         fact(2, 2),
@@ -975,20 +975,20 @@ static int test_maelys_datalog_fact_dedup_removes_duplicates(void) {
 
 static int test_maelys_datalog_fact_exact_lookup(void) {
     TEST_BEGIN();
-    maelys_datalog_fact_t pool[3] = {fact(1, 1), fact(2, 2), fact(3, 3)};
+    maelys_datalog_internal_fact_t pool[3] = {fact(1, 1), fact(2, 2), fact(3, 3)};
     maelys_datalog_fact_set_t set;
     maelys_datalog_fact_set_init(&set, pool, 3);
     set.count = 3;
     set.sorted = 1;
     TEST_ASSERT_TRUE(maelys_datalog_fact_set_contains(&set, &pool[1]));
-    maelys_datalog_fact_t missing = fact(2, 4);
+    maelys_datalog_internal_fact_t missing = fact(2, 4);
     TEST_ASSERT_FALSE(maelys_datalog_fact_set_contains(&set, &missing));
     TEST_END();
 }
 
 static int test_maelys_datalog_fact_predicate_range(void) {
     TEST_BEGIN();
-    maelys_datalog_fact_t pool[5] = {fact(1, 1), fact(2, 2), fact(2, 3), fact(2, 4), fact(4, 5)};
+    maelys_datalog_internal_fact_t pool[5] = {fact(1, 1), fact(2, 2), fact(2, 3), fact(2, 4), fact(4, 5)};
     maelys_datalog_fact_set_t set;
     maelys_datalog_fact_set_init(&set, pool, 5);
     set.count = 5;
@@ -1004,7 +1004,7 @@ static int test_maelys_datalog_fact_predicate_range(void) {
 
 static int test_maelys_datalog_idb_delta_dedup(void) {
     TEST_BEGIN();
-    maelys_datalog_fact_t pool[3] = {fact(1, 1), fact(1, 1), fact(1, 2)};
+    maelys_datalog_internal_fact_t pool[3] = {fact(1, 1), fact(1, 1), fact(1, 2)};
     maelys_datalog_fact_set_t delta;
     maelys_datalog_fact_set_init(&delta, pool, 3);
     delta.count = 3;
@@ -1017,9 +1017,9 @@ static int test_maelys_datalog_idb_delta_dedup(void) {
 
 static int test_maelys_datalog_idb_merge_delta_preserves_sorted_order(void) {
     TEST_BEGIN();
-    maelys_datalog_fact_t current_pool[5] = {fact(1, 1), fact(3, 3)};
-    maelys_datalog_fact_t delta_pool[3] = {fact(2, 2), fact(4, 4)};
-    maelys_datalog_fact_t merge[5];
+    maelys_datalog_internal_fact_t current_pool[5] = {fact(1, 1), fact(3, 3)};
+    maelys_datalog_internal_fact_t delta_pool[3] = {fact(2, 2), fact(4, 4)};
+    maelys_datalog_internal_fact_t merge[5];
     maelys_datalog_fact_set_t current, delta;
     maelys_datalog_fact_set_init(&current, current_pool, 5);
     maelys_datalog_fact_set_init(&delta, delta_pool, 3);
@@ -1038,9 +1038,9 @@ static int test_maelys_datalog_idb_merge_delta_preserves_sorted_order(void) {
 
 static int test_maelys_datalog_idb_merge_delta_reports_inserted_count(void) {
     TEST_BEGIN();
-    maelys_datalog_fact_t current_pool[4] = {fact(1, 1), fact(2, 2)};
-    maelys_datalog_fact_t delta_pool[3] = {fact(1, 1), fact(3, 3)};
-    maelys_datalog_fact_t merge[4];
+    maelys_datalog_internal_fact_t current_pool[4] = {fact(1, 1), fact(2, 2)};
+    maelys_datalog_internal_fact_t delta_pool[3] = {fact(1, 1), fact(3, 3)};
+    maelys_datalog_internal_fact_t merge[4];
     maelys_datalog_fact_set_t current, delta;
     maelys_datalog_fact_set_init(&current, current_pool, 4);
     maelys_datalog_fact_set_init(&delta, delta_pool, 3);
@@ -1055,10 +1055,10 @@ static int test_maelys_datalog_idb_merge_delta_reports_inserted_count(void) {
 
 static int test_maelys_datalog_idb_merge_delta_overflow_fails_closed(void) {
     TEST_BEGIN();
-    maelys_datalog_fact_t current_pool[3] = {fact(1, 1), fact(2, 2)};
-    maelys_datalog_fact_t before[3] = {current_pool[0], current_pool[1], current_pool[2]};
-    maelys_datalog_fact_t delta_pool[2] = {fact(3, 3), fact(4, 4)};
-    maelys_datalog_fact_t merge[3];
+    maelys_datalog_internal_fact_t current_pool[3] = {fact(1, 1), fact(2, 2)};
+    maelys_datalog_internal_fact_t before[3] = {current_pool[0], current_pool[1], current_pool[2]};
+    maelys_datalog_internal_fact_t delta_pool[2] = {fact(3, 3), fact(4, 4)};
+    maelys_datalog_internal_fact_t merge[3];
     maelys_datalog_fact_set_t current, delta;
     maelys_datalog_fact_set_init(&current, current_pool, 3);
     maelys_datalog_fact_set_init(&delta, delta_pool, 2);
@@ -1076,9 +1076,9 @@ static int test_maelys_datalog_idb_merge_delta_overflow_fails_closed(void) {
 
 static int test_maelys_datalog_idb_merge_delta_one_pass_no_duplicate(void) {
     TEST_BEGIN();
-    maelys_datalog_fact_t current_pool[4] = {fact(1, 1)};
-    maelys_datalog_fact_t delta_pool[3] = {fact(1, 1), fact(2, 2)};
-    maelys_datalog_fact_t merge[4];
+    maelys_datalog_internal_fact_t current_pool[4] = {fact(1, 1)};
+    maelys_datalog_internal_fact_t delta_pool[3] = {fact(1, 1), fact(2, 2)};
+    maelys_datalog_internal_fact_t merge[4];
     maelys_datalog_fact_set_t current, delta;
     maelys_datalog_fact_set_init(&current, current_pool, 4);
     maelys_datalog_fact_set_init(&delta, delta_pool, 3);
@@ -1095,9 +1095,9 @@ static int test_maelys_datalog_idb_merge_delta_one_pass_no_duplicate(void) {
 
 static int test_maelys_datalog_term_equal_int(void) {
     TEST_BEGIN();
-    maelys_datalog_term_t a = int_term(42);
-    maelys_datalog_term_t b = int_term(42);
-    maelys_datalog_term_t c = int_term(43);
+    maelys_datalog_internal_term_t a = int_term(42);
+    maelys_datalog_internal_term_t b = int_term(42);
+    maelys_datalog_internal_term_t c = int_term(43);
     TEST_ASSERT_TRUE(maelys_datalog_term_equal(&a, &b));
     TEST_ASSERT_FALSE(maelys_datalog_term_equal(&a, &c));
     TEST_ASSERT_FALSE(maelys_datalog_term_equal(&a, NULL));
@@ -1106,9 +1106,9 @@ static int test_maelys_datalog_term_equal_int(void) {
 
 static int test_maelys_datalog_term_equal_symbol(void) {
     TEST_BEGIN();
-    maelys_datalog_term_t a = symbol_term(7);
-    maelys_datalog_term_t b = symbol_term(7);
-    maelys_datalog_term_t c = symbol_term(8);
+    maelys_datalog_internal_term_t a = symbol_term(7);
+    maelys_datalog_internal_term_t b = symbol_term(7);
+    maelys_datalog_internal_term_t c = symbol_term(8);
     TEST_ASSERT_TRUE(maelys_datalog_term_equal(&a, &b));
     TEST_ASSERT_FALSE(maelys_datalog_term_equal(&a, &c));
     TEST_END();
@@ -1116,9 +1116,9 @@ static int test_maelys_datalog_term_equal_symbol(void) {
 
 static int test_maelys_datalog_term_equal_bool(void) {
     TEST_BEGIN();
-    maelys_datalog_term_t a = bool_term(1);
-    maelys_datalog_term_t b = bool_term(1);
-    maelys_datalog_term_t c = bool_term(0);
+    maelys_datalog_internal_term_t a = bool_term(1);
+    maelys_datalog_internal_term_t b = bool_term(1);
+    maelys_datalog_internal_term_t c = bool_term(0);
     TEST_ASSERT_TRUE(maelys_datalog_term_equal(&a, &b));
     TEST_ASSERT_FALSE(maelys_datalog_term_equal(&a, &c));
     TEST_END();
@@ -1126,24 +1126,24 @@ static int test_maelys_datalog_term_equal_bool(void) {
 
 static int test_maelys_datalog_term_equal_var_false(void) {
     TEST_BEGIN();
-    maelys_datalog_term_t a = var_term(1);
-    maelys_datalog_term_t b = var_term(1);
+    maelys_datalog_internal_term_t a = var_term(1);
+    maelys_datalog_internal_term_t b = var_term(1);
     TEST_ASSERT_FALSE(maelys_datalog_term_equal(&a, &b));
     TEST_END();
 }
 
 static int test_maelys_datalog_term_equal_kind_mismatch(void) {
     TEST_BEGIN();
-    maelys_datalog_term_t a = int_term(1);
-    maelys_datalog_term_t b = bool_term(1);
+    maelys_datalog_internal_term_t a = int_term(1);
+    maelys_datalog_internal_term_t b = bool_term(1);
     TEST_ASSERT_FALSE(maelys_datalog_term_equal(&a, &b));
     TEST_END();
 }
 
 static int test_maelys_datalog_term_equal_padding_sensitive(void) {
     TEST_BEGIN();
-    maelys_datalog_term_t a;
-    maelys_datalog_term_t b;
+    maelys_datalog_internal_term_t a;
+    maelys_datalog_internal_term_t b;
     memset(&a, 0xAA, sizeof(a));
     memset(&b, 0x55, sizeof(b));
     a.kind = MAELYS_DATALOG_TERM_INT;

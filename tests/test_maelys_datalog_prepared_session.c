@@ -7,28 +7,28 @@
 #include <string.h>
 
 maelys_result_t maelys_datalog_test_solve_result_idb_facts(
-    const maelys_datalog_solve_result_t *result,
-    const maelys_datalog_fact_t **out_facts,
+    const maelys_datalog_internal_solve_result_t *result,
+    const maelys_datalog_internal_fact_t **out_facts,
     size_t *out_count);
 maelys_result_t maelys_datalog_test_solve_result_idb_proof_indices(
-    const maelys_datalog_solve_result_t *result,
+    const maelys_datalog_internal_solve_result_t *result,
     const uint16_t **out_indices,
     size_t *out_count);
 maelys_result_t maelys_datalog_test_solve_result_edb_slice(
-    const maelys_datalog_solve_result_t *result,
+    const maelys_datalog_internal_solve_result_t *result,
     maelys_datalog_predicate_id_t predicate_id,
-    const maelys_datalog_fact_t **out_facts,
+    const maelys_datalog_internal_fact_t **out_facts,
     size_t *out_count);
 
 static const char k_fingerprint[] =
     "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 
-static maelys_result_t make_ruleset(maelys_datalog_ruleset_t *ruleset) {
+static maelys_result_t make_ruleset(maelys_datalog_internal_ruleset_t *ruleset) {
     memset(ruleset, 0, sizeof(*ruleset));
     maelys_result_t rc = maelys_datalog_ruleset_init(
         ruleset, "prepared.session", "authorization", k_fingerprint, 1);
     if (rc != MAELYS_OK) return rc;
-    static const maelys_datalog_public_predicate_t defs[] = {
+    static const maelys_datalog_predicate_t defs[] = {
         {"member", 2u, MAELYS_DATALOG_PRED_KIND_EDB},
         {"admin", 1u, MAELYS_DATALOG_PRED_KIND_EDB},
         {"blocked", 1u, MAELYS_DATALOG_PRED_KIND_EDB},
@@ -49,7 +49,7 @@ static maelys_result_t make_ruleset(maelys_datalog_ruleset_t *ruleset) {
     return maelys_datalog_parse_ruleset(ruleset, source, strlen(source));
 }
 
-static maelys_result_t make_symbol_ruleset(maelys_datalog_ruleset_t *ruleset) {
+static maelys_result_t make_symbol_ruleset(maelys_datalog_internal_ruleset_t *ruleset) {
     memset(ruleset, 0, sizeof(*ruleset));
     maelys_result_t rc = maelys_datalog_ruleset_init(
         ruleset, "prepared.symbols", "authorization", k_fingerprint, 1);
@@ -72,34 +72,34 @@ static maelys_result_t make_symbol_ruleset(maelys_datalog_ruleset_t *ruleset) {
     return maelys_datalog_parse_ruleset(ruleset, source, strlen(source));
 }
 
-static maelys_datalog_input_term_t symbol_term(const char *text) {
-    maelys_datalog_input_term_t term;
+static maelys_datalog_value_t symbol_term(const char *text) {
+    maelys_datalog_value_t term;
     memset(&term, 0, sizeof(term));
-    term.kind = MAELYS_DATALOG_TERM_SYMBOL;
+    term.kind = MAELYS_DATALOG_VALUE_SYMBOL;
     term.as.symbol = text;
     return term;
 }
 
-static maelys_datalog_input_term_t integer_term(long long value) {
-    maelys_datalog_input_term_t term;
+static maelys_datalog_value_t integer_term(long long value) {
+    maelys_datalog_value_t term;
     memset(&term, 0, sizeof(term));
-    term.kind = MAELYS_DATALOG_TERM_INT;
+    term.kind = MAELYS_DATALOG_VALUE_INTEGER;
     term.as.integer = value;
     return term;
 }
 
-static maelys_datalog_input_term_t boolean_term(int value) {
-    maelys_datalog_input_term_t term;
+static maelys_datalog_value_t boolean_term(int value) {
+    maelys_datalog_value_t term;
     memset(&term, 0, sizeof(term));
-    term.kind = MAELYS_DATALOG_TERM_BOOL;
+    term.kind = MAELYS_DATALOG_VALUE_BOOLEAN;
     term.as.boolean = value;
     return term;
 }
 
-static maelys_datalog_input_fact_t unary_fact(
+static maelys_datalog_fact_t unary_fact(
     const char *predicate,
     const char *value) {
-    maelys_datalog_input_fact_t fact;
+    maelys_datalog_fact_t fact;
     memset(&fact, 0, sizeof(fact));
     fact.predicate = predicate;
     fact.arity = 1u;
@@ -107,11 +107,11 @@ static maelys_datalog_input_fact_t unary_fact(
     return fact;
 }
 
-static maelys_datalog_input_fact_t binary_fact(
+static maelys_datalog_fact_t binary_fact(
     const char *predicate,
     const char *left,
     const char *right) {
-    maelys_datalog_input_fact_t fact;
+    maelys_datalog_fact_t fact;
     memset(&fact, 0, sizeof(fact));
     fact.predicate = predicate;
     fact.arity = 2u;
@@ -121,9 +121,9 @@ static maelys_datalog_input_fact_t binary_fact(
 }
 
 static void authorization_facts(
-    maelys_datalog_input_fact_t out[4],
+    maelys_datalog_fact_t out[4],
     int reverse) {
-    maelys_datalog_input_fact_t canonical[4];
+    maelys_datalog_fact_t canonical[4];
     canonical[0] = binary_fact("member", "alice", "team");
     canonical[1] = unary_fact("admin", "team");
     canonical[2] = binary_fact("member", "bob", "team");
@@ -134,10 +134,10 @@ static void authorization_facts(
 }
 
 static int results_byte_identical(
-    const maelys_datalog_solve_result_t *lhs,
-    const maelys_datalog_solve_result_t *rhs) {
-    const maelys_datalog_fact_t *lhs_facts = NULL;
-    const maelys_datalog_fact_t *rhs_facts = NULL;
+    const maelys_datalog_internal_solve_result_t *lhs,
+    const maelys_datalog_internal_solve_result_t *rhs) {
+    const maelys_datalog_internal_fact_t *lhs_facts = NULL;
+    const maelys_datalog_internal_fact_t *rhs_facts = NULL;
     size_t lhs_count = 0u;
     size_t rhs_count = 0u;
     if (maelys_datalog_test_solve_result_idb_facts(
@@ -175,11 +175,11 @@ static int results_byte_identical(
 }
 
 static int explanations_byte_identical(
-    const maelys_datalog_ruleset_t *format_ruleset,
-    const maelys_datalog_solve_result_t *lhs,
-    const maelys_datalog_solve_result_t *rhs) {
-    maelys_datalog_fact_t lhs_fact;
-    maelys_datalog_fact_t rhs_fact;
+    const maelys_datalog_internal_ruleset_t *format_ruleset,
+    const maelys_datalog_internal_solve_result_t *lhs,
+    const maelys_datalog_internal_solve_result_t *rhs) {
+    maelys_datalog_internal_fact_t lhs_fact;
+    maelys_datalog_internal_fact_t rhs_fact;
     size_t lhs_count = 0u;
     size_t rhs_count = 0u;
     if (maelys_datalog_solve_result_enumerate_predicate_facts(
@@ -253,12 +253,12 @@ static int explanations_byte_identical(
 }
 
 static maelys_result_t solve_fresh_canonical(
-    const maelys_datalog_ruleset_t *source,
-    const maelys_datalog_input_fact_t *facts,
+    const maelys_datalog_internal_ruleset_t *source,
+    const maelys_datalog_fact_t *facts,
     size_t fact_count,
-    maelys_datalog_ruleset_t *ruleset,
-    maelys_datalog_fact_t fact_pool[MAELYS_DATALOG_MAX_EDB_FACTS],
-    maelys_datalog_solve_result_t **out_result) {
+    maelys_datalog_internal_ruleset_t *ruleset,
+    maelys_datalog_internal_fact_t fact_pool[MAELYS_DATALOG_MAX_EDB_FACTS],
+    maelys_datalog_internal_solve_result_t **out_result) {
     *ruleset = *source;
     static const char *const symbols[] = {"alice", "bob", "team"};
     for (size_t i = 0u; i < sizeof(symbols) / sizeof(symbols[0]); i++) {
@@ -267,7 +267,7 @@ static maelys_result_t solve_fresh_canonical(
             &ruleset->symbols, symbols[i], strlen(symbols[i]), &id);
         if (rc != MAELYS_OK) return rc;
     }
-    maelys_datalog_edb_t edb;
+    maelys_datalog_internal_edb_t edb;
     maelys_result_t rc = maelys_datalog_edb_init(
         &edb,
         fact_pool,
@@ -276,10 +276,10 @@ static maelys_result_t solve_fresh_canonical(
         &ruleset->registry);
     if (rc != MAELYS_OK) return rc;
     for (size_t i = 0u; i < fact_count; i++) {
-        maelys_datalog_term_t terms[MAELYS_DATALOG_MAX_TERMS];
+        maelys_datalog_internal_term_t terms[MAELYS_DATALOG_MAX_TERMS];
         memset(terms, 0, sizeof(terms));
         for (size_t j = 0u; j < facts[i].arity; j++) {
-            terms[j].kind = facts[i].terms[j].kind;
+            terms[j].kind = (maelys_datalog_internal_term_kind_t)facts[i].terms[j].kind;
             if (terms[j].kind == MAELYS_DATALOG_TERM_SYMBOL) {
                 int found = 0;
                 rc = maelys_datalog_symbol_lookup_readonly(
@@ -310,28 +310,28 @@ static maelys_result_t solve_fresh_canonical(
 
 static int test_order_independent_results_and_why_true(void) {
     TEST_BEGIN();
-    maelys_datalog_ruleset_t ruleset;
+    maelys_datalog_internal_ruleset_t ruleset;
     TEST_ASSERT_EQUAL(MAELYS_OK, make_ruleset(&ruleset), "%d");
-    maelys_datalog_prepared_session_t *first = NULL;
-    maelys_datalog_prepared_session_t *second = NULL;
+    maelys_datalog_internal_prepared_session_t *first = NULL;
+    maelys_datalog_internal_prepared_session_t *second = NULL;
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       maelys_datalog_prepared_session_create(&ruleset, &first), "%d");
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       maelys_datalog_prepared_session_create(&ruleset, &second), "%d");
-    maelys_datalog_input_fact_t forward[4], reverse[4];
+    maelys_datalog_fact_t forward[4], reverse[4];
     authorization_facts(forward, 0);
     authorization_facts(reverse, 1);
-    maelys_datalog_solve_result_t *first_result = NULL;
-    maelys_datalog_solve_result_t *second_result = NULL;
+    maelys_datalog_internal_solve_result_t *first_result = NULL;
+    maelys_datalog_internal_solve_result_t *second_result = NULL;
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       maelys_datalog_prepared_session_solve(
                           first, forward, 4u, &first_result), "%d");
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       maelys_datalog_prepared_session_solve(
                           second, reverse, 4u, &second_result), "%d");
-    maelys_datalog_ruleset_t oracle_ruleset;
-    maelys_datalog_fact_t oracle_pool[MAELYS_DATALOG_MAX_EDB_FACTS];
-    maelys_datalog_solve_result_t *oracle_result = NULL;
+    maelys_datalog_internal_ruleset_t oracle_ruleset;
+    maelys_datalog_internal_fact_t oracle_pool[MAELYS_DATALOG_MAX_EDB_FACTS];
+    maelys_datalog_internal_solve_result_t *oracle_result = NULL;
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       solve_fresh_canonical(
                           &ruleset,
@@ -371,21 +371,21 @@ static int test_order_independent_results_and_why_true(void) {
 
 static int test_matches_fresh_full_solve_oracle(void) {
     TEST_BEGIN();
-    maelys_datalog_ruleset_t source;
+    maelys_datalog_internal_ruleset_t source;
     TEST_ASSERT_EQUAL(MAELYS_OK, make_ruleset(&source), "%d");
-    maelys_datalog_input_fact_t facts[4];
+    maelys_datalog_fact_t facts[4];
     authorization_facts(facts, 1);
-    maelys_datalog_prepared_session_t *session = NULL;
-    maelys_datalog_solve_result_t *prepared_result = NULL;
+    maelys_datalog_internal_prepared_session_t *session = NULL;
+    maelys_datalog_internal_solve_result_t *prepared_result = NULL;
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       maelys_datalog_prepared_session_create(&source, &session), "%d");
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       maelys_datalog_prepared_session_solve(
                           session, facts, 4u, &prepared_result), "%d");
 
-    maelys_datalog_ruleset_t fresh_ruleset;
-    maelys_datalog_fact_t fresh_pool[MAELYS_DATALOG_MAX_EDB_FACTS];
-    maelys_datalog_solve_result_t *fresh_result = NULL;
+    maelys_datalog_internal_ruleset_t fresh_ruleset;
+    maelys_datalog_internal_fact_t fresh_pool[MAELYS_DATALOG_MAX_EDB_FACTS];
+    maelys_datalog_internal_solve_result_t *fresh_result = NULL;
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       solve_fresh_canonical(
                           &source, facts, 4u, &fresh_ruleset, fresh_pool, &fresh_result), "%d");
@@ -402,16 +402,16 @@ static int test_matches_fresh_full_solve_oracle(void) {
 
 static int test_reset_discards_prior_runtime_symbols(void) {
     TEST_BEGIN();
-    maelys_datalog_ruleset_t ruleset;
+    maelys_datalog_internal_ruleset_t ruleset;
     TEST_ASSERT_EQUAL(MAELYS_OK, make_ruleset(&ruleset), "%d");
-    maelys_datalog_prepared_session_t *session = NULL;
+    maelys_datalog_internal_prepared_session_t *session = NULL;
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       maelys_datalog_prepared_session_create(&ruleset, &session), "%d");
-    maelys_datalog_input_fact_t first_facts[2] = {
+    maelys_datalog_fact_t first_facts[2] = {
         binary_fact("member", "alice", "team"),
         unary_fact("admin", "team"),
     };
-    maelys_datalog_solve_result_t *result = NULL;
+    maelys_datalog_internal_solve_result_t *result = NULL;
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       maelys_datalog_prepared_session_solve(
                           session, first_facts, 2u, &result), "%d");
@@ -423,7 +423,7 @@ static int test_reset_discards_prior_runtime_symbols(void) {
     TEST_ASSERT_TRUE(found);
     maelys_datalog_solve_result_free(result);
 
-    maelys_datalog_input_fact_t second_facts[2] = {
+    maelys_datalog_fact_t second_facts[2] = {
         binary_fact("member", "charlie", "team"),
         unary_fact("admin", "team"),
     };
@@ -448,23 +448,23 @@ static int test_reset_discards_prior_runtime_symbols(void) {
 
 static int test_fingerprint_snapshot_and_result_lease(void) {
     TEST_BEGIN();
-    maelys_datalog_ruleset_t ruleset;
+    maelys_datalog_internal_ruleset_t ruleset;
     TEST_ASSERT_EQUAL(MAELYS_OK, make_ruleset(&ruleset), "%d");
-    maelys_datalog_prepared_session_t *session = NULL;
+    maelys_datalog_internal_prepared_session_t *session = NULL;
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       maelys_datalog_prepared_session_create(&ruleset, &session), "%d");
     memset(&ruleset, 0, sizeof(ruleset));
     TEST_ASSERT_EQUAL_STRING(
         k_fingerprint, maelys_datalog_prepared_session_fingerprint(session));
-    maelys_datalog_input_fact_t facts[2] = {
+    maelys_datalog_fact_t facts[2] = {
         unary_fact("admin", "team"),
         binary_fact("member", "alice", "team"),
     };
-    maelys_datalog_solve_result_t *result = NULL;
+    maelys_datalog_internal_solve_result_t *result = NULL;
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       maelys_datalog_prepared_session_solve(
                           session, facts, 2u, &result), "%d");
-    maelys_datalog_solve_result_t *second = NULL;
+    maelys_datalog_internal_solve_result_t *second = NULL;
     TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_STATE,
                       maelys_datalog_prepared_session_solve(
                           session, facts, 2u, &second), "%d");
@@ -474,7 +474,7 @@ static int test_fingerprint_snapshot_and_result_lease(void) {
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       maelys_datalog_prepared_session_destroy(session), "%d");
 
-    maelys_datalog_ruleset_t unset;
+    maelys_datalog_internal_ruleset_t unset;
     memset(&unset, 0, sizeof(unset));
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       maelys_datalog_ruleset_init(
@@ -484,7 +484,7 @@ static int test_fingerprint_snapshot_and_result_lease(void) {
                       maelys_datalog_prepared_session_create(&unset, &session), "%d");
     TEST_ASSERT_NULL(session);
 
-    maelys_datalog_ruleset_t uppercase;
+    maelys_datalog_internal_ruleset_t uppercase;
     TEST_ASSERT_EQUAL(MAELYS_OK, make_ruleset(&uppercase), "%d");
     uppercase.sha256[0] = 'A';
     TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_STATE,
@@ -495,8 +495,8 @@ static int test_fingerprint_snapshot_and_result_lease(void) {
 
 static int test_argument_refusals_clear_outputs_and_preserve_session(void) {
     TEST_BEGIN();
-    maelys_datalog_prepared_session_t *session =
-        (maelys_datalog_prepared_session_t *)(uintptr_t)1u;
+    maelys_datalog_internal_prepared_session_t *session =
+        (maelys_datalog_internal_prepared_session_t *)(uintptr_t)1u;
     TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_ARGUMENT,
                       maelys_datalog_prepared_session_create(NULL, &session), "%d");
     TEST_ASSERT_NULL(session);
@@ -504,30 +504,30 @@ static int test_argument_refusals_clear_outputs_and_preserve_session(void) {
                       maelys_datalog_prepared_session_destroy(NULL), "%d");
     TEST_ASSERT_NULL(maelys_datalog_prepared_session_fingerprint(NULL));
 
-    maelys_datalog_ruleset_t ruleset;
+    maelys_datalog_internal_ruleset_t ruleset;
     TEST_ASSERT_EQUAL(MAELYS_OK, make_ruleset(&ruleset), "%d");
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       maelys_datalog_prepared_session_create(&ruleset, &session), "%d");
-    maelys_datalog_solve_result_t *result =
-        (maelys_datalog_solve_result_t *)(uintptr_t)1u;
+    maelys_datalog_internal_solve_result_t *result =
+        (maelys_datalog_internal_solve_result_t *)(uintptr_t)1u;
     TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_ARGUMENT,
                       maelys_datalog_prepared_session_solve(
                           NULL, NULL, 0u, &result), "%d");
     TEST_ASSERT_NULL(result);
-    result = (maelys_datalog_solve_result_t *)(uintptr_t)1u;
+    result = (maelys_datalog_internal_solve_result_t *)(uintptr_t)1u;
     TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_ARGUMENT,
                       maelys_datalog_prepared_session_solve(
                           session, NULL, 1u, &result), "%d");
     TEST_ASSERT_NULL(result);
 
-    maelys_datalog_input_fact_t invalid = unary_fact("admin", "team");
+    maelys_datalog_fact_t invalid = unary_fact("admin", "team");
     invalid.arity = MAELYS_DATALOG_MAX_TERMS + 1u;
-    result = (maelys_datalog_solve_result_t *)(uintptr_t)1u;
+    result = (maelys_datalog_internal_solve_result_t *)(uintptr_t)1u;
     TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_ARGUMENT,
                       maelys_datalog_prepared_session_solve(
                           session, &invalid, 1u, &result), "%d");
     TEST_ASSERT_NULL(result);
-    result = (maelys_datalog_solve_result_t *)(uintptr_t)1u;
+    result = (maelys_datalog_internal_solve_result_t *)(uintptr_t)1u;
     TEST_ASSERT_EQUAL(MAELYS_ERR_PAYLOAD_TOO_LARGE,
                       maelys_datalog_prepared_session_solve(
                           session,
@@ -553,15 +553,15 @@ static int test_argument_refusals_clear_outputs_and_preserve_session(void) {
 
 static int test_refused_input_leaves_session_retryable(void) {
     TEST_BEGIN();
-    maelys_datalog_ruleset_t ruleset;
+    maelys_datalog_internal_ruleset_t ruleset;
     TEST_ASSERT_EQUAL(MAELYS_OK, make_ruleset(&ruleset), "%d");
-    maelys_datalog_prepared_session_t *session = NULL;
+    maelys_datalog_internal_prepared_session_t *session = NULL;
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       maelys_datalog_prepared_session_create(&ruleset, &session), "%d");
 
-    maelys_datalog_input_fact_t invalid =
+    maelys_datalog_fact_t invalid =
         unary_fact("unknown_predicate", "orphan");
-    maelys_datalog_solve_result_t *result = NULL;
+    maelys_datalog_internal_solve_result_t *result = NULL;
     TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_FIELD,
                       maelys_datalog_prepared_session_solve(
                           session, &invalid, 1u, &result), "%d");
@@ -587,7 +587,7 @@ static int test_refused_input_leaves_session_retryable(void) {
                           "%d");
     }
 
-    maelys_datalog_input_fact_t valid[2] = {
+    maelys_datalog_fact_t valid[2] = {
         binary_fact("member", "alice", "team"),
         unary_fact("admin", "team"),
     };
@@ -609,13 +609,13 @@ static int test_refused_input_leaves_session_retryable(void) {
 
 static int test_typed_terms_are_materialized_exactly(void) {
     TEST_BEGIN();
-    maelys_datalog_ruleset_t ruleset;
+    maelys_datalog_internal_ruleset_t ruleset;
     TEST_ASSERT_EQUAL(MAELYS_OK, make_ruleset(&ruleset), "%d");
-    maelys_datalog_prepared_session_t *session = NULL;
+    maelys_datalog_internal_prepared_session_t *session = NULL;
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       maelys_datalog_prepared_session_create(&ruleset, &session), "%d");
 
-    maelys_datalog_input_fact_t facts[6];
+    maelys_datalog_fact_t facts[6];
     authorization_facts(facts, 0);
     memset(&facts[4], 0, sizeof(facts[4]));
     facts[4].predicate = "quota";
@@ -628,7 +628,7 @@ static int test_typed_terms_are_materialized_exactly(void) {
     facts[5].terms[0] = symbol_term("alice");
     facts[5].terms[1] = boolean_term(9);
 
-    maelys_datalog_solve_result_t *result = NULL;
+    maelys_datalog_internal_solve_result_t *result = NULL;
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       maelys_datalog_prepared_session_solve(
                           session, facts, 6u, &result), "%d");
@@ -639,8 +639,8 @@ static int test_typed_terms_are_materialized_exactly(void) {
         &ruleset.registry, "quota", 2u, &quota_id));
     TEST_ASSERT_TRUE(maelys_datalog_predicate_registry_find(
         &ruleset.registry, "enabled", 2u, &enabled_id));
-    const maelys_datalog_fact_t *quota = NULL;
-    const maelys_datalog_fact_t *enabled = NULL;
+    const maelys_datalog_internal_fact_t *quota = NULL;
+    const maelys_datalog_internal_fact_t *enabled = NULL;
     size_t quota_count = 0u;
     size_t enabled_count = 0u;
     TEST_ASSERT_EQUAL(MAELYS_OK,
@@ -671,9 +671,9 @@ static char *owned_text(const char *source) {
 
 static int test_input_text_is_borrowed_only_during_solve(void) {
     TEST_BEGIN();
-    maelys_datalog_ruleset_t ruleset;
+    maelys_datalog_internal_ruleset_t ruleset;
     TEST_ASSERT_EQUAL(MAELYS_OK, make_ruleset(&ruleset), "%d");
-    maelys_datalog_prepared_session_t *session = NULL;
+    maelys_datalog_internal_prepared_session_t *session = NULL;
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       maelys_datalog_prepared_session_create(&ruleset, &session), "%d");
 
@@ -687,11 +687,11 @@ static int test_input_text_is_borrowed_only_during_solve(void) {
     TEST_ASSERT_NOT_NULL(alice);
     TEST_ASSERT_NOT_NULL(team_left);
     TEST_ASSERT_NOT_NULL(team_right);
-    maelys_datalog_input_fact_t facts[2] = {
+    maelys_datalog_fact_t facts[2] = {
         binary_fact(member, alice, team_left),
         unary_fact(admin, team_right),
     };
-    maelys_datalog_solve_result_t *result = NULL;
+    maelys_datalog_internal_solve_result_t *result = NULL;
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       maelys_datalog_prepared_session_solve(
                           session, facts, 2u, &result), "%d");
@@ -707,7 +707,7 @@ static int test_input_text_is_borrowed_only_during_solve(void) {
                       maelys_datalog_prepared_session_lookup_symbol(
                           session, "alice", &alice_id, &found), "%d");
     TEST_ASSERT_TRUE(found);
-    maelys_datalog_term_t allow_term;
+    maelys_datalog_internal_term_t allow_term;
     memset(&allow_term, 0, sizeof(allow_term));
     allow_term.kind = MAELYS_DATALOG_TERM_SYMBOL;
     allow_term.as.symbol = alice_id;
@@ -725,14 +725,14 @@ static int test_input_text_is_borrowed_only_during_solve(void) {
 
 static int test_all_permutations_and_aba_preserve_oracle(void) {
     TEST_BEGIN();
-    maelys_datalog_ruleset_t source;
+    maelys_datalog_internal_ruleset_t source;
     TEST_ASSERT_EQUAL(MAELYS_OK, make_ruleset(&source), "%d");
-    maelys_datalog_input_fact_t canonical[4];
+    maelys_datalog_fact_t canonical[4];
     authorization_facts(canonical, 0);
 
-    maelys_datalog_ruleset_t oracle_ruleset;
-    maelys_datalog_fact_t oracle_pool[MAELYS_DATALOG_MAX_EDB_FACTS];
-    maelys_datalog_solve_result_t *oracle_result = NULL;
+    maelys_datalog_internal_ruleset_t oracle_ruleset;
+    maelys_datalog_internal_fact_t oracle_pool[MAELYS_DATALOG_MAX_EDB_FACTS];
+    maelys_datalog_internal_solve_result_t *oracle_result = NULL;
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       solve_fresh_canonical(
                           &source,
@@ -742,7 +742,7 @@ static int test_all_permutations_and_aba_preserve_oracle(void) {
                           oracle_pool,
                           &oracle_result), "%d");
 
-    maelys_datalog_prepared_session_t *session = NULL;
+    maelys_datalog_internal_prepared_session_t *session = NULL;
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       maelys_datalog_prepared_session_create(&source, &session), "%d");
     size_t permutation_count = 0u;
@@ -754,11 +754,11 @@ static int test_all_permutations_and_aba_preserve_oracle(void) {
                 for (size_t d = 0u; d < 4u; d++) {
                     if (d == a || d == b || d == c) continue;
                     const size_t order[4] = {a, b, c, d};
-                    maelys_datalog_input_fact_t permuted[4];
+                    maelys_datalog_fact_t permuted[4];
                     for (size_t i = 0u; i < 4u; i++) {
                         permuted[i] = canonical[order[i]];
                     }
-                    maelys_datalog_solve_result_t *result = NULL;
+                    maelys_datalog_internal_solve_result_t *result = NULL;
                     TEST_ASSERT_EQUAL(MAELYS_OK,
                                       maelys_datalog_prepared_session_solve(
                                           session, permuted, 4u, &result), "%d");
@@ -773,17 +773,17 @@ static int test_all_permutations_and_aba_preserve_oracle(void) {
     }
     TEST_ASSERT_EQUAL((size_t)24u, permutation_count, "%zu");
 
-    maelys_datalog_input_fact_t different[2] = {
+    maelys_datalog_fact_t different[2] = {
         binary_fact("member", "charlie", "other-team"),
         unary_fact("admin", "other-team"),
     };
-    maelys_datalog_solve_result_t *middle_result = NULL;
+    maelys_datalog_internal_solve_result_t *middle_result = NULL;
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       maelys_datalog_prepared_session_solve(
                           session, different, 2u, &middle_result), "%d");
     maelys_datalog_solve_result_free(middle_result);
 
-    maelys_datalog_solve_result_t *final_result = NULL;
+    maelys_datalog_internal_solve_result_t *final_result = NULL;
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       maelys_datalog_prepared_session_solve(
                           session, canonical, 4u, &final_result), "%d");
@@ -800,7 +800,7 @@ static int test_all_permutations_and_aba_preserve_oracle(void) {
 
 static int test_filter_fresh_and_prepared_statistics_match(void) {
     TEST_BEGIN();
-    maelys_datalog_ruleset_t source;
+    maelys_datalog_internal_ruleset_t source;
     TEST_ASSERT_EQUAL(MAELYS_OK, make_ruleset(&source), "%d");
     memset(source.rules, 0, sizeof(source.rules));
     source.rule_count = 0u;
@@ -810,21 +810,21 @@ static int test_filter_fresh_and_prepared_statistics_match(void) {
                       maelys_datalog_parse_ruleset(
                           &source, filter_source, strlen(filter_source)), "%d");
 
-    maelys_datalog_input_fact_t facts[4];
+    maelys_datalog_fact_t facts[4];
     authorization_facts(facts, 0);
-    maelys_datalog_prepared_session_t *session = NULL;
+    maelys_datalog_internal_prepared_session_t *session = NULL;
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       maelys_datalog_prepared_session_create(&source, &session), "%d");
-    maelys_datalog_solve_result_t *prepared = NULL;
+    maelys_datalog_internal_solve_result_t *prepared = NULL;
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       maelys_datalog_prepared_session_solve(
                           session, facts, 4u, &prepared), "%d");
 
-    maelys_datalog_ruleset_t fresh_ruleset;
-    maelys_datalog_fact_t *pool = calloc(
+    maelys_datalog_internal_ruleset_t fresh_ruleset;
+    maelys_datalog_internal_fact_t *pool = calloc(
         MAELYS_DATALOG_MAX_EDB_FACTS, sizeof(*pool));
     TEST_ASSERT_NOT_NULL(pool);
-    maelys_datalog_solve_result_t *fresh = NULL;
+    maelys_datalog_internal_solve_result_t *fresh = NULL;
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       solve_fresh_canonical(
                           &source, facts, 4u, &fresh_ruleset, pool, &fresh), "%d");
@@ -857,7 +857,7 @@ static int test_filter_fresh_and_prepared_statistics_match(void) {
                           &bob_id,
                           &bob_found), "%d");
     TEST_ASSERT_TRUE(bob_found);
-    maelys_datalog_fact_t absent;
+    maelys_datalog_internal_fact_t absent;
     memset(&absent, 0, sizeof(absent));
     absent.predicate_id = allow_id;
     absent.arity = 1u;
@@ -898,7 +898,7 @@ static int test_filter_fresh_and_prepared_statistics_match(void) {
 }
 
 static int assert_rendered_symbol(
-    const maelys_datalog_solve_result_t *result,
+    const maelys_datalog_internal_solve_result_t *result,
     maelys_datalog_symbol_id_t id,
     const char *expected) {
     const char *text = NULL;
@@ -913,14 +913,14 @@ static int assert_rendered_symbol(
 
 static int test_result_symbol_text_fresh_and_prepared(void) {
     TEST_BEGIN();
-    maelys_datalog_ruleset_t source;
+    maelys_datalog_internal_ruleset_t source;
     TEST_ASSERT_EQUAL(MAELYS_OK, make_symbol_ruleset(&source), "%d");
-    maelys_datalog_input_fact_t facts[1] = {
+    maelys_datalog_fact_t facts[1] = {
         binary_fact("member", "alice", "policy-team"),
     };
 
-    maelys_datalog_prepared_session_t *session = NULL;
-    maelys_datalog_solve_result_t *prepared = NULL;
+    maelys_datalog_internal_prepared_session_t *session = NULL;
+    maelys_datalog_internal_solve_result_t *prepared = NULL;
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       maelys_datalog_prepared_session_create(&source, &session), "%d");
     TEST_ASSERT_EQUAL(MAELYS_OK,
@@ -941,9 +941,9 @@ static int test_result_symbol_text_fresh_and_prepared(void) {
     TEST_ASSERT_TRUE(assert_rendered_symbol(
         prepared, prepared_team, "policy-team"));
 
-    maelys_datalog_ruleset_t fresh_ruleset;
-    maelys_datalog_fact_t fresh_pool[MAELYS_DATALOG_MAX_EDB_FACTS];
-    maelys_datalog_solve_result_t *fresh = NULL;
+    maelys_datalog_internal_ruleset_t fresh_ruleset;
+    maelys_datalog_internal_fact_t fresh_pool[MAELYS_DATALOG_MAX_EDB_FACTS];
+    maelys_datalog_internal_solve_result_t *fresh = NULL;
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       solve_fresh_canonical(
                           &source, facts, 1u, &fresh_ruleset, fresh_pool, &fresh), "%d");
@@ -985,10 +985,10 @@ static int test_result_symbol_text_errors_leave_outputs_untouched(void) {
     TEST_ASSERT_TRUE(text == (const char *)(uintptr_t)1u);
     TEST_ASSERT_EQUAL((size_t)991u, length, "%zu");
 
-    maelys_datalog_ruleset_t ruleset;
+    maelys_datalog_internal_ruleset_t ruleset;
     TEST_ASSERT_EQUAL(MAELYS_OK, make_ruleset(&ruleset), "%d");
-    maelys_datalog_prepared_session_t *session = NULL;
-    maelys_datalog_solve_result_t *result = NULL;
+    maelys_datalog_internal_prepared_session_t *session = NULL;
+    maelys_datalog_internal_solve_result_t *result = NULL;
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       maelys_datalog_prepared_session_create(&ruleset, &session), "%d");
     TEST_ASSERT_EQUAL(MAELYS_OK,
@@ -1024,17 +1024,17 @@ static int test_result_symbol_text_errors_leave_outputs_untouched(void) {
 
 static int test_result_symbol_text_transaction_interpretation(void) {
     TEST_BEGIN();
-    maelys_datalog_ruleset_t ruleset;
+    maelys_datalog_internal_ruleset_t ruleset;
     TEST_ASSERT_EQUAL(MAELYS_OK, make_ruleset(&ruleset), "%d");
-    maelys_datalog_prepared_session_t *session = NULL;
+    maelys_datalog_internal_prepared_session_t *session = NULL;
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       maelys_datalog_prepared_session_create(&ruleset, &session), "%d");
 
-    maelys_datalog_input_fact_t a[2] = {
+    maelys_datalog_fact_t a[2] = {
         binary_fact("member", "alpha", "team"),
         unary_fact("admin", "team"),
     };
-    maelys_datalog_solve_result_t *result = NULL;
+    maelys_datalog_internal_solve_result_t *result = NULL;
     maelys_datalog_symbol_id_t a_id = 0u;
     int found = 0;
     TEST_ASSERT_EQUAL(MAELYS_OK,
@@ -1046,7 +1046,7 @@ static int test_result_symbol_text_transaction_interpretation(void) {
     TEST_ASSERT_TRUE(assert_rendered_symbol(result, a_id, "alpha"));
     maelys_datalog_solve_result_free(result);
 
-    maelys_datalog_input_fact_t b[2] = {
+    maelys_datalog_fact_t b[2] = {
         binary_fact("member", "bravo", "team"),
         unary_fact("admin", "team"),
     };
@@ -1080,11 +1080,11 @@ static int test_result_symbol_text_transaction_interpretation(void) {
 
 static int test_result_symbol_text_read_only(void) {
     TEST_BEGIN();
-    maelys_datalog_ruleset_t ruleset;
+    maelys_datalog_internal_ruleset_t ruleset;
     TEST_ASSERT_EQUAL(MAELYS_OK, make_ruleset(&ruleset), "%d");
-    maelys_datalog_prepared_session_t *session = NULL;
-    maelys_datalog_solve_result_t *result = NULL;
-    maelys_datalog_input_fact_t facts[2] = {
+    maelys_datalog_internal_prepared_session_t *session = NULL;
+    maelys_datalog_internal_solve_result_t *result = NULL;
+    maelys_datalog_fact_t facts[2] = {
         binary_fact("member", "alice", "team"),
         unary_fact("admin", "team"),
     };

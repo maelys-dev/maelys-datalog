@@ -12,11 +12,11 @@ def _check_abi_layout() -> None:
         "term_size": ffi.sizeof("maelys_py_term_t"),
         "term_kind_offset": ffi.offsetof("maelys_py_term_t", "kind"),
         "term_value_offset": ffi.offsetof("maelys_py_term_t", "value"),
-        "predicate_def_size": ffi.sizeof("maelys_datalog_public_predicate_t"),
-        "predicate_def_name_offset": ffi.offsetof("maelys_datalog_public_predicate_t", "name"),
-        "predicate_def_arity_offset": ffi.offsetof("maelys_datalog_public_predicate_t", "arity"),
+        "predicate_def_size": ffi.sizeof("maelys_datalog_predicate_t"),
+        "predicate_def_name_offset": ffi.offsetof("maelys_datalog_predicate_t", "name"),
+        "predicate_def_arity_offset": ffi.offsetof("maelys_datalog_predicate_t", "arity"),
         "predicate_def_flags_offset": ffi.offsetof(
-            "maelys_datalog_public_predicate_t", "flags"
+            "maelys_datalog_predicate_t", "flags"
         ),
     }
     for field, value in expected.items():

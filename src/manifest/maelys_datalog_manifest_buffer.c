@@ -47,12 +47,12 @@ static const char *first_unknown_key(yyjson_val *obj, const char *const *keys) {
     return NULL;
 }
 
-static void manifest_diag(maelys_datalog_diagnostic_t *diag,
+static void manifest_diag(maelys_datalog_internal_diagnostic_t *diag,
                           maelys_datalog_diag_code_t code,
                           const char *file,
                           const char *message,
                           const char *hint) {
-    maelys_datalog_diagnostic_set(diag, code, "manifest", file, 0, 0, message, hint);
+    maelys_datalog_internal_diagnostic_set(diag, code, "manifest", file, 0, 0, message, hint);
 }
 
 static int required_string(yyjson_val *obj, const char *key) {
@@ -96,7 +96,7 @@ static maelys_result_t collect_decl_array(
     maelys_datalog_policy_load_predicate_decl_t *decls,
     size_t decl_cap,
     size_t *out_count,
-    maelys_datalog_diagnostic_t *diag,
+    maelys_datalog_internal_diagnostic_t *diag,
     const char *manifest_path,
     const char *field_name) {
     if (!out_count) return MAELYS_ERR_INVALID_ARGUMENT;
@@ -137,7 +137,7 @@ static maelys_result_t collect_decl_array(
 }
 
 static maelys_result_t append_policy_set_query_whitelist(
-    maelys_datalog_policy_set_t *set,
+    maelys_datalog_internal_policy_set_t *set,
     const maelys_datalog_query_whitelist_entry_t *entry) {
     if (!set || !entry) return MAELYS_ERR_INVALID_ARGUMENT;
     for (size_t i = 0u; i < set->query_whitelist_count; i++) {
@@ -154,11 +154,11 @@ static maelys_result_t append_policy_set_query_whitelist(
 }
 
 static maelys_result_t validate_and_copy_query_whitelist(
-    maelys_datalog_ruleset_t *ruleset,
+    maelys_datalog_internal_ruleset_t *ruleset,
     const maelys_datalog_policy_load_predicate_decl_t *decls,
     size_t decl_count,
-    maelys_datalog_policy_set_t *set,
-    maelys_datalog_diagnostic_t *diag,
+    maelys_datalog_internal_policy_set_t *set,
+    maelys_datalog_internal_diagnostic_t *diag,
     const char *manifest_path) {
     if (!ruleset || !set) return MAELYS_ERR_INVALID_ARGUMENT;
     for (size_t i = 0u; i < decl_count; i++) {
@@ -171,7 +171,7 @@ static maelys_result_t validate_and_copy_query_whitelist(
                           manifest_path,
                           "query whitelist predicate rejected",
                           "queries must reference domain QUERY predicates with matching arity");
-            maelys_datalog_diagnostic_set_predicate(diag, name, arity);
+            maelys_datalog_internal_diagnostic_set_predicate(diag, name, arity);
             return MAELYS_ERR_INVALID_FIELD;
         }
         const maelys_datalog_predicate_entry_t *def =
@@ -182,7 +182,7 @@ static maelys_result_t validate_and_copy_query_whitelist(
                           manifest_path,
                           "query whitelist predicate is not query-capable",
                           "queries may only expose predicates marked QUERY by the domain");
-            maelys_datalog_diagnostic_set_predicate(diag, name, arity);
+            maelys_datalog_internal_diagnostic_set_predicate(diag, name, arity);
             return MAELYS_ERR_INVALID_FIELD;
         }
         if (ruleset->query_whitelist_count >= MAELYS_DATALOG_MAX_QUERY_WHITELIST) {
@@ -214,8 +214,8 @@ static const maelys_datalog_policy_bundle_entry_t *find_bundle(
 
 static maelys_result_t maelys_datalog_policy_load_from_spec(
     const maelys_datalog_policy_load_spec_t *spec,
-    maelys_datalog_policy_set_t *set,
-    maelys_datalog_diagnostic_t *diag) {
+    maelys_datalog_internal_policy_set_t *set,
+    maelys_datalog_internal_diagnostic_t *diag) {
     if (!spec || !spec->policy_id || !spec->domain || !spec->src || !spec->sha256 || !set) {
         return MAELYS_ERR_INVALID_ARGUMENT;
     }
@@ -241,8 +241,8 @@ static maelys_result_t maelys_datalog_policy_load_from_spec(
         return MAELYS_ERR_PAYLOAD_TOO_LARGE;
     }
 
-    maelys_datalog_ruleset_t *tmp =
-        (maelys_datalog_ruleset_t *)calloc(1u, sizeof(*tmp));
+    maelys_datalog_internal_ruleset_t *tmp =
+        (maelys_datalog_internal_ruleset_t *)calloc(1u, sizeof(*tmp));
     if (!tmp) return MAELYS_ERR_INTERNAL;
 
     maelys_result_t rc = maelys_datalog_ruleset_init(
@@ -304,8 +304,8 @@ static maelys_result_t load_policy_entry_from_bundle(
     const maelys_datalog_policy_bundle_entry_t *bundle,
     size_t bundle_count,
     unsigned flags,
-    maelys_datalog_policy_set_t *set,
-    maelys_datalog_diagnostic_t *diag) {
+    maelys_datalog_internal_policy_set_t *set,
+    maelys_datalog_internal_diagnostic_t *diag) {
     static const char *const keys[] = {
         "policy_id", "domain", "file", "sha256", "mode", "enabled", "description",
         "idb_predicates", "queries", NULL
@@ -461,13 +461,13 @@ maelys_result_t maelys_datalog_manifest_load_from_text_expected_profile(
     size_t bundle_count,
     unsigned flags,
     const char *expected_profile,
-    maelys_datalog_policy_set_t *out_set,
-    maelys_datalog_diagnostic_t *out_diag) {
+    maelys_datalog_internal_policy_set_t *out_set,
+    maelys_datalog_internal_diagnostic_t *out_diag) {
     if ((!manifest_json && manifest_json_len > 0u) || !expected_profile || !out_set) {
         return MAELYS_ERR_INVALID_ARGUMENT;
     }
     if (bundle_count > 0u && !bundle) return MAELYS_ERR_INVALID_ARGUMENT;
-    if (out_diag) maelys_datalog_diagnostic_clear(out_diag);
+    if (out_diag) maelys_datalog_internal_diagnostic_clear(out_diag);
     memset(out_set, 0, sizeof(*out_set));
     out_set->enforces_query_whitelist = 1;
 
@@ -553,8 +553,8 @@ maelys_result_t maelys_datalog_manifest_load_from_text(
     const maelys_datalog_policy_bundle_entry_t *bundle,
     size_t bundle_count,
     unsigned flags,
-    maelys_datalog_policy_set_t *out_set,
-    maelys_datalog_diagnostic_t *out_diag) {
+    maelys_datalog_internal_policy_set_t *out_set,
+    maelys_datalog_internal_diagnostic_t *out_diag) {
     return maelys_datalog_manifest_load_from_text_expected_profile(
         manifest_json,
         manifest_json_len,
@@ -587,11 +587,11 @@ maelys_result_t maelys_datalog_load_policy_inline(
     const char *src,
     size_t src_len,
     unsigned flags,
-    maelys_datalog_policy_set_t *out_set,
-    maelys_datalog_diagnostic_t *out_diag) {
+    maelys_datalog_internal_policy_set_t *out_set,
+    maelys_datalog_internal_diagnostic_t *out_diag) {
     if (!out_set) return MAELYS_ERR_INVALID_ARGUMENT;
     memset(out_set, 0, sizeof(*out_set));
-    if (out_diag) maelys_datalog_diagnostic_clear(out_diag);
+    if (out_diag) maelys_datalog_internal_diagnostic_clear(out_diag);
     if (flags != 0u) return MAELYS_ERR_INVALID_ARGUMENT;
 
     maelys_result_t rc = validate_inline_identity(domain, MAELYS_DATALOG_INLINE_MAX_DOMAIN_LEN);
@@ -626,18 +626,18 @@ maelys_result_t maelys_datalog_load_policy_inline(
 }
 
 maelys_result_t maelys_datalog_load_policy_inline_with_static_domain(
-    const maelys_datalog_public_predicate_t *predicates,
+    const maelys_datalog_predicate_t *predicates,
     size_t predicate_count,
     const char *domain_name,
     const char *policy_id,
     const char *src,
     size_t src_len,
     unsigned flags,
-    maelys_datalog_policy_set_t *out_set,
-    maelys_datalog_diagnostic_t *out_diag) {
+    maelys_datalog_internal_policy_set_t *out_set,
+    maelys_datalog_internal_diagnostic_t *out_diag) {
     if (!out_set) return MAELYS_ERR_INVALID_ARGUMENT;
     memset(out_set, 0, sizeof(*out_set));
-    if (out_diag) maelys_datalog_diagnostic_clear(out_diag);
+    if (out_diag) maelys_datalog_internal_diagnostic_clear(out_diag);
 
     maelys_result_t rc = validate_inline_identity(domain_name, MAELYS_DATALOG_INLINE_MAX_DOMAIN_LEN);
     if (rc != MAELYS_OK) return rc;
@@ -661,7 +661,7 @@ maelys_result_t maelys_datalog_load_policy_inline_with_static_domain(
                                              out_diag);
 }
 
-void maelys_datalog_policy_set_clear(maelys_datalog_policy_set_t *set) {
+void maelys_datalog_policy_set_clear(maelys_datalog_internal_policy_set_t *set) {
     if (!set) return;
     memset(set, 0, sizeof(*set));
 }

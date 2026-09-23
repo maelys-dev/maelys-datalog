@@ -35,10 +35,10 @@ static int test_datalog_headers_owner_types_available(void) {
                       "%u");
     TEST_ASSERT_TRUE(sizeof(maelys_datalog_predicate_registry_t) > 0u);
     TEST_ASSERT_TRUE(sizeof(maelys_datalog_symbol_table_t) > 0u);
-    TEST_ASSERT_TRUE(sizeof(maelys_datalog_ruleset_t) > 0u);
-    TEST_ASSERT_TRUE(sizeof(maelys_datalog_edb_t) > 0u);
-    TEST_ASSERT_TRUE(sizeof(maelys_datalog_solve_diagnostic_t) > 0u);
-    TEST_ASSERT_TRUE(sizeof(maelys_datalog_policy_set_t) > 0u);
+    TEST_ASSERT_TRUE(sizeof(maelys_datalog_internal_ruleset_t) > 0u);
+    TEST_ASSERT_TRUE(sizeof(maelys_datalog_internal_edb_t) > 0u);
+    TEST_ASSERT_TRUE(sizeof(maelys_datalog_internal_solve_diagnostic_t) > 0u);
+    TEST_ASSERT_TRUE(sizeof(maelys_datalog_internal_policy_set_t) > 0u);
     /* The version macros are generated from VERSION (single source of truth,
      * enforced by `make check-version-header`), so asserting literal values
      * here would break every release bump. Assert internal coherence instead:

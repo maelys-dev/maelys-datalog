@@ -77,27 +77,6 @@ _Static_assert(MAELYS_DATALOG_MAX_IDB_FACTS <= UINT16_MAX,
 _Static_assert(MAELYS_DATALOG_MAX_FACTS_PER_PRED <= UINT16_MAX,
                "per-predicate fact capacity must fit predicate counters");
 
-typedef struct {
-    /* Observable engine capacities (shared across profiles). */
-    size_t max_symbols;        /* MAELYS_DATALOG_MAX_SYMBOLS */
-    size_t string_pool_bytes;  /* MAELYS_DATALOG_STRING_POOL_BYTES */
-    size_t max_predicates;     /* MAELYS_DATALOG_MAX_PREDICATES */
-    size_t max_rules;          /* MAELYS_DATALOG_MAX_RULES */
-    size_t max_arity;          /* MAELYS_DATALOG_MAX_ARITY */
-    size_t max_body_literals;  /* MAELYS_DATALOG_MAX_BODY_LITERALS */
-    size_t max_depth;          /* MAELYS_DATALOG_MAX_DEPTH */
-    /* Profile-specific observable capacities. */
-    size_t max_edb_facts;      /* MAELYS_DATALOG_MAX_EDB_FACTS */
-    size_t max_idb_facts;      /* MAELYS_DATALOG_MAX_IDB_FACTS */
-    size_t max_facts_per_pred; /* MAELYS_DATALOG_MAX_FACTS_PER_PRED */
-} maelys_datalog_build_limits_t;
-
-/* Build limits expose user-observable engine capacities, not internal
- * implementation constants. The reported values describe the active build
- * profile; they are not runtime occupancy, EDB usage, solve statistics, or
- * mutable engine state. out_limits is required and must not be NULL. */
-void maelys_datalog_get_build_limits(maelys_datalog_build_limits_t *out_limits);
-
 typedef uint32_t maelys_datalog_symbol_id_t;
 typedef uint16_t maelys_datalog_predicate_id_t;
 
@@ -108,26 +87,26 @@ typedef enum {
     MAELYS_DATALOG_TERM_INT = 2,
     MAELYS_DATALOG_TERM_BOOL = 3,
     MAELYS_DATALOG_TERM_VAR = 4
-} maelys_datalog_term_kind_t;
+} maelys_datalog_internal_term_kind_t;
 
 typedef struct {
-    maelys_datalog_term_kind_t kind;
+    maelys_datalog_internal_term_kind_t kind;
     union {
         maelys_datalog_symbol_id_t symbol;
         long long integer;
         int boolean;
         unsigned variable;
     } as;
-} maelys_datalog_term_t;
+} maelys_datalog_internal_term_t;
 
 typedef struct {
     maelys_datalog_predicate_id_t predicate_id;
     uint8_t arity;
-    maelys_datalog_term_t terms[MAELYS_DATALOG_MAX_TERMS];
-} maelys_datalog_fact_t;
+    maelys_datalog_internal_term_t terms[MAELYS_DATALOG_MAX_TERMS];
+} maelys_datalog_internal_fact_t;
 
 typedef struct {
-    maelys_datalog_fact_t *facts;
+    maelys_datalog_internal_fact_t *facts;
     size_t count;
     size_t capacity;
     int sorted;
@@ -195,25 +174,25 @@ typedef struct {
     uint8_t left;
     uint8_t right;
     uint8_t _pad[2];
-    maelys_datalog_term_t term;
+    maelys_datalog_internal_term_t term;
 } maelys_datalog_arith_expr_node_t;
 
 typedef struct {
     maelys_datalog_literal_kind_t kind;
-    maelys_datalog_fact_t atom;
-    maelys_datalog_term_t lhs;
-    maelys_datalog_term_t rhs;
+    maelys_datalog_internal_fact_t atom;
+    maelys_datalog_internal_term_t lhs;
+    maelys_datalog_internal_term_t rhs;
     maelys_datalog_cmp_op_t op;
     uint8_t lhs_expr_root;
     uint8_t rhs_expr_root;
     uint8_t has_arith_expr;
     uint8_t filter_kind; /* maelys_datalog_filter_kind_t for FILTER */
     uint16_t filter_program_index;
-    maelys_datalog_term_t filter_value;
+    maelys_datalog_internal_term_t filter_value;
 } maelys_datalog_literal_t;
 
 typedef struct {
-    maelys_datalog_fact_t head;
+    maelys_datalog_internal_fact_t head;
     maelys_datalog_literal_t body[MAELYS_DATALOG_MAX_BODY_LITERALS];
     maelys_datalog_arith_expr_node_t expr_nodes[MAELYS_DATALOG_MAX_ARITH_EXPR_NODES];
     uint8_t expr_node_count;
@@ -239,7 +218,7 @@ typedef struct {
     maelys_datalog_predicate_id_t predicate_id;
     maelys_datalog_deny_reason_t deny_reason;
     size_t depth;
-    maelys_datalog_fact_t derived_fact;
+    maelys_datalog_internal_fact_t derived_fact;
     uint16_t parent_index;
 } maelys_datalog_proof_node_t;
 
@@ -331,7 +310,7 @@ typedef struct {
     uint8_t op;           /* maelys_datalog_cmp_op_t for COMPARISON_TRUE, else 0 */
     uint8_t _pad0;
     union {
-        maelys_datalog_fact_t fact;
+        maelys_datalog_internal_fact_t fact;
         struct {
             /* Same size/alignment as a fact; use its header padding for the
              * aggregate metadata, keeping every existing premise layout.
@@ -340,14 +319,14 @@ typedef struct {
             uint8_t arity;
             uint8_t projected_variable;
             uint32_t value;
-            maelys_datalog_term_t terms[MAELYS_DATALOG_MAX_TERMS];
+            maelys_datalog_internal_term_t terms[MAELYS_DATALOG_MAX_TERMS];
         } count;
         struct {
-            maelys_datalog_term_t lhs;
-            maelys_datalog_term_t rhs;
+            maelys_datalog_internal_term_t lhs;
+            maelys_datalog_internal_term_t rhs;
         } comparison;
         struct {
-            maelys_datalog_term_t value;
+            maelys_datalog_internal_term_t value;
             uint16_t program_index;
             uint8_t filter_kind;
             uint8_t _pad[5];
@@ -356,7 +335,7 @@ typedef struct {
 } maelys_datalog_explanation_premise_t;
 
 _Static_assert(sizeof(((maelys_datalog_explanation_premise_t *)0)->as.count) ==
-               sizeof(maelys_datalog_fact_t), "count must not enlarge the premise union");
+               sizeof(maelys_datalog_internal_fact_t), "count must not enlarge the premise union");
 _Static_assert(sizeof(maelys_datalog_explanation_premise_t) <= 96u,
                "explanation premise exceeds 96-byte bound");
 
@@ -364,7 +343,7 @@ _Static_assert(sizeof(maelys_datalog_explanation_premise_t) <= 96u,
  * premises are premises[premise_begin .. premise_begin + premise_count). */
 typedef struct {
     size_t rule_id;
-    maelys_datalog_fact_t derived_fact;
+    maelys_datalog_internal_fact_t derived_fact;
     uint16_t premise_begin;
     uint16_t premise_count;
     uint8_t _pad[4];
@@ -450,14 +429,14 @@ typedef struct {
     maelys_datalog_predicate_id_t predicate_id;
     uint8_t arity;
     uint8_t unbound_term_mask;
-    maelys_datalog_term_t terms[MAELYS_DATALOG_MAX_TERMS];
+    maelys_datalog_internal_term_t terms[MAELYS_DATALOG_MAX_TERMS];
 } maelys_datalog_why_false_pattern_t;
 
 typedef struct {
     uint16_t body_index;
     uint8_t origin; /* maelys_datalog_explanation_origin_t */
     uint8_t _pad0;
-    maelys_datalog_fact_t fact;
+    maelys_datalog_internal_fact_t fact;
 } maelys_datalog_why_false_support_t;
 
 typedef struct {
@@ -467,19 +446,19 @@ typedef struct {
     maelys_datalog_why_false_pattern_t pattern;
     uint8_t op; /* maelys_datalog_cmp_op_t for COMPARISON_FALSE */
     uint8_t _pad0[7];
-    maelys_datalog_term_t lhs;
-    maelys_datalog_term_t rhs;
+    maelys_datalog_internal_term_t lhs;
+    maelys_datalog_internal_term_t rhs;
     uint16_t filter_program_index;
     uint8_t filter_kind;
     uint8_t _pad1[5];
-    maelys_datalog_term_t filter_value;
+    maelys_datalog_internal_term_t filter_value;
 } maelys_datalog_why_false_obstacle_t;
 
 typedef struct {
     size_t rule_id;
-    maelys_datalog_fact_t target_fact;
+    maelys_datalog_internal_fact_t target_fact;
     uint32_t bound_variable_mask;
-    maelys_datalog_term_t substitution[MAELYS_DATALOG_MAX_RULE_VARIABLES];
+    maelys_datalog_internal_term_t substitution[MAELYS_DATALOG_MAX_RULE_VARIABLES];
     maelys_datalog_why_false_support_t
         supports[MAELYS_DATALOG_MAX_WHY_FALSE_SUPPORTS];
     uint16_t support_count;
@@ -489,7 +468,7 @@ typedef struct {
 } maelys_datalog_why_false_diagnostic_t;
 
 typedef struct {
-    maelys_datalog_fact_t query;
+    maelys_datalog_internal_fact_t query;
     uint8_t status;       /* maelys_datalog_why_false_status_t */
     uint8_t summary;      /* maelys_datalog_why_false_summary_t */
     uint8_t query_origin; /* maelys_datalog_explanation_origin_t */

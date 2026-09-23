@@ -108,9 +108,9 @@ static inline int maelys_conformance_frontend(const maelys_datalog_frontend_t *f
  * queryable. This is a finite fixture check, not a proof of equivalence. */
 static inline int maelys_conformance_backend(const maelys_datalog_backend_t *backend,
                                              const char *domain, const char *source,
-                                             const maelys_datalog_public_fact_t *inputs,
+                                             const maelys_datalog_fact_t *inputs,
                                              size_t input_count,
-                                             const maelys_datalog_public_fact_t *probes,
+                                             const maelys_datalog_fact_t *probes,
                                              size_t probe_count) {
     MC_REQUIRE(backend && source && probes && probe_count);
     maelys_datalog_context_t *context = NULL;

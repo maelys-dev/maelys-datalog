@@ -124,7 +124,7 @@ maelys_datalog_program_info(const maelys_datalog_program_t *, maelys_datalog_pro
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_program_fingerprint(
     const maelys_datalog_program_t *, char out[MAELYS_DATALOG_PUBLIC_FINGERPRINT_BYTES]);
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_program_predicate(
-    const maelys_datalog_program_t *, size_t, maelys_datalog_public_predicate_t *);
+    const maelys_datalog_program_t *, size_t, maelys_datalog_predicate_t *);
 MAELYS_DATALOG_API maelys_datalog_status_t
 maelys_datalog_program_fact(const maelys_datalog_program_t *, size_t, maelys_datalog_ir_atom_t *);
 MAELYS_DATALOG_API maelys_datalog_status_t

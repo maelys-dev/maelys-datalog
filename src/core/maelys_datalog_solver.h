@@ -15,7 +15,7 @@
 extern "C" {
 #endif
 
-typedef struct maelys_datalog_solve_result maelys_datalog_solve_result_t;
+typedef struct maelys_datalog_solve_result maelys_datalog_internal_solve_result_t;
 
 typedef enum {
     MAELYS_DATALOG_SOLVE_DIAG_NONE = 0,
@@ -47,43 +47,43 @@ typedef struct {
     uint8_t arity_expected;
     uint8_t arity_observed;
     uint8_t _pad[2];
-} maelys_datalog_solve_diagnostic_t;
+} maelys_datalog_internal_solve_diagnostic_t;
 
 const char *maelys_datalog_solve_diagnostic_category_name(
     maelys_datalog_solve_diag_category_t category);
-maelys_result_t maelys_datalog_solve_once(const maelys_datalog_ruleset_t *ruleset,
-                                          const maelys_datalog_edb_t *edb,
-                                          maelys_datalog_solve_result_t **out_result);
+maelys_result_t maelys_datalog_solve_once(const maelys_datalog_internal_ruleset_t *ruleset,
+                                          const maelys_datalog_internal_edb_t *edb,
+                                          maelys_datalog_internal_solve_result_t **out_result);
 maelys_result_t maelys_datalog_solve_once_ex(
-    const maelys_datalog_ruleset_t *ruleset,
-    const maelys_datalog_edb_t *edb,
-    maelys_datalog_solve_result_t **out_result,
-    maelys_datalog_solve_diagnostic_t *out_diag);
-void maelys_datalog_solve_result_free(maelys_datalog_solve_result_t *result);
+    const maelys_datalog_internal_ruleset_t *ruleset,
+    const maelys_datalog_internal_edb_t *edb,
+    maelys_datalog_internal_solve_result_t **out_result,
+    maelys_datalog_internal_solve_diagnostic_t *out_diag);
+void maelys_datalog_solve_result_free(maelys_datalog_internal_solve_result_t *result);
 /* Resolve a symbol id in the exact vocabulary retained by result. The text is
  * borrowed, NUL-terminated, and remains valid only while result (and, for a
  * fresh solve, its borrowed ruleset) remains alive. This accessor never
  * interns, allocates, or mutates solve state. */
 maelys_result_t maelys_datalog_solve_result_symbol_text(
-    const maelys_datalog_solve_result_t *result,
+    const maelys_datalog_internal_solve_result_t *result,
     maelys_datalog_symbol_id_t id,
     const char **out_text,
     size_t *out_length);
 maelys_result_t maelys_datalog_validate_solved_ground_query(
-    const maelys_datalog_solve_result_t *result,
+    const maelys_datalog_internal_solve_result_t *result,
     const char *predicate,
     size_t arity);
 maelys_result_t maelys_datalog_query_solved_ground_fact(
-    const maelys_datalog_solve_result_t *result,
+    const maelys_datalog_internal_solve_result_t *result,
     const char *predicate,
-    const maelys_datalog_term_t *terms,
+    const maelys_datalog_internal_term_t *terms,
     size_t arity,
     bool *out_present);
 const maelys_datalog_proof_tree_t *maelys_datalog_solve_result_proof(
-    const maelys_datalog_solve_result_t *result);
+    const maelys_datalog_internal_solve_result_t *result);
 maelys_result_t maelys_datalog_extract_proof_for_fact(
-    const maelys_datalog_solve_result_t *result,
-    const maelys_datalog_fact_t *queried_fact,
+    const maelys_datalog_internal_solve_result_t *result,
+    const maelys_datalog_internal_fact_t *queried_fact,
     maelys_datalog_proof_tree_t *out_proof);
 /* P4-C64 — Extract the bounded Why-true premise provenance of a canonical
  * derivation of queried_fact. The witness is captured during the single solve
@@ -110,8 +110,8 @@ maelys_result_t maelys_datalog_extract_proof_for_fact(
  * DAG whose parent_step links are remapped to local step indices; the queried
  * fact's step is last. This does not change the historic proof tree. */
 maelys_result_t maelys_datalog_explain_solved_fact(
-    const maelys_datalog_solve_result_t *result,
-    const maelys_datalog_fact_t *queried_fact,
+    const maelys_datalog_internal_solve_result_t *result,
+    const maelys_datalog_internal_fact_t *queried_fact,
     maelys_datalog_explanation_t *out_explanation);
 /* Bounded Why-false extraction.
  *
@@ -125,15 +125,15 @@ maelys_result_t maelys_datalog_explain_solved_fact(
  * unless at least one configured bound is reached, in which case it returns
  * STATUS_TRUNCATED with the corresponding limit_hits bit(s). */
 maelys_result_t maelys_datalog_explain_absent_solved_fact(
-    const maelys_datalog_solve_result_t *result,
-    const maelys_datalog_fact_t *queried_fact,
+    const maelys_datalog_internal_solve_result_t *result,
+    const maelys_datalog_internal_fact_t *queried_fact,
     const maelys_datalog_why_false_limits_t *limits,
     maelys_datalog_why_false_explanation_t *out_explanation);
 maelys_result_t maelys_datalog_solve_result_derived_fact_count(
-    const maelys_datalog_solve_result_t *result,
+    const maelys_datalog_internal_solve_result_t *result,
     size_t *out_count);
 maelys_result_t maelys_datalog_solve_result_filter_statistics(
-    const maelys_datalog_solve_result_t *result,
+    const maelys_datalog_internal_solve_result_t *result,
     maelys_datalog_filter_statistics_t *out_statistics);
 /* Enumerates already-materialized IDB facts for a query-capable predicate.
  * This accessor never derives new facts, never resolves symbols to text, and
@@ -144,10 +144,10 @@ maelys_result_t maelys_datalog_solve_result_filter_statistics(
  * not just the number copied. Truncation is therefore observable by the caller
  * as *out_count > out_capacity. No ordering guarantee is made for copied facts. */
 maelys_result_t maelys_datalog_solve_result_enumerate_predicate_facts(
-    const maelys_datalog_solve_result_t *result,
+    const maelys_datalog_internal_solve_result_t *result,
     const char *predicate,
     size_t arity,
-    maelys_datalog_fact_t *out_facts,
+    maelys_datalog_internal_fact_t *out_facts,
     size_t out_capacity,
     size_t *out_count);
 

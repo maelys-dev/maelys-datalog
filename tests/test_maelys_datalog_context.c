@@ -76,10 +76,10 @@ static maelys_datalog_filter_module_t filter(int matched) {
     return f;
 }
 static int setup(void) {
-    const maelys_datalog_public_predicate_t p[] = {
+    const maelys_datalog_predicate_t p[] = {
         {"seed", 1, MAELYS_DATALOG_PREDICATE_EDB},
         {"allow", 1, MAELYS_DATALOG_PREDICATE_IDB | MAELYS_DATALOG_PREDICATE_QUERY}};
-    const maelys_datalog_public_domain_t d = {"context_test", p, 2, NULL, 0};
+    const maelys_datalog_domain_t d = {"context_test", p, 2, NULL, 0};
     OK(maelys_datalog_domain_register(&d));
     return 0;
 }
@@ -103,7 +103,7 @@ static int make_context(int matched, int bad_planner, maelys_datalog_context_t *
     return 0;
 }
 static int solve_check(maelys_datalog_session_t *s, int matched) {
-    maelys_datalog_public_fact_t f = {0};
+    maelys_datalog_fact_t f = {0};
     f.predicate = "seed";
     f.arity = 1;
     f.terms[0].kind = MAELYS_DATALOG_VALUE_SYMBOL;
@@ -268,7 +268,7 @@ static int fingerprints_and_invalid_planner(void) {
     CHECK(!strcmp(a, b));
     maelys_datalog_session_t *s;
     OK(maelys_datalog_session_create(explicit, 0, &s));
-    maelys_datalog_public_fact_t f = {0};
+    maelys_datalog_fact_t f = {0};
     f.predicate = "seed";
     f.arity = 1;
     f.terms[0].kind = MAELYS_DATALOG_VALUE_SYMBOL;

@@ -34,19 +34,19 @@ static const char k_source[] =
     "same_generation(X, X) :- person(X).\n"
     "same_generation(X, Y) :- parent(X, P), same_generation(P, Q), parent(Y, Q).\n";
 
-static maelys_datalog_public_value_t symbol(const char *s) {
-    maelys_datalog_public_value_t v = {.kind = MAELYS_DATALOG_VALUE_SYMBOL};
+static maelys_datalog_value_t symbol(const char *s) {
+    maelys_datalog_value_t v = {.kind = MAELYS_DATALOG_VALUE_SYMBOL};
     v.as.symbol = s;
     return v;
 }
 
 static int setup(void) {
-    const maelys_datalog_public_predicate_t predicates[] = {
+    const maelys_datalog_predicate_t predicates[] = {
         {"parent", 2, MAELYS_DATALOG_PREDICATE_EDB},
         {"person", 1, MAELYS_DATALOG_PREDICATE_IDB | MAELYS_DATALOG_PREDICATE_QUERY},
         {"same_generation", 2, MAELYS_DATALOG_PREDICATE_IDB | MAELYS_DATALOG_PREDICATE_QUERY}
     };
-    const maelys_datalog_public_domain_t domain = {
+    const maelys_datalog_domain_t domain = {
         "same_generation", predicates,
         sizeof(predicates) / sizeof(predicates[0]), NULL, 0u
     };
@@ -72,7 +72,7 @@ static int open_session(maelys_datalog_session_t **out) {
 static int solve_parents(maelys_datalog_session_t *session,
                          maelys_datalog_result_t **out) {
     maelys_datalog_public_diagnostic_t diagnostic;
-    maelys_datalog_public_fact_t facts[sizeof(k_parent) / sizeof(k_parent[0])];
+    maelys_datalog_fact_t facts[sizeof(k_parent) / sizeof(k_parent[0])];
     memset(facts, 0, sizeof(facts));
     for (size_t i = 0; i < sizeof(facts) / sizeof(facts[0]); i++) {
         facts[i].predicate = "parent";
@@ -102,7 +102,7 @@ static int complete_and_exact(void) {
         REQUIRE(solve_parents(session, &result) == 0);
 
         for (size_t i = 0; i < EXPECTED_COUNT; i++) {
-            maelys_datalog_public_value_t pair[2] = {
+            maelys_datalog_value_t pair[2] = {
                 symbol(k_expected[i][0]), symbol(k_expected[i][1])
             };
             int present = -1;
@@ -119,7 +119,7 @@ static int complete_and_exact(void) {
             {"a","b"}, {"b","a"}, {"d","b"}, {"b","d"}, {"a","d"}, {"d","a"}
         };
         for (size_t i = 0; i < sizeof(k_absent) / sizeof(k_absent[0]); i++) {
-            maelys_datalog_public_value_t pair[2] = {
+            maelys_datalog_value_t pair[2] = {
                 symbol(k_absent[i][0]), symbol(k_absent[i][1])
             };
             int present = -1;
@@ -131,7 +131,7 @@ static int complete_and_exact(void) {
             }
         }
 
-        maelys_datalog_public_fact_view_t views[64];
+        maelys_datalog_fact_view_t views[64];
         size_t pairs = 0;
         OK(maelys_datalog_result_enumerate(result, "same_generation", 2u,
                                            views, sizeof(views) / sizeof(views[0]), &pairs));

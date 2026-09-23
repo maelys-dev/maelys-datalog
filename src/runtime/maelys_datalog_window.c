@@ -96,7 +96,7 @@ maelys_datalog_status_t maelys_datalog_window_init(
 
 maelys_datalog_status_t maelys_datalog_window_push(
     maelys_datalog_window_t *w, const char *predicate,
-    const maelys_datalog_public_value_t *values, size_t count,
+    const maelys_datalog_value_t *values, size_t count,
     uint32_t *occurrence, maelys_datalog_public_diagnostic_t *diag) {
     maelys_datalog_public_diagnostic_clear(diag);
     if (!w || !predicate || count >= MAELYS_DATALOG_PUBLIC_MAX_TERMS || (!values && count))
@@ -107,14 +107,14 @@ maelys_datalog_status_t maelys_datalog_window_push(
         return window_error(diag, MAELYS_DATALOG_STATUS_PAYLOAD_TOO_LARGE, "The window occurrence ID space is exhausted.");
     w->busy = 1;
     unsigned candidate = 1u - w->active;
-    const maelys_datalog_public_fact_t *old = NULL;
+    const maelys_datalog_fact_t *old = NULL;
     size_t old_count = 0;
     maelys_datalog_result_t *result = NULL;
     maelys_datalog_status_t rc = maelys_datalog_input_edb_view(w->inputs[w->active], &old, &old_count);
     if (!rc) rc = maelys_datalog_input_edb_clear(w->inputs[candidate]);
     size_t skip = old_count == w->capacity ? 1u : 0u;
     if (!rc) rc = maelys_datalog_input_edb_add_facts(w->inputs[candidate], old + skip, old_count - skip, diag);
-    maelys_datalog_public_value_t terms[MAELYS_DATALOG_PUBLIC_MAX_TERMS] = {{0}};
+    maelys_datalog_value_t terms[MAELYS_DATALOG_PUBLIC_MAX_TERMS] = {{0}};
     terms[0].kind = MAELYS_DATALOG_VALUE_INTEGER;
     terms[0].as.integer = (int64_t)w->next;
     if (count) memcpy(terms + 1, values, count * sizeof(*values));
@@ -145,7 +145,7 @@ maelys_datalog_status_t maelys_datalog_window_result(
     return MAELYS_DATALOG_STATUS_OK;
 }
 maelys_datalog_status_t maelys_datalog_window_events(
-    const maelys_datalog_window_t *w, const maelys_datalog_public_fact_t **out, size_t *count) {
+    const maelys_datalog_window_t *w, const maelys_datalog_fact_t **out, size_t *count) {
     if (!w) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
     if (!w->result || w->busy) return MAELYS_DATALOG_STATUS_INVALID_STATE;
     return maelys_datalog_input_edb_view(w->inputs[w->active], out, count);

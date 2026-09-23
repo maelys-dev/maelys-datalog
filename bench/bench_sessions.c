@@ -1,3 +1,4 @@
+#include "bench/types_compat.h"
 /* SPDX-License-Identifier: MPL-2.0 */
 /* Public facade only. Time solve_edb, excluding append, query/check and release.
  * Inert-policy cost is a common-cost control, not an isolated materialization timer. */
@@ -33,7 +34,7 @@ static uint64_t mix(uint64_t h, uint64_t value) {
     return (h ^ value) * UINT64_C(1099511628211);
 }
 
-static uint64_t verify(maelys_datalog_result_t *result, maelys_datalog_public_fact_view_t *views,
+static uint64_t verify(maelys_datalog_result_t *result, maelys_bench_fact_view_t *views,
                        size_t cap, size_t entries, size_t lanes, unsigned order, unsigned symbolic,
                        unsigned deriving, char (*texts)[32]) {
     uint64_t hash = UINT64_C(14695981039346656037);
@@ -50,7 +51,7 @@ static uint64_t verify(maelys_datalog_result_t *result, maelys_datalog_public_fa
             /* enumerate exposes derived facts only. Check EDB membership and
              * an absent boundary value through query, outside the timer. */
             for (size_t i = 0; i <= expected; ++i) {
-                maelys_datalog_public_value_t term = {0};
+                maelys_bench_value_t term = {0};
                 term.kind = symbolic ? MAELYS_DATALOG_VALUE_SYMBOL : MAELYS_DATALOG_VALUE_INTEGER;
                 if (symbolic) term.as.symbol = texts[i];
                 else term.as.integer = (int64_t)(i * (order == 4 ? 4096u : 1u));
@@ -66,7 +67,7 @@ static uint64_t verify(maelys_datalog_result_t *result, maelys_datalog_public_fa
         hash = mix(mix(hash, p), count);
         for (size_t i = 0; i < count; ++i) {
             assert(views[i].arity == 1);
-            const maelys_datalog_public_term_view_t *term = &views[i].terms[0];
+            const maelys_bench_term_view_t *term = &views[i].terms[0];
             hash = mix(hash, term->kind);
             size_t value = i * (order == 4 ? 4096u : 1u);
             if (symbolic) {
@@ -97,15 +98,15 @@ int main(int argc, char **argv) {
     OK(maelys_datalog_limit_get(MAELYS_DATALOG_LIMIT_MAX_FACTS_PER_PRED, &cap));
     OK(maelys_datalog_limit_get(MAELYS_DATALOG_LIMIT_MAX_EDB_FACTS, &edb_limit));
     assert((edb_limit + cap - 1) / cap < PREDS);
-    maelys_datalog_public_predicate_t predicates[PREDS + 1];
+    maelys_bench_predicate_t predicates[PREDS + 1];
     for (unsigned i = 0; i < PREDS; ++i) {
         snprintf(names[i], sizeof(names[i]), "p%02u", i);
-        predicates[i] = (maelys_datalog_public_predicate_t){names[i], 1,
+        predicates[i] = (maelys_bench_predicate_t){names[i], 1,
             MAELYS_DATALOG_PREDICATE_EDB | MAELYS_DATALOG_PREDICATE_QUERY};
     }
-    predicates[PREDS] = (maelys_datalog_public_predicate_t){"out", 1,
+    predicates[PREDS] = (maelys_bench_predicate_t){"out", 1,
         MAELYS_DATALOG_PREDICATE_IDB | MAELYS_DATALOG_PREDICATE_QUERY};
-    const maelys_datalog_public_domain_t domain = {"session_bench", predicates, PREDS + 1, NULL, 0};
+    const maelys_bench_domain_t domain = {"session_bench", predicates, PREDS + 1, NULL, 0};
     OK(maelys_datalog_domain_register(&domain));
     const char *sources[] = {"out(X) :- p00(X), p31(X).", "out(X) :- p00(X)."};
     maelys_datalog_policy_t *policies[2]; maelys_datalog_session_t *sessions[2];
@@ -114,8 +115,8 @@ int main(int argc, char **argv) {
         OK(maelys_datalog_session_create(policies[i], 0, &sessions[i]));
     }
     maelys_datalog_input_edb_t *edb; OK(maelys_datalog_input_edb_create(&edb));
-    maelys_datalog_public_fact_t *facts = calloc(edb_limit, sizeof(*facts));
-    maelys_datalog_public_fact_view_t *views = calloc(cap, sizeof(*views));
+    maelys_bench_fact_t *facts = calloc(edb_limit, sizeof(*facts));
+    maelys_bench_fact_view_t *views = calloc(cap, sizeof(*views));
     char (*texts)[32] = calloc(cap + 1, sizeof(*texts));
     assert(facts && views && texts);
     fprintf(summary, "policy,order,values,size,entries,edb_limit,samples,min_us,median_us,p95_us,result_digest,commit,profile,compiler,cflags,opt_level\n");

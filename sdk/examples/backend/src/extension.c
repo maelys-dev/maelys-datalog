@@ -12,16 +12,16 @@ typedef struct {
     maelys_datalog_ir_rule_t *rules;
 } naive_t;
 typedef struct {
-    maelys_datalog_public_value_t values[MAELYS_DATALOG_IR_MAX_VARIABLES];
+    maelys_datalog_value_t values[MAELYS_DATALOG_IR_MAX_VARIABLES];
     uint32_t bound;
 } bindings_t;
 typedef struct {
     maelys_datalog_backend_output_t *output;
-    maelys_datalog_public_fact_t *facts;
+    maelys_datalog_fact_t *facts;
     size_t count, capacity, available;
 } work_t;
-static int equal_value(const maelys_datalog_public_value_t *a,
-                       const maelys_datalog_public_value_t *b) {
+static int equal_value(const maelys_datalog_value_t *a,
+                       const maelys_datalog_value_t *b) {
     if (a->kind != b->kind)
         return 0;
     if (a->kind == MAELYS_DATALOG_VALUE_SYMBOL)
@@ -30,8 +30,8 @@ static int equal_value(const maelys_datalog_public_value_t *a,
         return a->as.integer == b->as.integer;
     return a->as.boolean == b->as.boolean;
 }
-static maelys_datalog_public_value_t constant(const maelys_datalog_ir_term_t *term) {
-    maelys_datalog_public_value_t value = {0};
+static maelys_datalog_value_t constant(const maelys_datalog_ir_term_t *term) {
+    maelys_datalog_value_t value = {0};
     value.kind = (maelys_datalog_value_kind_t)term->kind;
     if (term->kind == MAELYS_DATALOG_IR_SYMBOL)
         value.as.symbol = term->as.symbol;
@@ -43,7 +43,7 @@ static maelys_datalog_public_value_t constant(const maelys_datalog_ir_term_t *te
 }
 static maelys_datalog_status_t add_derived(work_t *w, const maelys_datalog_ir_atom_t *head,
                                            const bindings_t *bindings) {
-    maelys_datalog_public_fact_t f = {0};
+    maelys_datalog_fact_t f = {0};
     f.predicate = head->predicate;
     f.arity = head->arity;
     for (size_t i = 0; i < head->arity; ++i) {
@@ -59,7 +59,7 @@ static maelys_datalog_status_t add_derived(work_t *w, const maelys_datalog_ir_at
         maelys_datalog_status_t rc = maelys_datalog_backend_charge(w->output, 1u);
         if (rc != MAELYS_DATALOG_STATUS_OK)
             return rc;
-        const maelys_datalog_public_fact_t *a = &w->facts[i];
+        const maelys_datalog_fact_t *a = &w->facts[i];
         if (strcmp(a->predicate, f.predicate) || a->arity != f.arity)
             continue;
         size_t j = 0;
@@ -85,7 +85,7 @@ static maelys_datalog_status_t join(work_t *w, const maelys_datalog_ir_rule_t *r
         maelys_datalog_status_t rc = maelys_datalog_backend_charge(w->output, 1u);
         if (rc != MAELYS_DATALOG_STATUS_OK)
             return rc;
-        const maelys_datalog_public_fact_t *fact = &w->facts[i];
+        const maelys_datalog_fact_t *fact = &w->facts[i];
         if (fact->arity != atom->arity || strcmp(fact->predicate, atom->predicate))
             continue;
         bindings_t next = *bindings;
@@ -102,7 +102,7 @@ static maelys_datalog_status_t join(work_t *w, const maelys_datalog_ir_rule_t *r
                     next.values[term->as.variable] = fact->terms[t];
                 }
             } else {
-                maelys_datalog_public_value_t value = constant(term);
+                maelys_datalog_value_t value = constant(term);
                 if (!equal_value(&value, &fact->terms[t]))
                     break;
             }
@@ -136,7 +136,7 @@ static maelys_datalog_status_t prepare(const maelys_datalog_program_t *program, 
     }
     return MAELYS_DATALOG_STATUS_OK;
 }
-static maelys_datalog_status_t solve(void *state, const maelys_datalog_public_fact_t *inputs,
+static maelys_datalog_status_t solve(void *state, const maelys_datalog_fact_t *inputs,
                                      size_t input_count, maelys_datalog_backend_output_t *output,
                                      void **out_result, maelys_datalog_public_diagnostic_t *diag) {
     (void)diag;
@@ -157,7 +157,7 @@ static maelys_datalog_status_t solve(void *state, const maelys_datalog_public_fa
         rc = maelys_datalog_program_fact(s->program, i, &atom);
         if (rc != MAELYS_DATALOG_STATUS_OK)
             goto done;
-        maelys_datalog_public_fact_t *f = &w.facts[w.count++];
+        maelys_datalog_fact_t *f = &w.facts[w.count++];
         f->predicate = atom.predicate;
         f->arity = atom.arity;
         for (size_t j = 0; j < atom.arity; ++j)

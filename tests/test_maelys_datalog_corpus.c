@@ -43,14 +43,14 @@ static const char k_zero_hash[65] =
 
 static const char k_conflict_domain[] = "corpus_registry_conflict";
 static const char k_conflict_policy_id[] = "corpus_registry_conflict_policy";
-static const maelys_datalog_public_predicate_t k_conflict_domain_table[] = {
+static const maelys_datalog_predicate_t k_conflict_domain_table[] = {
     {.name = "safe", .arity = 1, .flags = MAELYS_DATALOG_PRED_KIND_EDB},
     {.name = "allow",
      .arity = 1,
      .flags = MAELYS_DATALOG_PRED_KIND_IDB | MAELYS_DATALOG_PRED_KIND_QUERY},
 };
 
-static int add_predicate(maelys_datalog_ruleset_t *ruleset,
+static int add_predicate(maelys_datalog_internal_ruleset_t *ruleset,
                          const char *name,
                          uint8_t arity,
                          uint8_t kind)
@@ -59,14 +59,14 @@ static int add_predicate(maelys_datalog_ruleset_t *ruleset,
         &ruleset->registry, name, arity, kind);
 }
 
-static int add_atom(maelys_datalog_ruleset_t *ruleset,
+static int add_atom(maelys_datalog_internal_ruleset_t *ruleset,
                     const char *atom)
 {
     return maelys_datalog_predicate_registry_add_atom(
         &ruleset->registry, atom);
 }
 
-static int init_corpus_ruleset(maelys_datalog_ruleset_t *ruleset)
+static int init_corpus_ruleset(maelys_datalog_internal_ruleset_t *ruleset)
 {
     int rc = maelys_datalog_ruleset_init(
         ruleset, "corpus.policy", "corpus", k_zero_hash, 1);
@@ -296,7 +296,7 @@ static int run_corpus_file(const char *path)
         return 1;
     }
 
-    maelys_datalog_ruleset_t ruleset;
+    maelys_datalog_internal_ruleset_t ruleset;
     api_rc = init_corpus_ruleset(&ruleset);
     if (api_rc != MAELYS_OK) {
         TEST_NOTE_ERR("failed to init corpus ruleset for %s", path);
@@ -304,7 +304,7 @@ static int run_corpus_file(const char *path)
         return 1;
     }
 
-    maelys_datalog_diagnostic_t diag = {0};
+    maelys_datalog_internal_diagnostic_t diag = {0};
     api_rc = maelys_datalog_parse_ruleset_ex(
         &ruleset, (const char *)buf, len, path, &diag);
 
@@ -455,8 +455,8 @@ static int test_registry_conflict_api_fixture(void)
         .src = src,
         .src_len = strlen(src),
     };
-    maelys_datalog_policy_set_t set;
-    maelys_datalog_diagnostic_t diag = {0};
+    maelys_datalog_internal_policy_set_t set;
+    maelys_datalog_internal_diagnostic_t diag = {0};
     result = maelys_datalog_manifest_load_from_text(manifest,
                                                     strlen(manifest),
                                                     &bundle,

@@ -13,15 +13,15 @@ static maelys_datalog_status_t prepare(const maelys_datalog_program_t *program, 
     *out = program->prepared_inputs;
     return *out ? MAELYS_DATALOG_STATUS_OK : MAELYS_DATALOG_STATUS_INVALID_STATE;
 }
-static maelys_datalog_status_t solve(void *state, const maelys_datalog_public_fact_t *facts,
+static maelys_datalog_status_t solve(void *state, const maelys_datalog_fact_t *facts,
                                      size_t count, maelys_datalog_backend_output_t *output,
                                      void **out_result,
                                      maelys_datalog_public_diagnostic_t *diagnostic) {
-    maelys_datalog_prepared_session_t *session = state;
+    maelys_datalog_internal_prepared_session_t *session = state;
     (void)facts;
     (void)count;
-    maelys_datalog_solve_result_t *result = NULL;
-    maelys_datalog_solve_diagnostic_t diag = {0};
+    maelys_datalog_internal_solve_result_t *result = NULL;
+    maelys_datalog_internal_solve_diagnostic_t diag = {0};
     maelys_result_t rc =
         maelys_datalog_prepared_session_solve_materialized_ex(session, &result, &diag);
     if (rc != MAELYS_OK) {
@@ -32,8 +32,8 @@ static maelys_datalog_status_t solve(void *state, const maelys_datalog_public_fa
     size_t derived = 0;
     rc = maelys_datalog_solve_result_derived_fact_count(result, &derived);
     for (size_t i = 0; rc == MAELYS_OK && i < derived; ++i) {
-        maelys_datalog_fact_t fact;
-        maelys_datalog_public_fact_t view;
+        maelys_datalog_internal_fact_t fact;
+        maelys_datalog_fact_t view;
         rc = maelys_datalog_solve_result_idb_fact(result, i, &fact);
         if (rc == MAELYS_OK)
             rc = maelys_datalog_export_fact(&session->working, &fact, &view);
@@ -55,11 +55,11 @@ static maelys_datalog_status_t explanation_storage_requirements(
 }
 static maelys_datalog_status_t explanation_prepare(
     void *state, void *result_state, maelys_datalog_explanation_kind_t kind,
-    const char *predicate, const maelys_datalog_public_value_t *terms, size_t arity,
+    const char *predicate, const maelys_datalog_value_t *terms, size_t arity,
     void *storage, size_t bytes, size_t *required) {
-    maelys_datalog_prepared_session_t *session = state;
-    maelys_datalog_solve_result_t *result = result_state;
-    maelys_datalog_fact_t fact = {0};
+    maelys_datalog_internal_prepared_session_t *session = state;
+    maelys_datalog_internal_solve_result_t *result = result_state;
+    maelys_datalog_internal_fact_t fact = {0};
     fact.arity = (uint8_t)arity;
     if (!maelys_datalog_predicate_registry_find(&session->working.registry, predicate, arity,
                                                 &fact.predicate_id))
@@ -95,7 +95,7 @@ static maelys_datalog_status_t explanation_write_text(
     void *state, void *result, maelys_datalog_explanation_kind_t kind,
     const void *storage, char *text, size_t capacity) {
     (void)result;
-    maelys_datalog_prepared_session_t *session = state;
+    maelys_datalog_internal_prepared_session_t *session = state;
     size_t required;
     if (kind == MAELYS_DATALOG_EXPLAIN_FALSE)
         return (maelys_datalog_status_t)maelys_datalog_format_why_false_text(

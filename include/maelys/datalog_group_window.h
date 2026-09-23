@@ -88,7 +88,7 @@ MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_group_window_init(
  * -> PAYLOAD_TOO_LARGE. Optional out_group_id is unchanged on failure. */
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_group_window_push(
     maelys_datalog_group_window_t *window,
-    const maelys_datalog_public_fact_t *facts, size_t fact_count,
+    const maelys_datalog_fact_t *facts, size_t fact_count,
     uint32_t *out_group_id, maelys_datalog_public_diagnostic_t *out_diagnostic);
 
 /* All views/results are borrowed and valid until successful push/free. Failure
@@ -104,10 +104,10 @@ MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_group_window_groups(
     const maelys_datalog_event_group_t **out_groups, size_t *out_count);
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_group_window_contributions(
     const maelys_datalog_group_window_t *window,
-    const maelys_datalog_public_fact_t **out_facts, size_t *out_count);
+    const maelys_datalog_fact_t **out_facts, size_t *out_count);
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_group_window_facts(
     const maelys_datalog_group_window_t *window,
-    const maelys_datalog_public_fact_t **out_facts, size_t *out_count);
+    const maelys_datalog_fact_t **out_facts, size_t *out_count);
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_group_window_result(
     const maelys_datalog_group_window_t *window, maelys_datalog_result_t **out_result);
 

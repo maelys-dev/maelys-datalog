@@ -117,12 +117,12 @@
 #ifndef __cplusplus
 #if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L
 typedef struct {
-    maelys_datalog_public_value_t value;
+    maelys_datalog_value_t value;
     int out_of_range;
 } maelys_datalog_detail_argument_t;
 
 typedef struct {
-    maelys_datalog_public_fact_t fact;
+    maelys_datalog_fact_t fact;
     unsigned out_of_range_mask;
 } maelys_datalog_detail_fact_t;
 
@@ -198,7 +198,7 @@ maelys_datalog_detail_boolean(_Bool value) {
 static inline maelys_datalog_status_t maelys_datalog_detail_add_fact(
     maelys_datalog_input_edb_t *edb, maelys_datalog_public_diagnostic_t *diagnostic,
     const char *predicate, const maelys_datalog_detail_argument_t *arguments, size_t count) {
-    maelys_datalog_public_value_t terms[MAELYS_DATALOG_PUBLIC_MAX_TERMS];
+    maelys_datalog_value_t terms[MAELYS_DATALOG_PUBLIC_MAX_TERMS];
     for (size_t i = 0u; i < count; ++i) {
         if (arguments[i].out_of_range)
             return maelys_datalog_detail_range_error(diagnostic, 0u, i);
@@ -221,7 +221,7 @@ static inline maelys_datalog_detail_fact_t maelys_datalog_detail_fact(
 
 static inline maelys_datalog_status_t maelys_datalog_detail_add_facts(
     maelys_datalog_input_edb_t *edb, maelys_datalog_public_diagnostic_t *diagnostic,
-    const maelys_datalog_detail_fact_t *built, maelys_datalog_public_fact_t *facts,
+    const maelys_datalog_detail_fact_t *built, maelys_datalog_fact_t *facts,
     size_t count) {
     for (size_t i = 0u; i < count; ++i) {
         for (size_t j = 0u; j < built[i].fact.arity; ++j)
@@ -235,7 +235,7 @@ static inline maelys_datalog_status_t maelys_datalog_detail_add_facts(
 static inline maelys_datalog_status_t maelys_datalog_detail_query(
     const maelys_datalog_result_t *result, int *present, const char *predicate,
     const maelys_datalog_detail_argument_t *arguments, size_t count) {
-    maelys_datalog_public_value_t terms[MAELYS_DATALOG_PUBLIC_MAX_TERMS];
+    maelys_datalog_value_t terms[MAELYS_DATALOG_PUBLIC_MAX_TERMS];
     for (size_t i = 0u; i < count; ++i) {
         if (arguments[i].out_of_range)
             return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
@@ -316,7 +316,7 @@ static inline maelys_datalog_status_t maelys_datalog_detail_query(
 #define MAELYS_DATALOG_ADD_FACTS(edb, diagnostic, ...) \
     maelys_datalog_detail_add_facts((edb), (diagnostic), \
         (const maelys_datalog_detail_fact_t[]){__VA_ARGS__}, \
-        (maelys_datalog_public_fact_t[MAELYS_DATALOG_DETAIL_FACT_COUNT(__VA_ARGS__)]){{0}}, \
+        (maelys_datalog_fact_t[MAELYS_DATALOG_DETAIL_FACT_COUNT(__VA_ARGS__)]){{0}}, \
         MAELYS_DATALOG_DETAIL_FACT_COUNT(__VA_ARGS__))
 #define MAELYS_DATALOG_DETAIL_QUERY_0(result, present, predicate) \
     maelys_datalog_result_query((result), (predicate), NULL, 0u, (present))

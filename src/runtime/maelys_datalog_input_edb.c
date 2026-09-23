@@ -6,7 +6,7 @@
 #include <string.h>
 
 struct maelys_datalog_input_edb {
-    maelys_datalog_public_fact_t *facts;
+    maelys_datalog_fact_t *facts;
     size_t count, capacity;
     char *text;
     size_t text_used, text_capacity;
@@ -69,7 +69,7 @@ static maelys_datalog_status_t input_error(
 /* Header size is rounded for the public fact array. The arena is never grown;
  * moving it would invalidate every copied string pointer. */
 static size_t facts_offset(void) {
-    size_t alignment = _Alignof(maelys_datalog_public_fact_t);
+    size_t alignment = _Alignof(maelys_datalog_fact_t);
     return (sizeof(maelys_datalog_input_edb_t) + alignment - 1u) / alignment * alignment;
 }
 
@@ -79,9 +79,9 @@ maelys_datalog_status_t maelys_datalog_input_edb_storage_requirements(
         text_capacity > MAELYS_DATALOG_INPUT_EDB_TEXT_BYTES)
         return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
     size_t offset = facts_offset();
-    if (fact_capacity > (SIZE_MAX - offset) / sizeof(maelys_datalog_public_fact_t))
+    if (fact_capacity > (SIZE_MAX - offset) / sizeof(maelys_datalog_fact_t))
         return MAELYS_DATALOG_STATUS_PAYLOAD_TOO_LARGE;
-    size_t base = offset + fact_capacity * sizeof(maelys_datalog_public_fact_t);
+    size_t base = offset + fact_capacity * sizeof(maelys_datalog_fact_t);
     size_t slots = input_index_slots(fact_capacity, text_capacity);
     size_t index_bytes = slots ?
         (slots + input_distinct_bound(fact_capacity, text_capacity)) * sizeof(uint16_t) +
@@ -91,8 +91,8 @@ maelys_datalog_status_t maelys_datalog_input_edb_storage_requirements(
     if (text_capacity > SIZE_MAX - base)
         return MAELYS_DATALOG_STATUS_PAYLOAD_TOO_LARGE;
     *bytes = base + text_capacity;
-    *alignment = _Alignof(maelys_datalog_input_edb_t) > _Alignof(maelys_datalog_public_fact_t)
-        ? _Alignof(maelys_datalog_input_edb_t) : _Alignof(maelys_datalog_public_fact_t);
+    *alignment = _Alignof(maelys_datalog_input_edb_t) > _Alignof(maelys_datalog_fact_t)
+        ? _Alignof(maelys_datalog_input_edb_t) : _Alignof(maelys_datalog_fact_t);
     return MAELYS_DATALOG_STATUS_OK;
 }
 
@@ -144,7 +144,7 @@ maelys_datalog_status_t maelys_datalog_input_edb_create_with_capacity(
 }
 
 static const char *entry_text(const maelys_datalog_input_edb_t *edb, size_t slot,
-                              const maelys_datalog_public_fact_t *facts) {
+                              const maelys_datalog_fact_t *facts) {
     if (edb->index[slot] < INPUT_PENDING_BASE) return edb->text + edb->index[slot] - 1u;
     size_t ordinal = edb->index[slot] - INPUT_PENDING_BASE;
     size_t fact = ordinal / INPUT_STRINGS_PER_FACT;
@@ -158,7 +158,7 @@ static int slot_occupied(const maelys_datalog_input_edb_t *edb, size_t slot) {
 }
 
 static size_t text_slot(const maelys_datalog_input_edb_t *edb, const char *text,
-                        const maelys_datalog_public_fact_t *facts) {
+                        const maelys_datalog_fact_t *facts) {
     uint32_t hash = UINT32_C(2166136261);
     for (const unsigned char *p = (const unsigned char *)text; *p; ++p)
         hash = (hash ^ *p) * UINT32_C(16777619);
@@ -177,7 +177,7 @@ typedef struct {
 } input_lookup_t;
 
 static size_t cached_slot(const maelys_datalog_input_edb_t *edb, const char *text,
-                           const maelys_datalog_public_fact_t *facts, input_lookup_t *cache) {
+                           const maelys_datalog_fact_t *facts, input_lookup_t *cache) {
     for (size_t i = 0; i < 2u; ++i)
         if (cache->keys[i] && (cache->keys[i] == text || !strcmp(cache->keys[i], text)))
             return cache->slots[i];
@@ -192,7 +192,7 @@ static size_t cached_slot(const maelys_datalog_input_edb_t *edb, const char *tex
  * Only the validated prefix (exclusive end ordinal) is read. Generations were
  * never modified, hence restoring old entries also restores stale slots exactly. */
 static void discard_pending(maelys_datalog_input_edb_t *edb,
-                            const maelys_datalog_public_fact_t *facts,
+                            const maelys_datalog_fact_t *facts,
                             size_t end, size_t count) {
     while (count) {
         size_t ordinal = --end;
@@ -218,7 +218,7 @@ static const char *find_text(const maelys_datalog_input_edb_t *edb, const char *
 }
 
 /* Linear preflight only examines the already-validated batch prefix. */
-static int prefix_has_text(const maelys_datalog_public_fact_t *facts,
+static int prefix_has_text(const maelys_datalog_fact_t *facts,
                            size_t index, size_t term_index, const char *text) {
     for (size_t i = 0; i <= index; ++i) {
         if (i == index && term_index == SIZE_MAX) break;
@@ -232,7 +232,7 @@ static int prefix_has_text(const maelys_datalog_public_fact_t *facts,
 }
 
 static maelys_datalog_status_t measure_text(
-    maelys_datalog_input_edb_t *edb, const maelys_datalog_public_fact_t *facts,
+    maelys_datalog_input_edb_t *edb, const maelys_datalog_fact_t *facts,
     size_t index, size_t term_index, const char *text, size_t *remaining,
     size_t *pending_count, input_lookup_t *cache, const char **reason) {
     if (!text) { *reason = "NULL string"; return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT; }
@@ -262,7 +262,7 @@ static maelys_datalog_status_t measure_text(
 }
 
 static const char *stored_text(maelys_datalog_input_edb_t *edb, const char *text,
-                               const maelys_datalog_public_fact_t *facts,
+                               const maelys_datalog_fact_t *facts,
                                input_lookup_t *cache) {
     if (!edb->index_slots) {
         const char *existing = find_text(edb, text);
@@ -290,7 +290,7 @@ maelys_datalog_status_t maelys_datalog_input_edb_create(maelys_datalog_input_edb
 }
 
 maelys_datalog_status_t maelys_datalog_input_edb_add_facts(
-    maelys_datalog_input_edb_t *edb, const maelys_datalog_public_fact_t *facts,
+    maelys_datalog_input_edb_t *edb, const maelys_datalog_fact_t *facts,
     size_t count, maelys_datalog_public_diagnostic_t *diag) {
     maelys_datalog_public_diagnostic_clear(diag);
     if (!edb || (!facts && count))
@@ -325,7 +325,7 @@ maelys_datalog_status_t maelys_datalog_input_edb_add_facts(
             return rc;
         }
         for (size_t j = 0; j < facts[i].arity; ++j) {
-            const maelys_datalog_public_value_t *in = &facts[i].terms[j];
+            const maelys_datalog_value_t *in = &facts[i].terms[j];
             switch (in->kind) {
             case MAELYS_DATALOG_VALUE_SYMBOL:
                 rc = measure_text(edb, facts, i, j, in->as.symbol, &remaining, &pending_count, &cache, &reason);
@@ -347,8 +347,8 @@ maelys_datalog_status_t maelys_datalog_input_edb_add_facts(
     /* Validation is complete. Copy each distinct string once in encounter
      * order, then publish facts. No operation from here can fail. */
     for (size_t i = 0; i < count; ++i) {
-        maelys_datalog_public_fact_t *dest = &edb->facts[edb->count + i];
-        *dest = (maelys_datalog_public_fact_t){0};
+        maelys_datalog_fact_t *dest = &edb->facts[edb->count + i];
+        *dest = (maelys_datalog_fact_t){0};
         dest->predicate = stored_text(edb, facts[i].predicate, facts, &cache);
         dest->arity = facts[i].arity;
         for (size_t j = 0; j < facts[i].arity; ++j) {
@@ -368,14 +368,14 @@ maelys_datalog_status_t maelys_datalog_input_edb_add_facts(
 
 maelys_datalog_status_t maelys_datalog_input_edb_add_fact(
     maelys_datalog_input_edb_t *edb, const char *predicate,
-    const maelys_datalog_public_value_t *terms, size_t arity,
+    const maelys_datalog_value_t *terms, size_t arity,
     maelys_datalog_public_diagnostic_t *diag) {
     maelys_datalog_public_diagnostic_clear(diag);
     if (arity > MAELYS_DATALOG_MAX_TERMS || (!terms && arity))
         return input_error(diag, MAELYS_DATALOG_STATUS_INVALID_ARGUMENT,
                            "Terms are required for nonzero arity; maximum arity is %u.",
                            MAELYS_DATALOG_MAX_TERMS);
-    maelys_datalog_public_fact_t fact = {0};
+    maelys_datalog_fact_t fact = {0};
     fact.predicate = predicate;
     fact.arity = arity;
     if (arity) memcpy(fact.terms, terms, arity * sizeof(*terms));
@@ -397,7 +397,7 @@ maelys_datalog_status_t maelys_datalog_input_edb_text_usage(
 }
 maelys_datalog_status_t maelys_datalog_input_edb_view(
     const maelys_datalog_input_edb_t *edb,
-    const maelys_datalog_public_fact_t **out_facts, size_t *out_count) {
+    const maelys_datalog_fact_t **out_facts, size_t *out_count) {
     if (!edb || !out_facts || !out_count) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
     *out_facts = edb->facts;
     *out_count = edb->count;

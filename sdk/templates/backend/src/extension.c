@@ -13,7 +13,7 @@ static maelys_datalog_status_t prepare_program(
 }
 
 static maelys_datalog_status_t solve_program(
-    void *state, const maelys_datalog_public_fact_t *inputs, size_t count,
+    void *state, const maelys_datalog_fact_t *inputs, size_t count,
     maelys_datalog_backend_output_t *output, void **result,
     maelys_datalog_public_diagnostic_t *diagnostic)
 {

@@ -49,14 +49,14 @@ static maelys_datalog_status_t injected_result_free(maelys_datalog_result_t *r) 
 #undef calloc
 #undef realloc
 #undef free
-static maelys_datalog_public_value_t integer(int64_t x) {
-    maelys_datalog_public_value_t v={.kind=MAELYS_DATALOG_VALUE_INTEGER};v.as.integer=x;return v;
+static maelys_datalog_value_t integer(int64_t x) {
+    maelys_datalog_value_t v={.kind=MAELYS_DATALOG_VALUE_INTEGER};v.as.integer=x;return v;
 }
-static maelys_datalog_public_fact_t reading(int64_t id,int64_t x) {
-    maelys_datalog_public_fact_t f={.predicate="reading",.arity=2};f.terms[0]=integer(id);f.terms[1]=integer(x);return f;
+static maelys_datalog_fact_t reading(int64_t id,int64_t x) {
+    maelys_datalog_fact_t f={.predicate="reading",.arity=2};f.terms[0]=integer(id);f.terms[1]=integer(x);return f;
 }
 static void rejected_unchanged(maelys_datalog_group_window_t *w,
-    const maelys_datalog_public_fact_t *facts,size_t n,int expected) {
+    const maelys_datalog_fact_t *facts,size_t n,int expected) {
     group_layout layout; assert(!group_storage_layout(&w->capacities,&layout));
     unsigned char *bank=malloc(layout.stride); assert(bank);
     unsigned char header[sizeof(*w)]; memcpy(header,w,sizeof(*w));
@@ -68,10 +68,10 @@ static void rejected_unchanged(maelys_datalog_group_window_t *w,
     free(bank);
 }
 int main(void) {
-    const maelys_datalog_public_predicate_t preds[]={
+    const maelys_datalog_predicate_t preds[]={
         {"reading",2,MAELYS_DATALOG_PREDICATE_EDB},
         {"total",1,MAELYS_DATALOG_PREDICATE_IDB|MAELYS_DATALOG_PREDICATE_QUERY}};
-    const maelys_datalog_public_domain_t d={"group_alloc",preds,2,NULL,0};
+    const maelys_datalog_domain_t d={"group_alloc",preds,2,NULL,0};
     assert(!maelys_datalog_domain_register(&d));
     maelys_datalog_policy_t *p=NULL;
     const char *source="total(N) :- sum(V,reading(_,V),N).";
@@ -92,19 +92,19 @@ int main(void) {
     size_t before=live; forbidden=1; maelys_datalog_group_window_t *w=NULL;
     assert(!maelys_datalog_group_window_init(storage,bytes,&caps,0,a,b,&w,NULL));
     for(uint32_t i=0;i<100;++i) {
-        maelys_datalog_public_fact_t batch[]={reading(i,1),reading(i,1)}; uint32_t id=UINT32_MAX;
+        maelys_datalog_fact_t batch[]={reading(i,1),reading(i,1)}; uint32_t id=UINT32_MAX;
         assert(!maelys_datalog_group_window_push(w,batch,2,&id,NULL) && id==i);
         maelys_datalog_group_window_usage_t usage;
         assert(!maelys_datalog_group_window_state(w,&usage) && usage.text_bytes==8);
-        maelys_datalog_public_fact_t bad=reading(i+1,INT32_MAX);
+        maelys_datalog_fact_t bad=reading(i+1,INT32_MAX);
         rejected_unchanged(w,&bad,1,MAELYS_DATALOG_STATUS_INVALID_FIELD);
         bad.predicate="too_long_for_text_storage";
         rejected_unchanged(w,&bad,1,MAELYS_DATALOG_STATUS_PAYLOAD_TOO_LARGE);
         rejected_unchanged(w,batch,5,MAELYS_DATALOG_STATUS_PAYLOAD_TOO_LARGE);
-        maelys_datalog_public_fact_t unique[]={reading(i+1,1),reading(i+2,1)};
+        maelys_datalog_fact_t unique[]={reading(i+1,1),reading(i+2,1)};
         rejected_unchanged(w,unique,2,MAELYS_DATALOG_STATUS_PAYLOAD_TOO_LARGE);
         maelys_datalog_result_t *r=NULL; assert(!maelys_datalog_group_window_result(w,&r));
-        maelys_datalog_public_value_t v=integer(i?2:1); int found=-1;
+        maelys_datalog_value_t v=integer(i?2:1); int found=-1;
         assert(!maelys_datalog_result_query(r,"total",&v,1,&found) && found);
         size_t required; char text[8192];
         assert(!maelys_datalog_result_explain_true_text(r,"total",&v,1,text,sizeof(text),&required));
@@ -116,7 +116,7 @@ int main(void) {
         assert(!maelys_datalog_prepared_explanation_release(e));
     }
     release_failure_target=w->result;
-    maelys_datalog_public_fact_t proposed=reading(101,1);
+    maelys_datalog_fact_t proposed=reading(101,1);
     rejected_unchanged(w,&proposed,1,MAELYS_DATALOG_STATUS_INVALID_ARGUMENT);
     release_failure_target=NULL;
     assert(!maelys_datalog_group_window_push(w,&proposed,1,NULL,NULL));

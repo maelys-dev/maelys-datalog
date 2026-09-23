@@ -31,10 +31,10 @@ typedef struct {
     size_t limit;
     char message[256];
     char hint[256];
-} maelys_datalog_diagnostic_t;
+} maelys_datalog_internal_diagnostic_t;
 
-void maelys_datalog_diagnostic_clear(maelys_datalog_diagnostic_t *diag);
-void maelys_datalog_diagnostic_set(maelys_datalog_diagnostic_t *diag,
+void maelys_datalog_internal_diagnostic_clear(maelys_datalog_internal_diagnostic_t *diag);
+void maelys_datalog_internal_diagnostic_set(maelys_datalog_internal_diagnostic_t *diag,
                                    maelys_datalog_diag_code_t code,
                                    const char *phase,
                                    const char *file,
@@ -42,13 +42,13 @@ void maelys_datalog_diagnostic_set(maelys_datalog_diagnostic_t *diag,
                                    size_t column,
                                    const char *message,
                                    const char *hint);
-void maelys_datalog_diagnostic_set_predicate(maelys_datalog_diagnostic_t *diag,
+void maelys_datalog_internal_diagnostic_set_predicate(maelys_datalog_internal_diagnostic_t *diag,
                                              const char *predicate,
                                              size_t arity);
-void maelys_datalog_diagnostic_set_limit(maelys_datalog_diagnostic_t *diag,
+void maelys_datalog_internal_diagnostic_set_limit(maelys_datalog_internal_diagnostic_t *diag,
                                          size_t count,
                                          size_t limit);
-void maelys_datalog_diagnostic_set_comparison_error(maelys_datalog_diagnostic_t *diag,
+void maelys_datalog_internal_diagnostic_set_comparison_error(maelys_datalog_internal_diagnostic_t *diag,
                                                     uint8_t compare_result,
                                                     uint8_t expected_kind,
                                                     uint8_t observed_lhs_kind,

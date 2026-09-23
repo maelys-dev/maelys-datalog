@@ -7,10 +7,10 @@
 #include <string.h>
 
 #define OK(call) assert((call) == MAELYS_OK)
-static maelys_datalog_ruleset_t rules;
+static maelys_datalog_internal_ruleset_t rules;
 static char names[32][12];
-static maelys_datalog_fact_t pools[2][MAELYS_DATALOG_MAX_EDB_FACTS];
-static maelys_datalog_edb_t edbs[2];
+static maelys_datalog_internal_fact_t pools[2][MAELYS_DATALOG_MAX_EDB_FACTS];
+static maelys_datalog_internal_edb_t edbs[2];
 static maelys_datalog_edb_insert_index_t index_state;
 
 static void reset(void) {
@@ -21,7 +21,7 @@ static void reset(void) {
                                   &rules.symbols, &rules.registry));
 }
 
-static maelys_result_t insert(const char *name, const maelys_datalog_term_t *terms, size_t arity) {
+static maelys_result_t insert(const char *name, const maelys_datalog_internal_term_t *terms, size_t arity) {
     maelys_datalog_edb_insert_index_t before = index_state;
     maelys_result_t a = maelys_datalog_edb_add_fact(&edbs[0], name, terms, arity);
     maelys_result_t b = maelys_datalog_edb_add_fact_indexed(&edbs[1], name, terms, arity, &index_state);
@@ -40,10 +40,10 @@ static void native_parity(void) {
         for (size_t i = 0; i < MAELYS_DATALOG_MAX_EDB_FACTS; ++i) {
             size_t v = order == 0 ? i : order == 1 ? MAELYS_DATALOG_MAX_EDB_FACTS - 1 - i :
                        order == 2 ? (i * 13u) % MAELYS_DATALOG_MAX_EDB_FACTS : 0;
-            maelys_datalog_term_t t = {.kind = MAELYS_DATALOG_TERM_INT, .as.integer = (long long)(v % cap)};
+            maelys_datalog_internal_term_t t = {.kind = MAELYS_DATALOG_TERM_INT, .as.integer = (long long)(v % cap)};
             OK(insert(names[v / cap], &t, 1));
         }
-        maelys_datalog_term_t t = {.kind = MAELYS_DATALOG_TERM_INT, .as.integer = 0};
+        maelys_datalog_internal_term_t t = {.kind = MAELYS_DATALOG_TERM_INT, .as.integer = 0};
         assert(insert(names[0], &t, 1) == (order == 3 ? MAELYS_OK : MAELYS_ERR_PAYLOAD_TOO_LARGE));
         assert(insert("missing", &t, 1) == MAELYS_ERR_INVALID_FIELD);
         assert(insert("out", &t, 1) == MAELYS_ERR_INVALID_FIELD);
@@ -55,14 +55,14 @@ static void native_parity(void) {
         reset();
         const size_t prefix = indexed ? MAELYS_DATALOG_EDB_INSERT_SCAN_LIMIT : 0;
         for (size_t i = 0; i < prefix; ++i) {
-            maelys_datalog_term_t t = {.kind=MAELYS_DATALOG_TERM_INT, .as.integer=(long long)i};
+            maelys_datalog_internal_term_t t = {.kind=MAELYS_DATALOG_TERM_INT, .as.integer=(long long)i};
             OK(insert(names[1], &t, 1));
         }
         /* Same numeric payload in different kinds, unused bytes intentionally dirty. */
-        const maelys_datalog_term_kind_t kinds[] = {MAELYS_DATALOG_TERM_SYMBOL, MAELYS_DATALOG_TERM_INT,
+        const maelys_datalog_internal_term_kind_t kinds[] = {MAELYS_DATALOG_TERM_SYMBOL, MAELYS_DATALOG_TERM_INT,
                                                    MAELYS_DATALOG_TERM_BOOL, MAELYS_DATALOG_TERM_VAR};
         for (unsigned k = 0; k < 4; ++k) {
-            maelys_datalog_term_t t;
+            maelys_datalog_internal_term_t t;
             memset(&t, 0xa5, sizeof(t));
             t.kind = kinds[k];
             if (k == 0) t.as.symbol = 1;
@@ -78,7 +78,7 @@ static void native_parity(void) {
             OK(insert(names[0], &t, 1));
             assert(edbs[1].fact_count == prefix + k + 1u);
         }
-        maelys_datalog_term_t pair[2] = {{.kind=MAELYS_DATALOG_TERM_INT, .as.integer=-1},
+        maelys_datalog_internal_term_t pair[2] = {{.kind=MAELYS_DATALOG_TERM_INT, .as.integer=-1},
                                         {.kind=MAELYS_DATALOG_TERM_INT, .as.integer=1}};
         OK(insert("pair", pair, 2));
         pair[1].as.integer = -1; OK(insert("pair", pair, 2));
@@ -92,7 +92,7 @@ static void activation_boundary(void) {
     const maelys_datalog_edb_insert_index_t empty = {0};
     const size_t limit = MAELYS_DATALOG_EDB_INSERT_SCAN_LIMIT;
     for (size_t i = 0; i < limit; ++i) {
-        maelys_datalog_term_t t = {.kind=MAELYS_DATALOG_TERM_INT, .as.integer=(long long)i};
+        maelys_datalog_internal_term_t t = {.kind=MAELYS_DATALOG_TERM_INT, .as.integer=(long long)i};
         OK(insert(names[0], &t, 1));
         assert(!memcmp(&empty, &index_state, sizeof(empty)));
         t.as.integer = 0; /* Includes nonconsecutive duplicates at 31 and 32. */
@@ -100,7 +100,7 @@ static void activation_boundary(void) {
         assert(edbs[1].fact_count == i + 1u);
         assert(!memcmp(&empty, &index_state, sizeof(empty)));
     }
-    maelys_datalog_term_t t = {.kind=MAELYS_DATALOG_TERM_INT, .as.integer=(long long)limit};
+    maelys_datalog_internal_term_t t = {.kind=MAELYS_DATALOG_TERM_INT, .as.integer=(long long)limit};
     assert(insert("missing", &t, 1) == MAELYS_ERR_INVALID_FIELD);
     for (unsigned i = 0; i < 2; ++i) edbs[i].fact_capacity = limit;
     assert(insert(names[0], &t, 1) == MAELYS_ERR_PAYLOAD_TOO_LARGE);
@@ -126,7 +126,7 @@ static void collisions(void) {
     reset();
     maelys_datalog_predicate_id_t pid;
     assert(maelys_datalog_predicate_registry_find(&rules.registry, names[0], 1, &pid));
-    maelys_datalog_fact_t fact = {.predicate_id=pid, .arity=1};
+    maelys_datalog_internal_fact_t fact = {.predicate_id=pid, .arity=1};
     fact.terms[0].kind = MAELYS_DATALOG_TERM_INT;
     size_t found = 0;
     long long first = -1;
@@ -149,18 +149,18 @@ static void collisions(void) {
 }
 
 static void transaction_rollback(void) {
-    maelys_datalog_prepared_session_t *session;
+    maelys_datalog_internal_prepared_session_t *session;
     OK(maelys_datalog_prepared_session_create(&rules, &session));
     OK(maelys_datalog_prepared_session_materialize_inputs(session, NULL, 0));
     /* A rejection resets to an empty mutable transaction, not a finalized one. */
     maelys_datalog_edb_clear(&session->edb);
-    maelys_datalog_prepared_session_t *snapshot = malloc(sizeof(*snapshot));
+    maelys_datalog_internal_prepared_session_t *snapshot = malloc(sizeof(*snapshot));
     assert(snapshot); memcpy(snapshot, session, sizeof(*snapshot));
-    static maelys_datalog_input_fact_t facts[MAELYS_DATALOG_MAX_EDB_FACTS + 1];
+    static maelys_datalog_fact_t facts[MAELYS_DATALOG_MAX_EDB_FACTS + 1];
     const size_t cap = MAELYS_DATALOG_MAX_FACTS_PER_PRED;
     for (size_t i = 0; i <= cap; ++i) {
         facts[i].predicate = names[0]; facts[i].arity = 1;
-        facts[i].terms[0].kind = MAELYS_DATALOG_TERM_INT;
+        facts[i].terms[0].kind = MAELYS_DATALOG_VALUE_INTEGER;
         facts[i].terms[0].as.integer = (long long)i;
     }
     char message[256], expected[64];
@@ -182,15 +182,15 @@ static void transaction_rollback(void) {
                message, sizeof(message)) == MAELYS_ERR_INVALID_FIELD);
     assert(strstr(message, expected) && strstr(message, "unknown predicate"));
     assert(!memcmp(snapshot, session, sizeof(*snapshot)));
-    facts[0].predicate = names[0]; facts[0].terms[0].kind = MAELYS_DATALOG_TERM_SYMBOL;
+    facts[0].predicate = names[0]; facts[0].terms[0].kind = MAELYS_DATALOG_VALUE_SYMBOL;
     facts[0].terms[0].as.symbol = "orphan-after-rejection";
     facts[1].predicate = "missing";
     assert(maelys_datalog_prepared_session_materialize_inputs(session, facts, 2) == MAELYS_ERR_INVALID_FIELD);
     assert(!memcmp(snapshot, session, sizeof(*snapshot)));
-    facts[1].predicate = names[1]; facts[1].terms[0].kind = MAELYS_DATALOG_TERM_SYMBOL;
+    facts[1].predicate = names[1]; facts[1].terms[0].kind = MAELYS_DATALOG_VALUE_SYMBOL;
     facts[1].terms[0].as.symbol = "new-valid-symbol";
     OK(maelys_datalog_prepared_session_materialize_inputs(session, facts, 2));
-    maelys_datalog_solve_result_t *result;
+    maelys_datalog_internal_solve_result_t *result;
     OK(maelys_datalog_prepared_session_solve_materialized_ex(session, &result, NULL));
     maelys_datalog_solve_result_free(result);
     free(snapshot);
@@ -212,6 +212,6 @@ int main(void) {
     OK(maelys_datalog_parse_ruleset(&rules, source, strlen(source)));
     native_parity(); activation_boundary(); collisions(); transaction_rollback();
     printf("materialization: legacy parity, capacity precedence, collisions, byte-exact rollback; session=%zu index=%zu bytes\n",
-           sizeof(maelys_datalog_prepared_session_t), sizeof(index_state));
+           sizeof(maelys_datalog_internal_prepared_session_t), sizeof(index_state));
     return 0;
 }

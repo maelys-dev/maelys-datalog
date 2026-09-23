@@ -55,7 +55,7 @@ maelys_datalog_status_t maelys_datalog_callback_status(maelys_datalog_status_t s
                : MAELYS_DATALOG_STATUS_INTERNAL;
 }
 void maelys_datalog_copy_load_diagnostic(maelys_datalog_public_diagnostic_t *out,
-                                         const maelys_datalog_diagnostic_t *in) {
+                                         const maelys_datalog_internal_diagnostic_t *in) {
     if (!out || !in)
         return;
     memset(out, 0, sizeof(*out));
@@ -68,7 +68,7 @@ void maelys_datalog_copy_load_diagnostic(maelys_datalog_public_diagnostic_t *out
     snprintf(out->hint, sizeof(out->hint), "%s", in->hint);
 }
 void maelys_datalog_copy_solve_diagnostic(maelys_datalog_public_diagnostic_t *out,
-                                          const maelys_datalog_solve_diagnostic_t *in) {
+                                          const maelys_datalog_internal_solve_diagnostic_t *in) {
     if (!out || !in)
         return;
     memset(out, 0, sizeof(*out));
@@ -79,8 +79,8 @@ void maelys_datalog_copy_solve_diagnostic(maelys_datalog_public_diagnostic_t *ou
              maelys_datalog_solve_diagnostic_category_name(in->category));
 }
 
-static maelys_result_t export_term(const maelys_datalog_ruleset_t *r,
-                                   const maelys_datalog_term_t *in, maelys_datalog_ir_term_t *out) {
+static maelys_result_t export_term(const maelys_datalog_internal_ruleset_t *r,
+                                   const maelys_datalog_internal_term_t *in, maelys_datalog_ir_term_t *out) {
     memset(out, 0, sizeof(*out));
     out->kind = (maelys_datalog_ir_term_kind_t)in->kind;
     switch (in->kind) {
@@ -101,8 +101,8 @@ static maelys_result_t export_term(const maelys_datalog_ruleset_t *r,
     }
     return MAELYS_OK;
 }
-static maelys_result_t export_atom(const maelys_datalog_ruleset_t *r,
-                                   const maelys_datalog_fact_t *in, maelys_datalog_ir_atom_t *out) {
+static maelys_result_t export_atom(const maelys_datalog_internal_ruleset_t *r,
+                                   const maelys_datalog_internal_fact_t *in, maelys_datalog_ir_atom_t *out) {
     memset(out, 0, sizeof(*out));
     const maelys_datalog_predicate_entry_t *d =
         maelys_datalog_predicate_registry_get(&r->registry, in->predicate_id);
@@ -117,9 +117,9 @@ static maelys_result_t export_atom(const maelys_datalog_ruleset_t *r,
     }
     return MAELYS_OK;
 }
-maelys_result_t maelys_datalog_export_fact(const maelys_datalog_ruleset_t *r,
-                                           const maelys_datalog_fact_t *in,
-                                           maelys_datalog_public_fact_t *out) {
+maelys_result_t maelys_datalog_export_fact(const maelys_datalog_internal_ruleset_t *r,
+                                           const maelys_datalog_internal_fact_t *in,
+                                           maelys_datalog_fact_t *out) {
     maelys_datalog_ir_atom_t a;
     maelys_result_t rc = export_atom(r, in, &a);
     if (rc != MAELYS_OK)
@@ -149,7 +149,7 @@ maelys_datalog_status_t maelys_datalog_program_info(const maelys_datalog_program
                                                     maelys_datalog_program_info_t *out) {
     if (!p || !p->ruleset || !out)
         return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
-    const maelys_datalog_ruleset_t *r = p->ruleset;
+    const maelys_datalog_internal_ruleset_t *r = p->ruleset;
     uint64_t caps = MAELYS_DATALOG_CAP_POSITIVE;
     for (size_t i = 0; i < r->rule_count; ++i)
         for (size_t j = 0; j < r->rules[i].body_count; ++j) {
@@ -195,8 +195,8 @@ static void hash_bytes(maelys_sha256_ctx_t *h, const void *data, size_t n) {
 static void hash_text(maelys_sha256_ctx_t *h, const char *text) {
     hash_bytes(h, text, strlen(text));
 }
-static void hash_term(maelys_sha256_ctx_t *h, const maelys_datalog_ruleset_t *r,
-                      const maelys_datalog_term_t *term) {
+static void hash_term(maelys_sha256_ctx_t *h, const maelys_datalog_internal_ruleset_t *r,
+                      const maelys_datalog_internal_term_t *term) {
     hash_number(h, term->kind);
     if (term->kind == MAELYS_DATALOG_TERM_SYMBOL)
         hash_text(h, maelys_datalog_symbol_text(&r->symbols, term->as.symbol));
@@ -207,8 +207,8 @@ static void hash_term(maelys_sha256_ctx_t *h, const maelys_datalog_ruleset_t *r,
     else
         hash_number(h, term->as.variable);
 }
-static void hash_atom(maelys_sha256_ctx_t *h, const maelys_datalog_ruleset_t *r,
-                      const maelys_datalog_fact_t *atom) {
+static void hash_atom(maelys_sha256_ctx_t *h, const maelys_datalog_internal_ruleset_t *r,
+                      const maelys_datalog_internal_fact_t *atom) {
     hash_number(h, atom->predicate_id);
     hash_number(h, atom->arity);
     for (size_t i = 0; i < atom->arity; ++i)
@@ -224,7 +224,7 @@ maelys_datalog_status_t maelys_datalog_program_fingerprint(const maelys_datalog_
     return MAELYS_DATALOG_STATUS_OK;
 }
 
-maelys_result_t maelys_datalog_compute_program_fingerprint(const maelys_datalog_ruleset_t *r,
+maelys_result_t maelys_datalog_compute_program_fingerprint(const maelys_datalog_internal_ruleset_t *r,
                                                            char out[65]) {
     MAELYS_DATALOG_COUNT_PIPELINE(fingerprints);
     maelys_sha256_ctx_t h;
@@ -323,13 +323,13 @@ maelys_result_t maelys_datalog_compute_program_fingerprint(const maelys_datalog_
 }
 maelys_datalog_status_t maelys_datalog_program_predicate(const maelys_datalog_program_t *p,
                                                          size_t index,
-                                                         maelys_datalog_public_predicate_t *out) {
+                                                         maelys_datalog_predicate_t *out) {
     if (!p || !p->ruleset || !out)
         return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
     if (index >= p->ruleset->registry.count)
         return MAELYS_DATALOG_STATUS_NOT_FOUND;
     const maelys_datalog_predicate_entry_t *d = &p->ruleset->registry.defs[index];
-    *out = (maelys_datalog_public_predicate_t){d->name, d->arity, d->kind_flags};
+    *out = (maelys_datalog_predicate_t){d->name, d->arity, d->kind_flags};
     return MAELYS_DATALOG_STATUS_OK;
 }
 maelys_datalog_status_t maelys_datalog_program_fact(const maelys_datalog_program_t *p, size_t index,
@@ -350,7 +350,7 @@ maelys_datalog_status_t maelys_datalog_program_rule(const maelys_datalog_program
         return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
     if (index >= p->ruleset->rule_count)
         return MAELYS_DATALOG_STATUS_NOT_FOUND;
-    const maelys_datalog_ruleset_t *r = p->ruleset;
+    const maelys_datalog_internal_ruleset_t *r = p->ruleset;
     const maelys_datalog_rule_t *in = &r->rules[index];
     maelys_datalog_ir_rule_t rule = {0};
     maelys_result_t rc = export_atom(r, &in->head, &rule.head);
@@ -419,10 +419,10 @@ static maelys_datalog_status_t fail(maelys_datalog_program_builder_t *b, maelys_
         b->error = (maelys_datalog_status_t)rc;
     return b ? b->error : (maelys_datalog_status_t)rc;
 }
-static maelys_result_t import_term(maelys_datalog_ruleset_t *r, const maelys_datalog_ir_term_t *in,
-                                   maelys_datalog_term_t *out, int variables) {
+static maelys_result_t import_term(maelys_datalog_internal_ruleset_t *r, const maelys_datalog_ir_term_t *in,
+                                   maelys_datalog_internal_term_t *out, int variables) {
     memset(out, 0, sizeof(*out));
-    out->kind = (maelys_datalog_term_kind_t)in->kind;
+    out->kind = (maelys_datalog_internal_term_kind_t)in->kind;
     switch (in->kind) {
     case MAELYS_DATALOG_IR_SYMBOL: {
         if (!in->as.symbol)
@@ -454,8 +454,8 @@ static maelys_result_t import_term(maelys_datalog_ruleset_t *r, const maelys_dat
     }
     return MAELYS_OK;
 }
-static maelys_result_t import_atom(maelys_datalog_ruleset_t *r, const maelys_datalog_ir_atom_t *in,
-                                   maelys_datalog_fact_t *out, int variables) {
+static maelys_result_t import_atom(maelys_datalog_internal_ruleset_t *r, const maelys_datalog_ir_atom_t *in,
+                                   maelys_datalog_internal_fact_t *out, int variables) {
     if (!in->predicate || in->arity > MAELYS_DATALOG_MAX_TERMS)
         return MAELYS_ERR_INVALID_ARGUMENT;
     memset(out, 0, sizeof(*out));
@@ -476,10 +476,10 @@ maelys_datalog_status_t maelys_datalog_program_add_fact(maelys_datalog_program_b
         return fail(b, MAELYS_ERR_INVALID_ARGUMENT);
     if (b->error)
         return b->error;
-    maelys_datalog_ruleset_t *r = b->ruleset;
+    maelys_datalog_internal_ruleset_t *r = b->ruleset;
     if (r->fact_count >= MAELYS_DATALOG_MAX_RULE_FACTS)
         return fail(b, MAELYS_ERR_PAYLOAD_TOO_LARGE);
-    maelys_datalog_fact_t fact;
+    maelys_datalog_internal_fact_t fact;
     maelys_result_t rc = import_atom(r, in, &fact, 0);
     if (rc != MAELYS_OK)
         return fail(b, rc);
@@ -494,7 +494,7 @@ maelys_datalog_status_t maelys_datalog_program_add_rule(maelys_datalog_program_b
         return fail(b, MAELYS_ERR_INVALID_ARGUMENT);
     if (b->error)
         return b->error;
-    maelys_datalog_ruleset_t *r = b->ruleset;
+    maelys_datalog_internal_ruleset_t *r = b->ruleset;
     if (r->rule_count >= MAELYS_DATALOG_MAX_RULES || in->body_count > MAELYS_DATALOG_IR_MAX_BODY ||
         in->expression_count > MAELYS_DATALOG_IR_MAX_EXPRESSIONS)
         return fail(b, MAELYS_ERR_PAYLOAD_TOO_LARGE);
@@ -594,7 +594,7 @@ maelys_datalog_status_t maelys_datalog_program_add_rule(maelys_datalog_program_b
 static maelys_datalog_status_t datalog_lower(const char *source, size_t length,
                                              maelys_datalog_program_builder_t *builder,
                                              maelys_datalog_public_diagnostic_t *out) {
-    maelys_datalog_diagnostic_t diag = {0};
+    maelys_datalog_internal_diagnostic_t diag = {0};
     maelys_result_t rc = maelys_datalog_parse_only(builder->ruleset, source, length, "inline", 0,
                                                    builder->parse_origin, &diag);
     if (rc != MAELYS_OK)
@@ -611,7 +611,7 @@ maelys_result_t maelys_datalog_compile_frontend(const char *domain, const char *
                                                 const char *source, size_t length,
                                                 const maelys_datalog_frontend_t *frontend,
                                                 maelys_datalog_context_t *context,
-                                                maelys_datalog_ruleset_t *r,
+                                                maelys_datalog_internal_ruleset_t *r,
                                                 maelys_datalog_public_diagnostic_t *out) {
     if (!frontend)
         frontend = maelys_datalog_frontend_datalog();
@@ -620,16 +620,16 @@ maelys_result_t maelys_datalog_compile_frontend(const char *domain, const char *
         return MAELYS_ERR_INVALID_ARGUMENT;
     if (strlen(domain) >= sizeof(r->domain) || strlen(policy_id) >= sizeof(r->policy_id))
         return MAELYS_ERR_PAYLOAD_TOO_LARGE;
-    maelys_datalog_diagnostic_t diag = {0};
+    maelys_datalog_internal_diagnostic_t diag = {0};
     if (!maelys_datalog_domain_registry_find(domain)) {
-        maelys_datalog_diagnostic_set(&diag, MAELYS_DATALOG_DIAG_MANIFEST_UNKNOWN_DOMAIN,
+        maelys_datalog_internal_diagnostic_set(&diag, MAELYS_DATALOG_DIAG_MANIFEST_UNKNOWN_DOMAIN,
             "manifest", "inline", 0, 0, "unknown policy domain",
             "install a domain registry or disable the policy");
         maelys_datalog_copy_load_diagnostic(out, &diag);
         return MAELYS_ERR_UNSUPPORTED;
     }
     if (!maelys_utf8_validate((const unsigned char *)source, length)) {
-        maelys_datalog_diagnostic_set(&diag, MAELYS_DATALOG_DIAG_LEXER_INVALID_UTF8,
+        maelys_datalog_internal_diagnostic_set(&diag, MAELYS_DATALOG_DIAG_LEXER_INVALID_UTF8,
             "manifest", "inline", 0, 0, "invalid UTF-8 in policy text",
             "ensure the policy text is valid UTF-8");
         maelys_datalog_copy_load_diagnostic(out, &diag);

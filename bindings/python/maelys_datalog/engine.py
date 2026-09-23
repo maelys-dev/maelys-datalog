@@ -12,7 +12,6 @@ from ._types import (
     Predicate,
     RawFact,
     Term,
-    limits_from_c,
 )
 from .errors import (
     DomainAlreadyRegisteredError,
@@ -68,9 +67,16 @@ class Engine:
         self._handle = lib.maelys_py_engine_new()
         if self._handle == ffi.NULL:
             raise MemoryError("failed to allocate Maelys engine")
-        limits = ffi.new("maelys_datalog_build_limits_t *")
-        _raise_rc(lib.maelys_py_get_build_limits(limits))
-        self.limits: BuildLimits = limits_from_c(limits)
+        # IDs 1..10 are the original append-only public build-limit contract.
+        limit_names = ("max_symbols", "string_pool_bytes", "max_predicates",
+                       "max_rules", "max_arity", "max_body_literals", "max_depth",
+                       "max_edb_facts", "max_idb_facts", "max_facts_per_pred")
+        limits = {}
+        value = ffi.new("size_t *")
+        for key, name in enumerate(limit_names, 1):
+            _raise_rc(lib.maelys_py_limit_get(key, value))
+            limits[name] = int(value[0])
+        self.limits: BuildLimits = BuildLimits(**limits)
         self._closed = False
         self._rulesets = weakref.WeakSet()
 
@@ -107,7 +113,7 @@ class Engine:
         _raise_rc(rc)
         if not found[0] or not inspectable[0]:
             return bool(found[0]), bool(inspectable[0]), ()
-        preds = ffi.new("maelys_datalog_public_predicate_t[]", count[0])
+        preds = ffi.new("maelys_datalog_predicate_t[]", count[0])
         rc = lib.maelys_py_find_domain(domain_b, preds, count[0], count, found, inspectable)
         _raise_rc(rc)
         copied = []
@@ -141,7 +147,7 @@ class Engine:
 
             domain_b = domain_name.encode("utf-8")
             name_buffers = [ffi.new("char[]", pred.name.encode("utf-8")) for pred in normalized]
-            pred_array = ffi.new("maelys_datalog_public_predicate_t[]", len(normalized))
+            pred_array = ffi.new("maelys_datalog_predicate_t[]", len(normalized))
             for i, pred in enumerate(normalized):
                 pred_array[i].name = name_buffers[i]
                 pred_array[i].arity = pred.arity

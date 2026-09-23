@@ -49,18 +49,3 @@ InputTerm: TypeAlias = str | int | bool | Term
 ResolvedTerm: TypeAlias = str | int | bool
 Fact: TypeAlias = tuple[ResolvedTerm, ...]
 RawFact: TypeAlias = tuple[Term, ...]
-
-
-def limits_from_c(ptr) -> BuildLimits:
-    return BuildLimits(
-        max_symbols=ptr.max_symbols,
-        string_pool_bytes=ptr.string_pool_bytes,
-        max_predicates=ptr.max_predicates,
-        max_rules=ptr.max_rules,
-        max_arity=ptr.max_arity,
-        max_body_literals=ptr.max_body_literals,
-        max_depth=ptr.max_depth,
-        max_edb_facts=ptr.max_edb_facts,
-        max_idb_facts=ptr.max_idb_facts,
-        max_facts_per_pred=ptr.max_facts_per_pred,
-    )

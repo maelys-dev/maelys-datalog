@@ -36,8 +36,8 @@ static int symbol_pointer_cmp(const void *lhs, const void *rhs) {
 MAELYS_DEFINE_SORT(sort_symbol_pointers, const char *, symbol_pointer_cmp)
 
 static maelys_result_t collect_input_symbols(
-    maelys_datalog_prepared_session_t *session,
-    const maelys_datalog_input_fact_t *facts,
+    maelys_datalog_internal_prepared_session_t *session,
+    const maelys_datalog_fact_t *facts,
     size_t fact_count,
     size_t *out_count, char *message, size_t message_capacity) {
     if (!session || (!facts && fact_count > 0u) || !out_count) {
@@ -45,7 +45,7 @@ static maelys_result_t collect_input_symbols(
     }
     size_t count = 0u;
     for (size_t i = 0u; i < fact_count; i++) {
-        const maelys_datalog_input_fact_t *fact = &facts[i];
+        const maelys_datalog_fact_t *fact = &facts[i];
         if (!fact->predicate || fact->arity > MAELYS_DATALOG_MAX_TERMS) {
             input_message(message, message_capacity,
                           "Invalid fact at index %zu: missing predicate or arity exceeds %u.",
@@ -53,9 +53,9 @@ static maelys_result_t collect_input_symbols(
             return MAELYS_ERR_INVALID_ARGUMENT;
         }
         for (size_t j = 0u; j < fact->arity; j++) {
-            const maelys_datalog_input_term_t *term = &fact->terms[j];
+            const maelys_datalog_value_t *term = &fact->terms[j];
             switch (term->kind) {
-                case MAELYS_DATALOG_TERM_SYMBOL:
+                case MAELYS_DATALOG_VALUE_SYMBOL:
                     if (!term->as.symbol || count >= MAELYS_DATALOG_MAX_INPUT_SYMBOLS) {
                         input_message(message, message_capacity,
                                       "Invalid fact at index %zu (%.63s), term %zu: %s.",
@@ -74,10 +74,9 @@ static maelys_result_t collect_input_symbols(
                     }
                     session->symbol_inputs[count++] = term->as.symbol;
                     break;
-                case MAELYS_DATALOG_TERM_INT:
-                case MAELYS_DATALOG_TERM_BOOL:
+                case MAELYS_DATALOG_VALUE_INTEGER:
+                case MAELYS_DATALOG_VALUE_BOOLEAN:
                     break;
-                case MAELYS_DATALOG_TERM_VAR:
                 default:
                     input_message(message, message_capacity,
                                   "Invalid fact at index %zu (%.63s), term %zu: unsupported value kind %d.",
@@ -91,8 +90,8 @@ static maelys_result_t collect_input_symbols(
 }
 
 static maelys_result_t intern_input_symbols(
-    maelys_datalog_prepared_session_t *session,
-    size_t count, const maelys_datalog_input_fact_t *facts, size_t fact_count,
+    maelys_datalog_internal_prepared_session_t *session,
+    size_t count, const maelys_datalog_fact_t *facts, size_t fact_count,
     char *message, size_t message_capacity) {
     if (!session || count > MAELYS_DATALOG_MAX_INPUT_SYMBOLS) {
         return MAELYS_ERR_INVALID_ARGUMENT;
@@ -122,7 +121,7 @@ static maelys_result_t intern_input_symbols(
             }
             for (size_t f = 0u; f < fact_count; ++f) {
                 for (size_t t = 0u; t < facts[f].arity; ++t) {
-                    if (facts[f].terms[t].kind == MAELYS_DATALOG_TERM_SYMBOL &&
+                    if (facts[f].terms[t].kind == MAELYS_DATALOG_VALUE_SYMBOL &&
                         strcmp(facts[f].terms[t].as.symbol, text) == 0) {
                         input_message(message, message_capacity,
                                       "Invalid fact at index %zu (%.63s), term %zu: %s (%zu).",
@@ -139,19 +138,19 @@ static maelys_result_t intern_input_symbols(
 }
 
 static maelys_result_t materialize_input_fact(
-    maelys_datalog_prepared_session_t *session,
-    const maelys_datalog_input_fact_t *input) {
+    maelys_datalog_internal_prepared_session_t *session,
+    const maelys_datalog_fact_t *input) {
     if (!session || !input || !input->predicate ||
         input->arity > MAELYS_DATALOG_MAX_TERMS) {
         return MAELYS_ERR_INVALID_ARGUMENT;
     }
-    maelys_datalog_term_t terms[MAELYS_DATALOG_MAX_TERMS];
+    maelys_datalog_internal_term_t terms[MAELYS_DATALOG_MAX_TERMS];
     memset(terms, 0, sizeof(terms));
     for (size_t i = 0u; i < input->arity; i++) {
-        const maelys_datalog_input_term_t *source = &input->terms[i];
-        terms[i].kind = source->kind;
+        const maelys_datalog_value_t *source = &input->terms[i];
+        terms[i].kind = (maelys_datalog_internal_term_kind_t)source->kind;
         switch (source->kind) {
-            case MAELYS_DATALOG_TERM_SYMBOL: {
+            case MAELYS_DATALOG_VALUE_SYMBOL: {
                 int found = 0;
                 maelys_datalog_symbol_id_t id = MAELYS_DATALOG_SYMBOL_ID_INVALID;
                 maelys_result_t rc = maelys_datalog_symbol_lookup_readonly(
@@ -165,13 +164,12 @@ static maelys_result_t materialize_input_fact(
                 terms[i].as.symbol = id;
                 break;
             }
-            case MAELYS_DATALOG_TERM_INT:
+            case MAELYS_DATALOG_VALUE_INTEGER:
                 terms[i].as.integer = source->as.integer;
                 break;
-            case MAELYS_DATALOG_TERM_BOOL:
+            case MAELYS_DATALOG_VALUE_BOOLEAN:
                 terms[i].as.boolean = source->as.boolean ? 1 : 0;
                 break;
-            case MAELYS_DATALOG_TERM_VAR:
             default:
                 return MAELYS_ERR_INVALID_FIELD;
         }
@@ -181,7 +179,7 @@ static maelys_result_t materialize_input_fact(
 }
 
 static maelys_result_t reset_transaction_state(
-    maelys_datalog_prepared_session_t *session) {
+    maelys_datalog_internal_prepared_session_t *session) {
     if (!session) return MAELYS_ERR_INVALID_ARGUMENT;
     session->working.symbols = session->prepared.symbols;
     memset(session->fact_pool, 0, sizeof(session->fact_pool));
@@ -195,21 +193,21 @@ static maelys_result_t reset_transaction_state(
 }
 
 static maelys_result_t reject_transaction(
-    maelys_datalog_prepared_session_t *session,
+    maelys_datalog_internal_prepared_session_t *session,
     maelys_result_t rejection) {
     maelys_result_t reset = reset_transaction_state(session);
     return reset == MAELYS_OK ? rejection : reset;
 }
 
 maelys_result_t maelys_datalog_prepared_session_create(
-    const maelys_datalog_ruleset_t *ruleset,
-    maelys_datalog_prepared_session_t **out_session) {
+    const maelys_datalog_internal_ruleset_t *ruleset,
+    maelys_datalog_internal_prepared_session_t **out_session) {
     if (out_session) *out_session = NULL;
     if (!ruleset || !out_session) return MAELYS_ERR_INVALID_ARGUMENT;
     if (!ruleset->loaded || !maelys_sha256_hex_is_lowercase(ruleset->sha256)) {
         return MAELYS_ERR_INVALID_STATE;
     }
-    maelys_datalog_prepared_session_t *session = calloc(1u, sizeof(*session));
+    maelys_datalog_internal_prepared_session_t *session = calloc(1u, sizeof(*session));
     if (!session) return MAELYS_ERR_INTERNAL;
     session->result_workspace = maelys_datalog_solve_workspace_create();
     if (!session->result_workspace) { free(session); return MAELYS_ERR_INTERNAL; }
@@ -234,7 +232,7 @@ maelys_result_t maelys_datalog_prepared_session_create(
 }
 
 maelys_result_t maelys_datalog_prepared_session_destroy(
-    maelys_datalog_prepared_session_t *session) {
+    maelys_datalog_internal_prepared_session_t *session) {
     if (!session) return MAELYS_ERR_INVALID_ARGUMENT;
     if (session->active_result) return MAELYS_ERR_INVALID_STATE;
     maelys_datalog_context_release(session->prepared.modules);
@@ -245,17 +243,17 @@ maelys_result_t maelys_datalog_prepared_session_destroy(
 }
 
 maelys_result_t maelys_datalog_prepared_session_solve(
-    maelys_datalog_prepared_session_t *session,
-    const maelys_datalog_input_fact_t *facts,
+    maelys_datalog_internal_prepared_session_t *session,
+    const maelys_datalog_fact_t *facts,
     size_t fact_count,
-    maelys_datalog_solve_result_t **out_result) {
+    maelys_datalog_internal_solve_result_t **out_result) {
     return maelys_datalog_prepared_session_solve_ex(
         session, facts, fact_count, out_result, NULL);
 }
 
 static void explain_fact_rejection(
-    const maelys_datalog_prepared_session_t *session,
-    const maelys_datalog_input_fact_t *fact, size_t index,
+    const maelys_datalog_internal_prepared_session_t *session,
+    const maelys_datalog_fact_t *fact, size_t index,
     char *message, size_t message_capacity) {
     maelys_datalog_predicate_id_t pid;
     const maelys_datalog_predicate_registry_t *registry = &session->working.registry;
@@ -296,16 +294,16 @@ static void explain_fact_rejection(
 }
 
 maelys_result_t maelys_datalog_prepared_session_materialize_inputs(
-    maelys_datalog_prepared_session_t *session,
-    const maelys_datalog_input_fact_t *facts,
+    maelys_datalog_internal_prepared_session_t *session,
+    const maelys_datalog_fact_t *facts,
     size_t fact_count) {
     return maelys_datalog_prepared_session_materialize_inputs_diagnosed(
         session, facts, fact_count, NULL, 0u);
 }
 
 maelys_result_t maelys_datalog_prepared_session_materialize_inputs_diagnosed(
-    maelys_datalog_prepared_session_t *session,
-    const maelys_datalog_input_fact_t *facts, size_t fact_count,
+    maelys_datalog_internal_prepared_session_t *session,
+    const maelys_datalog_fact_t *facts, size_t fact_count,
     char *message, size_t message_capacity) {
     if (message && message_capacity) message[0] = '\0';
     if (!session || (!facts && fact_count > 0u)) {
@@ -348,9 +346,9 @@ maelys_result_t maelys_datalog_prepared_session_materialize_inputs_diagnosed(
 }
 
 maelys_result_t maelys_datalog_prepared_session_solve_ex(
-    maelys_datalog_prepared_session_t *session,
-    const maelys_datalog_input_fact_t *facts, size_t fact_count,
-    maelys_datalog_solve_result_t **out_result, maelys_datalog_solve_diagnostic_t *out_diag) {
+    maelys_datalog_internal_prepared_session_t *session,
+    const maelys_datalog_fact_t *facts, size_t fact_count,
+    maelys_datalog_internal_solve_result_t **out_result, maelys_datalog_internal_solve_diagnostic_t *out_diag) {
     if (out_result) *out_result = NULL;
     if (!out_result) return MAELYS_ERR_INVALID_ARGUMENT;
     maelys_result_t rc = maelys_datalog_prepared_session_materialize_inputs(session, facts, fact_count);
@@ -359,8 +357,8 @@ maelys_result_t maelys_datalog_prepared_session_solve_ex(
 }
 
 maelys_result_t maelys_datalog_prepared_session_solve_materialized_ex(
-    maelys_datalog_prepared_session_t *session,
-    maelys_datalog_solve_result_t **out_result, maelys_datalog_solve_diagnostic_t *out_diag) {
+    maelys_datalog_internal_prepared_session_t *session,
+    maelys_datalog_internal_solve_result_t **out_result, maelys_datalog_internal_solve_diagnostic_t *out_diag) {
     if (out_result) *out_result = NULL;
     if (!session || !out_result) return MAELYS_ERR_INVALID_ARGUMENT;
     if (session->active_result || !session->edb.immutable) return MAELYS_ERR_INVALID_STATE;
@@ -376,12 +374,12 @@ maelys_result_t maelys_datalog_prepared_session_solve_materialized_ex(
 }
 
 const char *maelys_datalog_prepared_session_fingerprint(
-    const maelys_datalog_prepared_session_t *session) {
+    const maelys_datalog_internal_prepared_session_t *session) {
     return session ? session->prepared.sha256 : NULL;
 }
 
 maelys_result_t maelys_datalog_prepared_session_lookup_symbol(
-    const maelys_datalog_prepared_session_t *session,
+    const maelys_datalog_internal_prepared_session_t *session,
     const char *text,
     maelys_datalog_symbol_id_t *out_id,
     int *out_found) {
@@ -395,8 +393,8 @@ maelys_result_t maelys_datalog_prepared_session_lookup_symbol(
 
 void maelys_datalog_prepared_session_result_released(
     void *owner,
-    maelys_datalog_solve_result_t *result) {
-    maelys_datalog_prepared_session_t *session = owner;
+    maelys_datalog_internal_solve_result_t *result) {
+    maelys_datalog_internal_prepared_session_t *session = owner;
     if (session && session->active_result == result) {
         session->active_result = NULL;
     }

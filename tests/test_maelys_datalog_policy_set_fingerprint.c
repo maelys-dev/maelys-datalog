@@ -3,7 +3,7 @@
 
 #include <string.h>
 
-static void initialize_set(maelys_datalog_policy_set_t *set) {
+static void initialize_set(maelys_datalog_internal_policy_set_t *set) {
     memset(set, 0, sizeof(*set));
     set->policy_count = 1u;
     set->policies[0].loaded = 1;
@@ -19,7 +19,7 @@ static void initialize_set(maelys_datalog_policy_set_t *set) {
 
 static int test_fingerprint_is_stable_and_sensitive(void) {
     TEST_BEGIN();
-    maelys_datalog_policy_set_t set;
+    maelys_datalog_internal_policy_set_t set;
     initialize_set(&set);
     char first[65], second[65], changed[65];
     TEST_ASSERT_EQUAL(MAELYS_OK,
@@ -37,7 +37,7 @@ static int test_fingerprint_is_stable_and_sensitive(void) {
 
 static int test_fingerprint_rejects_invalid_sets(void) {
     TEST_BEGIN();
-    maelys_datalog_policy_set_t set;
+    maelys_datalog_internal_policy_set_t set;
     char fingerprint[65];
     memset(&set, 0, sizeof(set));
     TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_STATE,

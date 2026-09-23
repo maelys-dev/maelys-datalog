@@ -17,7 +17,20 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ### Changed
 
-- Unify predicate declarations on `maelys_datalog_public_predicate_t` for stable
+- Share application declarations as `maelys_datalog_value_t`, `fact_t`,
+  `predicate_t`, `domain_t`, `term_view_t` and `fact_view_t` (all with the
+  `maelys_datalog_` prefix), without compatibility aliases. Rename native solver
+  representations to `maelys_datalog_internal_*_t`. Prepared materialization
+  consumes the common input facts directly; full-batch shape validation, typed
+  identity, boolean normalization and bounded allocation-free execution remain.
+- Use `maelys_datalog_limit_get` as the single C build-capacity accessor. Remove
+  `maelys_datalog_build_limits_t` and `maelys_datalog_get_build_limits`; Python and
+  Wasm read the scalar limits while preserving their existing language-level
+  results. Rebuild C/CFFI consumers for the coordinated 0.10.0 source migration.
+  These type-name changes preserve existing layouts and backend ABI 3 signatures
+  at the binary level; they do not implement the future resource contract.
+
+- Unify predicate declarations on `maelys_datalog_predicate_t` for stable
   and low-level domains, inline domain loading, and the Python C shim. Remove
   `maelys_datalog_predicate_def_t` and `maelys_py_predicate_def_t` without aliases;
   migrate declarations from `kind_flags` to `flags` and rebuild low-level/CFFI

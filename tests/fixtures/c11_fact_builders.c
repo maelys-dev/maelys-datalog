@@ -16,9 +16,9 @@
 #define OUTPUT_TYPE maelys_datalog_public_diagnostic_t
 #endif
 
-const maelys_datalog_public_value_t c_symbol = MAELYS_DATALOG_SYMBOL("alice");
+const maelys_datalog_value_t c_symbol = MAELYS_DATALOG_SYMBOL("alice");
 
-const maelys_datalog_public_predicate_t c_declarations[] = {
+const maelys_datalog_predicate_t c_declarations[] = {
     MAELYS_DATALOG_EDB("seed", 1),
     MAELYS_DATALOG_IDB("hidden", 1),
     MAELYS_DATALOG_IDB_QUERY("allow", 1),
@@ -32,7 +32,7 @@ maelys_datalog_status_t fact_builder_consumer(INPUT_TYPE *edb, OUTPUT_TYPE *diag
 #elif defined(REJECT_POINTER)
     return BUILD(edb, diagnostic, "bad", (void *)0);
 #elif defined(REJECT_STRUCT)
-    maelys_datalog_public_value_t value = {0};
+    maelys_datalog_value_t value = {0};
     return BUILD(edb, diagnostic, "bad", value);
 #elif defined(REJECT_TOO_MANY)
     return BUILD(edb, diagnostic, "bad", 1, 2, 3, 4, 5);

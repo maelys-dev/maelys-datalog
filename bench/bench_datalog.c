@@ -1,3 +1,4 @@
+#include "bench/types_compat.h"
 #define _POSIX_C_SOURCE 200809L
 
 #include <errno.h>
@@ -104,13 +105,13 @@ typedef struct {
 typedef struct {
   maelys_datalog_symbol_table_t symbols;
   maelys_datalog_predicate_registry_t registry;
-  maelys_datalog_ruleset_t ruleset;
-  maelys_datalog_fact_t fact_pool[MAELYS_DATALOG_MAX_EDB_FACTS];
-  maelys_datalog_edb_t edb;
+  maelys_bench_native_ruleset_t ruleset;
+  maelys_bench_native_fact_t fact_pool[MAELYS_DATALOG_MAX_EDB_FACTS];
+  maelys_bench_native_edb_t edb;
   maelys_datalog_symbol_id_t ids[MAX_VALUES];
   const char *values[MAX_VALUES];
   char strings[MAX_VALUES][32];
-  maelys_datalog_term_t query_terms[2];
+  maelys_bench_native_term_t query_terms[2];
 } bench_ctx_t;
 
 typedef struct {
@@ -655,7 +656,7 @@ static uint64_t run_solver_once(bench_ctx_t *ctx, const bench_case_t *bench) {
   uint64_t acc = 0;
   for (size_t i = 0; i < solve_count; ++i) {
     require_ok(maelys_datalog_edb_finalize(&ctx->edb), "edb finalize");
-    maelys_datalog_solve_result_t *result = NULL;
+    maelys_bench_native_solve_result_t *result = NULL;
     maelys_result_t rc = maelys_datalog_solve_once(&ctx->ruleset, &ctx->edb, &result);
     acc += (uint64_t)rc;
     if (rc == MAELYS_OK) {

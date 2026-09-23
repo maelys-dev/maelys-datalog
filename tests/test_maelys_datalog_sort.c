@@ -21,8 +21,8 @@ static int reference_fact_cmp(const void *a, const void *b) {
     return maelys_datalog_fact_cmp(a, b);
 }
 static int values[MAELYS_DATALOG_MAX_EDB_FACTS], expected[MAELYS_DATALOG_MAX_EDB_FACTS];
-static maelys_datalog_fact_t facts[MAELYS_DATALOG_MAX_EDB_FACTS];
-static maelys_datalog_fact_t expected_facts[MAELYS_DATALOG_MAX_EDB_FACTS];
+static maelys_datalog_internal_fact_t facts[MAELYS_DATALOG_MAX_EDB_FACTS];
+static maelys_datalog_internal_fact_t expected_facts[MAELYS_DATALOG_MAX_EDB_FACTS];
 static uint32_t random_state = 1u;
 static uint32_t next_random(void) {
     random_state ^= random_state << 13;

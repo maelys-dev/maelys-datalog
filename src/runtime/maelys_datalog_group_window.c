@@ -8,7 +8,7 @@ struct maelys_datalog_group_window {
     maelys_datalog_session_t *sessions[2];
     maelys_datalog_input_edb_t *inputs[2];
     maelys_datalog_event_group_t *groups[2];
-    maelys_datalog_public_fact_t *facts[2];
+    maelys_datalog_fact_t *facts[2];
     maelys_datalog_result_t *result;
     maelys_datalog_group_window_capacities_t capacities;
     size_t group_count, unique_count;
@@ -58,7 +58,7 @@ static maelys_datalog_status_t group_storage_layout(
     size_t end = 0, ignored;
     if (!reserve_region(&end, 1, input_bytes, alignment, &v.input) ||
         !reserve_region(&end, c->groups, sizeof(maelys_datalog_event_group_t), alignment, &v.groups) ||
-        !reserve_region(&end, c->contributions, sizeof(maelys_datalog_public_fact_t), alignment, &v.facts) ||
+        !reserve_region(&end, c->contributions, sizeof(maelys_datalog_fact_t), alignment, &v.facts) ||
         !reserve_region(&end, 0, 1, alignment, &ignored))
         return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
     v.stride = end;
@@ -123,13 +123,13 @@ maelys_datalog_status_t maelys_datalog_group_window_init(void *storage, size_t s
 
 /* All strings/values have already been validated and copied by input_edb.
  * Ignore padding/inactive terms; nonzero booleans have already become one. */
-static int fact_order(const maelys_datalog_public_fact_t *a,
-    const maelys_datalog_public_fact_t *b) {
+static int fact_order(const maelys_datalog_fact_t *a,
+    const maelys_datalog_fact_t *b) {
     int d = strcmp(a->predicate, b->predicate);
     if (d) return d;
     if (a->arity != b->arity) return a->arity < b->arity ? -1 : 1;
     for (size_t i = 0; i < a->arity; ++i) {
-        const maelys_datalog_public_value_t *x = &a->terms[i], *y = &b->terms[i];
+        const maelys_datalog_value_t *x = &a->terms[i], *y = &b->terms[i];
         if (x->kind != y->kind) return x->kind < y->kind ? -1 : 1;
         if (x->kind == MAELYS_DATALOG_VALUE_SYMBOL) d = strcmp(x->as.symbol, y->as.symbol);
         else if (x->kind == MAELYS_DATALOG_VALUE_INTEGER)
@@ -139,10 +139,10 @@ static int fact_order(const maelys_datalog_public_fact_t *a,
     }
     return 0;
 }
-static void swap_fact(maelys_datalog_public_fact_t *a, maelys_datalog_public_fact_t *b) {
-    maelys_datalog_public_fact_t tmp = *a; *a = *b; *b = tmp;
+static void swap_fact(maelys_datalog_fact_t *a, maelys_datalog_fact_t *b) {
+    maelys_datalog_fact_t tmp = *a; *a = *b; *b = tmp;
 }
-static void sift(maelys_datalog_public_fact_t *a, size_t n, size_t root) {
+static void sift(maelys_datalog_fact_t *a, size_t n, size_t root) {
     while (root < n / 2u) {
         size_t child = 2u * root + 1u;
         if (child + 1u < n && fact_order(&a[child], &a[child + 1u]) < 0) ++child;
@@ -152,7 +152,7 @@ static void sift(maelys_datalog_public_fact_t *a, size_t n, size_t root) {
 }
 /* In-place heapsort: O(C log C) comparisons, constant stack, no libc qsort.
  * Text comparisons are bounded by the SDK's per-string length limit. */
-static size_t make_union(maelys_datalog_public_fact_t *a, size_t n) {
+static size_t make_union(maelys_datalog_fact_t *a, size_t n) {
     for (size_t i = n / 2u; i; --i) sift(a, n, i - 1u);
     for (size_t i = n; i > 1u; --i) { swap_fact(a, a + i - 1u); sift(a, i - 1u, 0); }
     size_t unique = 0;
@@ -162,7 +162,7 @@ static size_t make_union(maelys_datalog_public_fact_t *a, size_t n) {
 }
 
 maelys_datalog_status_t maelys_datalog_group_window_push(maelys_datalog_group_window_t *w,
-    const maelys_datalog_public_fact_t *facts, size_t count, uint32_t *id,
+    const maelys_datalog_fact_t *facts, size_t count, uint32_t *id,
     maelys_datalog_public_diagnostic_t *diag) {
     maelys_datalog_public_diagnostic_clear(diag);
     if (!w || (!facts && count))
@@ -174,7 +174,7 @@ maelys_datalog_status_t maelys_datalog_group_window_push(maelys_datalog_group_wi
     unsigned active = w->active, candidate = 1u - active;
     size_t skip_group = w->group_count == w->capacities.groups ? 1u : 0u;
     size_t skip_fact = skip_group ? w->groups[active][0].fact_count : 0;
-    const maelys_datalog_public_fact_t *old = NULL;
+    const maelys_datalog_fact_t *old = NULL;
     size_t old_count = 0;
     w->busy = 1;
     maelys_datalog_status_t rc = maelys_datalog_input_edb_view(w->inputs[active], &old, &old_count);
@@ -184,7 +184,7 @@ maelys_datalog_status_t maelys_datalog_group_window_push(maelys_datalog_group_wi
     if (!rc) rc = maelys_datalog_input_edb_clear(w->inputs[candidate]);
     if (!rc) rc = maelys_datalog_input_edb_add_facts(w->inputs[candidate], old + skip_fact, retained, diag);
     if (!rc) rc = maelys_datalog_input_edb_add_facts(w->inputs[candidate], facts, count, diag);
-    const maelys_datalog_public_fact_t *raw = NULL;
+    const maelys_datalog_fact_t *raw = NULL;
     size_t total = 0, unique = 0;
     if (!rc) rc = maelys_datalog_input_edb_view(w->inputs[candidate], &raw, &total);
     if (!rc) {
@@ -251,13 +251,13 @@ maelys_datalog_status_t maelys_datalog_group_window_groups(const maelys_datalog_
     return MAELYS_DATALOG_STATUS_OK;
 }
 maelys_datalog_status_t maelys_datalog_group_window_contributions(const maelys_datalog_group_window_t *w,
-    const maelys_datalog_public_fact_t **out, size_t *count) {
+    const maelys_datalog_fact_t **out, size_t *count) {
     if (!out || !count) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
     maelys_datalog_status_t rc = readable(w);
     return rc ? rc : maelys_datalog_input_edb_view(w->inputs[w->active], out, count);
 }
 maelys_datalog_status_t maelys_datalog_group_window_facts(const maelys_datalog_group_window_t *w,
-    const maelys_datalog_public_fact_t **out, size_t *count) {
+    const maelys_datalog_fact_t **out, size_t *count) {
     if (!out || !count) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
     maelys_datalog_status_t rc = readable(w);
     if (rc) return rc;

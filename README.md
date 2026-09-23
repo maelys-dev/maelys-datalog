@@ -194,7 +194,7 @@ The legacy `include/maelys_datalog.h` umbrella remains available for alpha
 compatibility. New modules must not depend on its internal engine types.
 
 In the next minor release (unreleased), stable and low-level predicate tables
-both use `maelys_datalog_public_predicate_t` (`name`, `arity`, `flags`). Domain
+both use `maelys_datalog_predicate_t` (`name`, `arity`, `flags`). Domain
 registration copies names into bounded owned storage; pointer declarations do
 not require heap allocation. The old low-level and Python-shim C predicate
 declarations are removed without aliases. See the
@@ -203,7 +203,7 @@ declarations are removed without aliases. See the
 Declaration initializers, added in 0.7.0, keep common predicate roles explicit:
 
 ```c
-static const maelys_datalog_public_predicate_t predicates[] = {
+static const maelys_datalog_predicate_t predicates[] = {
     MAELYS_DATALOG_EDB("seed", 1),
     MAELYS_DATALOG_IDB("hidden", 1),
     MAELYS_DATALOG_IDB_QUERY("allow", 1),
@@ -231,19 +231,19 @@ it executes a membership query; it does not declare a predicate.
 Domain initializers (unreleased) also derive the counts from fixed-size arrays:
 
 ```c
-static const maelys_datalog_public_domain_t domain =
+static const maelys_datalog_domain_t domain =
     MAELYS_DATALOG_DOMAIN_NO_ATOMS("documents", predicates);
 
 /* Or declare the strings that may appear in policy source: */
 static const char *const atoms[] = {"confidential", "restricted"};
-static const maelys_datalog_public_domain_t domain_with_atoms =
+static const maelys_datalog_domain_t domain_with_atoms =
     MAELYS_DATALOG_DOMAIN_WITH_ATOMS("classified_documents", predicates, atoms);
 
 /* Registration stays explicit: check its status. */
 maelys_datalog_status_t rc = maelys_datalog_domain_register(&domain);
 ```
 
-Both macros initialize `maelys_datalog_public_domain_t` in C and C++ without
+Both macros initialize `maelys_datalog_domain_t` in C and C++ without
 allocating, copying or registering anything. Pass actual, nonempty fixed-size
 arrays, never pointers, function array parameters or VLAs: their counts use
 `sizeof`, and the macros do not enforce this precondition. Dynamic tables,
@@ -292,7 +292,7 @@ automatic temporary arrays and the same conversions as `ADD_FACT`. Strings
 are copied by the native batch call before it returns. Arguments are evaluated
 once, in unspecified order. The macro requires at least one `FACT`; for large,
 dynamic or empty batches, use `maelys_datalog_input_edb_add_facts(edb, facts,
-count, &diagnostic)` with an ordinary `maelys_datalog_public_fact_t` array.
+count, &diagnostic)` with an ordinary `maelys_datalog_fact_t` array.
 `FACT` is not a public-fact initializer. Multiple independent `ADD_FACT` calls
 do not roll back earlier successful calls if a later one fails.
 
@@ -308,7 +308,7 @@ The explicit typed API remains available, including in C++17. A symbol
 initializer reduces boilerplate without hiding the values array:
 
 ```c
-const maelys_datalog_public_value_t terms[] = {
+const maelys_datalog_value_t terms[] = {
     MAELYS_DATALOG_SYMBOL("alice"),
     MAELYS_DATALOG_SYMBOL("roadmap.pdf"),
 };

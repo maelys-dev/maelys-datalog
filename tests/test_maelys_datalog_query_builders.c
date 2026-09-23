@@ -4,7 +4,7 @@
 #include <stdio.h>
 #include <string.h>
 
-static const maelys_datalog_public_value_t literal[] = {
+static const maelys_datalog_value_t literal[] = {
     MAELYS_DATALOG_SYMBOL("alice"),
 };
 static unsigned result_calls, output_calls, predicate_calls, term_calls;
@@ -17,14 +17,14 @@ static int term_once(void) { ++term_calls; return 42; }
 static const char *symbol_once(void) { ++term_calls; return "alice"; }
 
 int main(void) {
-    const maelys_datalog_public_predicate_t predicates[] = {
+    const maelys_datalog_predicate_t predicates[] = {
         MAELYS_DATALOG_EDB("zero_in", 0), MAELYS_DATALOG_IDB_QUERY("zero", 0),
         MAELYS_DATALOG_EDB("one_in", 1), MAELYS_DATALOG_IDB_QUERY("one", 1),
         MAELYS_DATALOG_EDB("two_in", 2), MAELYS_DATALOG_IDB_QUERY("two", 2),
         MAELYS_DATALOG_EDB("three_in", 3), MAELYS_DATALOG_IDB_QUERY("three", 3),
         MAELYS_DATALOG_EDB("four_in", 4), MAELYS_DATALOG_IDB_QUERY("four", 4),
     };
-    const maelys_datalog_public_domain_t domain = {
+    const maelys_datalog_domain_t domain = {
         "query_builders", predicates, sizeof(predicates)/sizeof(predicates[0]), NULL, 0,
     };
     const char source[] =
@@ -76,7 +76,7 @@ int main(void) {
     assert(typed != MAELYS_DATALOG_STATUS_OK);
     assert(MAELYS_DATALOG_QUERY(result, &present, "two", "alice") == typed && present == typed_present);
 
-    const maelys_datalog_public_value_t dynamic[] = {MAELYS_DATALOG_SYMBOL(symbol_once())};
+    const maelys_datalog_value_t dynamic[] = {MAELYS_DATALOG_SYMBOL(symbol_once())};
     assert(term_calls == 5 && dynamic[0].kind == MAELYS_DATALOG_VALUE_SYMBOL);
     assert(strcmp(dynamic[0].as.symbol, literal[0].as.symbol) == 0);
     assert(maelys_datalog_result_query(result, "one", dynamic, 1, &typed_present) == MAELYS_DATALOG_STATUS_OK && typed_present == 1);

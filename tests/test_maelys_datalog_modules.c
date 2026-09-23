@@ -109,7 +109,7 @@ static maelys_datalog_filter_module_t filter_module(void) {
 }
 
 static maelys_datalog_status_t domain(void) {
-    static const maelys_datalog_public_predicate_t predicates[] = {
+    static const maelys_datalog_predicate_t predicates[] = {
         {"ref", 1u, MAELYS_DATALOG_PREDICATE_EDB},
         {"other", 1u, MAELYS_DATALOG_PREDICATE_EDB},
         {"edge", 2u, MAELYS_DATALOG_PREDICATE_EDB},
@@ -117,7 +117,7 @@ static maelys_datalog_status_t domain(void) {
         {"allow", 1u, MAELYS_DATALOG_PREDICATE_IDB | MAELYS_DATALOG_PREDICATE_QUERY},
     };
     static const char *const atoms[] = {"alice", "bob"};
-    const maelys_datalog_public_domain_t d = {
+    const maelys_datalog_domain_t d = {
         "modules", predicates, sizeof(predicates) / sizeof(predicates[0]), atoms, 2u};
     return maelys_datalog_domain_register(&d);
 }
@@ -125,14 +125,14 @@ static maelys_datalog_status_t load(const char *source, maelys_datalog_policy_t 
     return maelys_datalog_policy_load_inline("modules", "modules.test", source, strlen(source),
                                              policy, NULL);
 }
-static maelys_datalog_public_value_t symbol(const char *s) {
-    maelys_datalog_public_value_t v = {0};
+static maelys_datalog_value_t symbol(const char *s) {
+    maelys_datalog_value_t v = {0};
     v.kind = MAELYS_DATALOG_VALUE_SYMBOL;
     v.as.symbol = s;
     return v;
 }
-static maelys_datalog_public_fact_t fact(const char *name, const char *s) {
-    maelys_datalog_public_fact_t f = {0};
+static maelys_datalog_fact_t fact(const char *name, const char *s) {
+    maelys_datalog_fact_t f = {0};
     f.predicate = name;
     f.arity = 1u;
     f.terms[0] = symbol(s);
@@ -194,12 +194,12 @@ static int lifecycle(void) {
     maelys_datalog_session_t *session = NULL;
     OK(maelys_datalog_session_create(policy, 0u, &session));
     OK(maelys_datalog_policy_free(policy));
-    const maelys_datalog_public_fact_t facts[] = {fact("ref", "alice"), fact("ref", "bob")};
+    const maelys_datalog_fact_t facts[] = {fact("ref", "alice"), fact("ref", "bob")};
     char first[4096] = {0};
     for (int i = 0; i < 3; ++i) {
         maelys_datalog_result_t *result = NULL;
         OK(maelys_datalog_session_solve(session, facts, 2u, &result, NULL));
-        maelys_datalog_public_value_t value = symbol("alice");
+        maelys_datalog_value_t value = symbol("alice");
         int present = -1;
         OK(maelys_datalog_result_query(result, "allow", &value, 1u, &present));
         CHECK(present == 1);
@@ -250,7 +250,7 @@ static int failing_filter(maelys_datalog_filter_cost_fn cost,
     maelys_datalog_session_t *session = NULL;
     OK(maelys_datalog_session_create(policy, 0u, &session));
     maelys_datalog_result_t *result = NULL;
-    maelys_datalog_public_fact_t f = fact("ref", "alice");
+    maelys_datalog_fact_t f = fact("ref", "alice");
     for (int i = 0; i < 2; ++i) {
         CHECK(maelys_datalog_session_solve(session, &f, 1u, &result, NULL) == expected);
         CHECK(result == NULL);
@@ -335,15 +335,15 @@ static int planner_case(maelys_datalog_join_choose_fn choose, maelys_datalog_sta
     CHECK(maelys_datalog_register_planner_module(&module) == MAELYS_DATALOG_STATUS_INVALID_STATE);
     maelys_datalog_session_t *session = NULL;
     OK(maelys_datalog_session_create(policy, 0u, &session));
-    maelys_datalog_public_fact_t edge = fact("edge", "alice");
+    maelys_datalog_fact_t edge = fact("edge", "alice");
     edge.arity = 2u;
     edge.terms[1] = symbol("bob");
-    const maelys_datalog_public_fact_t facts[] = {fact("ref", "alice"), fact("other", "alice"),
+    const maelys_datalog_fact_t facts[] = {fact("ref", "alice"), fact("other", "alice"),
                                                   edge};
     maelys_datalog_result_t *result = NULL;
     CHECK(maelys_datalog_session_solve(session, facts, 3u, &result, NULL) == expected);
     if (expected == MAELYS_DATALOG_STATUS_OK) {
-        maelys_datalog_public_value_t v = symbol("alice");
+        maelys_datalog_value_t v = symbol("alice");
         int present = 0;
         OK(maelys_datalog_result_query(result, "allow", &v, 1u, &present));
         CHECK(present == 1);

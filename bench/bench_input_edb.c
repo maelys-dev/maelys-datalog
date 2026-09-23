@@ -1,3 +1,4 @@
+#include "bench/types_compat.h"
 /* SPDX-License-Identifier: MPL-2.0 */
 /* Common public-API consumer for both revisions. No implementation flags.
  * Allocations, input construction and reporting are outside append timing.
@@ -28,7 +29,7 @@ static void run_case(const char *scenario, size_t capacity, size_t text_capacity
                      size_t count, size_t distinct, int unit, int packed) {
     size_t bytes, alignment;
     assert(!maelys_datalog_input_edb_storage_requirements(capacity, text_capacity, &bytes, &alignment));
-    maelys_datalog_public_fact_t *facts = calloc(count, sizeof(*facts));
+    maelys_bench_fact_t *facts = calloc(count, sizeof(*facts));
     assert(facts && distinct <= NAMES);
     for (size_t i = 0; i < count; ++i) {
         facts[i].predicate = packed ? names[(i * 5u) % distinct] : "seed";

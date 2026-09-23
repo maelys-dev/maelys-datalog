@@ -37,15 +37,15 @@ static maelys_result_t canonical_printf(maelys_sha256_ctx_t *ctx, const char *fm
 }
 
 static const maelys_datalog_predicate_entry_t *canonical_predicate_def(
-    const maelys_datalog_ruleset_t *ruleset,
+    const maelys_datalog_internal_ruleset_t *ruleset,
     maelys_datalog_predicate_id_t id) {
     if (!ruleset || id >= ruleset->registry.count || id >= MAELYS_DATALOG_MAX_PREDICATES) return NULL;
     return &ruleset->registry.defs[id];
 }
 
 static maelys_result_t canonical_stream_term(maelys_sha256_ctx_t *ctx,
-                                             const maelys_datalog_ruleset_t *ruleset,
-                                             const maelys_datalog_term_t *term) {
+                                             const maelys_datalog_internal_ruleset_t *ruleset,
+                                             const maelys_datalog_internal_term_t *term) {
     if (!ctx || !ruleset || !term) return MAELYS_ERR_INVALID_ARGUMENT;
     switch (term->kind) {
         case MAELYS_DATALOG_TERM_SYMBOL: {
@@ -65,8 +65,8 @@ static maelys_result_t canonical_stream_term(maelys_sha256_ctx_t *ctx,
 }
 
 static maelys_result_t canonical_stream_terms(maelys_sha256_ctx_t *ctx,
-                                              const maelys_datalog_ruleset_t *ruleset,
-                                              const maelys_datalog_term_t *terms,
+                                              const maelys_datalog_internal_ruleset_t *ruleset,
+                                              const maelys_datalog_internal_term_t *terms,
                                               size_t arity) {
     if (!ctx || !ruleset || (!terms && arity > 0) || arity > MAELYS_DATALOG_MAX_TERMS) {
         return MAELYS_ERR_INVALID_ARGUMENT;
@@ -83,9 +83,9 @@ static maelys_result_t canonical_stream_terms(maelys_sha256_ctx_t *ctx,
 }
 
 static maelys_result_t canonical_stream_atom(maelys_sha256_ctx_t *ctx,
-                                             const maelys_datalog_ruleset_t *ruleset,
+                                             const maelys_datalog_internal_ruleset_t *ruleset,
                                              const char *prefix,
-                                             const maelys_datalog_fact_t *atom) {
+                                             const maelys_datalog_internal_fact_t *atom) {
     if (!ctx || !ruleset || !prefix || !atom || atom->arity > MAELYS_DATALOG_MAX_TERMS) {
         return MAELYS_ERR_INVALID_ARGUMENT;
     }
@@ -99,7 +99,7 @@ static maelys_result_t canonical_stream_atom(maelys_sha256_ctx_t *ctx,
 }
 
 static maelys_result_t canonical_stream_literal(maelys_sha256_ctx_t *ctx,
-                                                const maelys_datalog_ruleset_t *ruleset,
+                                                const maelys_datalog_internal_ruleset_t *ruleset,
                                                 const maelys_datalog_rule_t *rule,
                                                 const maelys_datalog_literal_t *literal) {
     if (!ctx || !ruleset || !rule || !literal) return MAELYS_ERR_INVALID_ARGUMENT;
@@ -197,7 +197,7 @@ static maelys_result_t canonical_stream_literal(maelys_sha256_ctx_t *ctx,
 }
 
 static maelys_result_t ruleset_stream_canonical(maelys_sha256_ctx_t *ctx,
-                                                const maelys_datalog_ruleset_t *ruleset) {
+                                                const maelys_datalog_internal_ruleset_t *ruleset) {
     if (!ctx || !ruleset || !ruleset->loaded) return MAELYS_ERR_INVALID_ARGUMENT;
     maelys_result_t rc = canonical_printf(ctx, "policy_id=%s\n", ruleset->policy_id);
     if (rc != MAELYS_OK) return rc;
@@ -249,7 +249,7 @@ static maelys_result_t ruleset_stream_canonical(maelys_sha256_ctx_t *ctx,
     return MAELYS_OK;
 }
 
-static maelys_result_t finalize_authority(maelys_datalog_ruleset_t *ruleset) {
+static maelys_result_t finalize_authority(maelys_datalog_internal_ruleset_t *ruleset) {
     if (!ruleset) return MAELYS_ERR_INVALID_ARGUMENT;
     if (ruleset->filter_program_count > MAELYS_DATALOG_MAX_FILTER_PROGRAMS) {
         return MAELYS_ERR_INVALID_STATE;
@@ -278,7 +278,7 @@ static maelys_result_t finalize_authority(maelys_datalog_ruleset_t *ruleset) {
     return MAELYS_OK;
 }
 
-maelys_result_t maelys_datalog_ruleset_finalize_sha256(maelys_datalog_ruleset_t *ruleset) {
+maelys_result_t maelys_datalog_ruleset_finalize_sha256(maelys_datalog_internal_ruleset_t *ruleset) {
     if (!ruleset) return MAELYS_ERR_INVALID_ARGUMENT;
     ruleset->compiled_fingerprint[0] = 0;
     maelys_result_t rc = finalize_authority(ruleset);

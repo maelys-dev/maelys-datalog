@@ -40,18 +40,18 @@ static maelys_datalog_predicate_entry_t s_predicates[MAELYS_DATALOG_MAX_PREDICAT
 static size_t s_pred_count;
 static int s_building;
 static int s_has_committed;
-static maelys_datalog_policy_set_t s_policy_set;
-static maelys_datalog_diagnostic_t s_last_diag;
-static maelys_datalog_edb_t s_edb;
-static maelys_datalog_fact_t s_fact_pool[MAELYS_DATALOG_MAX_EDB_FACTS];
+static maelys_datalog_internal_policy_set_t s_policy_set;
+static maelys_datalog_internal_diagnostic_t s_last_diag;
+static maelys_datalog_internal_edb_t s_edb;
+static maelys_datalog_internal_fact_t s_fact_pool[MAELYS_DATALOG_MAX_EDB_FACTS];
 static maelys_datalog_symbol_id_t s_id_scratch[MAELYS_DATALOG_MAX_EDB_FACTS * 2u];
-static maelys_datalog_fact_t
+static maelys_datalog_internal_fact_t
     s_enumerate_facts_scratch[MAELYS_DATALOG_MAX_FACTS_PER_PRED];
-static maelys_datalog_solve_result_t *s_solve_result = NULL;
+static maelys_datalog_internal_solve_result_t *s_solve_result = NULL;
 static wasm_edb_state_t s_edb_state = WASM_EDB_STATE_EMPTY;
 
 /* Flat uint32_t ABI for JS build limits.
- * Slots mirror maelys_datalog_build_limits_t declaration order:
+ * Slots use public limit IDs 1..10 in this fixed transport order:
  *   0 max_symbols
  *   1 string_pool_bytes
  *   2 max_predicates
@@ -65,18 +65,11 @@ static wasm_edb_state_t s_edb_state = WASM_EDB_STATE_EMPTY;
  */
 void maelys_datalog_wasm_get_build_limits(uint32_t *out) {
     if (!out) return;
-    maelys_datalog_build_limits_t limits;
-    maelys_datalog_get_build_limits(&limits);
-    out[0] = (uint32_t)limits.max_symbols;
-    out[1] = (uint32_t)limits.string_pool_bytes;
-    out[2] = (uint32_t)limits.max_predicates;
-    out[3] = (uint32_t)limits.max_rules;
-    out[4] = (uint32_t)limits.max_arity;
-    out[5] = (uint32_t)limits.max_body_literals;
-    out[6] = (uint32_t)limits.max_depth;
-    out[7] = (uint32_t)limits.max_edb_facts;
-    out[8] = (uint32_t)limits.max_idb_facts;
-    out[9] = (uint32_t)limits.max_facts_per_pred;
+    for (size_t i = 0u; i < MAELYS_DATALOG_WASM_BUILD_LIMITS_COUNT; ++i) {
+        size_t value = 0u;
+        (void)maelys_datalog_limit_get((maelys_datalog_limit_t)(i + 1u), &value);
+        out[i] = (uint32_t)value;
+    }
 }
 
 static void builder_clear_current(void) {
@@ -224,9 +217,9 @@ maelys_result_t maelys_datalog_wasm_domain_commit(void) {
         return MAELYS_ERR_INVALID_ARGUMENT;
     }
 
-    maelys_datalog_public_predicate_t declarations[MAELYS_DATALOG_MAX_PREDICATES];
+    maelys_datalog_predicate_t declarations[MAELYS_DATALOG_MAX_PREDICATES];
     for (size_t i = 0; i < s_pred_count; ++i) {
-        declarations[i] = (maelys_datalog_public_predicate_t){
+        declarations[i] = (maelys_datalog_predicate_t){
             s_predicates[i].name, s_predicates[i].arity, s_predicates[i].kind_flags};
     }
     maelys_datalog_domain_def_t def = {
@@ -440,8 +433,8 @@ maelys_result_t maelys_datalog_wasm_edb_add_symbol2(const char *pred,
  * bound identically; the observed/limit pair goes to the hint, which callers
  * read separately. */
 static void wasm_record_solve_failure(
-    const maelys_datalog_solve_diagnostic_t *diag) {
-    maelys_datalog_diagnostic_clear(&s_last_diag);
+    const maelys_datalog_internal_solve_diagnostic_t *diag) {
+    maelys_datalog_internal_diagnostic_clear(&s_last_diag);
     const char *name = maelys_datalog_solve_diagnostic_category_name(
         diag ? diag->category : MAELYS_DATALOG_SOLVE_DIAG_NONE);
     char hint[256];
@@ -455,11 +448,11 @@ static void wasm_record_solve_failure(
                  "evaluation did not converge within the build limit of %u iterations",
                  (unsigned)diag->depth_limit);
     }
-    maelys_datalog_diagnostic_set(&s_last_diag, MAELYS_DATALOG_DIAG_NONE,
+    maelys_datalog_internal_diagnostic_set(&s_last_diag, MAELYS_DATALOG_DIAG_NONE,
                                   "solve", "", 0u, 0u, name,
                                   hint[0] ? hint : NULL);
     if (diag) {
-        maelys_datalog_diagnostic_set_limit(&s_last_diag,
+        maelys_datalog_internal_diagnostic_set_limit(&s_last_diag,
                                             (size_t)diag->count_observed,
                                             (size_t)diag->capacity);
     }
@@ -468,8 +461,8 @@ static void wasm_record_solve_failure(
 /* A state rejection never reaches the solver, so it has no category. Name the
  * precondition instead of leaving the caller with a bare return code. */
 static void wasm_record_solve_state_error(const char *what) {
-    maelys_datalog_diagnostic_clear(&s_last_diag);
-    maelys_datalog_diagnostic_set(&s_last_diag, MAELYS_DATALOG_DIAG_NONE,
+    maelys_datalog_internal_diagnostic_clear(&s_last_diag);
+    maelys_datalog_internal_diagnostic_set(&s_last_diag, MAELYS_DATALOG_DIAG_NONE,
                                   "solve", "", 0u, 0u, "invalid_state", what);
 }
 
@@ -482,18 +475,18 @@ maelys_result_t maelys_datalog_wasm_solve(void) {
         wasm_record_solve_state_error("no policy loaded");
         return MAELYS_ERR_INVALID_STATE;
     }
-    maelys_datalog_diagnostic_clear(&s_last_diag);
+    maelys_datalog_internal_diagnostic_clear(&s_last_diag);
     free_solve_result_only();
     maelys_result_t rc = maelys_datalog_edb_finalize(&s_edb);
     if (rc != MAELYS_OK) {
-        maelys_datalog_diagnostic_set(&s_last_diag, MAELYS_DATALOG_DIAG_NONE,
+        maelys_datalog_internal_diagnostic_set(&s_last_diag, MAELYS_DATALOG_DIAG_NONE,
                                       "solve", "", 0u, 0u, "malformed_edb",
                                       "input facts were rejected before evaluation");
         maelys_datalog_edb_clear(&s_edb);
         s_edb_state = WASM_EDB_STATE_EMPTY;
         return rc;
     }
-    maelys_datalog_solve_diagnostic_t solve_diag;
+    maelys_datalog_internal_solve_diagnostic_t solve_diag;
     memset(&solve_diag, 0, sizeof(solve_diag));
     rc = maelys_datalog_solve_once_ex(&s_policy_set.policies[0], &s_edb,
                                       &s_solve_result, &solve_diag);
@@ -520,7 +513,7 @@ int maelys_datalog_wasm_query_symbol(const char *pred, const char *arg0) {
     if (found < 0) return -1;
     if (found == 0) return 0;
 
-    maelys_datalog_term_t term = {.kind = MAELYS_DATALOG_TERM_SYMBOL};
+    maelys_datalog_internal_term_t term = {.kind = MAELYS_DATALOG_TERM_SYMBOL};
     term.as.symbol = id0;
     bool present = false;
     maelys_result_t rc = maelys_datalog_query_solved_ground_fact(s_solve_result,
@@ -550,7 +543,7 @@ int maelys_datalog_wasm_query_symbol2(const char *pred,
     if (found0 < 0 || found1 < 0) return -1;
     if (found0 == 0 || found1 == 0) return 0;
 
-    maelys_datalog_term_t terms[2];
+    maelys_datalog_internal_term_t terms[2];
     terms[0].kind = MAELYS_DATALOG_TERM_SYMBOL;
     terms[0].as.symbol = id0;
     terms[1].kind = MAELYS_DATALOG_TERM_SYMBOL;
@@ -635,7 +628,7 @@ static maelys_result_t wasm_explain_symbol_fact_text(const char *predicate,
                                                  &predicate_id)) {
         return MAELYS_ERR_INVALID_STATE;
     }
-    maelys_datalog_fact_t queried_fact;
+    maelys_datalog_internal_fact_t queried_fact;
     memset(&queried_fact, 0, sizeof(queried_fact));
     queried_fact.predicate_id = predicate_id;
     queried_fact.arity = (uint8_t)arity;
@@ -742,7 +735,7 @@ int32_t maelys_datalog_wasm_enumerate_predicate_facts(const char *predicate,
     if ((size_t)capacity > MAELYS_DATALOG_MAX_FACTS_PER_PRED) return -1;
 
     size_t cap = (size_t)capacity;
-    maelys_datalog_fact_t *facts = cap > 0u ? s_enumerate_facts_scratch : NULL;
+    maelys_datalog_internal_fact_t *facts = cap > 0u ? s_enumerate_facts_scratch : NULL;
     size_t count = 0u;
     maelys_result_t rc =
         maelys_datalog_solve_result_enumerate_predicate_facts(s_solve_result,
@@ -756,7 +749,7 @@ int32_t maelys_datalog_wasm_enumerate_predicate_facts(const char *predicate,
     size_t copied = count < cap ? count : cap;
     for (size_t fact_index = 0u; fact_index < copied; fact_index++) {
         for (size_t term_index = 0u; term_index < (size_t)arity; term_index++) {
-            const maelys_datalog_term_t *term =
+            const maelys_datalog_internal_term_t *term =
                 &facts[fact_index].terms[term_index];
             int32_t *slot =
                 &out_terms[(fact_index * (size_t)arity + term_index) * 3u];
@@ -828,7 +821,7 @@ maelys_result_t maelys_datalog_wasm_load_ruleset(const char *domain_name,
     char policy_buf[MAELYS_DATALOG_INLINE_MAX_POLICY_ID_LEN + 1u];
     reset_edb_runtime_state();
     maelys_datalog_policy_set_clear(&s_policy_set);
-    maelys_datalog_diagnostic_clear(&s_last_diag);
+    maelys_datalog_internal_diagnostic_clear(&s_last_diag);
 
     maelys_result_t rc = copy_bounded(domain_buf, sizeof(domain_buf), domain_name);
     if (rc != MAELYS_OK) return rc;

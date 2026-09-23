@@ -228,7 +228,7 @@ class Engine:
         domain_name = ffi.new("char[]", _name(name, "domain name"))
         if not predicates:
             raise ValueError("at least one predicate is required")
-        declarations = ffi.new("maelys_datalog_public_predicate_t[]", len(predicates))
+        declarations = ffi.new("maelys_datalog_predicate_t[]", len(predicates))
         keepers: list[object] = [domain_name, declarations]
         for index, predicate in enumerate(predicates):
             if not isinstance(predicate, Predicate):
@@ -246,7 +246,7 @@ class Engine:
             ffi.new("const char *const[]", atom_buffers)
             if atom_buffers else ffi.NULL
         )
-        domain = ffi.new("maelys_datalog_public_domain_t *")
+        domain = ffi.new("maelys_datalog_domain_t *")
         domain.name = domain_name
         domain.predicates = declarations
         domain.predicate_count = len(predicates)
@@ -558,7 +558,7 @@ class Edb:
         self._require_mutable()
         name = _name(predicate, "predicate")
         normalized = _terms(terms)
-        native = ffi.new("maelys_datalog_public_value_t[]", len(normalized)) if normalized else ffi.NULL
+        native = ffi.new("maelys_datalog_value_t[]", len(normalized)) if normalized else ffi.NULL
         keepers: list[object] = []
         for index, value in enumerate(normalized):
             _fill_value(native[index], value, keepers)
@@ -590,7 +590,7 @@ class Edb:
             staged.append((predicate, _terms(terms)))
         # Iterators can execute caller code, including closing this EDB.
         self._require_mutable()
-        native = ffi.new("maelys_datalog_public_fact_t[]", len(staged)) if staged else ffi.NULL
+        native = ffi.new("maelys_datalog_fact_t[]", len(staged)) if staged else ffi.NULL
         keepers: list[object] = []
         for index, (predicate, terms) in enumerate(staged):
             name = ffi.new("char[]", _name(predicate, "predicate"))
@@ -688,7 +688,7 @@ class SolveResult:
         self._require_open()
         name = _name(predicate, "predicate")
         normalized = _terms(terms)
-        values = ffi.new("maelys_datalog_public_value_t[]", len(normalized)) if normalized else ffi.NULL
+        values = ffi.new("maelys_datalog_value_t[]", len(normalized)) if normalized else ffi.NULL
         keepers: list[object] = []
         for index, term in enumerate(normalized):
             _fill_value(values[index], term, keepers)
@@ -743,7 +743,7 @@ class SolveResult:
         name = ffi.new("char[]", _name(predicate, "predicate"))
         normalized = _terms(terms)
         values = (
-            ffi.new("maelys_datalog_public_value_t[]", len(normalized))
+            ffi.new("maelys_datalog_value_t[]", len(normalized))
             if normalized else ffi.NULL
         )
         keepers: list[object] = [name]
@@ -792,7 +792,7 @@ class SolveResult:
         )
         if count[0] == 0:
             return []
-        views = ffi.new("maelys_datalog_public_fact_view_t[]", count[0])
+        views = ffi.new("maelys_datalog_fact_view_t[]", count[0])
         _check(
             lib.maelys_datalog_result_enumerate(
                 self._result, name, arity, views, count[0], count,

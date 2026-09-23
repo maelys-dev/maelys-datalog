@@ -11,8 +11,8 @@
 #include <string.h>
 
 
-int maelys_datalog_term_equal(const maelys_datalog_term_t *a,
-                              const maelys_datalog_term_t *b) {
+int maelys_datalog_term_equal(const maelys_datalog_internal_term_t *a,
+                              const maelys_datalog_internal_term_t *b) {
     if (!a || !b || a->kind != b->kind) return 0;
     switch (a->kind) {
         case MAELYS_DATALOG_TERM_SYMBOL: return a->as.symbol == b->as.symbol;
@@ -23,8 +23,8 @@ int maelys_datalog_term_equal(const maelys_datalog_term_t *a,
     }
 }
 
-int maelys_datalog_fact_cmp(const maelys_datalog_fact_t *a,
-                            const maelys_datalog_fact_t *b) {
+int maelys_datalog_fact_cmp(const maelys_datalog_internal_fact_t *a,
+                            const maelys_datalog_internal_fact_t *b) {
     if (!a && !b) return 0;
     if (!a) return -1;
     if (!b) return 1;
@@ -39,10 +39,10 @@ int maelys_datalog_fact_cmp(const maelys_datalog_fact_t *a,
     return 0;
 }
 
-MAELYS_DEFINE_SORT(sort_facts, maelys_datalog_fact_t, maelys_datalog_fact_cmp)
+MAELYS_DEFINE_SORT(sort_facts, maelys_datalog_internal_fact_t, maelys_datalog_fact_cmp)
 
 void maelys_datalog_fact_set_init(maelys_datalog_fact_set_t *set,
-                                  maelys_datalog_fact_t *facts,
+                                  maelys_datalog_internal_fact_t *facts,
                                   size_t capacity) {
     if (!set) return;
     memset(set, 0, sizeof(*set));
@@ -75,14 +75,14 @@ maelys_result_t maelys_datalog_fact_set_dedup(maelys_datalog_fact_set_t *set) {
     return MAELYS_OK;
 }
 
-int maelys_datalog_fact_equals(const maelys_datalog_fact_t *a,
-                               const maelys_datalog_fact_t *b) {
+int maelys_datalog_fact_equals(const maelys_datalog_internal_fact_t *a,
+                               const maelys_datalog_internal_fact_t *b) {
     if (!a || !b) return 0;
     return maelys_datalog_fact_cmp(a, b) == 0;
 }
 
 int maelys_datalog_fact_set_contains(const maelys_datalog_fact_set_t *set,
-                                     const maelys_datalog_fact_t *fact) {
+                                     const maelys_datalog_internal_fact_t *fact) {
     if (!set || !fact || (!set->facts && set->count > 0)) return 0;
     if (!set->sorted) {
         for (size_t i = 0; i < set->count; i++) {
@@ -137,7 +137,7 @@ maelys_result_t maelys_datalog_fact_set_predicate_range(const maelys_datalog_fac
 
 maelys_result_t maelys_datalog_fact_set_merge_delta(maelys_datalog_fact_set_t *current,
                                                     const maelys_datalog_fact_set_t *delta,
-                                                    maelys_datalog_fact_t *merge_buffer,
+                                                    maelys_datalog_internal_fact_t *merge_buffer,
                                                     size_t merge_capacity,
                                                     size_t *inserted_count) {
     if (!current || !delta || !merge_buffer || !inserted_count || !current->sorted || !delta->sorted ||
@@ -151,7 +151,7 @@ maelys_result_t maelys_datalog_fact_set_merge_delta(maelys_datalog_fact_set_t *c
     size_t out = 0;
     size_t inserted = 0;
     while (i < current->count || j < delta->count) {
-        const maelys_datalog_fact_t *src = NULL;
+        const maelys_datalog_internal_fact_t *src = NULL;
         int from_delta = 0;
         if (i >= current->count) {
             src = &delta->facts[j++];
@@ -184,13 +184,13 @@ maelys_result_t maelys_datalog_fact_set_merge_delta(maelys_datalog_fact_set_t *c
     return MAELYS_OK;
 }
 
-maelys_result_t maelys_datalog_edb_init(maelys_datalog_edb_t *edb,
-                                        maelys_datalog_fact_t *fact_pool,
+maelys_result_t maelys_datalog_edb_init(maelys_datalog_internal_edb_t *edb,
+                                        maelys_datalog_internal_fact_t *fact_pool,
                                         size_t fact_capacity,
                                         maelys_datalog_symbol_table_t *symbols,
                                         const maelys_datalog_predicate_registry_t *registry) {
     if (!edb || !fact_pool || fact_capacity == 0 || !symbols || !registry) return MAELYS_ERR_INVALID_ARGUMENT;
-    memset(edb, 0, offsetof(maelys_datalog_edb_t, runtime_pair_ids_scratch));
+    memset(edb, 0, offsetof(maelys_datalog_internal_edb_t, runtime_pair_ids_scratch));
     edb->facts = fact_pool;
     edb->fact_capacity = fact_capacity;
     maelys_datalog_fact_set_init(&edb->fact_set, fact_pool, fact_capacity);
@@ -199,7 +199,7 @@ maelys_result_t maelys_datalog_edb_init(maelys_datalog_edb_t *edb,
     return MAELYS_OK;
 }
 
-void maelys_datalog_edb_clear(maelys_datalog_edb_t *edb) {
+void maelys_datalog_edb_clear(maelys_datalog_internal_edb_t *edb) {
     if (!edb) return;
     edb->fact_count = 0;
     edb->fact_set.count = 0;
@@ -208,17 +208,17 @@ void maelys_datalog_edb_clear(maelys_datalog_edb_t *edb) {
     memset(edb->facts_per_pred, 0, sizeof(edb->facts_per_pred));
 }
 
-int maelys_datalog_edb_contains(const maelys_datalog_edb_t *edb,
-                                const maelys_datalog_fact_t *fact) {
+int maelys_datalog_edb_contains(const maelys_datalog_internal_edb_t *edb,
+                                const maelys_datalog_internal_fact_t *fact) {
     if (!edb || !fact) return 0;
     return maelys_datalog_fact_set_contains(&edb->fact_set, fact);
 }
 
 /* Shared validation preserves the historical error/capacity precedence.
  * The two insertion paths deliberately do not share an index-aware body. */
-static inline maelys_result_t validate_fact(maelys_datalog_edb_t *edb,
-    const char *predicate, const maelys_datalog_term_t *terms, size_t arity,
-    maelys_datalog_fact_t *fact) {
+static inline maelys_result_t validate_fact(maelys_datalog_internal_edb_t *edb,
+    const char *predicate, const maelys_datalog_internal_term_t *terms, size_t arity,
+    maelys_datalog_internal_fact_t *fact) {
     if (!edb || !predicate || (!terms && arity > 0) || arity > MAELYS_DATALOG_MAX_ARITY) {
         return MAELYS_ERR_INVALID_ARGUMENT;
     }
@@ -248,9 +248,9 @@ static inline maelys_result_t validate_fact(maelys_datalog_edb_t *edb,
 
 }
 
-maelys_result_t maelys_datalog_edb_add_fact(maelys_datalog_edb_t *edb,
-    const char *predicate, const maelys_datalog_term_t *terms, size_t arity) {
-    maelys_datalog_fact_t fact;
+maelys_result_t maelys_datalog_edb_add_fact(maelys_datalog_internal_edb_t *edb,
+    const char *predicate, const maelys_datalog_internal_term_t *terms, size_t arity) {
+    maelys_datalog_internal_fact_t fact;
     maelys_result_t rc = validate_fact(edb, predicate, terms, arity, &fact);
     if (rc != MAELYS_OK) return rc;
     if (maelys_datalog_edb_contains(edb, &fact)) return MAELYS_OK;
@@ -263,11 +263,11 @@ maelys_result_t maelys_datalog_edb_add_fact(maelys_datalog_edb_t *edb,
 
 /* Hash logical fields, never union padding or unused terms. Final avalanche
  * spreads consecutive integer and symbol IDs across the bounded table. */
-static size_t insert_bucket(const maelys_datalog_fact_t *fact) {
+static size_t insert_bucket(const maelys_datalog_internal_fact_t *fact) {
     uint64_t hash = fact->predicate_id;
     hash = (hash ^ fact->arity) * UINT64_C(1099511628211);
     for (size_t i = 0; i < fact->arity; ++i) {
-        const maelys_datalog_term_t *term = &fact->terms[i];
+        const maelys_datalog_internal_term_t *term = &fact->terms[i];
         uint64_t value = 0;
         switch (term->kind) {
             case MAELYS_DATALOG_TERM_SYMBOL: value = term->as.symbol; break;
@@ -288,16 +288,16 @@ static size_t insert_bucket(const maelys_datalog_fact_t *fact) {
 }
 
 #ifdef MAELYS_TESTING
-size_t maelys_datalog_test_edb_insert_bucket(const maelys_datalog_fact_t *fact) {
+size_t maelys_datalog_test_edb_insert_bucket(const maelys_datalog_internal_fact_t *fact) {
     return insert_bucket(fact);
 }
 #endif
 
-maelys_result_t maelys_datalog_edb_add_fact_indexed(maelys_datalog_edb_t *edb,
-    const char *predicate, const maelys_datalog_term_t *terms, size_t arity,
+maelys_result_t maelys_datalog_edb_add_fact_indexed(maelys_datalog_internal_edb_t *edb,
+    const char *predicate, const maelys_datalog_internal_term_t *terms, size_t arity,
     maelys_datalog_edb_insert_index_t *index) {
     if (!index) return MAELYS_ERR_INVALID_ARGUMENT;
-    maelys_datalog_fact_t fact;
+    maelys_datalog_internal_fact_t fact;
     maelys_result_t rc = validate_fact(edb, predicate, terms, arity, &fact);
     if (rc != MAELYS_OK) return rc;
     size_t slot = 0;
@@ -337,7 +337,7 @@ maelys_result_t maelys_datalog_edb_add_fact_indexed(maelys_datalog_edb_t *edb,
     return MAELYS_OK;
 }
 
-static maelys_result_t validate_edb_symbol_target(maelys_datalog_edb_t *edb,
+static maelys_result_t validate_edb_symbol_target(maelys_datalog_internal_edb_t *edb,
                                                   const char *predicate,
                                                   size_t arity) {
     if (!edb || !predicate) return MAELYS_ERR_INVALID_ARGUMENT;
@@ -355,7 +355,7 @@ static maelys_result_t validate_edb_symbol_target(maelys_datalog_edb_t *edb,
     return MAELYS_OK;
 }
 
-static maelys_result_t validate_edb_symbol_batch_target(maelys_datalog_edb_t *edb,
+static maelys_result_t validate_edb_symbol_batch_target(maelys_datalog_internal_edb_t *edb,
                                                         const char *predicate,
                                                         size_t arity,
                                                         size_t count) {
@@ -386,7 +386,7 @@ static maelys_result_t validate_edb_symbol_batch_target(maelys_datalog_edb_t *ed
     return MAELYS_OK;
 }
 
-static maelys_result_t validate_edb_symbol_capacity(maelys_datalog_edb_t *edb,
+static maelys_result_t validate_edb_symbol_capacity(maelys_datalog_internal_edb_t *edb,
                                                     const char *predicate,
                                                     size_t arity) {
     if (!edb || !predicate) return MAELYS_ERR_INVALID_ARGUMENT;
@@ -403,7 +403,7 @@ static maelys_result_t validate_edb_symbol_capacity(maelys_datalog_edb_t *edb,
     return MAELYS_OK;
 }
 
-static maelys_result_t validate_symbol_id(const maelys_datalog_edb_t *edb,
+static maelys_result_t validate_symbol_id(const maelys_datalog_internal_edb_t *edb,
                                           maelys_datalog_symbol_id_t id) {
     if (!edb || !maelys_datalog_symbol_id_is_valid(edb->symbols, id)) {
         return MAELYS_ERR_INVALID_ARGUMENT;
@@ -411,7 +411,7 @@ static maelys_result_t validate_symbol_id(const maelys_datalog_edb_t *edb,
     return MAELYS_OK;
 }
 
-maelys_result_t maelys_datalog_edb_intern_runtime_symbol(maelys_datalog_edb_t *edb,
+maelys_result_t maelys_datalog_edb_intern_runtime_symbol(maelys_datalog_internal_edb_t *edb,
                                                          const char *text,
                                                          maelys_datalog_symbol_id_t *out_id) {
     if (!edb || !text || !out_id) return MAELYS_ERR_INVALID_ARGUMENT;
@@ -419,7 +419,7 @@ maelys_result_t maelys_datalog_edb_intern_runtime_symbol(maelys_datalog_edb_t *e
     return maelys_datalog_symbol_intern(edb->symbols, text, strlen(text), out_id);
 }
 
-maelys_result_t maelys_datalog_edb_add_symbol_id_fact(maelys_datalog_edb_t *edb,
+maelys_result_t maelys_datalog_edb_add_symbol_id_fact(maelys_datalog_internal_edb_t *edb,
                                                       const char *predicate,
                                                       maelys_datalog_symbol_id_t value) {
     if (!edb || !predicate) return MAELYS_ERR_INVALID_ARGUMENT;
@@ -429,12 +429,12 @@ maelys_result_t maelys_datalog_edb_add_symbol_id_fact(maelys_datalog_edb_t *edb,
     if (rc != MAELYS_OK) return rc;
     rc = validate_edb_symbol_capacity(edb, predicate, 1);
     if (rc != MAELYS_OK) return rc;
-    maelys_datalog_term_t term = {.kind = MAELYS_DATALOG_TERM_SYMBOL};
+    maelys_datalog_internal_term_t term = {.kind = MAELYS_DATALOG_TERM_SYMBOL};
     term.as.symbol = value;
     return maelys_datalog_edb_add_fact(edb, predicate, &term, 1);
 }
 
-maelys_result_t maelys_datalog_edb_add_symbol_ids_fact(maelys_datalog_edb_t *edb,
+maelys_result_t maelys_datalog_edb_add_symbol_ids_fact(maelys_datalog_internal_edb_t *edb,
                                                        const char *predicate,
                                                        maelys_datalog_symbol_id_t left,
                                                        maelys_datalog_symbol_id_t right) {
@@ -447,7 +447,7 @@ maelys_result_t maelys_datalog_edb_add_symbol_ids_fact(maelys_datalog_edb_t *edb
     if (rc != MAELYS_OK) return rc;
     rc = validate_edb_symbol_capacity(edb, predicate, 2);
     if (rc != MAELYS_OK) return rc;
-    maelys_datalog_term_t terms[2] = {
+    maelys_datalog_internal_term_t terms[2] = {
         {.kind = MAELYS_DATALOG_TERM_SYMBOL},
         {.kind = MAELYS_DATALOG_TERM_SYMBOL},
     };
@@ -457,7 +457,7 @@ maelys_result_t maelys_datalog_edb_add_symbol_ids_fact(maelys_datalog_edb_t *edb
 }
 
 maelys_result_t maelys_datalog_edb_add_symbol_id_facts(
-    maelys_datalog_edb_t *edb,
+    maelys_datalog_internal_edb_t *edb,
     const char *predicate,
     const maelys_datalog_symbol_id_t *values,
     size_t value_count) {
@@ -472,7 +472,7 @@ maelys_result_t maelys_datalog_edb_add_symbol_id_facts(
         if (rc != MAELYS_OK) return rc;
     }
     for (size_t i = 0; i < value_count; i++) {
-        maelys_datalog_term_t term = {.kind = MAELYS_DATALOG_TERM_SYMBOL};
+        maelys_datalog_internal_term_t term = {.kind = MAELYS_DATALOG_TERM_SYMBOL};
         term.as.symbol = values[i];
         rc = maelys_datalog_edb_add_fact(edb, predicate, &term, 1);
         if (rc != MAELYS_OK) return rc;
@@ -481,7 +481,7 @@ maelys_result_t maelys_datalog_edb_add_symbol_id_facts(
 }
 
 maelys_result_t maelys_datalog_edb_add_symbol_ids_facts(
-    maelys_datalog_edb_t *edb,
+    maelys_datalog_internal_edb_t *edb,
     const char *predicate,
     const maelys_datalog_symbol_id_t *pairs,
     size_t pair_count) {
@@ -498,7 +498,7 @@ maelys_result_t maelys_datalog_edb_add_symbol_ids_facts(
         if (rc != MAELYS_OK) return rc;
     }
     for (size_t i = 0; i < pair_count; i++) {
-        maelys_datalog_term_t terms[2] = {
+        maelys_datalog_internal_term_t terms[2] = {
             {.kind = MAELYS_DATALOG_TERM_SYMBOL},
             {.kind = MAELYS_DATALOG_TERM_SYMBOL},
         };
@@ -511,7 +511,7 @@ maelys_result_t maelys_datalog_edb_add_symbol_ids_facts(
 }
 
 maelys_result_t maelys_datalog_edb_add_runtime_symbol_facts(
-    maelys_datalog_edb_t *edb,
+    maelys_datalog_internal_edb_t *edb,
     const char *predicate,
     const char *const *values,
     size_t value_count) {
@@ -532,7 +532,7 @@ maelys_result_t maelys_datalog_edb_add_runtime_symbol_facts(
 }
 
 maelys_result_t maelys_datalog_edb_add_runtime_symbol_pair_facts(
-    maelys_datalog_edb_t *edb,
+    maelys_datalog_internal_edb_t *edb,
     const char *predicate,
     const char *const *flat_pairs,
     size_t pair_count) {
@@ -554,7 +554,7 @@ maelys_result_t maelys_datalog_edb_add_runtime_symbol_pair_facts(
     return maelys_datalog_edb_add_symbol_ids_facts(edb, predicate, ids, pair_count);
 }
 
-maelys_result_t maelys_datalog_edb_add_runtime_symbol_fact(maelys_datalog_edb_t *edb,
+maelys_result_t maelys_datalog_edb_add_runtime_symbol_fact(maelys_datalog_internal_edb_t *edb,
                                                            const char *predicate,
                                                            const char *value) {
     if (!edb || !predicate || !value) return MAELYS_ERR_INVALID_ARGUMENT;
@@ -565,12 +565,12 @@ maelys_result_t maelys_datalog_edb_add_runtime_symbol_fact(maelys_datalog_edb_t 
     maelys_datalog_symbol_id_t sid;
     rc = maelys_datalog_edb_intern_runtime_symbol(edb, value, &sid);
     if (rc != MAELYS_OK) return rc;
-    maelys_datalog_term_t term = {.kind = MAELYS_DATALOG_TERM_SYMBOL};
+    maelys_datalog_internal_term_t term = {.kind = MAELYS_DATALOG_TERM_SYMBOL};
     term.as.symbol = sid;
     return maelys_datalog_edb_add_fact(edb, predicate, &term, 1);
 }
 
-maelys_result_t maelys_datalog_edb_add_atom_fact(maelys_datalog_edb_t *edb,
+maelys_result_t maelys_datalog_edb_add_atom_fact(maelys_datalog_internal_edb_t *edb,
                                                  const char *predicate,
                                                  const char *atom) {
     if (!edb || !predicate || !atom) return MAELYS_ERR_INVALID_ARGUMENT;
@@ -584,12 +584,12 @@ maelys_result_t maelys_datalog_edb_add_atom_fact(maelys_datalog_edb_t *edb,
     maelys_datalog_symbol_id_t sid;
     rc = maelys_datalog_symbol_intern(edb->symbols, atom, strlen(atom), &sid);
     if (rc != MAELYS_OK) return rc;
-    maelys_datalog_term_t term = {.kind = MAELYS_DATALOG_TERM_SYMBOL};
+    maelys_datalog_internal_term_t term = {.kind = MAELYS_DATALOG_TERM_SYMBOL};
     term.as.symbol = sid;
     return maelys_datalog_edb_add_fact(edb, predicate, &term, 1);
 }
 
-static maelys_result_t recompute_edb_counts(maelys_datalog_edb_t *edb) {
+static maelys_result_t recompute_edb_counts(maelys_datalog_internal_edb_t *edb) {
     memset(edb->facts_per_pred, 0, sizeof(edb->facts_per_pred));
     for (size_t i = 0; i < edb->fact_set.count; i++) {
         maelys_datalog_predicate_id_t pid = edb->fact_set.facts[i].predicate_id;
@@ -602,7 +602,7 @@ static maelys_result_t recompute_edb_counts(maelys_datalog_edb_t *edb) {
     return MAELYS_OK;
 }
 
-maelys_result_t maelys_datalog_edb_finalize(maelys_datalog_edb_t *edb) {
+maelys_result_t maelys_datalog_edb_finalize(maelys_datalog_internal_edb_t *edb) {
     if (!edb || !edb->facts) return MAELYS_ERR_INVALID_ARGUMENT;
     edb->fact_set.count = edb->fact_count;
     maelys_result_t rc = maelys_datalog_fact_set_sort(&edb->fact_set);

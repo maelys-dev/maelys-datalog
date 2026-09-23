@@ -51,11 +51,11 @@ static maelys_datalog_status_t injected_result_free(maelys_datalog_result_t *r) 
 #undef calloc
 #undef realloc
 #undef free
-static maelys_datalog_public_value_t integer(int64_t n) {
-    maelys_datalog_public_value_t v={.kind=MAELYS_DATALOG_VALUE_INTEGER};v.as.integer=n;return v;
+static maelys_datalog_value_t integer(int64_t n) {
+    maelys_datalog_value_t v={.kind=MAELYS_DATALOG_VALUE_INTEGER};v.as.integer=n;return v;
 }
 static void rejected_unchanged(maelys_datalog_window_t *w, const char *predicate,
-    maelys_datalog_public_value_t *values, size_t count, int expected, size_t input_bytes) {
+    maelys_datalog_value_t *values, size_t count, int expected, size_t input_bytes) {
     unsigned char *bank=malloc(input_bytes); assert(bank);
     unsigned char header[sizeof(*w)];
     memcpy(header,w,sizeof(*w)); memcpy(bank,w->inputs[w->active],input_bytes);
@@ -65,10 +65,10 @@ static void rejected_unchanged(maelys_datalog_window_t *w, const char *predicate
     assert(!memcmp(bank,w->inputs[w->active],input_bytes)); free(bank);
 }
 int main(void) {
-    const maelys_datalog_public_predicate_t preds[]={
+    const maelys_datalog_predicate_t preds[]={
         {"event",2,MAELYS_DATALOG_PREDICATE_EDB},
         {"out",1,MAELYS_DATALOG_PREDICATE_IDB|MAELYS_DATALOG_PREDICATE_QUERY}};
-    const maelys_datalog_public_domain_t d={"window_alloc",preds,2,NULL,0};
+    const maelys_datalog_domain_t d={"window_alloc",preds,2,NULL,0};
     assert(!maelys_datalog_domain_register(&d));
     maelys_datalog_policy_t *p=NULL;
     const char *source="out(N) :- sum(V,event(_,V),N).";
@@ -91,7 +91,7 @@ int main(void) {
     maelys_datalog_window_t *w=NULL;
     assert(!maelys_datalog_window_init(storage,bytes,2,16,0,a,b,&w,NULL));
     for(uint32_t i=0;i<600;++i) {
-        maelys_datalog_public_value_t v=integer(1); uint32_t id=UINT32_MAX;
+        maelys_datalog_value_t v=integer(1); uint32_t id=UINT32_MAX;
         assert(!maelys_datalog_window_push(w,"event",&v,1,&id,NULL) && id==i);
         size_t used,capacity;
         assert(!maelys_datalog_window_text_usage(w,&used,&capacity) && used==6 && capacity==16);
@@ -113,7 +113,7 @@ int main(void) {
     }
     /* A release failure need not be caused by an explanation lease. */
     release_failure_target=w->result;
-    maelys_datalog_public_value_t proposed=integer(1);
+    maelys_datalog_value_t proposed=integer(1);
     rejected_unchanged(w,"event",&proposed,1,MAELYS_DATALOG_STATUS_INVALID_ARGUMENT,input_bytes);
     maelys_datalog_public_diagnostic_t diag;
     assert(maelys_datalog_window_push(w,"event",&proposed,1,NULL,&diag)==MAELYS_DATALOG_STATUS_INVALID_ARGUMENT);
@@ -124,7 +124,7 @@ int main(void) {
     assert(!w->result && !w->sessions[0] && !w->sessions[1] && !w->inputs[0] && !w->inputs[1]);
     size_t closed_count=123,closed_capacity=456; uint64_t closed_next=789;
     maelys_datalog_result_t *closed_result=NULL;
-    const maelys_datalog_public_fact_t *closed_events=NULL;
+    const maelys_datalog_fact_t *closed_events=NULL;
     assert(maelys_datalog_window_push(w,"event",&proposed,1,NULL,&diag)==MAELYS_DATALOG_STATUS_INVALID_STATE);
     assert(maelys_datalog_window_state(w,&closed_count,&closed_next)==MAELYS_DATALOG_STATUS_INVALID_STATE);
     assert(maelys_datalog_window_text_usage(w,&closed_count,&closed_capacity)==MAELYS_DATALOG_STATUS_INVALID_STATE);
@@ -135,7 +135,7 @@ int main(void) {
     /* Same caller arena/sessions are reusable, including zero text capacity. */
     assert(!maelys_datalog_window_init(storage,bytes,1,0,0,a,b,&w,NULL));
     assert(!maelys_datalog_window_text_usage(w,&closed_count,&closed_capacity) && !closed_count && !closed_capacity);
-    maelys_datalog_public_value_t v=integer(1);
+    maelys_datalog_value_t v=integer(1);
     assert(maelys_datalog_window_push(w,"event",&v,1,NULL,NULL)==MAELYS_DATALOG_STATUS_PAYLOAD_TOO_LARGE);
     assert(!maelys_datalog_window_free(w));
     assert(calls==0 && frees==0 && live==before);

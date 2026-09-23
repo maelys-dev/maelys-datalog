@@ -27,12 +27,12 @@ typedef struct {
 } maelys_datalog_manifest_load_options_t;
 
 typedef struct {
-    maelys_datalog_ruleset_t policies[8];
+    maelys_datalog_internal_ruleset_t policies[8];
     size_t policy_count;
     maelys_datalog_query_whitelist_entry_t query_whitelist[MAELYS_DATALOG_MAX_QUERY_WHITELIST];
     size_t query_whitelist_count;
     int enforces_query_whitelist;
-} maelys_datalog_policy_set_t;
+} maelys_datalog_internal_policy_set_t;
 
 /*
  * Load a policy set from in-memory buffers.
@@ -47,8 +47,8 @@ maelys_result_t maelys_datalog_manifest_load_from_text(
     const maelys_datalog_policy_bundle_entry_t *bundle,
     size_t bundle_count,
     unsigned flags,
-    maelys_datalog_policy_set_t *out_set,
-    maelys_datalog_diagnostic_t *out_diag);
+    maelys_datalog_internal_policy_set_t *out_set,
+    maelys_datalog_internal_diagnostic_t *out_diag);
 
 /*
  * Load a single policy from in-memory .dl source text.
@@ -67,8 +67,8 @@ maelys_result_t maelys_datalog_load_policy_inline(
     const char *src,
     size_t src_len,
     unsigned flags,
-    maelys_datalog_policy_set_t *out_set,
-    maelys_datalog_diagnostic_t *out_diag);
+    maelys_datalog_internal_policy_set_t *out_set,
+    maelys_datalog_internal_diagnostic_t *out_diag);
 
 /*
  * Register a domain from a static predicate table, then load a single inline
@@ -79,24 +79,24 @@ maelys_result_t maelys_datalog_load_policy_inline(
  * valid for this call; no heap allocation is needed for registration.
  */
 maelys_result_t maelys_datalog_load_policy_inline_with_static_domain(
-    const maelys_datalog_public_predicate_t *predicates,
+    const maelys_datalog_predicate_t *predicates,
     size_t predicate_count,
     const char *domain_name,
     const char *policy_id,
     const char *src,
     size_t src_len,
     unsigned flags,
-    maelys_datalog_policy_set_t *out_set,
-    maelys_datalog_diagnostic_t *out_diag);
+    maelys_datalog_internal_policy_set_t *out_set,
+    maelys_datalog_internal_diagnostic_t *out_diag);
 
 maelys_result_t maelys_datalog_manifest_load(const char *manifest_path,
                                              unsigned flags,
-                                             maelys_datalog_policy_set_t *out_set);
+                                             maelys_datalog_internal_policy_set_t *out_set);
 maelys_result_t maelys_datalog_manifest_load_ex(const char *manifest_path,
                                                 unsigned flags,
-                                                maelys_datalog_policy_set_t *out_set,
-                                                maelys_datalog_diagnostic_t *out_diag);
-void maelys_datalog_policy_set_clear(maelys_datalog_policy_set_t *set);
+                                                maelys_datalog_internal_policy_set_t *out_set,
+                                                maelys_datalog_internal_diagnostic_t *out_diag);
+void maelys_datalog_policy_set_clear(maelys_datalog_internal_policy_set_t *set);
 
 /* Compute a stable SHA-256 identity for the complete loaded policy set.
  * The fingerprint covers policy order, identities, domains, canonical
@@ -104,7 +104,7 @@ void maelys_datalog_policy_set_clear(maelys_datalog_policy_set_t *set);
  * the exact executable authorization bundle rather than the manifest file's
  * incidental JSON formatting. `out_hex` must provide 65 bytes. */
 maelys_result_t maelys_datalog_policy_set_fingerprint(
-    const maelys_datalog_policy_set_t *set,
+    const maelys_datalog_internal_policy_set_t *set,
     char out_hex[65]);
 
 #endif

@@ -54,7 +54,7 @@ extern "C" {
  * Count-only mode and write mode share the same emission primitives; the
  * counted size and the written size cannot diverge. */
 maelys_result_t maelys_datalog_format_explanation_text(
-    const maelys_datalog_ruleset_t *ruleset,
+    const maelys_datalog_internal_ruleset_t *ruleset,
     const maelys_datalog_explanation_t *explanation,
     char *out_text,
     size_t out_capacity,
@@ -64,7 +64,7 @@ maelys_result_t maelys_datalog_format_explanation_text(
  * documented in maelys/datalog.h. Same atomic buffer contract as above;
  * presentation only, preserving bounded diagnostic status and named limits. */
 maelys_result_t maelys_datalog_format_why_false_text(
-    const maelys_datalog_ruleset_t *, const maelys_datalog_why_false_explanation_t *,
+    const maelys_datalog_internal_ruleset_t *, const maelys_datalog_why_false_explanation_t *,
     char *, size_t, size_t *);
 
 #ifdef __cplusplus

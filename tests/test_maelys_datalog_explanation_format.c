@@ -22,10 +22,10 @@
 
 /* MAELYS_TESTING hook: reference recursive traversal (§6.4 double parcours). */
 maelys_result_t maelys_datalog_test_solve_once_legacy_order(
-    const maelys_datalog_ruleset_t *ruleset,
-    const maelys_datalog_edb_t *edb,
-    maelys_datalog_solve_result_t **out_result,
-    maelys_datalog_solve_diagnostic_t *out_diag);
+    const maelys_datalog_internal_ruleset_t *ruleset,
+    const maelys_datalog_internal_edb_t *edb,
+    maelys_datalog_internal_solve_result_t **out_result,
+    maelys_datalog_internal_solve_diagnostic_t *out_diag);
 
 /* ====================================================================
  * §6.2(6) — static SIZE_MAX proof: with the public build bounds, the largest
@@ -49,11 +49,11 @@ static const char k_zero_sha[] =
     "0000000000000000000000000000000000000000000000000000000000000000";
 
 /* ---- file-static (off-stack) fixtures and buffers ---- */
-static maelys_datalog_ruleset_t g_fx;       /* main vocabulary fixture */
-static maelys_datalog_ruleset_t g_fx_copy;  /* bit copy for non-mutation */
-static maelys_datalog_ruleset_t g_bad_rs;   /* corrupted ruleset copies */
-static maelys_datalog_ruleset_t g_ord_r1;   /* ordered-traversal fixture */
-static maelys_datalog_ruleset_t g_ord_r2;   /* reference-traversal fixture */
+static maelys_datalog_internal_ruleset_t g_fx;       /* main vocabulary fixture */
+static maelys_datalog_internal_ruleset_t g_fx_copy;  /* bit copy for non-mutation */
+static maelys_datalog_internal_ruleset_t g_bad_rs;   /* corrupted ruleset copies */
+static maelys_datalog_internal_ruleset_t g_ord_r1;   /* ordered-traversal fixture */
+static maelys_datalog_internal_ruleset_t g_ord_r2;   /* reference-traversal fixture */
 static maelys_datalog_explanation_t g_exp;
 static maelys_datalog_explanation_t g_exp_b;
 static maelys_datalog_explanation_t g_exp_copy;
@@ -188,41 +188,41 @@ static int ensure_fx(void) {
 
 /* ---- explanation construction helpers ---- */
 
-static maelys_datalog_term_t t_sym(maelys_datalog_symbol_id_t id) {
-    maelys_datalog_term_t t;
+static maelys_datalog_internal_term_t t_sym(maelys_datalog_symbol_id_t id) {
+    maelys_datalog_internal_term_t t;
     memset(&t, 0, sizeof(t));
     t.kind = MAELYS_DATALOG_TERM_SYMBOL;
     t.as.symbol = id;
     return t;
 }
 
-static maelys_datalog_term_t t_int(long long v) {
-    maelys_datalog_term_t t;
+static maelys_datalog_internal_term_t t_int(long long v) {
+    maelys_datalog_internal_term_t t;
     memset(&t, 0, sizeof(t));
     t.kind = MAELYS_DATALOG_TERM_INT;
     t.as.integer = v;
     return t;
 }
 
-static maelys_datalog_term_t t_bool(int b) {
-    maelys_datalog_term_t t;
+static maelys_datalog_internal_term_t t_bool(int b) {
+    maelys_datalog_internal_term_t t;
     memset(&t, 0, sizeof(t));
     t.kind = MAELYS_DATALOG_TERM_BOOL;
     t.as.boolean = b ? 1 : 0;
     return t;
 }
 
-static maelys_datalog_fact_t f0(maelys_datalog_predicate_id_t pid) {
-    maelys_datalog_fact_t f;
+static maelys_datalog_internal_fact_t f0(maelys_datalog_predicate_id_t pid) {
+    maelys_datalog_internal_fact_t f;
     memset(&f, 0, sizeof(f));
     f.predicate_id = pid;
     f.arity = 0u;
     return f;
 }
 
-static maelys_datalog_fact_t f1(maelys_datalog_predicate_id_t pid,
-                                maelys_datalog_term_t a) {
-    maelys_datalog_fact_t f;
+static maelys_datalog_internal_fact_t f1(maelys_datalog_predicate_id_t pid,
+                                maelys_datalog_internal_term_t a) {
+    maelys_datalog_internal_fact_t f;
     memset(&f, 0, sizeof(f));
     f.predicate_id = pid;
     f.arity = 1u;
@@ -230,10 +230,10 @@ static maelys_datalog_fact_t f1(maelys_datalog_predicate_id_t pid,
     return f;
 }
 
-static maelys_datalog_fact_t f2(maelys_datalog_predicate_id_t pid,
-                                maelys_datalog_term_t a,
-                                maelys_datalog_term_t b) {
-    maelys_datalog_fact_t f;
+static maelys_datalog_internal_fact_t f2(maelys_datalog_predicate_id_t pid,
+                                maelys_datalog_internal_term_t a,
+                                maelys_datalog_internal_term_t b) {
+    maelys_datalog_internal_fact_t f;
     memset(&f, 0, sizeof(f));
     f.predicate_id = pid;
     f.arity = 2u;
@@ -245,7 +245,7 @@ static maelys_datalog_fact_t f2(maelys_datalog_predicate_id_t pid,
 static void set_step(maelys_datalog_explanation_t *e,
                      uint16_t idx,
                      size_t rule_id,
-                     maelys_datalog_fact_t fact,
+                     maelys_datalog_internal_fact_t fact,
                      uint16_t begin,
                      uint16_t count) {
     memset(&e->steps[idx], 0, sizeof(e->steps[idx]));
@@ -259,7 +259,7 @@ static void set_pos(maelys_datalog_explanation_t *e,
                     uint16_t idx,
                     uint16_t body,
                     uint8_t origin,
-                    maelys_datalog_fact_t fact,
+                    maelys_datalog_internal_fact_t fact,
                     uint16_t parent) {
     memset(&e->premises[idx], 0, sizeof(e->premises[idx]));
     e->premises[idx].kind = (uint8_t)MAELYS_DATALOG_EXPLANATION_PREMISE_POSITIVE_FACT;
@@ -273,7 +273,7 @@ static void set_neg(maelys_datalog_explanation_t *e,
                     uint16_t idx,
                     uint16_t body,
                     uint8_t origin,
-                    maelys_datalog_fact_t fact) {
+                    maelys_datalog_internal_fact_t fact) {
     memset(&e->premises[idx], 0, sizeof(e->premises[idx]));
     e->premises[idx].kind = (uint8_t)MAELYS_DATALOG_EXPLANATION_PREMISE_NEGATED_ABSENCE;
     e->premises[idx].origin = origin;
@@ -286,8 +286,8 @@ static void set_cmp(maelys_datalog_explanation_t *e,
                     uint16_t idx,
                     uint16_t body,
                     uint8_t op,
-                    maelys_datalog_term_t lhs,
-                    maelys_datalog_term_t rhs) {
+                    maelys_datalog_internal_term_t lhs,
+                    maelys_datalog_internal_term_t rhs) {
     memset(&e->premises[idx], 0, sizeof(e->premises[idx]));
     e->premises[idx].kind = (uint8_t)MAELYS_DATALOG_EXPLANATION_PREMISE_COMPARISON_TRUE;
     e->premises[idx].origin = (uint8_t)MAELYS_DATALOG_EXPLANATION_ORIGIN_NOT_APPLICABLE;
@@ -347,7 +347,7 @@ static const char k_normative_expected[] =
 
 /* ---- shared assertions ---- */
 
-static int format_golden_check(const maelys_datalog_ruleset_t *rs,
+static int format_golden_check(const maelys_datalog_internal_ruleset_t *rs,
                                const maelys_datalog_explanation_t *e,
                                const char *expected) {
     const size_t expected_len = strlen(expected);
@@ -401,7 +401,7 @@ static int text_wellformed(const char *text, size_t len) {
 
 /* §6.3: exact error code, sentinel buffer byte-identical, out_required
  * unchanged, in count-only mode and in write mode. */
-static int expect_error_untouched(const maelys_datalog_ruleset_t *rs,
+static int expect_error_untouched(const maelys_datalog_internal_ruleset_t *rs,
                                   const maelys_datalog_explanation_t *e,
                                   maelys_result_t expected_rc) {
     size_t required = (size_t)0xDEADBEEFu;
@@ -1067,10 +1067,10 @@ static int test_fmt_invalid_terms(void) {
     TEST_ASSERT_TRUE(expect_error_untouched(&g_fx, &g_bad, MAELYS_ERR_INVALID_FIELD));
     /* Unknown term kinds. */
     build_normative_example(&g_bad);
-    g_bad.premises[0].as.fact.terms[0].kind = (maelys_datalog_term_kind_t)0;
+    g_bad.premises[0].as.fact.terms[0].kind = (maelys_datalog_internal_term_kind_t)0;
     TEST_ASSERT_TRUE(expect_error_untouched(&g_fx, &g_bad, MAELYS_ERR_INVALID_FIELD));
     build_normative_example(&g_bad);
-    g_bad.premises[0].as.fact.terms[1].kind = (maelys_datalog_term_kind_t)9;
+    g_bad.premises[0].as.fact.terms[1].kind = (maelys_datalog_internal_term_kind_t)9;
     TEST_ASSERT_TRUE(expect_error_untouched(&g_fx, &g_bad, MAELYS_ERR_INVALID_FIELD));
     /* Symbol id zero: rejected before any id - 1 evaluation. */
     build_normative_example(&g_bad);
@@ -1217,7 +1217,7 @@ static int test_fmt_two_calls_identical(void) {
     TEST_END();
 }
 
-static maelys_result_t init_ord_ruleset(maelys_datalog_ruleset_t *r) {
+static maelys_result_t init_ord_ruleset(maelys_datalog_internal_ruleset_t *r) {
     memset(r, 0, sizeof(*r));
     maelys_result_t rc =
         maelys_datalog_ruleset_init(r, "p4c65.ord", "format", k_zero_sha, 1);
@@ -1237,12 +1237,12 @@ static maelys_result_t init_ord_ruleset(maelys_datalog_ruleset_t *r) {
     return maelys_datalog_parse_ruleset(r, src, sizeof(src) - 1u);
 }
 
-static maelys_result_t add_pair(maelys_datalog_ruleset_t *r,
-                                maelys_datalog_edb_t *edb,
+static maelys_result_t add_pair(maelys_datalog_internal_ruleset_t *r,
+                                maelys_datalog_internal_edb_t *edb,
                                 const char *predicate,
                                 const char *a,
                                 const char *b) {
-    maelys_datalog_term_t terms[2];
+    maelys_datalog_internal_term_t terms[2];
     maelys_datalog_symbol_id_t id_a = 0;
     maelys_datalog_symbol_id_t id_b = 0;
     maelys_result_t rc =
@@ -1260,10 +1260,10 @@ static int test_fmt_ordered_vs_reference_traversal_same_text(void) {
     TEST_BEGIN();
     TEST_ASSERT_EQUAL(MAELYS_OK, init_ord_ruleset(&g_ord_r1), "%d");
     TEST_ASSERT_EQUAL(MAELYS_OK, init_ord_ruleset(&g_ord_r2), "%d");
-    maelys_datalog_fact_t f1_store[8];
-    maelys_datalog_fact_t f2_store[8];
-    maelys_datalog_edb_t e1;
-    maelys_datalog_edb_t e2;
+    maelys_datalog_internal_fact_t f1_store[8];
+    maelys_datalog_internal_fact_t f2_store[8];
+    maelys_datalog_internal_edb_t e1;
+    maelys_datalog_internal_edb_t e2;
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       maelys_datalog_edb_init(&e1, f1_store, 8u, &g_ord_r1.symbols,
                                               &g_ord_r1.registry),
@@ -1279,16 +1279,16 @@ static int test_fmt_ordered_vs_reference_traversal_same_text(void) {
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_finalize(&e1), "%d");
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_finalize(&e2), "%d");
 
-    maelys_datalog_solve_result_t *ordered = NULL;
-    maelys_datalog_solve_result_t *reference = NULL;
+    maelys_datalog_internal_solve_result_t *ordered = NULL;
+    maelys_datalog_internal_solve_result_t *reference = NULL;
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_solve_once(&g_ord_r1, &e1, &ordered), "%d");
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       maelys_datalog_test_solve_once_legacy_order(&g_ord_r2, &e2,
                                                                   &reference, NULL),
                       "%d");
 
-    maelys_datalog_fact_t target1;
-    maelys_datalog_fact_t target2;
+    maelys_datalog_internal_fact_t target1;
+    maelys_datalog_internal_fact_t target2;
     memset(&target1, 0, sizeof(target1));
     memset(&target2, 0, sizeof(target2));
     maelys_datalog_symbol_id_t a1 = 0;

@@ -3,7 +3,7 @@
 #define MAELYS_DATALOG_TERM_INTERNAL_H
 #include "src/core/maelys_datalog_types.h"
 
-static inline int maelys_datalog_term_cmp(const maelys_datalog_term_t *a, const maelys_datalog_term_t *b) {
+static inline int maelys_datalog_term_cmp(const maelys_datalog_internal_term_t *a, const maelys_datalog_internal_term_t *b) {
     if (a->kind != b->kind) return (int)a->kind - (int)b->kind;
     switch (a->kind) {
         case MAELYS_DATALOG_TERM_SYMBOL:
