@@ -388,6 +388,21 @@ maelys_datalog_status_t maelys_datalog_input_edb_count(
     *out = edb->count;
     return MAELYS_DATALOG_STATUS_OK;
 }
+maelys_datalog_status_t maelys_datalog_input_edb_text_usage(
+    const maelys_datalog_input_edb_t *edb, size_t *used, size_t *capacity) {
+    if (!edb || !used || !capacity) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
+    *used = edb->text_used;
+    *capacity = edb->text_capacity;
+    return MAELYS_DATALOG_STATUS_OK;
+}
+maelys_datalog_status_t maelys_datalog_input_edb_view(
+    const maelys_datalog_input_edb_t *edb,
+    const maelys_datalog_public_fact_t **out_facts, size_t *out_count) {
+    if (!edb || !out_facts || !out_count) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
+    *out_facts = edb->facts;
+    *out_count = edb->count;
+    return MAELYS_DATALOG_STATUS_OK;
+}
 maelys_datalog_status_t maelys_datalog_input_edb_clear(maelys_datalog_input_edb_t *edb) {
     if (!edb) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
     edb->count = 0;

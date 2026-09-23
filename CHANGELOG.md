@@ -7,6 +7,25 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+
+- Native last-N event windows in `<maelys/datalog_window.h>`: caller-owned bounded
+  storage, two borrowed sessions, generated integer occurrence IDs, complete
+  snapshot recomputation and atomic expiry/insertion/result publication. Rejection
+  preserves the previous result and cursor. The adapter allocates nothing;
+  session creation and existing explanation/provider exceptions remain separate.
+  Closing clears borrowed references and rejects further operations while the
+  caller arena remains alive and unmodified, including after sessions are freed.
+- Constant-time `input_edb_text_usage` and `window_text_usage` report interned
+  predicate/symbol bytes including NULs and their configured text capacity.
+  Window usage describes the committed input bank, remains unchanged on failure,
+  and can decrease after expiry; candidate/session memory is not included.
+- Read-only `input_edb_view` for ordered raw entries. The window adapter consumes
+  only the public facade and ships in the installed native SDK. Existing ABI
+  layouts and language syntax are unchanged; Python/JS window bindings and
+  incremental maintenance are not introduced. These public additions target the
+  next minor release; `VERSION` remains at the last published version.
+
 ## 0.7.1 — 2026-09-22
 
 A named zero for the loading permissions, and a WebAssembly failure that
