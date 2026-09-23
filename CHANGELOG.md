@@ -14,6 +14,9 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
   and text capacities. Group IDs stay outside facts; shared facts survive until
   their last contributing group expires. Empty groups advance retention normally.
   Boolean normalization and typed union preserve existing Datalog semantics.
+  The raw contribution capacity is capped at `MAX_EDB_FACTS` (1,024 in SMALL,
+  2,048 in LARGE); every retained duplicate consumes a contribution slot,
+  even when the union contains very few unique facts.
 - Atomic publication of the retained groups, union, result and cursor using two
   borrowed sessions. Rejection preserves committed bytes and views; closed
   handles reject before accessing returned sessions. Allocation guards, generated
