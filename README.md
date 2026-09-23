@@ -47,7 +47,7 @@ The reference engine recomputes each supplied snapshot. See the
 [aggregate contract](docs/specifications/maelys-datalog-v2/aggregates.md) for
 binding, capability negotiation and explanation semantics.
 
-## Retain the last N events (unreleased)
+## Retain the last N events (0.8.0)
 
 The native [`datalog_window.h` adapter](docs/architecture/last-n-window.md) adds
 integer occurrence IDs and recomputes the last N accepted events. Expiration,
