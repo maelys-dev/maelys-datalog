@@ -1,3 +1,4 @@
+#include "bench/types_compat.h"
 /* SPDX-License-Identifier: MPL-2.0 */
 /* Same engine binary, legacy versus configured direct-text explanations.
  * Only measure+write is timed; setup, solve, release and text checks are not. */
@@ -13,7 +14,7 @@
 #define OK(call) assert((call) == MAELYS_DATALOG_STATUS_OK)
 enum { SAMPLES = 301, WARMUP = 50, TEXT_BYTES = 16384 };
 typedef maelys_datalog_status_t (*explain_fn)(const maelys_datalog_result_t *,
-    const char *, const maelys_datalog_public_value_t *, size_t, char *, size_t, size_t *);
+    const char *, const maelys_bench_value_t *, size_t, char *, size_t, size_t *);
 static const explain_fn explain[] = {
     maelys_datalog_result_explain_true_text, maelys_datalog_result_explain_false_text
 };
@@ -28,7 +29,7 @@ static double now_us(void) {
 }
 
 static size_t render(maelys_datalog_result_t *result, unsigned kind,
-                     maelys_datalog_public_value_t *term, char *text) {
+                     maelys_bench_value_t *term, char *text) {
     size_t required, written;
     OK(explain[kind](result, "allow", term, 1, NULL, 0, &required));
     assert(required < TEXT_BYTES);
@@ -52,7 +53,7 @@ static void verify_text(maelys_datalog_session_t *sessions[2], maelys_datalog_in
         maelys_datalog_result_t *result;
         OK(maelys_datalog_session_solve_edb(sessions[mode], edb, &result, NULL));
         for (unsigned kind = 0; kind < 2; ++kind) for (unsigned query = 0; query < 2; ++query) {
-            maelys_datalog_public_value_t term = MAELYS_DATALOG_SYMBOL(names[kind][query]);
+            maelys_bench_value_t term = MAELYS_DATALOG_SYMBOL(names[kind][query]);
             int present;
             OK(maelys_datalog_result_query(result, "allow", &term, 1, &present));
             assert(present == (kind == 0));
@@ -81,7 +82,7 @@ static void run_case(maelys_datalog_session_t *session, maelys_datalog_input_edb
     if (scenario) OK(maelys_datalog_session_solve_edb(session, edb, &result, NULL));
     for (size_t i = 0; i < SAMPLES + WARMUP; ++i) {
         unsigned query = scenario == 1 ? i % 2 : 0;
-        maelys_datalog_public_value_t term = MAELYS_DATALOG_SYMBOL(names[kind][query]);
+        maelys_bench_value_t term = MAELYS_DATALOG_SYMBOL(names[kind][query]);
         char text[TEXT_BYTES];
         if (!scenario) OK(maelys_datalog_session_solve_edb(session, edb, &result, NULL));
         double start = now_us();
@@ -117,11 +118,11 @@ int main(int argc, char **argv) {
     unsigned mode = !strcmp(argv[1], "workspace");
     FILE *summary = fopen(argv[2], "w"), *raw = fopen(argv[3], "w");
     assert(summary && raw);
-    const maelys_datalog_public_predicate_t predicates[] = {
+    const maelys_bench_predicate_t predicates[] = {
         MAELYS_DATALOG_EDB("seed", 1), MAELYS_DATALOG_EDB("blocked", 1),
         MAELYS_DATALOG_IDB_QUERY("allow", 1)
     };
-    const maelys_datalog_public_domain_t domain = {"explanation_bench", predicates, 3, NULL, 0};
+    const maelys_bench_domain_t domain = {"explanation_bench", predicates, 3, NULL, 0};
     OK(maelys_datalog_domain_register(&domain));
     const char *source = "allow(X) :- seed(X), not(blocked(X)).";
     maelys_datalog_policy_t *policy;
