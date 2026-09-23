@@ -56,4 +56,10 @@ const maelys_datalog_predicate_entry_t *maelys_datalog_predicate_registry_get(
     const maelys_datalog_predicate_registry_t *registry,
     maelys_datalog_predicate_id_t id);
 
+/* Input names are not stored in the solver's symbol pool. Account for their
+ * registry budget as well, so valid input vocabulary still fits by default. */
+#define MAELYS_DATALOG_INPUT_EDB_TEXT_BYTES \
+    (MAELYS_DATALOG_STRING_POOL_BYTES + MAELYS_DATALOG_MAX_PREDICATES * \
+     sizeof(((maelys_datalog_predicate_registry_t *)0)->defs[0].name))
+
 #endif

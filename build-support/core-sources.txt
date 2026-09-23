@@ -4,6 +4,7 @@ src/core/maelys_datalog_domain_registry.c
 src/core/maelys_datalog_edb.c
 src/core/maelys_datalog_explanation_format.c
 src/core/maelys_datalog_filter.c
+src/core/maelys_datalog_limits.c
 src/core/maelys_datalog_lexer.c
 src/core/maelys_datalog_parser.c
 src/core/maelys_datalog_prepared_session.c
