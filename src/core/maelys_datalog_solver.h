@@ -46,7 +46,8 @@ typedef struct {
     uint8_t term_index;
     uint8_t arity_expected;
     uint8_t arity_observed;
-    uint8_t _pad[2];
+    uint8_t limit_kind; /* maelys_datalog_limit_t, zero when unavailable. */
+    uint8_t _pad[1];
 } maelys_datalog_internal_solve_diagnostic_t;
 
 const char *maelys_datalog_solve_diagnostic_category_name(

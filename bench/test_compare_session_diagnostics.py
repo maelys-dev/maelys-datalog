@@ -6,7 +6,7 @@ from pathlib import Path
 import tempfile
 import unittest
 from unittest.mock import patch
-from diagnose_sessions import residuals, run, verify_count
+from diagnose_sessions import residuals, run, verify_count, events
 import test_compare_sessions as fixtures
 
 
@@ -39,10 +39,11 @@ class SessionDiagnosticsTest(unittest.TestCase):
                 calls.append(command)
                 if command[0] == "valgrind":
                     out = Path(next(c.split("=", 1)[1] for c in command if c.startswith("--callgrind-out-file=")))
-                    binary, summary, raw = map(Path, command[5:8])
-                    key = command[8:]
+                    index = command.index(next(c for c in command if c.endswith("/sessions-counts")))
+                    binary, summary, raw = map(Path, command[index:index+3])
+                    key = command[index+3:]
                     role = binary.parent.name.split("-")[1]
-                    out.write_text("events: Ir\nsummary: 10000\n")
+                    out.write_text("events: Ir Dr Dw I1mr D1mr D1mw ILmr DLmr DLmw\nsummary: 10000 200 100 1 2 3 1 1 2\n")
                     row = dict(zip(("policy", "order", "values", "size"), key), profile="SMALL",
                                commit=meta["base" if role == "A" else "head"], samples="1",
                                result_digest="0123456789abcdef", min_us="0.000000", median_us="0.000000", p95_us="0.000000")
@@ -53,16 +54,24 @@ class SessionDiagnosticsTest(unittest.TestCase):
                     kwargs["stdout"].write("10,000 (100.0%) src/edb.c:maelys_datalog_edb_add_fact [binary]\n")
             output = io.StringIO()
             with patch("diagnose_sessions.subprocess.check_output", return_value="synthetic valgrind\n"), patch("diagnose_sessions.subprocess.run", side_effect=fake_run), contextlib.redirect_stdout(output):
-                run(root, root)
-            self.assertEqual(sum(c[0] == "valgrind" for c in calls), 4)
-            self.assertTrue(all(c[-1] == "33" for c in calls if c[0] == "valgrind"))
-            self.assertIn("1 distinct cases selected", output.getvalue())
+                run(root, root, controls=(("SMALL", ("inert", "sorted", "integer", "31")),))
+            self.assertEqual(sum(c[0] == "valgrind" for c in calls), 8)
+            self.assertEqual({c[-1] for c in calls if c[0] == "valgrind"}, {"31", "33"})
+            self.assertTrue(all("--cache-sim=yes" in c for c in calls if c[0] == "valgrind"))
+            self.assertIn("2 distinct cases selected", output.getvalue())
             self.assertIn("| no |", output.getvalue())
-            prefix = root / "session-counts/000-SMALL-A-1"
+            prefix = root / "session-counts/001-SMALL-A-1"
             path = prefix.with_suffix(".csv")
             path.write_text(path.read_text().replace("0123456789abcdef", "ffffffffffffffff"))
             with self.assertRaisesRegex(ValueError, "oracle"):
                 verify_count(prefix, "SMALL", meta["base"], ("inert", "sorted", "integer", "33"), "0123456789abcdef")
+
+    def test_missing_write_counts_are_rejected(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "counts"
+            path.write_text("events: Ir\nsummary: 10000\n")
+            with self.assertRaisesRegex(ValueError, "events"):
+                events(path)
 
     def test_no_callgrind_for_no_residuals(self):
         with tempfile.TemporaryDirectory() as temporary:

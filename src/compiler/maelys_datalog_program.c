@@ -118,10 +118,7 @@ void maelys_datalog_copy_solve_diagnostic(maelys_datalog_diagnostic_t *out,
     if (in->capacity || in->count_observed) {
         out->present |= MAELYS_DATALOG_DIAGNOSTIC_CAPACITY;
         out->observed_count = in->count_observed; out->limit = in->capacity;
-        if (in->category == MAELYS_DATALOG_SOLVE_DIAG_IDB_OVERFLOW) {
-            if (in->capacity == MAELYS_DATALOG_MAX_IDB_FACTS) out->limit_kind = MAELYS_DATALOG_LIMIT_MAX_IDB_FACTS;
-            else if (in->capacity == MAELYS_DATALOG_MAX_FACTS_PER_PRED) out->limit_kind = MAELYS_DATALOG_LIMIT_MAX_FACTS_PER_PRED;
-        }
+        out->limit_kind = (maelys_datalog_limit_t)in->limit_kind;
     }
     if (in->category == MAELYS_DATALOG_SOLVE_DIAG_COMPARISON_TYPE_ERROR) {
         out->present |= MAELYS_DATALOG_DIAGNOSTIC_COMPARISON;

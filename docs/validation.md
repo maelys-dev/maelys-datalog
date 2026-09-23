@@ -360,3 +360,9 @@ working diagnostic. Prepared-explanation allocation guards exercise the new
 structured accessors and filter statistics with all engine allocators disabled.
 The SDK checks include the new headers in C11 and C++17. Legacy CFFI consumers
 are recompiled; Python-next initializes the size/version protocol explicitly.
+
+`test_maelys_datalog_diagnostic_writes` instruments actual reset calls and memset
+bytes through both public solve entries, verifies that text tails remain intact,
+and checks that invalid versions cause no writes. The advanced SDK consumer
+provokes per-predicate and global IDB exhaustion through real solves, checks
+capacity/predicate sections together, then reuses each session successfully.

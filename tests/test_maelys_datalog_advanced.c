@@ -232,4 +232,73 @@ static int aggregate_views(void) {
     }
     return 0;
 }
-int main(void) { return diagnostics_and_callbacks() || structured() || owned_policy_and_bundle() || context_configuration() || aggregate_views(); }
+/* Real public solves, not fabricated compact diagnostics. Both profiles must
+ * distinguish a relation limit from the global IDB limit and remain reusable. */
+static int capacity_rejections(void) {
+    size_t per_pred, global;
+    OK(maelys_datalog_limit_get(MAELYS_DATALOG_LIMIT_MAX_FACTS_PER_PRED,&per_pred));
+    OK(maelys_datalog_limit_get(MAELYS_DATALOG_LIMIT_MAX_IDB_FACTS,&global));
+    const maelys_datalog_predicate_t sg_preds[]={
+        {"parent",2,MAELYS_DATALOG_PREDICATE_EDB},
+        {"person",1,MAELYS_DATALOG_PREDICATE_IDB},
+        {"same",2,MAELYS_DATALOG_PREDICATE_IDB}};
+    const maelys_datalog_domain_t sg={"diagnostic_sg",sg_preds,3,NULL,0};
+    OK(maelys_datalog_domain_register(&sg));
+    const char source[]="person(X) :- parent(X, _). person(X) :- parent(_, X). "
+        "same(X,X) :- person(X). same(X,Y) :- parent(X,P), same(P,Q), parent(Y,Q).";
+    maelys_datalog_policy_t *p=NULL;maelys_datalog_session_t *session=NULL;
+    maelys_datalog_result_t *result=NULL;
+    maelys_datalog_diagnostic_t diag=MAELYS_DATALOG_DIAGNOSTIC_INIT;
+    OK(maelys_datalog_policy_load_inline(sg.name,"p",source,strlen(source),&p,&diag));
+    OK(maelys_datalog_session_create(p,0,&session));OK(maelys_datalog_policy_free(p));
+    size_t leaves=1;while(leaves*leaves+1<=per_pred)++leaves;
+    maelys_datalog_fact_t *facts=calloc(per_pred,sizeof(*facts));CHECK(facts);
+    for(size_t i=0;i<leaves;++i){
+        facts[i].predicate="parent";facts[i].arity=2;
+        facts[i].terms[0].kind=facts[i].terms[1].kind=MAELYS_DATALOG_VALUE_INTEGER;
+        facts[i].terms[0].as.integer=(int64_t)i+1;facts[i].terms[1].as.integer=0;
+    }
+    CHECK(maelys_datalog_session_solve(session,facts,leaves,&result,&diag)==MAELYS_DATALOG_STATUS_PAYLOAD_TOO_LARGE);
+    CHECK(!result && diag.code==MAELYS_DATALOG_DIAG_SOLVE_IDB_OVERFLOW);
+    CHECK(diag.present & MAELYS_DATALOG_DIAGNOSTIC_CAPACITY);
+    CHECK(diag.present & MAELYS_DATALOG_DIAGNOSTIC_PREDICATE);
+    CHECK(!strcmp(diag.predicate,"same") && diag.arity==2);
+    CHECK(diag.limit_kind==MAELYS_DATALOG_LIMIT_MAX_FACTS_PER_PRED);
+    CHECK(diag.limit==per_pred && diag.observed_count==per_pred+1);
+    OK(maelys_datalog_session_solve(session,facts,1,&result,&diag));
+    CHECK(diag.source==MAELYS_DATALOG_DIAGNOSTIC_NONE && !diag.present && !diag.limit && !diag.predicate[0]);
+    OK(maelys_datalog_result_free(result));OK(maelys_datalog_session_free(session));
+
+    size_t outputs=global/per_pred+1;
+    maelys_datalog_predicate_t *preds=calloc(outputs+1,sizeof(*preds));
+    char (*names)[16]=calloc(outputs,sizeof(*names));char *rules=calloc(outputs,48);
+    CHECK(preds && names && rules);
+    preds[0]=(maelys_datalog_predicate_t){"seed",1,MAELYS_DATALOG_PREDICATE_EDB};
+    size_t used=0;
+    for(size_t i=0;i<outputs;++i){
+        snprintf(names[i],sizeof(names[i]),"g%zu",i);
+        preds[i+1]=(maelys_datalog_predicate_t){names[i],1,MAELYS_DATALOG_PREDICATE_IDB};
+        used+=(size_t)snprintf(rules+used,outputs*48-used,"%s(X) :- seed(X).\n",names[i]);
+    }
+    const maelys_datalog_domain_t gd={"diagnostic_global",preds,outputs+1,NULL,0};
+    OK(maelys_datalog_domain_register(&gd));
+    OK(maelys_datalog_policy_load_inline(gd.name,"p",rules,used,&p,&diag));
+    OK(maelys_datalog_session_create(p,0,&session));OK(maelys_datalog_policy_free(p));
+    for(size_t i=0;i<per_pred;++i){facts[i].predicate="seed";facts[i].arity=1;
+        facts[i].terms[0].kind=MAELYS_DATALOG_VALUE_INTEGER;facts[i].terms[0].as.integer=(int64_t)i;}
+    CHECK(maelys_datalog_session_solve(session,facts,per_pred,&result,&diag)==MAELYS_DATALOG_STATUS_PAYLOAD_TOO_LARGE);
+    CHECK(!result && diag.code==MAELYS_DATALOG_DIAG_SOLVE_IDB_OVERFLOW);
+    CHECK(diag.present & MAELYS_DATALOG_DIAGNOSTIC_CAPACITY);
+    CHECK(diag.present & MAELYS_DATALOG_DIAGNOSTIC_PREDICATE);
+    CHECK(diag.limit_kind==MAELYS_DATALOG_LIMIT_MAX_IDB_FACTS);
+    CHECK(diag.limit==global && diag.observed_count==global+1);
+    CHECK(diag.predicate[0] && diag.arity==1);
+    OK(maelys_datalog_session_solve(session,facts,1,&result,&diag));
+    OK(maelys_datalog_result_free(result));OK(maelys_datalog_session_free(session));
+    free(rules);free(names);free(preds);free(facts);
+    return 0;
+}
+int main(void) {
+    return capacity_rejections() || diagnostics_and_callbacks() || structured() ||
+        owned_policy_and_bundle() || context_configuration() || aggregate_views();
+}

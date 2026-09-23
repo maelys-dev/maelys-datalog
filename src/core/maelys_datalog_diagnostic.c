@@ -3,6 +3,12 @@
 #include <stdio.h>
 #include <string.h>
 
+_Static_assert(offsetof(maelys_datalog_internal_diagnostic_t, limit_kind) + 1u <=
+               offsetof(maelys_datalog_internal_diagnostic_t, line),
+               "bound identity occupies the pre-existing alignment gap");
+_Static_assert(MAELYS_DATALOG_LIMIT_MAX_FACTS_PER_PRED <= UINT8_MAX,
+               "compact bound identity must fit");
+
 /* Returns 1 when the null-terminated source fits, 0 on truncation or error.
  * Current callers pass string literals or file paths; this guards future long
  * diagnostic strings without changing fail-closed behavior.
@@ -139,5 +145,15 @@ maelys_datalog_status_t maelys_datalog_diagnostic_clear(maelys_datalog_diagnosti
     if (d->struct_size < sizeof(*d)) return MAELYS_DATALOG_STATUS_STORAGE_TOO_SMALL;
     if (d->abi_version != MAELYS_DATALOG_DIAGNOSTIC_ABI_VERSION)
         return MAELYS_DATALOG_STATUS_UNSUPPORTED;
-    return maelys_datalog_diagnostic_init(d, d->struct_size);
+    /* Reset semantic fields, not the unused tails of owned C strings. Keep
+     * absent numeric sections zero, including for callbacks and CFFI readers.
+     * Initialization still zeroes the whole known object once. This is not
+     * secure erasure; bytes after each first NUL remain unspecified. */
+    memset((unsigned char *)d + offsetof(maelys_datalog_diagnostic_t, source), 0,
+           offsetof(maelys_datalog_diagnostic_t, phase) - offsetof(maelys_datalog_diagnostic_t, source));
+    memset((unsigned char *)d + offsetof(maelys_datalog_diagnostic_t, arity), 0,
+           offsetof(maelys_datalog_diagnostic_t, token) - offsetof(maelys_datalog_diagnostic_t, arity));
+    d->phase[0] = d->message[0] = d->hint[0] = d->file[0] = d->predicate[0] = '\0';
+    d->token[0] = d->field[0] = d->domain[0] = '\0';
+    return MAELYS_DATALOG_STATUS_OK;
 }

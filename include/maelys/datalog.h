@@ -165,7 +165,11 @@ typedef enum {
  * Future versions must preserve this size/version prefix AND its alignment or
  * use a new entry point. A size alone never authorizes reading unknown fields.
  * source == NONE means no detail was supplied; use the function return status.
- * Each present section is independent: capacity, predicate and depth coexist. */
+ * Each present section is independent: capacity, predicate and depth coexist.
+ * clear resets scalar fields and the first byte of each text field. Bytes after
+ * a string's NUL are unspecified, never payload to serialize or secure erasure.
+ * Capacity failures report the attempted count (limit + 1 for one insertion),
+ * and identify the violated budget explicitly, independently of its value. */
 #define MAELYS_DATALOG_DIAGNOSTIC_ABI_VERSION 1u
 #define MAELYS_DATALOG_DIAGNOSTIC_LOCATION (UINT64_C(1) << 0)
 #define MAELYS_DATALOG_DIAGNOSTIC_PREDICATE (UINT64_C(1) << 1)

@@ -20,6 +20,7 @@ typedef struct {
     uint16_t predicate_id;
     char phase[32];
     char file[256];
+    uint8_t limit_kind; /* maelys_datalog_limit_t; occupies alignment padding. */
     size_t line;
     size_t column;
     char predicate[96];

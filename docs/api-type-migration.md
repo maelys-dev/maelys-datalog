@@ -107,7 +107,11 @@ contract. A later incompatible delta contract needs a distinct ABI number.
 
 Initialize each diagnostic with `MAELYS_DATALOG_DIAGNOSTIC_INIT`, or call
 `diagnostic_init(storage, bytes)`. `{0}` alone is no longer valid. Clear preserves
-the declared storage capacity and version. Version 1 requires the entire known
+the declared storage capacity and version, resets all scalar fields, and empties
+strings by their first NUL only. String tails are unspecified; do not serialize
+whole diagnostic objects or treat clear as secure erasure. Initialization zeros
+the known object once. The successful `solve_edb` path delegates to `solve` and
+performs one reset, not two. Version 1 requires the entire known
 object and its natural alignment. Smaller storage is refused with
 `STORAGE_TOO_SMALL`, unknown versions with `UNSUPPORTED`, before payload writes
 or callback invocation. Larger same-version storage is accepted, but bytes
@@ -123,7 +127,12 @@ no diagnostic was supplied: always use the function's return status. Generic
 operation rejections use `DIAG_OPERATION_REJECTED`, not a negative status in
 `code`. Independent presence bits describe location, predicate, capacity,
 depth, comparison, arity, rule and source context. `limit_kind` identifies a
-known public budget; zero means the producer cannot identify it. Unset sections are zero and
+known public budget; zero means the producer cannot identify it. IDB exhaustion
+records the violated bound at the failed insertion: relation-local count and
+limit for a per-predicate overflow, global count and limit for total overflow,
+with the known predicate in its own section. Counts include the attempted
+insertion. The compact record stores the bound identity explicitly rather than
+inferring it from capacities that might coincide. Unset sections are zero and
 must not be interpreted. Predicate names are exported from the current
 vocabulary; unavailable native predicate/rule IDs produce no presence bit.
 Comparison kind/operator integers use the corresponding IR values; zero means

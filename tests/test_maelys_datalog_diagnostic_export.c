@@ -13,6 +13,7 @@ int main(void) {
     maelys_datalog_internal_solve_diagnostic_t compact={0};
     compact.category=MAELYS_DATALOG_SOLVE_DIAG_IDB_OVERFLOW;
     compact.predicate_id=0;compact.rule_id=0;compact.capacity=64;compact.count_observed=65;
+    compact.limit_kind=MAELYS_DATALOG_LIMIT_MAX_FACTS_PER_PRED;
     compact.depth=7;compact.depth_limit=10;
     maelys_datalog_internal_solve_diagnostic_t saved=compact;
     maelys_datalog_diagnostic_t detail=MAELYS_DATALOG_DIAGNOSTIC_INIT;
@@ -22,7 +23,12 @@ int main(void) {
     assert(detail.status==MAELYS_DATALOG_STATUS_PAYLOAD_TOO_LARGE && detail.code==MAELYS_DATALOG_DIAG_SOLVE_IDB_OVERFLOW);
     assert(!strcmp(detail.predicate,"output") && detail.arity==2);
     assert(detail.observed_count==65 && detail.limit==64 && detail.depth==7 && detail.depth_limit==10 && detail.rule_id==0);
+    assert(detail.limit_kind==MAELYS_DATALOG_LIMIT_MAX_FACTS_PER_PRED);
     assert(!memcmp(&saved,&compact,sizeof(saved)));
+    /* The bound identity is explicit even when two numeric capacities coincide. */
+    compact.limit_kind=MAELYS_DATALOG_LIMIT_MAX_PREDICATES;
+    maelys_datalog_copy_solve_diagnostic(&detail,&compact,r,MAELYS_ERR_PAYLOAD_TOO_LARGE);
+    assert(detail.limit_kind==MAELYS_DATALOG_LIMIT_MAX_PREDICATES && detail.limit==64);
     compact.predicate_id=UINT16_MAX;compact.rule_id=UINT16_MAX;compact.capacity=0;compact.count_observed=0;compact.depth_limit=0;compact.category=MAELYS_DATALOG_SOLVE_DIAG_INTERNAL_ERROR;
     maelys_datalog_copy_solve_diagnostic(&detail,&compact,r,MAELYS_ERR_INTERNAL);
     assert(!(detail.present & bits));
