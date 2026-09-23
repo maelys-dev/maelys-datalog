@@ -50,10 +50,10 @@ static int spawn_edb_begin_without_policy_selftest(const char *path) {
     return WIFEXITED(status) && WEXITSTATUS(status) == 0;
 }
 
-static maelys_datalog_term_t symbol_term(maelys_datalog_ruleset_t *ruleset, const char *text) {
+static maelys_datalog_internal_term_t symbol_term(maelys_datalog_internal_ruleset_t *ruleset, const char *text) {
     maelys_datalog_symbol_id_t id = 0;
     (void)maelys_datalog_symbol_intern(&ruleset->symbols, text, strlen(text), &id);
-    maelys_datalog_term_t term = {.kind = MAELYS_DATALOG_TERM_SYMBOL};
+    maelys_datalog_internal_term_t term = {.kind = MAELYS_DATALOG_TERM_SYMBOL};
     term.as.symbol = id;
     return term;
 }
@@ -291,11 +291,11 @@ static int test_wasm_builder_ruleset_ptr(void) {
 
 static int test_wasm_builder_solve_query(void) {
     TEST_BEGIN();
-    maelys_datalog_ruleset_t *ruleset = (maelys_datalog_ruleset_t *)maelys_datalog_wasm_ruleset_ptr();
+    maelys_datalog_internal_ruleset_t *ruleset = (maelys_datalog_internal_ruleset_t *)maelys_datalog_wasm_ruleset_ptr();
     TEST_ASSERT_NOT_NULL(ruleset);
 
-    maelys_datalog_fact_t facts[4];
-    maelys_datalog_edb_t edb;
+    maelys_datalog_internal_fact_t facts[4];
+    maelys_datalog_internal_edb_t edb;
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       maelys_datalog_edb_init(&edb,
                                               facts,
@@ -303,11 +303,11 @@ static int test_wasm_builder_solve_query(void) {
                                               &ruleset->symbols,
                                               &ruleset->registry),
                       "%d");
-    maelys_datalog_term_t alice = symbol_term(ruleset, "alice");
+    maelys_datalog_internal_term_t alice = symbol_term(ruleset, "alice");
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_add_fact(&edb, "safe", &alice, 1), "%d");
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_finalize(&edb), "%d");
 
-    maelys_datalog_solve_result_t *result = NULL;
+    maelys_datalog_internal_solve_result_t *result = NULL;
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_solve_once(ruleset, &edb, &result), "%d");
     bool present = false;
     TEST_ASSERT_EQUAL(MAELYS_OK,
@@ -389,11 +389,11 @@ static const char k_explain_truncated_text[] =
 
 static char g_explain_text[8192];
 static char g_explain_text_b[8192];
-static maelys_datalog_ruleset_t g_explain_ruleset_snapshot;
+static maelys_datalog_internal_ruleset_t g_explain_ruleset_snapshot;
 
 static maelys_result_t explain_install_predicates(
     maelys_datalog_predicate_registry_t *registry) {
-    static const maelys_datalog_public_predicate_t defs[] = {
+    static const maelys_datalog_predicate_t defs[] = {
         {"safe", 1u, MAELYS_DATALOG_PRED_KIND_EDB},
         {"edge", 2u, MAELYS_DATALOG_PRED_KIND_EDB},
         {"observed", 1u, MAELYS_DATALOG_PRED_KIND_EDB | MAELYS_DATALOG_PRED_KIND_QUERY},
@@ -668,8 +668,8 @@ static int test_wasm_explain_non_query_predicate(void) {
 
 static int test_wasm_explain_unknown_symbol_is_absent_and_readonly(void) {
     TEST_BEGIN();
-    maelys_datalog_ruleset_t *ruleset =
-        (maelys_datalog_ruleset_t *)maelys_datalog_wasm_ruleset_ptr();
+    maelys_datalog_internal_ruleset_t *ruleset =
+        (maelys_datalog_internal_ruleset_t *)maelys_datalog_wasm_ruleset_ptr();
     TEST_ASSERT_NOT_NULL(ruleset);
     const size_t symbols_before = ruleset->symbols.count;
 
@@ -848,8 +848,8 @@ static int test_wasm_explain_scalars_zeroed_on_error(void) {
 
 static int test_wasm_explain_does_not_mutate_state(void) {
     TEST_BEGIN();
-    maelys_datalog_ruleset_t *ruleset =
-        (maelys_datalog_ruleset_t *)maelys_datalog_wasm_ruleset_ptr();
+    maelys_datalog_internal_ruleset_t *ruleset =
+        (maelys_datalog_internal_ruleset_t *)maelys_datalog_wasm_ruleset_ptr();
     TEST_ASSERT_NOT_NULL(ruleset);
     const int32_t derived_before = maelys_datalog_wasm_derived_fact_count();
     TEST_ASSERT_TRUE(derived_before > 0);

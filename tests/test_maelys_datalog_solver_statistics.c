@@ -8,7 +8,7 @@
 static const char *const k_test_sha =
     "0000000000000000000000000000000000000000000000000000000000000000";
 
-static maelys_result_t make_ruleset_with_path_kind(maelys_datalog_ruleset_t *ruleset,
+static maelys_result_t make_ruleset_with_path_kind(maelys_datalog_internal_ruleset_t *ruleset,
                                                    const char *policy,
                                                    uint32_t path_kind_flags) {
     if (!ruleset) return MAELYS_ERR_INVALID_ARGUMENT;
@@ -30,7 +30,7 @@ static maelys_result_t make_ruleset_with_path_kind(maelys_datalog_ruleset_t *rul
     return maelys_datalog_parse_ruleset(ruleset, policy, strlen(policy));
 }
 
-static maelys_result_t make_ruleset(maelys_datalog_ruleset_t *ruleset,
+static maelys_result_t make_ruleset(maelys_datalog_internal_ruleset_t *ruleset,
                                     const char *policy) {
     return make_ruleset_with_path_kind(
         ruleset,
@@ -38,27 +38,27 @@ static maelys_result_t make_ruleset(maelys_datalog_ruleset_t *ruleset,
         MAELYS_DATALOG_PRED_KIND_IDB | MAELYS_DATALOG_PRED_KIND_QUERY);
 }
 
-static maelys_datalog_term_t symbol_term(maelys_datalog_ruleset_t *ruleset,
+static maelys_datalog_internal_term_t symbol_term(maelys_datalog_internal_ruleset_t *ruleset,
                                          const char *text) {
     maelys_datalog_symbol_id_t id = 0;
     (void)maelys_datalog_symbol_intern(&ruleset->symbols, text, strlen(text), &id);
-    maelys_datalog_term_t term = {.kind = MAELYS_DATALOG_TERM_SYMBOL};
+    maelys_datalog_internal_term_t term = {.kind = MAELYS_DATALOG_TERM_SYMBOL};
     term.as.symbol = id;
     return term;
 }
 
-static maelys_result_t add_edge(maelys_datalog_ruleset_t *ruleset,
-                                maelys_datalog_edb_t *edb,
+static maelys_result_t add_edge(maelys_datalog_internal_ruleset_t *ruleset,
+                                maelys_datalog_internal_edb_t *edb,
                                 const char *left,
                                 const char *right) {
-    maelys_datalog_term_t terms[2] = {
+    maelys_datalog_internal_term_t terms[2] = {
         symbol_term(ruleset, left),
         symbol_term(ruleset, right),
     };
     return maelys_datalog_edb_add_fact(edb, "edge", terms, 2u);
 }
 
-static int fact_pair_matches(const maelys_datalog_fact_t *fact,
+static int fact_pair_matches(const maelys_datalog_internal_fact_t *fact,
                              maelys_datalog_symbol_id_t left,
                              maelys_datalog_symbol_id_t right) {
     return fact &&
@@ -69,9 +69,9 @@ static int fact_pair_matches(const maelys_datalog_fact_t *fact,
            fact->terms[1].as.symbol == right;
 }
 
-static int facts_contain_pair(const maelys_datalog_fact_t *facts,
+static int facts_contain_pair(const maelys_datalog_internal_fact_t *facts,
                               size_t count,
-                              maelys_datalog_ruleset_t *ruleset,
+                              maelys_datalog_internal_ruleset_t *ruleset,
                               const char *left,
                               const char *right) {
     const maelys_datalog_symbol_id_t left_id = symbol_term(ruleset, left).as.symbol;
@@ -82,11 +82,11 @@ static int facts_contain_pair(const maelys_datalog_fact_t *facts,
     return 0;
 }
 
-static maelys_result_t solve_path_fixture(maelys_datalog_ruleset_t *ruleset,
-                                          maelys_datalog_edb_t *edb,
-                                          maelys_datalog_fact_t *edb_facts,
+static maelys_result_t solve_path_fixture(maelys_datalog_internal_ruleset_t *ruleset,
+                                          maelys_datalog_internal_edb_t *edb,
+                                          maelys_datalog_internal_fact_t *edb_facts,
                                           size_t edb_capacity,
-                                          maelys_datalog_solve_result_t **out_result) {
+                                          maelys_datalog_internal_solve_result_t **out_result) {
     const char *policy =
         "path(X, Y) :- edge(X, Y).\n"
         "path(X, Z) :- edge(X, Y), path(Y, Z).";
@@ -108,17 +108,17 @@ static int test_derived_fact_count_success_and_purity(void) {
     const char *policy =
         "path(X, Y) :- edge(X, Y).\n"
         "path(X, Z) :- edge(X, Y), path(Y, Z).";
-    maelys_datalog_ruleset_t ruleset;
+    maelys_datalog_internal_ruleset_t ruleset;
     TEST_ASSERT_EQUAL(MAELYS_OK, make_ruleset(&ruleset, policy), "%d");
-    maelys_datalog_fact_t facts[4];
-    maelys_datalog_edb_t edb;
+    maelys_datalog_internal_fact_t facts[4];
+    maelys_datalog_internal_edb_t edb;
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       maelys_datalog_edb_init(&edb, facts, 4u, &ruleset.symbols, &ruleset.registry),
                       "%d");
     TEST_ASSERT_EQUAL(MAELYS_OK, add_edge(&ruleset, &edb, "a", "b"), "%d");
     TEST_ASSERT_EQUAL(MAELYS_OK, add_edge(&ruleset, &edb, "b", "c"), "%d");
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_finalize(&edb), "%d");
-    maelys_datalog_solve_result_t *result = NULL;
+    maelys_datalog_internal_solve_result_t *result = NULL;
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_solve_once(&ruleset, &edb, &result), "%d");
     TEST_ASSERT_NOT_NULL(result);
 
@@ -140,16 +140,16 @@ static int test_derived_fact_count_success_and_purity(void) {
 
 static int test_enumerate_predicate_facts_success_set_semantics(void) {
     TEST_BEGIN();
-    maelys_datalog_ruleset_t ruleset;
-    maelys_datalog_edb_t edb;
-    maelys_datalog_fact_t edb_facts[4];
-    maelys_datalog_solve_result_t *result = NULL;
+    maelys_datalog_internal_ruleset_t ruleset;
+    maelys_datalog_internal_edb_t edb;
+    maelys_datalog_internal_fact_t edb_facts[4];
+    maelys_datalog_internal_solve_result_t *result = NULL;
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       solve_path_fixture(&ruleset, &edb, edb_facts, 4u, &result),
                       "%d");
     TEST_ASSERT_NOT_NULL(result);
 
-    maelys_datalog_fact_t out[3];
+    maelys_datalog_internal_fact_t out[3];
     size_t count = 0u;
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       maelys_datalog_solve_result_enumerate_predicate_facts(
@@ -168,19 +168,19 @@ static int test_enumerate_predicate_facts_success_set_semantics(void) {
 static int test_enumerate_predicate_facts_empty_query_relation(void) {
     TEST_BEGIN();
     const char *policy = "path(X, Y) :- edge(X, Y).";
-    maelys_datalog_ruleset_t ruleset;
+    maelys_datalog_internal_ruleset_t ruleset;
     TEST_ASSERT_EQUAL(MAELYS_OK, make_ruleset(&ruleset, policy), "%d");
-    maelys_datalog_fact_t facts[1];
-    maelys_datalog_edb_t edb;
+    maelys_datalog_internal_fact_t facts[1];
+    maelys_datalog_internal_edb_t edb;
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       maelys_datalog_edb_init(&edb, facts, 1u, &ruleset.symbols, &ruleset.registry),
                       "%d");
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_finalize(&edb), "%d");
-    maelys_datalog_solve_result_t *result = NULL;
+    maelys_datalog_internal_solve_result_t *result = NULL;
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_solve_once(&ruleset, &edb, &result), "%d");
     TEST_ASSERT_NOT_NULL(result);
 
-    maelys_datalog_fact_t out[1];
+    maelys_datalog_internal_fact_t out[1];
     size_t count = 1234u;
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       maelys_datalog_solve_result_enumerate_predicate_facts(
@@ -195,16 +195,16 @@ static int test_enumerate_predicate_facts_empty_query_relation(void) {
 
 static int test_enumerate_predicate_facts_truncation_reports_total(void) {
     TEST_BEGIN();
-    maelys_datalog_ruleset_t ruleset;
-    maelys_datalog_edb_t edb;
-    maelys_datalog_fact_t edb_facts[4];
-    maelys_datalog_solve_result_t *result = NULL;
+    maelys_datalog_internal_ruleset_t ruleset;
+    maelys_datalog_internal_edb_t edb;
+    maelys_datalog_internal_fact_t edb_facts[4];
+    maelys_datalog_internal_solve_result_t *result = NULL;
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       solve_path_fixture(&ruleset, &edb, edb_facts, 4u, &result),
                       "%d");
     TEST_ASSERT_NOT_NULL(result);
 
-    maelys_datalog_fact_t out[1];
+    maelys_datalog_internal_fact_t out[1];
     size_t count = 0u;
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       maelys_datalog_solve_result_enumerate_predicate_facts(
@@ -222,10 +222,10 @@ static int test_enumerate_predicate_facts_truncation_reports_total(void) {
 
 static int test_enumerate_predicate_facts_count_only_mode(void) {
     TEST_BEGIN();
-    maelys_datalog_ruleset_t ruleset;
-    maelys_datalog_edb_t edb;
-    maelys_datalog_fact_t edb_facts[4];
-    maelys_datalog_solve_result_t *result = NULL;
+    maelys_datalog_internal_ruleset_t ruleset;
+    maelys_datalog_internal_edb_t edb;
+    maelys_datalog_internal_fact_t edb_facts[4];
+    maelys_datalog_internal_solve_result_t *result = NULL;
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       solve_path_fixture(&ruleset, &edb, edb_facts, 4u, &result),
                       "%d");
@@ -246,24 +246,24 @@ static int test_enumerate_predicate_facts_count_only_mode(void) {
 static int test_enumerate_predicate_facts_rejects_non_query_predicate(void) {
     TEST_BEGIN();
     const char *policy = "path(X, Y) :- edge(X, Y).";
-    maelys_datalog_ruleset_t ruleset;
+    maelys_datalog_internal_ruleset_t ruleset;
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       make_ruleset_with_path_kind(&ruleset,
                                                   policy,
                                                   MAELYS_DATALOG_PRED_KIND_IDB),
                       "%d");
-    maelys_datalog_fact_t facts[2];
-    maelys_datalog_edb_t edb;
+    maelys_datalog_internal_fact_t facts[2];
+    maelys_datalog_internal_edb_t edb;
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       maelys_datalog_edb_init(&edb, facts, 2u, &ruleset.symbols, &ruleset.registry),
                       "%d");
     TEST_ASSERT_EQUAL(MAELYS_OK, add_edge(&ruleset, &edb, "a", "b"), "%d");
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_finalize(&edb), "%d");
-    maelys_datalog_solve_result_t *result = NULL;
+    maelys_datalog_internal_solve_result_t *result = NULL;
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_solve_once(&ruleset, &edb, &result), "%d");
     TEST_ASSERT_NOT_NULL(result);
 
-    maelys_datalog_fact_t out[1];
+    maelys_datalog_internal_fact_t out[1];
     size_t count = 999u;
     TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_FIELD,
                       maelys_datalog_solve_result_enumerate_predicate_facts(
@@ -277,16 +277,16 @@ static int test_enumerate_predicate_facts_rejects_non_query_predicate(void) {
 
 static int test_enumerate_predicate_facts_rejects_absent_predicate(void) {
     TEST_BEGIN();
-    maelys_datalog_ruleset_t ruleset;
-    maelys_datalog_edb_t edb;
-    maelys_datalog_fact_t edb_facts[4];
-    maelys_datalog_solve_result_t *result = NULL;
+    maelys_datalog_internal_ruleset_t ruleset;
+    maelys_datalog_internal_edb_t edb;
+    maelys_datalog_internal_fact_t edb_facts[4];
+    maelys_datalog_internal_solve_result_t *result = NULL;
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       solve_path_fixture(&ruleset, &edb, edb_facts, 4u, &result),
                       "%d");
     TEST_ASSERT_NOT_NULL(result);
 
-    maelys_datalog_fact_t out[1];
+    maelys_datalog_internal_fact_t out[1];
     size_t count = 999u;
     TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_FIELD,
                       maelys_datalog_solve_result_enumerate_predicate_facts(
@@ -300,10 +300,10 @@ static int test_enumerate_predicate_facts_rejects_absent_predicate(void) {
 
 static int test_enumerate_predicate_facts_enforces_query_whitelist(void) {
     TEST_BEGIN();
-    maelys_datalog_ruleset_t ruleset;
-    maelys_datalog_edb_t edb;
-    maelys_datalog_fact_t edb_facts[4];
-    maelys_datalog_solve_result_t *result = NULL;
+    maelys_datalog_internal_ruleset_t ruleset;
+    maelys_datalog_internal_edb_t edb;
+    maelys_datalog_internal_fact_t edb_facts[4];
+    maelys_datalog_internal_solve_result_t *result = NULL;
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       solve_path_fixture(&ruleset, &edb, edb_facts, 4u, &result),
                       "%d");
@@ -316,7 +316,7 @@ static int test_enumerate_predicate_facts_enforces_query_whitelist(void) {
              "other");
     ruleset.query_whitelist[0].arity = 2u;
 
-    maelys_datalog_fact_t out[1];
+    maelys_datalog_internal_fact_t out[1];
     size_t count = 999u;
     TEST_ASSERT_EQUAL(MAELYS_ERR_FORBIDDEN,
                       maelys_datalog_solve_result_enumerate_predicate_facts(
@@ -330,16 +330,16 @@ static int test_enumerate_predicate_facts_enforces_query_whitelist(void) {
 
 static int test_enumerate_predicate_facts_invalid_arguments(void) {
     TEST_BEGIN();
-    maelys_datalog_ruleset_t ruleset;
-    maelys_datalog_edb_t edb;
-    maelys_datalog_fact_t edb_facts[4];
-    maelys_datalog_solve_result_t *result = NULL;
+    maelys_datalog_internal_ruleset_t ruleset;
+    maelys_datalog_internal_edb_t edb;
+    maelys_datalog_internal_fact_t edb_facts[4];
+    maelys_datalog_internal_solve_result_t *result = NULL;
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       solve_path_fixture(&ruleset, &edb, edb_facts, 4u, &result),
                       "%d");
     TEST_ASSERT_NOT_NULL(result);
 
-    maelys_datalog_fact_t out[1];
+    maelys_datalog_internal_fact_t out[1];
     size_t count = 999u;
     TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_ARGUMENT,
                       maelys_datalog_solve_result_enumerate_predicate_facts(
@@ -366,17 +366,17 @@ static int test_enumerate_predicate_facts_invalid_arguments(void) {
 
 static int test_enumerate_predicate_facts_read_only_purity(void) {
     TEST_BEGIN();
-    maelys_datalog_ruleset_t ruleset;
-    maelys_datalog_edb_t edb;
-    maelys_datalog_fact_t edb_facts[4];
-    maelys_datalog_solve_result_t *result = NULL;
+    maelys_datalog_internal_ruleset_t ruleset;
+    maelys_datalog_internal_edb_t edb;
+    maelys_datalog_internal_fact_t edb_facts[4];
+    maelys_datalog_internal_solve_result_t *result = NULL;
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       solve_path_fixture(&ruleset, &edb, edb_facts, 4u, &result),
                       "%d");
     TEST_ASSERT_NOT_NULL(result);
 
-    maelys_datalog_fact_t first[3];
-    maelys_datalog_fact_t second[3];
+    maelys_datalog_internal_fact_t first[3];
+    maelys_datalog_internal_fact_t second[3];
     size_t first_count = 0u;
     size_t second_count = 0u;
     TEST_ASSERT_EQUAL(MAELYS_OK,
@@ -398,15 +398,15 @@ static int test_enumerate_predicate_facts_read_only_purity(void) {
 static int test_derived_fact_count_zero_is_valid(void) {
     TEST_BEGIN();
     const char *policy = "path(X, Y) :- edge(X, Y).";
-    maelys_datalog_ruleset_t ruleset;
+    maelys_datalog_internal_ruleset_t ruleset;
     TEST_ASSERT_EQUAL(MAELYS_OK, make_ruleset(&ruleset, policy), "%d");
-    maelys_datalog_fact_t facts[1];
-    maelys_datalog_edb_t edb;
+    maelys_datalog_internal_fact_t facts[1];
+    maelys_datalog_internal_edb_t edb;
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       maelys_datalog_edb_init(&edb, facts, 1u, &ruleset.symbols, &ruleset.registry),
                       "%d");
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_finalize(&edb), "%d");
-    maelys_datalog_solve_result_t *result = NULL;
+    maelys_datalog_internal_solve_result_t *result = NULL;
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_solve_once(&ruleset, &edb, &result), "%d");
     TEST_ASSERT_NOT_NULL(result);
 
@@ -430,15 +430,15 @@ static int test_derived_fact_count_null_arguments_preserve_output(void) {
     TEST_ASSERT_EQUAL((size_t)1234u, count, "%zu");
 
     const char *policy = "path(X, Y) :- edge(X, Y).";
-    maelys_datalog_ruleset_t ruleset;
+    maelys_datalog_internal_ruleset_t ruleset;
     TEST_ASSERT_EQUAL(MAELYS_OK, make_ruleset(&ruleset, policy), "%d");
-    maelys_datalog_fact_t facts[1];
-    maelys_datalog_edb_t edb;
+    maelys_datalog_internal_fact_t facts[1];
+    maelys_datalog_internal_edb_t edb;
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       maelys_datalog_edb_init(&edb, facts, 1u, &ruleset.symbols, &ruleset.registry),
                       "%d");
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_finalize(&edb), "%d");
-    maelys_datalog_solve_result_t *result = NULL;
+    maelys_datalog_internal_solve_result_t *result = NULL;
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_solve_once(&ruleset, &edb, &result), "%d");
     TEST_ASSERT_NOT_NULL(result);
 
@@ -457,10 +457,10 @@ static int test_failed_solve_does_not_publish_result(void) {
     const char *policy =
         "path(X, Y) :- edge(X, Y).\n"
         "path(X, Z) :- path(X, Y), edge(Y, Z).";
-    maelys_datalog_ruleset_t ruleset;
+    maelys_datalog_internal_ruleset_t ruleset;
     TEST_ASSERT_EQUAL(MAELYS_OK, make_ruleset(&ruleset, policy), "%d");
-    maelys_datalog_fact_t facts[16];
-    maelys_datalog_edb_t edb;
+    maelys_datalog_internal_fact_t facts[16];
+    maelys_datalog_internal_edb_t edb;
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       maelys_datalog_edb_init(&edb, facts, 16u, &ruleset.symbols, &ruleset.registry),
                       "%d");
@@ -473,7 +473,7 @@ static int test_failed_solve_does_not_publish_result(void) {
     }
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_finalize(&edb), "%d");
 
-    maelys_datalog_solve_result_t *result = NULL;
+    maelys_datalog_internal_solve_result_t *result = NULL;
     TEST_ASSERT_EQUAL(MAELYS_ERR_PAYLOAD_TOO_LARGE,
                       maelys_datalog_solve_once(&ruleset, &edb, &result),
                       "%d");

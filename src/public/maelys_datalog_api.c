@@ -97,7 +97,7 @@ void maelys_datalog_public_diagnostic_clear(
 
 static int public_predicates_match(
     const maelys_datalog_domain_entry_t *existing,
-    const maelys_datalog_public_domain_t *candidate) {
+    const maelys_datalog_domain_t *candidate) {
     if (!existing || !candidate || existing->install_predicates ||
         existing->predicate_count != candidate->predicate_count ||
         existing->atom_count != candidate->atom_count) {
@@ -120,7 +120,7 @@ static int public_predicates_match(
 }
 
 maelys_datalog_status_t maelys_datalog_domain_register(
-    const maelys_datalog_public_domain_t *domain) {
+    const maelys_datalog_domain_t *domain) {
     if (!domain || !domain->name || !domain->predicates ||
         domain->predicate_count == 0u ||
         domain->predicate_count > MAELYS_DATALOG_MAX_PREDICATES ||
@@ -138,7 +138,7 @@ maelys_datalog_status_t maelys_datalog_domain_register(
 
     const size_t name_capacity = sizeof(((maelys_datalog_predicate_entry_t *)0)->name);
     for (size_t i = 0u; i < domain->predicate_count; i++) {
-        const maelys_datalog_public_predicate_t *source = &domain->predicates[i];
+        const maelys_datalog_predicate_t *source = &domain->predicates[i];
         if (!source->name) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
         const size_t name_length = strnlen(source->name, name_capacity);
         if (name_length == 0u || name_length >= name_capacity ||
@@ -240,8 +240,8 @@ maelys_datalog_status_t maelys_datalog_policy_load_manifest(
     maelys_datalog_policy_t *policy = NULL;
     maelys_datalog_status_t allocation = allocate_policy(out_policy, &policy);
     if (allocation != MAELYS_DATALOG_STATUS_OK) return allocation;
-    maelys_datalog_diagnostic_t diagnostic;
-    maelys_datalog_diagnostic_clear(&diagnostic);
+    maelys_datalog_internal_diagnostic_t diagnostic;
+    maelys_datalog_internal_diagnostic_clear(&diagnostic);
     unsigned manifest_flags = 0u;
     if (flags & MAELYS_DATALOG_PUBLIC_ALLOW_TEST_ONLY) {
         manifest_flags |= MAELYS_DATALOG_MANIFEST_ALLOW_TEST_ONLY;

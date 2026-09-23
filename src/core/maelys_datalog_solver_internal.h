@@ -7,10 +7,10 @@
 /* Caller-owned Why-false workspace, including retained proof and exploration
  * scratch. No allocation; out borrows storage until it is reused. */
 maelys_result_t maelys_datalog_why_false_storage_requirements(
-    const maelys_datalog_solve_result_t *, size_t *bytes, size_t *alignment);
+    const maelys_datalog_internal_solve_result_t *, size_t *bytes, size_t *alignment);
 maelys_result_t maelys_datalog_why_false_storage_bound(size_t *bytes, size_t *alignment);
 maelys_result_t maelys_datalog_explain_absent_in_workspace(
-    const maelys_datalog_solve_result_t *, const maelys_datalog_fact_t *,
+    const maelys_datalog_internal_solve_result_t *, const maelys_datalog_internal_fact_t *,
     const maelys_datalog_why_false_limits_t *, void *storage, size_t bytes,
     const maelys_datalog_why_false_explanation_t **out);
 const maelys_datalog_why_false_explanation_t *maelys_datalog_why_false_workspace_view(
@@ -18,25 +18,25 @@ const maelys_datalog_why_false_explanation_t *maelys_datalog_why_false_workspace
 
 /* Prepared-session workspace allocated only during initialization. The ordinary
  * result release ends a lease and resets this workspace, without freeing it. */
-maelys_datalog_solve_result_t *maelys_datalog_solve_workspace_create(void);
-void maelys_datalog_solve_workspace_destroy(maelys_datalog_solve_result_t *);
+maelys_datalog_internal_solve_result_t *maelys_datalog_solve_workspace_create(void);
+void maelys_datalog_solve_workspace_destroy(maelys_datalog_internal_solve_result_t *);
 maelys_result_t maelys_datalog_solve_reusing_workspace(
-    const maelys_datalog_ruleset_t *, const maelys_datalog_edb_t *,
-    maelys_datalog_solve_result_t *workspace,
-    maelys_datalog_solve_result_t **out_result, maelys_datalog_solve_diagnostic_t *);
+    const maelys_datalog_internal_ruleset_t *, const maelys_datalog_internal_edb_t *,
+    maelys_datalog_internal_solve_result_t *workspace,
+    maelys_datalog_internal_solve_result_t **out_result, maelys_datalog_internal_solve_diagnostic_t *);
 
 typedef void (*maelys_datalog_solve_result_release_fn)(
     void *owner,
-    maelys_datalog_solve_result_t *result);
+    maelys_datalog_internal_solve_result_t *result);
 
 void maelys_datalog_solve_result_set_release(
-    maelys_datalog_solve_result_t *result,
+    maelys_datalog_internal_solve_result_t *result,
     void *owner,
     maelys_datalog_solve_result_release_fn release);
 
 /* Reference-backend adapter only; no query-whitelist bypass is exposed in the
  * public result API. The host reapplies query restrictions after import. */
 maelys_result_t maelys_datalog_solve_result_idb_fact(
-    const maelys_datalog_solve_result_t *, size_t, maelys_datalog_fact_t *);
+    const maelys_datalog_internal_solve_result_t *, size_t, maelys_datalog_internal_fact_t *);
 
 #endif

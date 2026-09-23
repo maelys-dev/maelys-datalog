@@ -15,7 +15,7 @@ static const char k_policy_src[] =
     "allow(X) :- safe(X).\n";
 static const char k_whitelist_domain[] = "whitelist_test";
 static const char k_whitelist_policy_id[] = "whitelist_policy";
-static const maelys_datalog_public_predicate_t k_whitelist_domain_table[] = {
+static const maelys_datalog_predicate_t k_whitelist_domain_table[] = {
     {.name = "safe", .arity = 1, .flags = MAELYS_DATALOG_PRED_KIND_EDB},
     {.name = "allow",
      .arity = 1,
@@ -93,10 +93,10 @@ static maelys_result_t register_whitelist_domain(void) {
     return maelys_datalog_domain_registry_register(&def);
 }
 
-static maelys_datalog_term_t symbol_term(maelys_datalog_ruleset_t *ruleset, const char *text) {
+static maelys_datalog_internal_term_t symbol_term(maelys_datalog_internal_ruleset_t *ruleset, const char *text) {
     maelys_datalog_symbol_id_t id = 0;
     (void)maelys_datalog_symbol_intern(&ruleset->symbols, text, strlen(text), &id);
-    maelys_datalog_term_t term = {.kind = MAELYS_DATALOG_TERM_SYMBOL};
+    maelys_datalog_internal_term_t term = {.kind = MAELYS_DATALOG_TERM_SYMBOL};
     term.as.symbol = id;
     return term;
 }
@@ -127,8 +127,8 @@ static void build_whitelist_manifest(char *out,
 static maelys_result_t load_whitelist_policy(const char *src,
                                              const char *queries_field,
                                              const char *idb_field,
-                                             maelys_datalog_policy_set_t *set,
-                                             maelys_datalog_diagnostic_t *diag) {
+                                             maelys_datalog_internal_policy_set_t *set,
+                                             maelys_datalog_internal_diagnostic_t *diag) {
     maelys_result_t rc = register_whitelist_domain();
     if (rc != MAELYS_OK) return rc;
     char manifest[8192];
@@ -144,24 +144,24 @@ static maelys_result_t load_whitelist_policy(const char *src,
                                                   diag);
 }
 
-static maelys_result_t solve_and_query(maelys_datalog_policy_set_t *set,
+static maelys_result_t solve_and_query(maelys_datalog_internal_policy_set_t *set,
                                        const char *predicate,
                                        maelys_result_t *out_query_rc,
                                        bool *out_present) {
-    maelys_datalog_fact_t facts[4];
-    maelys_datalog_edb_t edb;
+    maelys_datalog_internal_fact_t facts[4];
+    maelys_datalog_internal_edb_t edb;
     maelys_result_t rc = maelys_datalog_edb_init(&edb,
                                                  facts,
                                                  sizeof(facts) / sizeof(facts[0]),
                                                  &set->policies[0].symbols,
                                                  &set->policies[0].registry);
     if (rc != MAELYS_OK) return rc;
-    maelys_datalog_term_t alice = symbol_term(&set->policies[0], "alice");
+    maelys_datalog_internal_term_t alice = symbol_term(&set->policies[0], "alice");
     rc = maelys_datalog_edb_add_fact(&edb, "safe", &alice, 1);
     if (rc != MAELYS_OK) return rc;
     rc = maelys_datalog_edb_finalize(&edb);
     if (rc != MAELYS_OK) return rc;
-    maelys_datalog_solve_result_t *result = NULL;
+    maelys_datalog_internal_solve_result_t *result = NULL;
     rc = maelys_datalog_solve_once(&set->policies[0], &edb, &result);
     if (rc != MAELYS_OK) return rc;
     *out_present = false;
@@ -174,8 +174,8 @@ static maelys_result_t solve_and_query(maelys_datalog_policy_set_t *set,
     return MAELYS_OK;
 }
 
-static int load_basic_policy(maelys_datalog_policy_set_t *set,
-                             maelys_datalog_diagnostic_t *diag) {
+static int load_basic_policy(maelys_datalog_internal_policy_set_t *set,
+                             maelys_datalog_internal_diagnostic_t *diag) {
     char sha[65], manifest[2048];
     sha_bytes(k_policy_src, strlen(k_policy_src), sha);
     build_manifest_one(manifest, sizeof(manifest), "p", sha, "shadow");
@@ -193,8 +193,8 @@ static int load_basic_policy(maelys_datalog_policy_set_t *set,
 static int test_datalog_wasm_manifest_load_from_text_basic(void) {
     TEST_BEGIN();
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_example_domains_install(), "%d");
-    maelys_datalog_policy_set_t set;
-    maelys_datalog_diagnostic_t diag;
+    maelys_datalog_internal_policy_set_t set;
+    maelys_datalog_internal_diagnostic_t diag;
     TEST_ASSERT_EQUAL(MAELYS_OK, load_basic_policy(&set, &diag), "%d");
     TEST_ASSERT_EQUAL((size_t)1u, set.policy_count, "%zu");
     TEST_ASSERT_EQUAL_STRING("p", set.policies[0].policy_id);
@@ -213,8 +213,8 @@ static int test_datalog_wasm_manifest_load_from_text_sha_mismatch(void) {
                        "shadow");
     maelys_datalog_policy_bundle_entry_t bundle =
         bundle_entry("p", k_policy_src, strlen(k_policy_src));
-    maelys_datalog_policy_set_t set;
-    maelys_datalog_diagnostic_t diag;
+    maelys_datalog_internal_policy_set_t set;
+    maelys_datalog_internal_diagnostic_t diag;
     TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_FIELD,
                       maelys_datalog_manifest_load_from_text(manifest,
                                                              strlen(manifest),
@@ -234,8 +234,8 @@ static int test_datalog_wasm_manifest_load_from_text_missing_bundle(void) {
     char sha[65], manifest[2048];
     sha_bytes(k_policy_src, strlen(k_policy_src), sha);
     build_manifest_one(manifest, sizeof(manifest), "missing", sha, "shadow");
-    maelys_datalog_policy_set_t set;
-    maelys_datalog_diagnostic_t diag;
+    maelys_datalog_internal_policy_set_t set;
+    maelys_datalog_internal_diagnostic_t diag;
     TEST_ASSERT_EQUAL(MAELYS_ERR_NOT_FOUND,
                       maelys_datalog_manifest_load_from_text(manifest,
                                                              strlen(manifest),
@@ -251,8 +251,8 @@ static int test_datalog_wasm_manifest_load_from_text_missing_bundle(void) {
 
 static int test_datalog_wasm_manifest_load_from_text_invalid_json(void) {
     TEST_BEGIN();
-    maelys_datalog_policy_set_t set;
-    maelys_datalog_diagnostic_t diag;
+    maelys_datalog_internal_policy_set_t set;
+    maelys_datalog_internal_diagnostic_t diag;
     const char manifest[] = "{\"policy_set_id\":\"x\",";
     TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_FIELD,
                       maelys_datalog_manifest_load_from_text(manifest,
@@ -281,8 +281,8 @@ static int test_datalog_wasm_manifest_rejects_historical_profile(void) {
             sizeof(manifest) - (size_t)(profile - manifest) - strlen(profile) - 1u);
     maelys_datalog_policy_bundle_entry_t bundle =
         bundle_entry("p", k_policy_src, strlen(k_policy_src));
-    maelys_datalog_policy_set_t set;
-    maelys_datalog_diagnostic_t diag;
+    maelys_datalog_internal_policy_set_t set;
+    maelys_datalog_internal_diagnostic_t diag;
     TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_FIELD,
                       maelys_datalog_manifest_load_from_text(manifest,
                                                              strlen(manifest),
@@ -312,8 +312,8 @@ static int test_datalog_wasm_manifest_rejects_unknown_profile(void) {
             sizeof(manifest) - (size_t)(profile - manifest) - strlen(profile) - 1u);
     maelys_datalog_policy_bundle_entry_t bundle =
         bundle_entry("p", k_policy_src, strlen(k_policy_src));
-    maelys_datalog_policy_set_t set;
-    maelys_datalog_diagnostic_t diag;
+    maelys_datalog_internal_policy_set_t set;
+    maelys_datalog_internal_diagnostic_t diag;
     TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_FIELD,
                       maelys_datalog_manifest_load_from_text(manifest,
                                                              strlen(manifest),
@@ -341,8 +341,8 @@ static int test_datalog_wasm_manifest_rejects_file_profile(void) {
             sizeof(manifest) - (size_t)(profile - manifest) - strlen(profile) - 1u);
     maelys_datalog_policy_bundle_entry_t bundle =
         bundle_entry("p", k_policy_src, strlen(k_policy_src));
-    maelys_datalog_policy_set_t set;
-    maelys_datalog_diagnostic_t diag;
+    maelys_datalog_internal_policy_set_t set;
+    maelys_datalog_internal_diagnostic_t diag;
     TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_FIELD,
                       maelys_datalog_manifest_load_from_text(manifest,
                                                              strlen(manifest),
@@ -365,8 +365,8 @@ static int test_datalog_wasm_manifest_load_from_text_utf8_invalid(void) {
     sha_bytes(invalid_src, sizeof(invalid_src), sha);
     build_manifest_one(manifest, sizeof(manifest), "p", sha, "shadow");
     maelys_datalog_policy_bundle_entry_t bundle = bundle_entry("p", invalid_src, sizeof(invalid_src));
-    maelys_datalog_policy_set_t set;
-    maelys_datalog_diagnostic_t diag;
+    maelys_datalog_internal_policy_set_t set;
+    maelys_datalog_internal_diagnostic_t diag;
     TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_FIELD,
                       maelys_datalog_manifest_load_from_text(manifest,
                                                              strlen(manifest),
@@ -393,8 +393,8 @@ static int test_datalog_wasm_manifest_load_from_text_multiple_policies(void) {
         bundle_entry("p1", k_policy_src, strlen(k_policy_src)),
         bundle_entry("p2", src2, strlen(src2)),
     };
-    maelys_datalog_policy_set_t set;
-    maelys_datalog_diagnostic_t diag;
+    maelys_datalog_internal_policy_set_t set;
+    maelys_datalog_internal_diagnostic_t diag;
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       maelys_datalog_manifest_load_from_text(manifest,
                                                              strlen(manifest),
@@ -417,8 +417,8 @@ static int test_datalog_wasm_manifest_load_from_text_test_only_rejected(void) {
     build_manifest_one(manifest, sizeof(manifest), "p", sha, "test_only");
     maelys_datalog_policy_bundle_entry_t bundle =
         bundle_entry("p", k_policy_src, strlen(k_policy_src));
-    maelys_datalog_policy_set_t set;
-    maelys_datalog_diagnostic_t diag;
+    maelys_datalog_internal_policy_set_t set;
+    maelys_datalog_internal_diagnostic_t diag;
     TEST_ASSERT_EQUAL(MAELYS_ERR_FORBIDDEN,
                       maelys_datalog_manifest_load_from_text(manifest,
                                                              strlen(manifest),
@@ -443,8 +443,8 @@ static int test_datalog_wasm_manifest_load_from_text_non_nul_terminated_manifest
     memcpy(raw + manifest_len, "TRAILING", 8u);
     maelys_datalog_policy_bundle_entry_t bundle =
         bundle_entry("p", k_policy_src, strlen(k_policy_src));
-    maelys_datalog_policy_set_t set;
-    maelys_datalog_diagnostic_t diag;
+    maelys_datalog_internal_policy_set_t set;
+    maelys_datalog_internal_diagnostic_t diag;
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       maelys_datalog_manifest_load_from_text(raw,
                                                              manifest_len,
@@ -464,7 +464,7 @@ static int test_query_whitelist_allows_whitelisted_query(void) {
     const char src[] =
         "allow(X) :- safe(X).\n"
         "debug_trace(X) :- safe(X).\n";
-    maelys_datalog_policy_set_t set;
+    maelys_datalog_internal_policy_set_t set;
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       load_whitelist_policy(src,
                                             ",\"queries\":[{\"name\":\"allow\",\"arity\":1}]",
@@ -488,7 +488,7 @@ static int test_query_whitelist_rejects_non_whitelisted_query(void) {
     const char src[] =
         "allow(X) :- safe(X).\n"
         "debug_trace(X) :- safe(X).\n";
-    maelys_datalog_policy_set_t set;
+    maelys_datalog_internal_policy_set_t set;
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       load_whitelist_policy(src,
                                             ",\"queries\":[{\"name\":\"allow\",\"arity\":1}]",
@@ -507,7 +507,7 @@ static int test_query_whitelist_rejects_non_whitelisted_query(void) {
 
 static int test_query_whitelist_manifest_empty_queries_blocks_all_queries(void) {
     TEST_BEGIN();
-    maelys_datalog_policy_set_t set;
+    maelys_datalog_internal_policy_set_t set;
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       load_whitelist_policy("allow(X) :- safe(X).\n", ",\"queries\":[]", NULL, &set, NULL),
                       "%d");
@@ -524,7 +524,7 @@ static int test_query_whitelist_manifest_empty_queries_blocks_all_queries(void) 
 
 static int test_query_whitelist_manifest_without_queries_field_blocks_all_queries(void) {
     TEST_BEGIN();
-    maelys_datalog_policy_set_t set;
+    maelys_datalog_internal_policy_set_t set;
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       load_whitelist_policy("allow(X) :- safe(X).\n", NULL, NULL, &set, NULL),
                       "%d");
@@ -544,7 +544,7 @@ static int test_query_whitelist_internal_predicate_still_computed(void) {
     const char src[] =
         "debug_trace(X) :- safe(X).\n"
         "allow(X) :- debug_trace(X).\n";
-    maelys_datalog_policy_set_t set;
+    maelys_datalog_internal_policy_set_t set;
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       load_whitelist_policy(src,
                                             ",\"queries\":[{\"name\":\"allow\",\"arity\":1}]",
@@ -566,7 +566,7 @@ static int test_query_whitelist_internal_predicate_still_computed(void) {
 
 static int test_query_whitelist_rejects_unknown_query_predicate(void) {
     TEST_BEGIN();
-    maelys_datalog_policy_set_t set;
+    maelys_datalog_internal_policy_set_t set;
     TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_FIELD,
                       load_whitelist_policy("allow(X) :- safe(X).\n",
                                             ",\"queries\":[{\"name\":\"unknown\",\"arity\":1}]",
@@ -580,7 +580,7 @@ static int test_query_whitelist_rejects_unknown_query_predicate(void) {
 
 static int test_query_whitelist_rejects_wrong_query_arity(void) {
     TEST_BEGIN();
-    maelys_datalog_policy_set_t set;
+    maelys_datalog_internal_policy_set_t set;
     TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_FIELD,
                       load_whitelist_policy("allow(X) :- safe(X).\n",
                                             ",\"queries\":[{\"name\":\"allow\",\"arity\":2}]",
@@ -594,7 +594,7 @@ static int test_query_whitelist_rejects_wrong_query_arity(void) {
 
 static int test_query_whitelist_rejects_non_query_capable_predicate(void) {
     TEST_BEGIN();
-    maelys_datalog_policy_set_t set;
+    maelys_datalog_internal_policy_set_t set;
     TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_FIELD,
                       load_whitelist_policy("helper(X) :- safe(X).\n",
                                             ",\"queries\":[{\"name\":\"helper\",\"arity\":1}]",
@@ -618,7 +618,7 @@ static int test_query_whitelist_too_many_queries(void) {
                                 i == 0u ? "" : ",");
     }
     snprintf(queries + off, sizeof(queries) - off, "]");
-    maelys_datalog_policy_set_t set;
+    maelys_datalog_internal_policy_set_t set;
     TEST_ASSERT_EQUAL(MAELYS_ERR_PAYLOAD_TOO_LARGE,
                       load_whitelist_policy("allow(X) :- safe(X).\n", queries, NULL, &set, NULL),
                       "%d");
@@ -631,7 +631,7 @@ static int test_query_whitelist_idb_predicates_no_longer_create_vocabulary(void)
     const char src[] =
         "invented(X) :- safe(X).\n"
         "allow(X) :- invented(X).\n";
-    maelys_datalog_policy_set_t set;
+    maelys_datalog_internal_policy_set_t set;
     TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_FIELD,
                       load_whitelist_policy(src,
                                             ",\"queries\":[{\"name\":\"allow\",\"arity\":1}]",
@@ -648,7 +648,7 @@ static int test_query_whitelist_idb_predicates_compat_noop(void) {
     const char src[] =
         "helper(X) :- safe(X).\n"
         "allow(X) :- helper(X).\n";
-    maelys_datalog_policy_set_t set;
+    maelys_datalog_internal_policy_set_t set;
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       load_whitelist_policy(src,
                                             ",\"queries\":[{\"name\":\"allow\",\"arity\":1}]",
@@ -663,7 +663,7 @@ static int test_query_whitelist_idb_predicates_compat_noop(void) {
 
 static int test_query_whitelist_out_set_cleared_on_failure(void) {
     TEST_BEGIN();
-    maelys_datalog_policy_set_t set;
+    maelys_datalog_internal_policy_set_t set;
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       load_whitelist_policy("allow(X) :- safe(X).\n",
                                             ",\"queries\":[{\"name\":\"allow\",\"arity\":1}]",
@@ -687,7 +687,7 @@ static int test_query_whitelist_out_set_cleared_on_failure(void) {
 
 static int test_query_whitelist_enforces_flag_invariant(void) {
     TEST_BEGIN();
-    maelys_datalog_policy_set_t set;
+    maelys_datalog_internal_policy_set_t set;
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       load_whitelist_policy("allow(X) :- safe(X).\n",
                                             ",\"queries\":[{\"name\":\"allow\",\"arity\":1}]",

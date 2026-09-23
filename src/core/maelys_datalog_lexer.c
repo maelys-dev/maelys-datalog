@@ -21,11 +21,11 @@ maelys_result_t maelys_datalog_lexer_init_ex(maelys_datalog_lexer_t *lexer,
                                              const char *src,
                                              size_t len,
                                              const char *file_path,
-                                             maelys_datalog_diagnostic_t *out_diag) {
+                                             maelys_datalog_internal_diagnostic_t *out_diag) {
     if (!lexer || (!src && len > 0)) return MAELYS_ERR_INVALID_ARGUMENT;
-    if (out_diag) maelys_datalog_diagnostic_clear(out_diag);
+    if (out_diag) maelys_datalog_internal_diagnostic_clear(out_diag);
     if (!maelys_utf8_validate((const unsigned char *)src, len)) {
-        maelys_datalog_diagnostic_set(out_diag,
+        maelys_datalog_internal_diagnostic_set(out_diag,
                                       MAELYS_DATALOG_DIAG_LEXER_INVALID_UTF8,
                                       "lexer",
                                       file_path,
@@ -62,7 +62,7 @@ static maelys_result_t lexer_invalid(maelys_datalog_lexer_t *l,
                                      size_t len,
                                      const char *message,
                                      const char *hint) {
-    maelys_datalog_diagnostic_set(l ? l->diag : NULL,
+    maelys_datalog_internal_diagnostic_set(l ? l->diag : NULL,
                                   code,
                                   "lexer",
                                   l ? l->file_path : NULL,
@@ -238,7 +238,7 @@ maelys_result_t maelys_datalog_lexer_next(maelys_datalog_lexer_t *l,
                                                    0,
                                                    "string literal too long",
                                                    "shorten the string atom or register a bounded atom");
-                maelys_datalog_diagnostic_set_limit(l->diag, bytes, MAELYS_DATALOG_MAX_STRING_BYTES);
+                maelys_datalog_internal_diagnostic_set_limit(l->diag, bytes, MAELYS_DATALOG_MAX_STRING_BYTES);
                 return er;
             }
         }
@@ -350,7 +350,7 @@ maelys_result_t maelys_datalog_lexer_validate(const char *src, size_t len) {
 maelys_result_t maelys_datalog_lexer_validate_ex(const char *src,
                                                  size_t len,
                                                  const char *file_path,
-                                                 maelys_datalog_diagnostic_t *out_diag) {
+                                                 maelys_datalog_internal_diagnostic_t *out_diag) {
     maelys_datalog_lexer_t l;
     maelys_result_t rc = maelys_datalog_lexer_init_ex(&l, src, len, file_path, out_diag);
     if (rc != MAELYS_OK) return rc;

@@ -11,7 +11,7 @@ void maelys_datalog_proof_init(maelys_datalog_proof_tree_t *proof,
 void maelys_datalog_proof_add(maelys_datalog_proof_tree_t *proof,
                               size_t rule_id,
                               maelys_datalog_predicate_id_t predicate_id,
-                              const maelys_datalog_fact_t *derived_fact,
+                              const maelys_datalog_internal_fact_t *derived_fact,
                               maelys_datalog_deny_reason_t reason,
                               size_t depth,
                               uint16_t parent_index);

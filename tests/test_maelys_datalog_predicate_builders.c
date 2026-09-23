@@ -4,7 +4,7 @@
 #include <stdio.h>
 #include <string.h>
 
-static const maelys_datalog_public_predicate_t declarations[] = {
+static const maelys_datalog_predicate_t declarations[] = {
     MAELYS_DATALOG_EDB("seed", 1),
     MAELYS_DATALOG_IDB("hidden", 1),
     MAELYS_DATALOG_IDB_QUERY("allow", 1),
@@ -17,9 +17,9 @@ static const char *name_once(void) { ++name_calls; return "dynamic"; }
 static size_t arity_once(void) { ++arity_calls; return 2; }
 
 static const char *const atoms[] = {"alice", "mallory"};
-static const maelys_datalog_public_domain_t domain =
+static const maelys_datalog_domain_t domain =
     MAELYS_DATALOG_DOMAIN_WITH_ATOMS("predicate_builders", declarations, atoms);
-static const maelys_datalog_public_domain_t no_atoms =
+static const maelys_datalog_domain_t no_atoms =
     MAELYS_DATALOG_DOMAIN_NO_ATOMS("domain_builders_no_atoms", declarations);
 
 static void test_domain_initializers(void) {
@@ -28,9 +28,9 @@ static void test_domain_initializers(void) {
     assert(no_atoms.predicates == declarations && no_atoms.predicate_count == 6u);
     assert(no_atoms.atoms == NULL && no_atoms.atom_count == 0u);
     name_calls = 0u;
-    const maelys_datalog_public_domain_t local_with =
+    const maelys_datalog_domain_t local_with =
         MAELYS_DATALOG_DOMAIN_WITH_ATOMS(name_once(), declarations, atoms);
-    const maelys_datalog_public_domain_t local_without =
+    const maelys_datalog_domain_t local_without =
         MAELYS_DATALOG_DOMAIN_NO_ATOMS(name_once(), declarations);
     assert(name_calls == 2u);
     assert(strcmp(local_with.name, "dynamic") == 0);
@@ -55,10 +55,10 @@ static void test_domain_initializers(void) {
     maelys_datalog_session_t *session = NULL;
     maelys_datalog_result_t *result = NULL;
     assert(!maelys_datalog_session_create(policy, 0, &session));
-    maelys_datalog_public_fact_t fact = {0};
+    maelys_datalog_fact_t fact = {0};
     fact.predicate = "seed";
     fact.arity = 1u;
-    fact.terms[0] = (maelys_datalog_public_value_t)MAELYS_DATALOG_SYMBOL("mallory");
+    fact.terms[0] = (maelys_datalog_value_t)MAELYS_DATALOG_SYMBOL("mallory");
     assert(!maelys_datalog_session_solve(session, &fact, 1u, &result, NULL));
     int present = 0;
     assert(!maelys_datalog_result_query(result, "allow", fact.terms, 1u, &present));
@@ -82,7 +82,7 @@ int main(void) {
     assert(declarations[4].flags == MAELYS_DATALOG_PREDICATE_POLICY_FACT);
     assert(declarations[5].flags ==
            (MAELYS_DATALOG_PREDICATE_POLICY_FACT | MAELYS_DATALOG_PREDICATE_QUERY));
-    const maelys_datalog_public_predicate_t dynamic[] = {
+    const maelys_datalog_predicate_t dynamic[] = {
         MAELYS_DATALOG_EDB(name_once(), arity_once()),
         MAELYS_DATALOG_IDB(name_once(), arity_once()),
         MAELYS_DATALOG_IDB_QUERY(name_once(), arity_once()),
@@ -103,12 +103,12 @@ int main(void) {
     assert(!maelys_datalog_policy_load_inline(domain.name, "builders", source,
                                               strlen(source), &policy, NULL));
     assert(!maelys_datalog_session_create(policy, 0, &session));
-    maelys_datalog_public_fact_t facts[2] = {0};
+    maelys_datalog_fact_t facts[2] = {0};
     facts[0].predicate = "seed";
     facts[1].predicate = "observed";
     for (size_t i = 0; i < 2; ++i) {
         facts[i].arity = 1;
-        facts[i].terms[0] = (maelys_datalog_public_value_t)MAELYS_DATALOG_SYMBOL("alice");
+        facts[i].terms[0] = (maelys_datalog_value_t)MAELYS_DATALOG_SYMBOL("alice");
     }
     assert(!maelys_datalog_session_solve(session, facts, 2, &result, NULL));
     for (size_t i = 0; i < 6; ++i) {
@@ -131,16 +131,16 @@ int main(void) {
     assert(!maelys_datalog_session_free(session));
     assert(!maelys_datalog_policy_free(policy));
     /* Initializers do not silently repair or validate declarations. */
-    const maelys_datalog_public_predicate_t invalid[] = {
+    const maelys_datalog_predicate_t invalid[] = {
         MAELYS_DATALOG_EDB("bad", MAELYS_DATALOG_PUBLIC_MAX_TERMS + 1),
     };
-    const maelys_datalog_public_domain_t bad_domain =
+    const maelys_datalog_domain_t bad_domain =
         MAELYS_DATALOG_DOMAIN_NO_ATOMS("predicate_builders_invalid", invalid);
     assert(maelys_datalog_domain_register(&bad_domain) == MAELYS_DATALOG_STATUS_INVALID_FIELD);
-    const maelys_datalog_public_predicate_t query_only = {
+    const maelys_datalog_predicate_t query_only = {
         "query_only", 1, MAELYS_DATALOG_PREDICATE_QUERY,
     };
-    const maelys_datalog_public_domain_t invalid_origin = {
+    const maelys_datalog_domain_t invalid_origin = {
         "predicate_query_only", &query_only, 1, NULL, 0,
     };
     /* The existing facade stores flags at registration; policy loading validates

@@ -63,7 +63,7 @@ MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_window_init(
  */
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_window_push(
     maelys_datalog_window_t *window, const char *predicate,
-    const maelys_datalog_public_value_t *values, size_t value_count,
+    const maelys_datalog_value_t *values, size_t value_count,
     uint32_t *out_occurrence, maelys_datalog_public_diagnostic_t *out_diagnostic);
 
 /* Borrow the latest result, including the initial empty snapshot. Do NOT call
@@ -76,7 +76,7 @@ MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_window_result(
  * input_edb_view. Invalidated on successful push/free, preserved on failure. */
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_window_events(
     const maelys_datalog_window_t *window,
-    const maelys_datalog_public_fact_t **out_facts, size_t *out_count);
+    const maelys_datalog_fact_t **out_facts, size_t *out_count);
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_window_state(
     const maelys_datalog_window_t *window, size_t *out_count, uint64_t *out_next_occurrence);
 /* Interned predicate/symbol bytes (including NULs) used by the COMMITTED input

@@ -26,7 +26,7 @@ static maelys_datalog_status_t requirements(void *s, void *r, maelys_datalog_exp
     return maelys_datalog_backend_reference()->explanation_storage_requirements(s, r, k, n, a);
 }
 static maelys_datalog_status_t prepare(void *s, void *r, maelys_datalog_explanation_kind_t k,
-    const char *predicate, const maelys_datalog_public_value_t *terms, size_t arity,
+    const char *predicate, const maelys_datalog_value_t *terms, size_t arity,
     void *storage, size_t bytes, size_t *text_size) {
     ++prepares;
     if (mode == 3) return (maelys_datalog_status_t)12345;
@@ -41,8 +41,8 @@ static maelys_datalog_status_t write_text(void *s, void *r, maelys_datalog_expla
     if (mode == 6) return MAELYS_DATALOG_STATUS_IO;
     return maelys_datalog_backend_reference()->explanation_write_text(s, r, k, storage, text, bytes);
 }
-static maelys_datalog_public_value_t symbol(const char *s) {
-    maelys_datalog_public_value_t v = {.kind = MAELYS_DATALOG_VALUE_SYMBOL, .as.symbol = s};
+static maelys_datalog_value_t symbol(const char *s) {
+    maelys_datalog_value_t v = {.kind = MAELYS_DATALOG_VALUE_SYMBOL, .as.symbol = s};
     return v;
 }
 static maelys_datalog_session_t *cached_session(maelys_datalog_policy_t *policy) {
@@ -63,7 +63,7 @@ static void bounded_case(const char *source, const char *expected_status) {
     OK(maelys_datalog_policy_load_inline("prepared_explanation", "bounded", source, strlen(source), &policy, NULL));
     OK(maelys_datalog_session_create(policy, 0, &session));
     OK(maelys_datalog_input_edb_create(&edb));
-    maelys_datalog_public_value_t alice = symbol("alice");
+    maelys_datalog_value_t alice = symbol("alice");
     OK(maelys_datalog_input_edb_add_fact(edb, "seed", &alice, 1, NULL));
     OK(maelys_datalog_session_solve_edb(session, edb, &result, NULL));
     size_t bytes, alignment, required;
@@ -125,7 +125,7 @@ static void reference_conveniences(maelys_datalog_policy_t *policy) {
     forbidden = 0;
     maelys_datalog_input_edb_t *edb;
     OK(maelys_datalog_input_edb_create(&edb));
-    maelys_datalog_public_value_t alice = symbol("alice"), bob = symbol("bob");
+    maelys_datalog_value_t alice = symbol("alice"), bob = symbol("bob");
     OK(maelys_datalog_input_edb_add_fact(edb, "seed", &alice, 1, NULL));
     OK(maelys_datalog_input_edb_add_fact(edb, "seed", &bob, 1, NULL));
     OK(maelys_datalog_input_edb_add_fact(edb, "blocked", &bob, 1, NULL));
@@ -134,7 +134,7 @@ static void reference_conveniences(maelys_datalog_policy_t *policy) {
     char text[8192], expected[8192];
     for (int i = 0; i < 2; ++i) {
         maelys_datalog_explanation_kind_t kind = (maelys_datalog_explanation_kind_t)(i + 1);
-        const maelys_datalog_public_value_t *query = i ? &bob : &alice;
+        const maelys_datalog_value_t *query = i ? &bob : &alice;
         size_t bytes, alignment, required;
         OK(maelys_datalog_result_explanation_storage_requirements(result, kind, &bytes, &alignment));
         assert(bytes <= bounds[i] && alignment == alignments[i]);
@@ -182,11 +182,11 @@ static void reference_conveniences(maelys_datalog_policy_t *policy) {
 }
 
 static void truncated_true_bound(void) {
-    const maelys_datalog_public_predicate_t predicates[] = {
+    const maelys_datalog_predicate_t predicates[] = {
         MAELYS_DATALOG_EDB("edge", 2), MAELYS_DATALOG_IDB_QUERY("path", 2),
         MAELYS_DATALOG_IDB_QUERY("reach", 2),
     };
-    const maelys_datalog_public_domain_t domain = {"bound_path", predicates, 3, NULL, 0};
+    const maelys_datalog_domain_t domain = {"bound_path", predicates, 3, NULL, 0};
     OK(maelys_datalog_domain_register(&domain));
     const char *source = "path(X,Y) :- edge(X,Y).\npath(X,Z) :- path(X,Y), edge(Y,Z).\nreach(X,Y) :- path(X,Y).";
     maelys_datalog_policy_t *policy;
@@ -200,14 +200,14 @@ static void truncated_true_bound(void) {
         char first[8], second[8];
         snprintf(first, sizeof(first), "n%d", i);
         snprintf(second, sizeof(second), "n%d", i + 1);
-        maelys_datalog_public_value_t terms[] = {symbol(first), symbol(second)};
+        maelys_datalog_value_t terms[] = {symbol(first), symbol(second)};
         OK(maelys_datalog_input_edb_add_fact(edb, "edge", terms, 2, NULL));
     }
     OK(maelys_datalog_session_solve_edb(session, edb, &result, NULL));
     maelys_datalog_session_t *cached = cached_session(policy);
     maelys_datalog_result_t *cached_result;
     OK(maelys_datalog_session_solve_edb(cached, edb, &cached_result, NULL));
-    maelys_datalog_public_value_t query[] = {symbol("n0"), symbol("n8")};
+    maelys_datalog_value_t query[] = {symbol("n0"), symbol("n8")};
     int present;
     OK(maelys_datalog_result_query(result, "path", query, 2, &present));
     assert(present);
@@ -244,12 +244,12 @@ static void truncated_true_bound(void) {
 }
 
 int main(void) {
-    const maelys_datalog_public_predicate_t predicates[] = {
+    const maelys_datalog_predicate_t predicates[] = {
         {"seed", 1, MAELYS_DATALOG_PREDICATE_EDB},
         {"blocked", 1, MAELYS_DATALOG_PREDICATE_EDB},
         {"allow", 1, MAELYS_DATALOG_PREDICATE_IDB | MAELYS_DATALOG_PREDICATE_QUERY},
     };
-    const maelys_datalog_public_domain_t domain = {"prepared_explanation", predicates, 3, NULL, 0};
+    const maelys_datalog_domain_t domain = {"prepared_explanation", predicates, 3, NULL, 0};
     OK(maelys_datalog_domain_register(&domain));
     const char *source = "allow(X) :- seed(X), not(blocked(X)).";
     maelys_datalog_policy_t *policy;
@@ -277,7 +277,7 @@ int main(void) {
     assert(bound == 123 && bound_alignment == 456);
     maelys_datalog_input_edb_t *edb;
     OK(maelys_datalog_input_edb_create(&edb));
-    maelys_datalog_public_value_t alice = symbol("alice"), bob = symbol("bob"), missing = symbol("unknown");
+    maelys_datalog_value_t alice = symbol("alice"), bob = symbol("bob"), missing = symbol("unknown");
     OK(maelys_datalog_input_edb_add_fact(edb, "seed", &alice, 1, NULL));
     OK(maelys_datalog_input_edb_add_fact(edb, "seed", &bob, 1, NULL));
     OK(maelys_datalog_input_edb_add_fact(edb, "blocked", &bob, 1, NULL));
@@ -300,7 +300,7 @@ int main(void) {
     size_t before = prepares;
     for (int i = 0; i < 2; ++i) {
         maelys_datalog_explanation_kind_t kind = (maelys_datalog_explanation_kind_t)(i + 1);
-        const maelys_datalog_public_value_t *value = i ? &bob : &alice;
+        const maelys_datalog_value_t *value = i ? &bob : &alice;
         sentinel = (void *)(uintptr_t)1;
         assert(maelys_datalog_result_prepare_explanation(result, kind, "allow", value, 1, storage[i], bytes[i] - 1, &sentinel) == MAELYS_DATALOG_STATUS_STORAGE_TOO_SMALL);
         assert(sentinel == (void *)(uintptr_t)1);

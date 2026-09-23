@@ -2,7 +2,7 @@
 #include "src/core/maelys_datalog_query_internal.h"
 #include <string.h>
 
-int maelys_datalog_query_whitelist_contains(const maelys_datalog_ruleset_t *ruleset,
+int maelys_datalog_query_whitelist_contains(const maelys_datalog_internal_ruleset_t *ruleset,
                                             const char *predicate, size_t arity) {
     if (!ruleset || !predicate)
         return 0;
@@ -13,7 +13,7 @@ int maelys_datalog_query_whitelist_contains(const maelys_datalog_ruleset_t *rule
     }
     return 0;
 }
-maelys_result_t maelys_datalog_validate_query_predicate(const maelys_datalog_ruleset_t *ruleset,
+maelys_result_t maelys_datalog_validate_query_predicate(const maelys_datalog_internal_ruleset_t *ruleset,
                                                         const char *predicate, size_t arity,
                                                         maelys_datalog_predicate_id_t *out_pid) {
     if (ruleset->enforces_query_whitelist &&

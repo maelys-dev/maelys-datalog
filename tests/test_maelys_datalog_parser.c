@@ -7,15 +7,15 @@
 #include <stdio.h>
 #include <string.h>
 
-static int parse_text_ex(const char *src, maelys_datalog_diagnostic_t *diag);
-static int init_parser_ruleset(maelys_datalog_ruleset_t *r);
+static int parse_text_ex(const char *src, maelys_datalog_internal_diagnostic_t *diag);
+static int init_parser_ruleset(maelys_datalog_internal_ruleset_t *r);
 
 static int parse_text(const char *src) {
-    maelys_datalog_diagnostic_t diag;
+    maelys_datalog_internal_diagnostic_t diag;
     return parse_text_ex(src, &diag);
 }
 
-static int init_parser_ruleset(maelys_datalog_ruleset_t *r) {
+static int init_parser_ruleset(maelys_datalog_internal_ruleset_t *r) {
     memset(r, 0, sizeof(*r));
     if (maelys_datalog_ruleset_init(r, "policy.test", "graph",
                                     "0000000000000000000000000000000000000000000000000000000000000000", 1) != MAELYS_OK) {
@@ -93,8 +93,8 @@ static int init_parser_ruleset(maelys_datalog_ruleset_t *r) {
     return MAELYS_OK;
 }
 
-static int parse_text_ex(const char *src, maelys_datalog_diagnostic_t *diag) {
-    maelys_datalog_ruleset_t r;
+static int parse_text_ex(const char *src, maelys_datalog_internal_diagnostic_t *diag) {
+    maelys_datalog_internal_ruleset_t r;
     if (init_parser_ruleset(&r) != MAELYS_OK) return -999;
     int rc = maelys_datalog_parse_ruleset_ex(&r, src, strlen(src), "test.dl", diag);
     maelys_datalog_ruleset_clear(&r);
@@ -106,7 +106,7 @@ static void fill_chars(char *buf, size_t len, char c) {
     buf[len] = '\0';
 }
 
-static int init_ruleset_with_predicate(maelys_datalog_ruleset_t *r,
+static int init_ruleset_with_predicate(maelys_datalog_internal_ruleset_t *r,
                                        const char *predicate,
                                        size_t arity,
                                        unsigned kind_flags) {
@@ -174,7 +174,7 @@ static int test_parser_rejects_unsupported_constructs(void) {
 
 static int test_datalog_negation_safety_check_unsafe_variable(void) {
     TEST_BEGIN();
-    maelys_datalog_diagnostic_t diag;
+    maelys_datalog_internal_diagnostic_t diag;
     TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_FIELD,
                       parse_text_ex("bad(X) :- not(p(X)).", &diag),
                       "%d");
@@ -208,7 +208,7 @@ static int test_datalog_negation_not_space_rejected(void) {
 
 static int test_datalog_negation_assign_strata_correct(void) {
     TEST_BEGIN();
-    maelys_datalog_ruleset_t r;
+    maelys_datalog_internal_ruleset_t r;
     TEST_ASSERT_EQUAL(MAELYS_OK, init_parser_ruleset(&r), "%d");
     const char *src =
         "p(X) :- q(X, \"a\").\n"
@@ -231,7 +231,7 @@ static int test_datalog_negation_assign_strata_correct(void) {
 
 static int test_datalog_negation_negative_cycle_detected(void) {
     TEST_BEGIN();
-    maelys_datalog_diagnostic_t diag;
+    maelys_datalog_internal_diagnostic_t diag;
     const char *src =
         "p(X) :- q(X, \"a\"), not(bad(X)).\n"
         "bad(X) :- q(X, \"a\"), not(p(X)).";
@@ -253,7 +253,7 @@ static int test_parser_has_no_domain_predicate_special_case(void) {
 
 static int test_parser_uses_registry_flags_not_names(void) {
     TEST_BEGIN();
-    maelys_datalog_ruleset_t r;
+    maelys_datalog_internal_ruleset_t r;
     memset(&r, 0, sizeof(r));
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_ruleset_init(&r, "policy.test", "custom",
         "0000000000000000000000000000000000000000000000000000000000000000", 1), "%d");
@@ -269,7 +269,7 @@ static int test_parser_uses_registry_flags_not_names(void) {
 
 static int test_parser_diag_unknown_predicate(void) {
     TEST_BEGIN();
-    maelys_datalog_diagnostic_t diag;
+    maelys_datalog_internal_diagnostic_t diag;
     TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_FIELD, parse_text_ex("magic_allow(P) :- blocked(P).", &diag), "%d");
     TEST_ASSERT_EQUAL(MAELYS_DATALOG_DIAG_PARSER_UNKNOWN_PREDICATE, diag.code, "%d");
     TEST_ASSERT_EQUAL_STRING("magic_allow", diag.predicate);
@@ -279,7 +279,7 @@ static int test_parser_diag_unknown_predicate(void) {
 
 static int test_parser_diag_arity_mismatch(void) {
     TEST_BEGIN();
-    maelys_datalog_diagnostic_t diag;
+    maelys_datalog_internal_diagnostic_t diag;
     TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_FIELD, parse_text_ex("blocked(\"proj-1\", \"a\").", &diag), "%d");
     TEST_ASSERT_EQUAL(MAELYS_DATALOG_DIAG_PARSER_ARITY_MISMATCH, diag.code, "%d");
     TEST_ASSERT_EQUAL_STRING("blocked", diag.predicate);
@@ -289,7 +289,7 @@ static int test_parser_diag_arity_mismatch(void) {
 
 static int test_parser_diag_rule_head_edb_forbidden(void) {
     TEST_BEGIN();
-    maelys_datalog_diagnostic_t diag;
+    maelys_datalog_internal_diagnostic_t diag;
     TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_FIELD, parse_text_ex("blocked(P) :- allow(P).", &diag), "%d");
     TEST_ASSERT_EQUAL(MAELYS_DATALOG_DIAG_PARSER_RULE_HEAD_EDB_FORBIDDEN, diag.code, "%d");
     TEST_ASSERT_EQUAL_STRING("blocked", diag.predicate);
@@ -298,7 +298,7 @@ static int test_parser_diag_rule_head_edb_forbidden(void) {
 
 static int test_parser_diag_fact_uses_non_base_predicate(void) {
     TEST_BEGIN();
-    maelys_datalog_diagnostic_t diag;
+    maelys_datalog_internal_diagnostic_t diag;
     TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_FIELD, parse_text_ex("allow(\"a\").", &diag), "%d");
     TEST_ASSERT_EQUAL(MAELYS_DATALOG_DIAG_PARSER_FACT_USES_NON_BASE_PREDICATE, diag.code, "%d");
     TEST_ASSERT_EQUAL_STRING("allow", diag.predicate);
@@ -307,7 +307,7 @@ static int test_parser_diag_fact_uses_non_base_predicate(void) {
 
 static int test_parser_diag_rule_body_literal_overflow(void) {
     TEST_BEGIN();
-    maelys_datalog_diagnostic_t diag;
+    maelys_datalog_internal_diagnostic_t diag;
     const char *src =
         "allow(P) :- blocked(P), blocked(P), blocked(P), blocked(P), "
         "blocked(P), blocked(P), blocked(P), blocked(P), blocked(P).";
@@ -322,7 +322,7 @@ static int test_parser_diag_rule_body_literal_overflow(void) {
 
 static int test_parser_diag_unsafe_variable(void) {
     TEST_BEGIN();
-    maelys_datalog_diagnostic_t diag;
+    maelys_datalog_internal_diagnostic_t diag;
     TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_FIELD, parse_text_ex("allow(P) :- blocked(\"proj-1\").", &diag), "%d");
     TEST_ASSERT_EQUAL(MAELYS_DATALOG_DIAG_PARSER_UNSAFE_VARIABLE, diag.code, "%d");
     TEST_ASSERT_EQUAL_STRING("allow", diag.predicate);
@@ -331,7 +331,7 @@ static int test_parser_diag_unsafe_variable(void) {
 
 static int test_parser_diag_unknown_atom(void) {
     TEST_BEGIN();
-    maelys_datalog_diagnostic_t diag;
+    maelys_datalog_internal_diagnostic_t diag;
     TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_FIELD, parse_text_ex("blocked(\"unsafe_root_shell\").", &diag), "%d");
     TEST_ASSERT_EQUAL(MAELYS_DATALOG_DIAG_PARSER_UNKNOWN_ATOM, diag.code, "%d");
     TEST_ASSERT_EQUAL_STRING("unsafe_root_shell", diag.token);
@@ -342,7 +342,7 @@ static int test_parser_predicate_name_at_max_length_accepted(void) {
     TEST_BEGIN();
     char pred[64];
     fill_chars(pred, 63u, 'a');
-    maelys_datalog_ruleset_t r;
+    maelys_datalog_internal_ruleset_t r;
     TEST_ASSERT_EQUAL(MAELYS_OK, init_ruleset_with_predicate(&r, pred, 1, MAELYS_DATALOG_PRED_KIND_EDB), "%d");
     char src[96];
     snprintf(src, sizeof(src), "p(X) :- %s(X).", pred);
@@ -367,7 +367,7 @@ static int test_parser_predicate_name_over_max_length_has_diagnostic(void) {
     fill_chars(pred, 64u, 'a');
     char src[96];
     snprintf(src, sizeof(src), "%s(X).", pred);
-    maelys_datalog_diagnostic_t diag;
+    maelys_datalog_internal_diagnostic_t diag;
     TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_FIELD, parse_text_ex(src, &diag), "%d");
     TEST_ASSERT_EQUAL(MAELYS_DATALOG_DIAG_PARSER_UNKNOWN_PREDICATE, diag.code, "%d");
     TEST_ASSERT_TRUE(diag.message[0] != '\0');
@@ -377,7 +377,7 @@ static int test_parser_predicate_name_over_max_length_has_diagnostic(void) {
 
 static int test_parser_unknown_token_in_body_has_diagnostic(void) {
     TEST_BEGIN();
-    maelys_datalog_diagnostic_t diag;
+    maelys_datalog_internal_diagnostic_t diag;
     TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_FIELD, parse_text_ex("allow(P) :- .", &diag), "%d");
     TEST_ASSERT_TRUE(diag.code != MAELYS_DATALOG_DIAG_NONE);
     TEST_ASSERT_TRUE(diag.message[0] != '\0');
@@ -394,7 +394,7 @@ static int test_parser_ruleset_init_policy_id_exact_length_accepted(void) {
     TEST_BEGIN();
     char policy_id[128];
     fill_chars(policy_id, 127u, 'p');
-    maelys_datalog_ruleset_t r;
+    maelys_datalog_internal_ruleset_t r;
     memset(&r, 0, sizeof(r));
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       maelys_datalog_ruleset_init(&r, policy_id, "graph",
@@ -409,7 +409,7 @@ static int test_parser_ruleset_init_policy_id_too_long_rejected(void) {
     TEST_BEGIN();
     char policy_id[129];
     fill_chars(policy_id, 128u, 'p');
-    maelys_datalog_ruleset_t r;
+    maelys_datalog_internal_ruleset_t r;
     memset(&r, 0, sizeof(r));
     TEST_ASSERT_EQUAL(MAELYS_ERR_PAYLOAD_TOO_LARGE,
                       maelys_datalog_ruleset_init(&r, policy_id, "graph",
@@ -422,7 +422,7 @@ static int test_parser_ruleset_init_sha256_too_long_rejected(void) {
     TEST_BEGIN();
     char sha256[66];
     fill_chars(sha256, 65u, '0');
-    maelys_datalog_ruleset_t r;
+    maelys_datalog_internal_ruleset_t r;
     memset(&r, 0, sizeof(r));
     TEST_ASSERT_EQUAL(MAELYS_ERR_PAYLOAD_TOO_LARGE,
                       maelys_datalog_ruleset_init(&r, "policy.test", "graph", sha256, 1),
@@ -434,7 +434,7 @@ static int test_parser_ruleset_init_domain_too_long_rejected(void) {
     TEST_BEGIN();
     char domain[65];
     fill_chars(domain, 64u, 'd');
-    maelys_datalog_ruleset_t r;
+    maelys_datalog_internal_ruleset_t r;
     memset(&r, 0, sizeof(r));
     TEST_ASSERT_EQUAL(MAELYS_ERR_PAYLOAD_TOO_LARGE,
                       maelys_datalog_ruleset_init(&r, "policy.test", domain,
@@ -445,7 +445,7 @@ static int test_parser_ruleset_init_domain_too_long_rejected(void) {
 
 static int test_parser_unsafe_variable_detected_single(void) {
     TEST_BEGIN();
-    maelys_datalog_diagnostic_t diag;
+    maelys_datalog_internal_diagnostic_t diag;
     TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_FIELD, parse_text_ex("allow(P) :- blocked(\"proj-1\").", &diag), "%d");
     TEST_ASSERT_EQUAL(MAELYS_DATALOG_DIAG_PARSER_UNSAFE_VARIABLE, diag.code, "%d");
     TEST_END();
@@ -453,7 +453,7 @@ static int test_parser_unsafe_variable_detected_single(void) {
 
 static int test_parser_unsafe_variable_detected_multiple(void) {
     TEST_BEGIN();
-    maelys_datalog_diagnostic_t diag;
+    maelys_datalog_internal_diagnostic_t diag;
     TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_FIELD, parse_text_ex("ancestor(X, Y) :- parent(X, Z).", &diag), "%d");
     TEST_ASSERT_EQUAL(MAELYS_DATALOG_DIAG_PARSER_UNSAFE_VARIABLE, diag.code, "%d");
     TEST_ASSERT_EQUAL_STRING("ancestor", diag.predicate);
@@ -487,7 +487,7 @@ static int test_parser_comparison_valid_still_accepted(void) {
 }
 
 static int parse_has_unsafe_diag(const char *src) {
-    maelys_datalog_diagnostic_t diag;
+    maelys_datalog_internal_diagnostic_t diag;
     return parse_text_ex(src, &diag) == MAELYS_ERR_INVALID_FIELD &&
            diag.code == MAELYS_DATALOG_DIAG_PARSER_UNSAFE_VARIABLE;
 }
@@ -563,7 +563,7 @@ static int test_rule_safety_positive_recursion(void) {
 
 static int test_datalog_parser_rejects_symbol_ordinal_static(void) {
     TEST_BEGIN();
-    maelys_datalog_diagnostic_t diag;
+    maelys_datalog_internal_diagnostic_t diag;
     TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_FIELD,
                       parse_text_ex("allow(P) :- blocked(P), \"a\" < \"b\".", &diag),
                       "%d");
@@ -573,7 +573,7 @@ static int test_datalog_parser_rejects_symbol_ordinal_static(void) {
 
 static int test_datalog_parser_rejects_bool_ordinal_static(void) {
     TEST_BEGIN();
-    maelys_datalog_diagnostic_t diag;
+    maelys_datalog_internal_diagnostic_t diag;
     TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_FIELD,
                       parse_text_ex("allow(P) :- blocked(P), true > false.", &diag),
                       "%d");
@@ -583,7 +583,7 @@ static int test_datalog_parser_rejects_bool_ordinal_static(void) {
 
 static int test_datalog_parser_rejects_kind_mismatch_static(void) {
     TEST_BEGIN();
-    maelys_datalog_diagnostic_t diag;
+    maelys_datalog_internal_diagnostic_t diag;
     TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_FIELD,
                       parse_text_ex("allow(P) :- blocked(P), \"a\" = 1.", &diag),
                       "%d");
@@ -593,7 +593,7 @@ static int test_datalog_parser_rejects_kind_mismatch_static(void) {
 
 static int test_datalog_parser_rejects_underscore_in_comparison(void) {
     TEST_BEGIN();
-    maelys_datalog_diagnostic_t diag;
+    maelys_datalog_internal_diagnostic_t diag;
     TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_FIELD,
                       parse_text_ex("allow(P) :- blocked(P), _ = P.", &diag),
                       "%d");
@@ -615,7 +615,7 @@ static int test_datalog_policy_fact_allowed_as_direct_dl_fact(void) {
 
 static int test_datalog_policy_fact_rejected_as_rule_head(void) {
     TEST_BEGIN();
-    maelys_datalog_diagnostic_t diag;
+    maelys_datalog_internal_diagnostic_t diag;
     TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_FIELD,
                       parse_text_ex("allowed_backend_tuple(K, N, F) :- backend_class(B, K), backend_channel(B, N), backend_format(B, F).", &diag),
                       "%d");
@@ -626,7 +626,7 @@ static int test_datalog_policy_fact_rejected_as_rule_head(void) {
 
 static int test_datalog_edb_rejected_as_direct_dl_fact(void) {
     TEST_BEGIN();
-    maelys_datalog_diagnostic_t diag;
+    maelys_datalog_internal_diagnostic_t diag;
     TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_FIELD, parse_text_ex("backend(1).", &diag), "%d");
     TEST_ASSERT_EQUAL(MAELYS_DATALOG_DIAG_PARSER_FACT_USES_NON_BASE_PREDICATE, diag.code, "%d");
     TEST_ASSERT_EQUAL_STRING("backend", diag.predicate);
@@ -651,7 +651,7 @@ static int test_datalog_idb_still_allowed_in_rule_body(void) {
 
 static int test_datalog_policy_fact_parser_does_not_mutate_frozen_registry(void) {
     TEST_BEGIN();
-    maelys_datalog_ruleset_t r;
+    maelys_datalog_internal_ruleset_t r;
     memset(&r, 0, sizeof(r));
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_ruleset_init(&r, "policy.test", "custom",
         "0000000000000000000000000000000000000000000000000000000000000000", 1), "%d");
@@ -672,7 +672,7 @@ static int test_datalog_policy_fact_parser_does_not_mutate_frozen_registry(void)
     TEST_END();
 }
 
-static int symbol_table_contains_prefix(const maelys_datalog_ruleset_t *r, const char *prefix) {
+static int symbol_table_contains_prefix(const maelys_datalog_internal_ruleset_t *r, const char *prefix) {
     size_t prefix_len = strlen(prefix);
     for (size_t i = 0; i < r->symbols.count; i++) {
         const char *s = r->symbols.storage + r->symbols.entries[i].offset;
@@ -689,7 +689,7 @@ static int test_datalog_wildcard_accepted_in_body_atom(void) {
 
 static int test_datalog_wildcard_multiple_occurrences_are_distinct(void) {
     TEST_BEGIN();
-    maelys_datalog_ruleset_t r;
+    maelys_datalog_internal_ruleset_t r;
     TEST_ASSERT_EQUAL(MAELYS_OK, init_parser_ruleset(&r), "%d");
     const char *src = "p(X) :- q(X, _), r(X, _).";
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_parse_ruleset_ex(&r, src, strlen(src), "test.dl", NULL), "%d");
@@ -711,7 +711,7 @@ static int test_datalog_wildcard_multiple_in_same_atom(void) {
 
 static int test_datalog_wildcard_each_occurrence_gets_fresh_variable(void) {
     TEST_BEGIN();
-    maelys_datalog_ruleset_t r;
+    maelys_datalog_internal_ruleset_t r;
     TEST_ASSERT_EQUAL(MAELYS_OK, init_parser_ruleset(&r), "%d");
     const char *src = "p(X) :- edge(_, _), q(X, \"a\").";
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_parse_ruleset_ex(&r, src, strlen(src), "test.dl", NULL), "%d");
@@ -727,7 +727,7 @@ static int test_datalog_wildcard_each_occurrence_gets_fresh_variable(void) {
 
 static int test_datalog_wildcard_rejected_in_rule_head(void) {
     TEST_BEGIN();
-    maelys_datalog_diagnostic_t diag;
+    maelys_datalog_internal_diagnostic_t diag;
     TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_FIELD, parse_text_ex("ancestor(_, X) :- parent(X, X).", &diag), "%d");
     TEST_ASSERT_EQUAL(MAELYS_DATALOG_DIAG_PARSER_ANONYMOUS_VARIABLE_IN_HEAD, diag.code, "%d");
     TEST_END();
@@ -735,7 +735,7 @@ static int test_datalog_wildcard_rejected_in_rule_head(void) {
 
 static int test_datalog_wildcard_rejected_in_head_before_safety(void) {
     TEST_BEGIN();
-    maelys_datalog_diagnostic_t diag;
+    maelys_datalog_internal_diagnostic_t diag;
     TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_FIELD, parse_text_ex("bad(_) :- blocked(P).", &diag), "%d");
     TEST_ASSERT_EQUAL(MAELYS_DATALOG_DIAG_PARSER_ANONYMOUS_VARIABLE_IN_HEAD, diag.code, "%d");
     TEST_ASSERT_FALSE(diag.code == MAELYS_DATALOG_DIAG_PARSER_UNSAFE_VARIABLE);
@@ -744,7 +744,7 @@ static int test_datalog_wildcard_rejected_in_head_before_safety(void) {
 
 static int test_datalog_wildcard_rejected_in_comparison(void) {
     TEST_BEGIN();
-    maelys_datalog_diagnostic_t diag;
+    maelys_datalog_internal_diagnostic_t diag;
     TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_FIELD, parse_text_ex("bad(P) :- blocked(P), _ = P.", &diag), "%d");
     TEST_ASSERT_EQUAL(MAELYS_DATALOG_DIAG_PARSER_ANONYMOUS_VARIABLE_IN_COMPARISON, diag.code, "%d");
     TEST_END();
@@ -752,7 +752,7 @@ static int test_datalog_wildcard_rejected_in_comparison(void) {
 
 static int test_datalog_wildcard_rejected_in_comparison_before_lowering(void) {
     TEST_BEGIN();
-    maelys_datalog_diagnostic_t diag;
+    maelys_datalog_internal_diagnostic_t diag;
     TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_FIELD, parse_text_ex("bad(P) :- blocked(P), P = _.", &diag), "%d");
     TEST_ASSERT_EQUAL(MAELYS_DATALOG_DIAG_PARSER_ANONYMOUS_VARIABLE_IN_COMPARISON, diag.code, "%d");
     TEST_END();
@@ -760,7 +760,7 @@ static int test_datalog_wildcard_rejected_in_comparison_before_lowering(void) {
 
 static int test_datalog_wildcard_rejected_in_direct_fact(void) {
     TEST_BEGIN();
-    maelys_datalog_diagnostic_t diag;
+    maelys_datalog_internal_diagnostic_t diag;
     TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_FIELD, parse_text_ex("allowed_backend_tuple(_, \"stdin\", \"text\").", &diag), "%d");
     TEST_ASSERT_EQUAL(MAELYS_DATALOG_DIAG_PARSER_ANONYMOUS_VARIABLE_IN_FACT, diag.code, "%d");
     TEST_END();
@@ -768,8 +768,8 @@ static int test_datalog_wildcard_rejected_in_direct_fact(void) {
 
 static int test_datalog_wildcard_head_candidate_rejected_without_commit(void) {
     TEST_BEGIN();
-    maelys_datalog_ruleset_t r;
-    maelys_datalog_diagnostic_t diag;
+    maelys_datalog_internal_ruleset_t r;
+    maelys_datalog_internal_diagnostic_t diag;
     TEST_ASSERT_EQUAL(MAELYS_OK, init_parser_ruleset(&r), "%d");
     size_t before_symbols = r.symbols.count;
     TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_FIELD,
@@ -785,7 +785,7 @@ static int test_datalog_wildcard_head_candidate_rejected_without_commit(void) {
 
 static int test_datalog_wildcard_direct_fact_candidate_checks_kind_before_groundness(void) {
     TEST_BEGIN();
-    maelys_datalog_diagnostic_t diag;
+    maelys_datalog_internal_diagnostic_t diag;
     TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_FIELD, parse_text_ex("backend_class(1, _).", &diag), "%d");
     TEST_ASSERT_EQUAL(MAELYS_DATALOG_DIAG_PARSER_FACT_USES_NON_BASE_PREDICATE, diag.code, "%d");
     TEST_END();
@@ -793,7 +793,7 @@ static int test_datalog_wildcard_direct_fact_candidate_checks_kind_before_ground
 
 static int test_datalog_wildcard_candidate_allocation_does_not_leak(void) {
     TEST_BEGIN();
-    maelys_datalog_ruleset_t r;
+    maelys_datalog_internal_ruleset_t r;
     TEST_ASSERT_EQUAL(MAELYS_OK, init_parser_ruleset(&r), "%d");
     size_t before = r.symbols.count;
     TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_FIELD,
@@ -814,7 +814,7 @@ static int test_datalog_wildcard_next_rule_state_not_corrupted_after_candidate_r
 
 static int test_datalog_wildcard_direct_policy_fact_rejected_as_non_ground(void) {
     TEST_BEGIN();
-    maelys_datalog_diagnostic_t diag;
+    maelys_datalog_internal_diagnostic_t diag;
     TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_FIELD, parse_text_ex("allowed_backend_tuple(_, \"stdin\", \"text\").", &diag), "%d");
     TEST_ASSERT_EQUAL(MAELYS_DATALOG_DIAG_PARSER_ANONYMOUS_VARIABLE_IN_FACT, diag.code, "%d");
     TEST_ASSERT_EQUAL_STRING("allowed_backend_tuple", diag.predicate);
@@ -823,7 +823,7 @@ static int test_datalog_wildcard_direct_policy_fact_rejected_as_non_ground(void)
 
 static int test_datalog_wildcard_direct_edb_fact_rejected_by_kind_before_groundness(void) {
     TEST_BEGIN();
-    maelys_datalog_diagnostic_t diag;
+    maelys_datalog_internal_diagnostic_t diag;
     TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_FIELD, parse_text_ex("backend_class(1, _).", &diag), "%d");
     TEST_ASSERT_EQUAL(MAELYS_DATALOG_DIAG_PARSER_FACT_USES_NON_BASE_PREDICATE, diag.code, "%d");
     TEST_ASSERT_EQUAL_STRING("backend_class", diag.predicate);
@@ -832,7 +832,7 @@ static int test_datalog_wildcard_direct_edb_fact_rejected_by_kind_before_groundn
 
 static int test_datalog_wildcard_does_not_bind_head_variable(void) {
     TEST_BEGIN();
-    maelys_datalog_diagnostic_t diag;
+    maelys_datalog_internal_diagnostic_t diag;
     TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_FIELD, parse_text_ex("bad(P) :- blocked_backend(_, _).", &diag), "%d");
     TEST_ASSERT_EQUAL(MAELYS_DATALOG_DIAG_PARSER_UNSAFE_VARIABLE, diag.code, "%d");
     TEST_END();
@@ -846,7 +846,7 @@ static int test_datalog_wildcard_named_head_variable_still_safe(void) {
 
 static int test_datalog_wildcard_anonymous_ids_start_after_named_variables(void) {
     TEST_BEGIN();
-    maelys_datalog_ruleset_t r;
+    maelys_datalog_internal_ruleset_t r;
     TEST_ASSERT_EQUAL(MAELYS_OK, init_parser_ruleset(&r), "%d");
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       maelys_datalog_parse_ruleset(&r, "has_backend(P) :- blocked_backend(P, _).",
@@ -861,7 +861,7 @@ static int test_datalog_wildcard_anonymous_ids_start_after_named_variables(void)
 
 static int test_datalog_wildcard_capacity_overflow_fails_closed(void) {
     TEST_BEGIN();
-    maelys_datalog_diagnostic_t diag;
+    maelys_datalog_internal_diagnostic_t diag;
     const char *src = "p(X) :- wide(_, _, _, _), edge(_, _), q(X, _).";
     TEST_ASSERT_EQUAL(MAELYS_ERR_PAYLOAD_TOO_LARGE, parse_text_ex(src, &diag), "%d");
     TEST_ASSERT_EQUAL(MAELYS_DATALOG_DIAG_PARSER_TOO_MANY_VARIABLES, diag.code, "%d");
@@ -872,7 +872,7 @@ static int test_datalog_wildcard_capacity_overflow_fails_closed(void) {
 static int test_datalog_wildcard_no_global_symbol_growth_on_repeated_loads(void) {
     TEST_BEGIN();
     for (size_t i = 0; i < 3; i++) {
-        maelys_datalog_ruleset_t r;
+        maelys_datalog_internal_ruleset_t r;
         TEST_ASSERT_EQUAL(MAELYS_OK, init_parser_ruleset(&r), "%d");
         TEST_ASSERT_EQUAL(MAELYS_OK,
                           maelys_datalog_parse_ruleset(&r, "has_backend(P) :- blocked_backend(P, _).",
@@ -886,7 +886,7 @@ static int test_datalog_wildcard_no_global_symbol_growth_on_repeated_loads(void)
 
 static int test_datalog_wildcard_generated_names_not_in_symbol_table(void) {
     TEST_BEGIN();
-    maelys_datalog_ruleset_t r;
+    maelys_datalog_internal_ruleset_t r;
     TEST_ASSERT_EQUAL(MAELYS_OK, init_parser_ruleset(&r), "%d");
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       maelys_datalog_parse_ruleset(&r, "has_backend(P) :- blocked_backend(P, _).",
@@ -915,7 +915,7 @@ static int test_parser_arithmetic_expression_filters_valid(void) {
 
 static int test_parser_arithmetic_expression_filters_invalid(void) {
     TEST_BEGIN();
-    maelys_datalog_diagnostic_t diag;
+    maelys_datalog_internal_diagnostic_t diag;
     memset(&diag, 0, sizeof(diag));
     TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_FIELD,
                       parse_text_ex("allow(U) :- score(U, S), S / 2 <= 10.", &diag),
@@ -950,7 +950,7 @@ static int test_parser_arithmetic_expression_depth_limit(void) {
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       parse_text("allow(U) :- score(U, S), (((((((S))))))) + 1 <= 10."),
                       "%d");
-    maelys_datalog_diagnostic_t diag;
+    maelys_datalog_internal_diagnostic_t diag;
     memset(&diag, 0, sizeof(diag));
     TEST_ASSERT_EQUAL(MAELYS_ERR_PAYLOAD_TOO_LARGE,
                       parse_text_ex("allow(U) :- score(U, S), ((((((((S)))))))) + 1 <= 10.", &diag),
@@ -961,7 +961,7 @@ static int test_parser_arithmetic_expression_depth_limit(void) {
 }
 
 static maelys_datalog_predicate_id_t parser_predicate_id(
-    const maelys_datalog_ruleset_t *ruleset,
+    const maelys_datalog_internal_ruleset_t *ruleset,
     const char *name,
     size_t arity) {
     maelys_datalog_predicate_id_t id = 0;
@@ -971,7 +971,7 @@ static maelys_datalog_predicate_id_t parser_predicate_id(
 
 static int test_parser_or_expands_two_alternatives_with_common_context(void) {
     TEST_BEGIN();
-    maelys_datalog_ruleset_t r;
+    maelys_datalog_internal_ruleset_t r;
     TEST_ASSERT_EQUAL(MAELYS_OK, init_parser_ruleset(&r), "%d");
     const char *src = "p(X) :- value(X), left(X) or right(X), safe(X).";
     TEST_ASSERT_EQUAL(MAELYS_OK,
@@ -997,7 +997,7 @@ static int test_parser_or_expands_two_alternatives_with_common_context(void) {
 
 static int test_parser_or_cartesian_order_is_lexical(void) {
     TEST_BEGIN();
-    maelys_datalog_ruleset_t r;
+    maelys_datalog_internal_ruleset_t r;
     TEST_ASSERT_EQUAL(MAELYS_OK, init_parser_ruleset(&r), "%d");
     const char *src = "p(X) :- left(X) or right(X), safe(X) or blocked(X).";
     TEST_ASSERT_EQUAL(MAELYS_OK,
@@ -1026,7 +1026,7 @@ static int test_parser_or_cartesian_order_is_lexical(void) {
 
 static int test_parser_or_validates_each_complete_expanded_rule(void) {
     TEST_BEGIN();
-    maelys_datalog_ruleset_t r;
+    maelys_datalog_internal_ruleset_t r;
     TEST_ASSERT_EQUAL(MAELYS_OK, init_parser_ruleset(&r), "%d");
     const char *unsafe = "pair(X, Y) :- edge(X, Y) or left(X).";
     TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_FIELD,
@@ -1061,7 +1061,7 @@ static int test_parser_or_rejects_unsafe_comparison_and_negation_branches(void) 
 
 static int test_parser_or_contextual_predicate_name_remains_usable(void) {
     TEST_BEGIN();
-    maelys_datalog_ruleset_t r;
+    maelys_datalog_internal_ruleset_t r;
     TEST_ASSERT_EQUAL(MAELYS_OK, init_parser_ruleset(&r), "%d");
     const char *after_comma = "p(X) :- left(X), or(X).";
     TEST_ASSERT_EQUAL(MAELYS_OK,
@@ -1115,7 +1115,7 @@ static int test_parser_or_rejects_out_of_scope_and_malformed_forms(void) {
 
 static int test_parser_or_preserves_common_arithmetic_literal(void) {
     TEST_BEGIN();
-    maelys_datalog_ruleset_t r;
+    maelys_datalog_internal_ruleset_t r;
     TEST_ASSERT_EQUAL(MAELYS_OK, init_parser_ruleset(&r), "%d");
     const char *src = "p(X) :- left(X) or right(X), X + 1 > 0.";
     TEST_ASSERT_EQUAL(MAELYS_OK,
@@ -1144,8 +1144,8 @@ static int test_parser_or_preserves_common_arithmetic_literal(void) {
 
 static int test_parser_or_anonymous_variables_match_manual_expansion(void) {
     TEST_BEGIN();
-    maelys_datalog_ruleset_t or_ruleset;
-    maelys_datalog_ruleset_t manual_ruleset;
+    maelys_datalog_internal_ruleset_t or_ruleset;
+    maelys_datalog_internal_ruleset_t manual_ruleset;
     TEST_ASSERT_EQUAL(MAELYS_OK, init_parser_ruleset(&or_ruleset), "%d");
     TEST_ASSERT_EQUAL(MAELYS_OK, init_parser_ruleset(&manual_ruleset), "%d");
     const char *or_source =

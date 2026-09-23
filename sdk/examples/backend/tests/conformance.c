@@ -1,8 +1,8 @@
 /* SPDX-License-Identifier: MPL-2.0 */
 #include "extension.h"
 #include "maelys_conformance.h"
-static maelys_datalog_public_fact_t pair(const char *predicate, const char *a, const char *b) {
-    maelys_datalog_public_fact_t f = {0};
+static maelys_datalog_fact_t pair(const char *predicate, const char *a, const char *b) {
+    maelys_datalog_fact_t f = {0};
     f.predicate = predicate;
     f.arity = 2;
     f.terms[0].kind = f.terms[1].kind = MAELYS_DATALOG_VALUE_SYMBOL;
@@ -11,14 +11,14 @@ static maelys_datalog_public_fact_t pair(const char *predicate, const char *a, c
     return f;
 }
 int main(void) {
-    const maelys_datalog_public_predicate_t predicates[] = {
+    const maelys_datalog_predicate_t predicates[] = {
         {"edge", 2, MAELYS_DATALOG_PREDICATE_EDB},
         {"reach", 2, MAELYS_DATALOG_PREDICATE_IDB | MAELYS_DATALOG_PREDICATE_QUERY}};
-    const maelys_datalog_public_domain_t domain = {"backend_example", predicates, 2, NULL, 0};
+    const maelys_datalog_domain_t domain = {"backend_example", predicates, 2, NULL, 0};
     MC_OK(maelys_datalog_domain_register(&domain));
     maelys_datalog_extension_t e = example_backend_extension();
     const char *nodes[] = {"a", "b", "c", "d", "e"};
-    maelys_datalog_public_fact_t probes[25], inputs[25];
+    maelys_datalog_fact_t probes[25], inputs[25];
     for (size_t a = 0; a < 5; ++a)
         for (size_t b = 0; b < 5; ++b)
             probes[a * 5 + b] = pair("reach", nodes[a], nodes[b]);

@@ -5,14 +5,14 @@
 #include <stdlib.h>
 #include <string.h>
 #define CHECK(call) do { int rc_=(call); if(rc_) { fprintf(stderr,"%s: %d\n",#call,rc_); return 1; } } while(0)
-static maelys_datalog_public_value_t number(int64_t n) {
-    maelys_datalog_public_value_t v={.kind=MAELYS_DATALOG_VALUE_INTEGER}; v.as.integer=n; return v;
+static maelys_datalog_value_t number(int64_t n) {
+    maelys_datalog_value_t v={.kind=MAELYS_DATALOG_VALUE_INTEGER}; v.as.integer=n; return v;
 }
 int main(void) {
-    const maelys_datalog_public_predicate_t predicates[]={
+    const maelys_datalog_predicate_t predicates[]={
         {"reading",2,MAELYS_DATALOG_PREDICATE_EDB},
         {"total",1,MAELYS_DATALOG_PREDICATE_IDB|MAELYS_DATALOG_PREDICATE_QUERY}};
-    const maelys_datalog_public_domain_t domain={"multi_event",predicates,2,NULL,0};
+    const maelys_datalog_domain_t domain={"multi_event",predicates,2,NULL,0};
     CHECK(maelys_datalog_domain_register(&domain));
     const char *rules="total(N) :- sum(V,reading(_,V),N).";
     maelys_datalog_policy_t *policy=NULL;
@@ -29,7 +29,7 @@ int main(void) {
     void *arena=(void *)(((uintptr_t)allocation+alignment-1)/alignment*alignment);
     maelys_datalog_group_window_t *w=NULL;
     CHECK(maelys_datalog_group_window_init(arena,bytes,&limits,0,a,b,&w,NULL));
-    maelys_datalog_public_fact_t group_a[2]={{.predicate="reading",.arity=2},{.predicate="reading",.arity=2}};
+    maelys_datalog_fact_t group_a[2]={{.predicate="reading",.arity=2},{.predicate="reading",.arity=2}};
     group_a[0].terms[0]=number(1); group_a[1].terms[0]=number(2);
     group_a[0].terms[1]=group_a[1].terms[1]=number(5);
     CHECK(maelys_datalog_group_window_push(w,group_a,2,NULL,NULL));
@@ -37,7 +37,7 @@ int main(void) {
     for(size_t step=0;step<3;++step) {
         if(step) CHECK(maelys_datalog_group_window_push(w,NULL,0,NULL,NULL)); /* C then D. */
         maelys_datalog_result_t *result=NULL; int present=0;
-        maelys_datalog_public_value_t expected=number(step==0?10:step==1?5:0);
+        maelys_datalog_value_t expected=number(step==0?10:step==1?5:0);
         CHECK(maelys_datalog_group_window_result(w,&result));
         CHECK(maelys_datalog_result_query(result,"total",&expected,1,&present));
         if(!present) return 1;

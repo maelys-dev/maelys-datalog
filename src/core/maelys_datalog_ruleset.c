@@ -13,14 +13,14 @@ static maelys_result_t copy_ruleset_identity(char *dst, size_t dst_len, const ch
     return MAELYS_OK;
 }
 
-maelys_result_t maelys_datalog_ruleset_init(maelys_datalog_ruleset_t *ruleset,
+maelys_result_t maelys_datalog_ruleset_init(maelys_datalog_internal_ruleset_t *ruleset,
                                             const char *policy_id,
                                             const char *domain,
                                             const char *sha256,
                                             int test_only) {
     return maelys_datalog_ruleset_init_in(ruleset, policy_id, domain, sha256, test_only, NULL);
 }
-maelys_result_t maelys_datalog_ruleset_init_in(maelys_datalog_ruleset_t *ruleset,
+maelys_result_t maelys_datalog_ruleset_init_in(maelys_datalog_internal_ruleset_t *ruleset,
     const char *policy_id, const char *domain, const char *sha256, int test_only,
     maelys_datalog_context_t *context) {
     if (!ruleset || !policy_id || !domain || !sha256) return MAELYS_ERR_INVALID_ARGUMENT;
@@ -44,7 +44,7 @@ maelys_result_t maelys_datalog_ruleset_init_in(maelys_datalog_ruleset_t *ruleset
     return MAELYS_OK;
 }
 
-void maelys_datalog_ruleset_clear(maelys_datalog_ruleset_t *ruleset) {
+void maelys_datalog_ruleset_clear(maelys_datalog_internal_ruleset_t *ruleset) {
     if (!ruleset) return;
     memset(ruleset, 0, sizeof(*ruleset));
 }
@@ -53,7 +53,7 @@ void maelys_datalog_ruleset_clear(maelys_datalog_ruleset_t *ruleset) {
  * allow_projection must be explicitly derived by Datalog rules.
  * A ruleset can never implicitly allow everything.
  * This is intentional, not a missing implementation. */
-int maelys_datalog_ruleset_has_allow_all(const maelys_datalog_ruleset_t *r) {
+int maelys_datalog_ruleset_has_allow_all(const maelys_datalog_internal_ruleset_t *r) {
     (void)r;
     return 0;
 }

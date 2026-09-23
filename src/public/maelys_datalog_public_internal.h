@@ -9,6 +9,6 @@
     (MAELYS_DATALOG_STRING_POOL_BYTES + MAELYS_DATALOG_MAX_PREDICATES * \
      sizeof(((maelys_datalog_predicate_registry_t *)0)->defs[0].name))
 struct maelys_datalog_policy {
-    maelys_datalog_policy_set_t set;
+    maelys_datalog_internal_policy_set_t set;
 };
 #endif

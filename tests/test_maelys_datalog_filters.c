@@ -6,14 +6,14 @@
 #include <stdio.h>
 #include <string.h>
 
-static maelys_result_t make_ruleset(maelys_datalog_ruleset_t *ruleset,
+static maelys_result_t make_ruleset(maelys_datalog_internal_ruleset_t *ruleset,
                                     const char *source,
                                     int homonym) {
     memset(ruleset, 0, sizeof(*ruleset));
     maelys_result_t rc = maelys_datalog_ruleset_init(
         ruleset, "filters.test", "filters", MAELYS_DATALOG_SHA256_UNSET, 1);
     if (rc != MAELYS_OK) return rc;
-    static const maelys_datalog_public_predicate_t defs[] = {
+    static const maelys_datalog_predicate_t defs[] = {
         {"ref", 1u, MAELYS_DATALOG_PRED_KIND_EDB},
         {"ref2", 1u, MAELYS_DATALOG_PRED_KIND_EDB},
         {"start", 1u, MAELYS_DATALOG_PRED_KIND_IDB | MAELYS_DATALOG_PRED_KIND_QUERY},
@@ -45,13 +45,13 @@ static maelys_result_t make_ruleset(maelys_datalog_ruleset_t *ruleset,
     return maelys_datalog_ruleset_finalize_sha256(ruleset);
 }
 
-static maelys_result_t solve_ref(maelys_datalog_ruleset_t *ruleset,
+static maelys_result_t solve_ref(maelys_datalog_internal_ruleset_t *ruleset,
                                  const char *value,
-                                 maelys_datalog_solve_result_t **out_result) {
-    maelys_datalog_fact_t *pool = calloc(
+                                 maelys_datalog_internal_solve_result_t **out_result) {
+    maelys_datalog_internal_fact_t *pool = calloc(
         MAELYS_DATALOG_MAX_EDB_FACTS, sizeof(*pool));
     if (!pool) return MAELYS_ERR_INTERNAL;
-    maelys_datalog_edb_t edb;
+    maelys_datalog_internal_edb_t edb;
     maelys_result_t rc = maelys_datalog_edb_init(
         &edb,
         pool,
@@ -69,14 +69,14 @@ static maelys_result_t solve_ref(maelys_datalog_ruleset_t *ruleset,
 }
 
 static maelys_result_t solve_ref_sets(
-    maelys_datalog_ruleset_t *ruleset,
+    maelys_datalog_internal_ruleset_t *ruleset,
     size_t value_count,
-    maelys_datalog_solve_result_t **out_result,
-    maelys_datalog_solve_diagnostic_t *out_diag) {
+    maelys_datalog_internal_solve_result_t **out_result,
+    maelys_datalog_internal_solve_diagnostic_t *out_diag) {
     if (value_count > MAELYS_DATALOG_MAX_FACTS_PER_PRED) {
         return MAELYS_ERR_INVALID_ARGUMENT;
     }
-    maelys_datalog_fact_t *pool = calloc(
+    maelys_datalog_internal_fact_t *pool = calloc(
         MAELYS_DATALOG_MAX_EDB_FACTS, sizeof(*pool));
     if (!pool) return MAELYS_ERR_INTERNAL;
     char left[MAELYS_DATALOG_MAX_FACTS_PER_PRED][16];
@@ -89,7 +89,7 @@ static maelys_result_t solve_ref_sets(
         left_values[i] = left[i];
         right_values[i] = right[i];
     }
-    maelys_datalog_edb_t edb;
+    maelys_datalog_internal_edb_t edb;
     maelys_result_t rc = maelys_datalog_edb_init(
         &edb,
         pool,
@@ -115,13 +115,13 @@ static maelys_result_t solve_ref_sets(
 }
 
 static maelys_result_t solve_empty(
-    maelys_datalog_ruleset_t *ruleset,
-    maelys_datalog_solve_result_t **out_result,
-    maelys_datalog_solve_diagnostic_t *out_diag) {
-    maelys_datalog_fact_t *pool = calloc(
+    maelys_datalog_internal_ruleset_t *ruleset,
+    maelys_datalog_internal_solve_result_t **out_result,
+    maelys_datalog_internal_solve_diagnostic_t *out_diag) {
+    maelys_datalog_internal_fact_t *pool = calloc(
         MAELYS_DATALOG_MAX_EDB_FACTS, sizeof(*pool));
     if (!pool) return MAELYS_ERR_INTERNAL;
-    maelys_datalog_edb_t edb;
+    maelys_datalog_internal_edb_t edb;
     maelys_result_t rc = maelys_datalog_edb_init(
         &edb,
         pool,
@@ -138,9 +138,9 @@ static maelys_result_t solve_empty(
     return rc;
 }
 
-static int result_has(const maelys_datalog_solve_result_t *result,
+static int result_has(const maelys_datalog_internal_solve_result_t *result,
                       const char *predicate,
-                      maelys_datalog_fact_t *out_fact) {
+                      maelys_datalog_internal_fact_t *out_fact) {
     size_t count = 0u;
     if (maelys_datalog_solve_result_enumerate_predicate_facts(
             result, predicate, 1u, out_fact, out_fact ? 1u : 0u, &count) !=
@@ -154,7 +154,7 @@ static int parser_forms_and_pattern_pool(void) {
         "start(R) :- starts_with(R, \"refs/heads/\"), ref(R).\n"
         "ending(R) :- ref(R), ends_with(R, \"/main\").\n"
         "inside(R) :- ref(R), contains(R, \"é\").\n";
-    maelys_datalog_ruleset_t ruleset;
+    maelys_datalog_internal_ruleset_t ruleset;
     TEST_ASSERT_EQUAL(MAELYS_OK, make_ruleset(&ruleset, source, 0), "%d");
     TEST_ASSERT_EQUAL((size_t)3u, ruleset.filter_program_count, "%zu");
     TEST_ASSERT_EQUAL(MAELYS_DATALOG_LITERAL_FILTER,
@@ -168,7 +168,7 @@ static int parser_forms_and_pattern_pool(void) {
 
 static int parser_ground_safety_and_types(void) {
     TEST_BEGIN();
-    maelys_datalog_ruleset_t ruleset;
+    maelys_datalog_internal_ruleset_t ruleset;
     TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_FIELD,
                       make_ruleset(&ruleset,
                                    "start(R) :- starts_with(R, \"x\").",
@@ -206,7 +206,7 @@ static int parser_ground_safety_and_types(void) {
 
 static int parser_registry_homonym_wins(void) {
     TEST_BEGIN();
-    maelys_datalog_ruleset_t ruleset;
+    maelys_datalog_internal_ruleset_t ruleset;
     TEST_ASSERT_EQUAL(
         MAELYS_OK,
         make_ruleset(&ruleset,
@@ -221,7 +221,7 @@ static int parser_registry_homonym_wins(void) {
 
 static int parser_pattern_is_not_an_atom_or_symbol(void) {
     TEST_BEGIN();
-    maelys_datalog_ruleset_t ruleset;
+    maelys_datalog_internal_ruleset_t ruleset;
     const char *source =
         "start(R) :- ref(R), starts_with(R, \"not-in-vocabulary\").";
     TEST_ASSERT_EQUAL(MAELYS_OK, make_ruleset(&ruleset, source, 0), "%d");
@@ -234,10 +234,10 @@ static int parser_pattern_is_not_an_atom_or_symbol(void) {
 
 static int parser_capacity_refusal_is_atomic(void) {
     TEST_BEGIN();
-    maelys_datalog_ruleset_t ruleset;
+    maelys_datalog_internal_ruleset_t ruleset;
     TEST_ASSERT_EQUAL(MAELYS_OK, make_ruleset(&ruleset, "", 0), "%d");
     ruleset.filter_program_count = MAELYS_DATALOG_MAX_FILTER_PROGRAMS;
-    maelys_datalog_ruleset_t before = ruleset;
+    maelys_datalog_internal_ruleset_t before = ruleset;
     const char *source =
         "start(R) :- ref(R), starts_with(R, \"x\").";
     TEST_ASSERT_EQUAL(MAELYS_ERR_PAYLOAD_TOO_LARGE,
@@ -372,12 +372,12 @@ static int semantics_ascii_utf8_empty_and_case(void) {
         "start(R) :- starts_with(R, \"refs/\"), ref(R).\n"
         "ending(R) :- ref(R), ends_with(R, \"42\").\n"
         "inside(R) :- ref(R), contains(R, \"é\").\n";
-    maelys_datalog_ruleset_t ruleset;
+    maelys_datalog_internal_ruleset_t ruleset;
     TEST_ASSERT_EQUAL(MAELYS_OK, make_ruleset(&ruleset, source, 0), "%d");
-    maelys_datalog_solve_result_t *result = NULL;
+    maelys_datalog_internal_solve_result_t *result = NULL;
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       solve_ref(&ruleset, "refs/café/42", &result), "%d");
-    maelys_datalog_fact_t fact;
+    maelys_datalog_internal_fact_t fact;
     TEST_ASSERT_TRUE(result_has(result, "start", &fact));
     TEST_ASSERT_TRUE(result_has(result, "ending", &fact));
     TEST_ASSERT_TRUE(result_has(result, "inside", &fact));
@@ -396,16 +396,16 @@ static int semantics_ascii_utf8_empty_and_case(void) {
 
 static int planner_filter_before_lier_is_deferred(void) {
     TEST_BEGIN();
-    maelys_datalog_ruleset_t ruleset;
+    maelys_datalog_internal_ruleset_t ruleset;
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       make_ruleset(
                           &ruleset,
                           "start(R) :- starts_with(R, \"refs/\"), ref(R).",
                           0), "%d");
-    maelys_datalog_solve_result_t *result = NULL;
+    maelys_datalog_internal_solve_result_t *result = NULL;
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       solve_ref(&ruleset, "refs/heads/main", &result), "%d");
-    maelys_datalog_fact_t fact;
+    maelys_datalog_internal_fact_t fact;
     TEST_ASSERT_TRUE(result_has(result, "start", &fact));
     maelys_datalog_explanation_t *explanation =
         calloc(1u, sizeof(*explanation));
@@ -426,7 +426,7 @@ static int planner_filter_before_lier_is_deferred(void) {
 
 static int statistics_exact_and_cost_formula(void) {
     TEST_BEGIN();
-    maelys_datalog_ruleset_t ruleset;
+    maelys_datalog_internal_ruleset_t ruleset;
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       make_ruleset(
                           &ruleset,
@@ -434,7 +434,7 @@ static int statistics_exact_and_cost_formula(void) {
                           "ending(R) :- ref(R), ends_with(R, \"no\").\n"
                           "inside(R) :- ref(R), contains(R, \"heads\").",
                           0), "%d");
-    maelys_datalog_solve_result_t *result = NULL;
+    maelys_datalog_internal_solve_result_t *result = NULL;
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       solve_ref(&ruleset, "refs/heads/main", &result), "%d");
     maelys_datalog_filter_statistics_t statistics;
@@ -493,9 +493,9 @@ static int bounds_cost_last_admitted_then_refused(void) {
         (void)strcat(source, clause);
     }
 
-    maelys_datalog_ruleset_t ruleset;
+    maelys_datalog_internal_ruleset_t ruleset;
     TEST_ASSERT_EQUAL(MAELYS_OK, make_ruleset(&ruleset, source, 0), "%d");
-    maelys_datalog_solve_result_t *result = NULL;
+    maelys_datalog_internal_solve_result_t *result = NULL;
     TEST_ASSERT_EQUAL(MAELYS_OK, solve_ref(&ruleset, value, &result), "%d");
     maelys_datalog_filter_statistics_t statistics;
     memset(&statistics, 0, sizeof(statistics));
@@ -512,12 +512,12 @@ static int bounds_cost_last_admitted_then_refused(void) {
     (void)strcat(source, clause);
     TEST_ASSERT_EQUAL(MAELYS_OK, make_ruleset(&ruleset, source, 0), "%d");
     result = NULL;
-    maelys_datalog_solve_diagnostic_t diag;
+    maelys_datalog_internal_solve_diagnostic_t diag;
     memset(&diag, 0, sizeof(diag));
-    maelys_datalog_fact_t *pool = calloc(
+    maelys_datalog_internal_fact_t *pool = calloc(
         MAELYS_DATALOG_MAX_EDB_FACTS, sizeof(*pool));
     TEST_ASSERT_NOT_NULL(pool);
-    maelys_datalog_edb_t edb;
+    maelys_datalog_internal_edb_t edb;
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       maelys_datalog_edb_init(
                           &edb,
@@ -555,10 +555,10 @@ static int bounds_evaluations_last_admitted_then_refused(void) {
     char source[512];
     int written = snprintf(source, sizeof(source), "%s%s", clause, clause);
     TEST_ASSERT_TRUE(written > 0);
-    maelys_datalog_ruleset_t ruleset;
+    maelys_datalog_internal_ruleset_t ruleset;
     TEST_ASSERT_EQUAL(MAELYS_OK, make_ruleset(&ruleset, source, 0), "%d");
-    maelys_datalog_solve_result_t *result = NULL;
-    maelys_datalog_solve_diagnostic_t diag;
+    maelys_datalog_internal_solve_result_t *result = NULL;
+    maelys_datalog_internal_solve_diagnostic_t diag;
     memset(&diag, 0, sizeof(diag));
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       solve_ref_sets(
@@ -601,7 +601,7 @@ static int bounds_evaluations_last_admitted_then_refused(void) {
 
 static int bounds_invalid_unused_program_is_refused(void) {
     TEST_BEGIN();
-    maelys_datalog_ruleset_t ruleset;
+    maelys_datalog_internal_ruleset_t ruleset;
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       make_ruleset(
                           &ruleset,
@@ -609,8 +609,8 @@ static int bounds_invalid_unused_program_is_refused(void) {
                           0), "%d");
     ruleset.filter_programs[0].pattern_offset =
         (uint32_t)(ruleset.filter_pattern_pool_used + 1u);
-    maelys_datalog_solve_result_t *result = NULL;
-    maelys_datalog_solve_diagnostic_t diag;
+    maelys_datalog_internal_solve_result_t *result = NULL;
+    maelys_datalog_internal_solve_diagnostic_t diag;
     memset(&diag, 0, sizeof(diag));
     TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_STATE,
                       solve_empty(&ruleset, &result, &diag), "%d");
@@ -623,9 +623,9 @@ static int bounds_invalid_unused_program_is_refused(void) {
 
 static int fingerprint_pattern_and_kind_change_identity(void) {
     TEST_BEGIN();
-    maelys_datalog_ruleset_t first;
-    maelys_datalog_ruleset_t second;
-    maelys_datalog_ruleset_t third;
+    maelys_datalog_internal_ruleset_t first;
+    maelys_datalog_internal_ruleset_t second;
+    maelys_datalog_internal_ruleset_t third;
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       make_ruleset(&first,
                                    "start(R) :- ref(R), starts_with(R, \"a\").",
@@ -644,7 +644,7 @@ static int fingerprint_pattern_and_kind_change_identity(void) {
         "48110270d97783980847aa652502e3adcdb4a39753177880b7b52237ab6acfc7",
         first.sha256);
 
-    maelys_datalog_ruleset_t ordered;
+    maelys_datalog_internal_ruleset_t ordered;
     TEST_ASSERT_EQUAL(
         MAELYS_OK,
         make_ruleset(
@@ -653,7 +653,7 @@ static int fingerprint_pattern_and_kind_change_identity(void) {
             "ending(R) :- ref(R), ends_with(R, \"z\").",
             0),
         "%d");
-    maelys_datalog_ruleset_t reordered = ordered;
+    maelys_datalog_internal_ruleset_t reordered = ordered;
     const maelys_datalog_filter_program_t saved_program =
         reordered.filter_programs[0];
     reordered.filter_programs[0] = reordered.filter_programs[1];
@@ -694,12 +694,12 @@ static int fingerprint_pattern_and_kind_change_identity(void) {
 
 static int pod_ruleset_is_value_copyable(void) {
     TEST_BEGIN();
-    maelys_datalog_ruleset_t first;
+    maelys_datalog_internal_ruleset_t first;
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       make_ruleset(&first,
                                    "start(R) :- ref(R), starts_with(R, \"refs/\").",
                                    0), "%d");
-    maelys_datalog_ruleset_t second = first;
+    maelys_datalog_internal_ruleset_t second = first;
     TEST_ASSERT_EQUAL(0, memcmp(&first, &second, sizeof(first)), "%d");
     maelys_datalog_ruleset_clear(&first);
     TEST_ASSERT_EQUAL((uint8_t)MAELYS_DATALOG_FILTER_STARTS_WITH,
@@ -710,13 +710,13 @@ static int pod_ruleset_is_value_copyable(void) {
 
 static int check_filter_why_false(const char *source) {
     TEST_BEGIN();
-    maelys_datalog_ruleset_t ruleset;
+    maelys_datalog_internal_ruleset_t ruleset;
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       make_ruleset(
                           &ruleset,
                           source,
                           0), "%d");
-    maelys_datalog_solve_result_t *result = NULL;
+    maelys_datalog_internal_solve_result_t *result = NULL;
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       solve_ref(&ruleset, "refs/tags/v1", &result), "%d");
     maelys_datalog_symbol_id_t symbol = 0u;
@@ -732,7 +732,7 @@ static int check_filter_why_false(const char *source) {
     maelys_datalog_predicate_id_t pid = 0u;
     TEST_ASSERT_TRUE(maelys_datalog_predicate_registry_find(
         &ruleset.registry, "start", 1u, &pid));
-    maelys_datalog_fact_t query;
+    maelys_datalog_internal_fact_t query;
     memset(&query, 0, sizeof(query));
     query.predicate_id = pid;
     query.arity = 1u;
@@ -780,7 +780,7 @@ static maelys_datalog_status_t module_false(
 }
 static int module_rejection_is_atomic(void) {
     TEST_BEGIN();
-    maelys_datalog_ruleset_t ruleset;
+    maelys_datalog_internal_ruleset_t ruleset;
     TEST_ASSERT_EQUAL(MAELYS_OK, make_ruleset(&ruleset, "start(R) :- ref(R).", 0), "%d");
     size_t count = ruleset.rule_count, symbols = ruleset.symbols.count;
     const char source[] = "start(R) :- ref(R), never_match(R, \"reject\").";

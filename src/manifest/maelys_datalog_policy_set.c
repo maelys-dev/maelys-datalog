@@ -19,7 +19,7 @@ static void hash_string(maelys_sha256_ctx_t *hash, const char *value) {
 }
 
 maelys_result_t maelys_datalog_policy_set_fingerprint(
-    const maelys_datalog_policy_set_t *set,
+    const maelys_datalog_internal_policy_set_t *set,
     char out_hex[65]) {
     if (!set || !out_hex) return MAELYS_ERR_INVALID_ARGUMENT;
     out_hex[0] = '\0';
@@ -33,7 +33,7 @@ maelys_result_t maelys_datalog_policy_set_fingerprint(
     maelys_sha256_update(&hash, domain, sizeof(domain));
     hash_u64(&hash, (uint64_t)set->policy_count);
     for (size_t i = 0u; i < set->policy_count; ++i) {
-        const maelys_datalog_ruleset_t *policy = &set->policies[i];
+        const maelys_datalog_internal_ruleset_t *policy = &set->policies[i];
         if (!policy->loaded || !policy->policy_id[0] || !policy->domain[0] ||
             !maelys_sha256_hex_is_lowercase(policy->sha256))
             return MAELYS_ERR_INVALID_STATE;

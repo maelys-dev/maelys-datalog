@@ -21,7 +21,7 @@ int main(void) {
     size_t max_arity = 0u;
     if (!require_status(maelys_datalog_limit_get(MAELYS_DATALOG_LIMIT_MAX_ARITY, &max_arity)) ||
         max_arity != MAELYS_DATALOG_PUBLIC_MAX_TERMS) return 16;
-    static const maelys_datalog_public_predicate_t predicates[] = {
+    static const maelys_datalog_predicate_t predicates[] = {
         MAELYS_DATALOG_EDB("observed", 1),
         MAELYS_DATALOG_IDB_QUERY("allow", 1),
     };
@@ -29,7 +29,7 @@ int main(void) {
      * the solved EDB, so the symbol lookup at exit 9 passes only when the
      * result reads its working symbol table, not the prepared policy's. Keep
      * it that way; this is what makes the result-scoped authority observable. */
-    const maelys_datalog_public_domain_t domain = {
+    const maelys_datalog_domain_t domain = {
         "installed_consumer", predicates, 2u, NULL, 0u,
     };
     if (!require_status(maelys_datalog_domain_register(&domain))) return 1;
@@ -73,7 +73,7 @@ int main(void) {
         strlen(fingerprint) != 64u) return 21;
     if (!require_status(maelys_datalog_policy_free(policy))) return 5;
 
-    maelys_datalog_public_fact_t fact;
+    maelys_datalog_fact_t fact;
     memset(&fact, 0, sizeof(fact));
     fact.predicate = "observed";
     fact.arity = 1u;
@@ -107,13 +107,13 @@ int main(void) {
     if (!require_status(maelys_datalog_result_derived_fact_count(result, &derived)) || derived != 1u) return 17;
     if (!require_status(maelys_datalog_result_query(
             result, "allow", fact.terms, 1u, &present)) || !present) return 7;
-    const maelys_datalog_public_value_t query[] = {MAELYS_DATALOG_SYMBOL("alice")};
+    const maelys_datalog_value_t query[] = {MAELYS_DATALOG_SYMBOL("alice")};
     if (!require_status(maelys_datalog_result_query(
             result, "allow", query, 1u, &present)) || !present) return 7;
 #ifndef __cplusplus
     if (!require_status(MAELYS_DATALOG_QUERY(result, &present, "allow", "alice")) || !present) return 7;
 #endif
-    maelys_datalog_public_fact_view_t view;
+    maelys_datalog_fact_view_t view;
     size_t count = 0u;
     if (!require_status(maelys_datalog_result_enumerate(
             result, "allow", 1u, &view, 1u, &count)) || count != 1u) return 8;

@@ -14,7 +14,7 @@ maelys_result_t maelys_datalog_manifest_load_from_text_expected_profile(
     size_t bundle_count,
     unsigned flags,
     const char *expected_profile,
-    maelys_datalog_policy_set_t *out_set,
-    maelys_datalog_diagnostic_t *out_diag);
+    maelys_datalog_internal_policy_set_t *out_set,
+    maelys_datalog_internal_diagnostic_t *out_diag);
 
 #endif

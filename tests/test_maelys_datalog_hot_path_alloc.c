@@ -32,13 +32,13 @@ static void release_bounded(maelys_datalog_result_t *result) {
     if (written > max_release_bytes) max_release_bytes = written;
 }
 static void owned_release_does_not_clear(void) {
-    static maelys_datalog_ruleset_t ruleset;
-    static maelys_datalog_edb_t edb;
-    static maelys_datalog_fact_t facts[1];
+    static maelys_datalog_internal_ruleset_t ruleset;
+    static maelys_datalog_internal_edb_t edb;
+    static maelys_datalog_internal_fact_t facts[1];
     assert(maelys_datalog_ruleset_init(&ruleset, "empty", "hot_path", "", 1) == MAELYS_OK);
     assert(maelys_datalog_edb_init(&edb, facts, 1u, &ruleset.symbols, &ruleset.registry) == MAELYS_OK);
     assert(maelys_datalog_edb_finalize(&edb) == MAELYS_OK);
-    maelys_datalog_solve_result_t *result = NULL;
+    maelys_datalog_internal_solve_result_t *result = NULL;
     size_t baseline = live;
     assert(maelys_datalog_solve_once(&ruleset, &edb, &result) == MAELYS_OK);
     size_t before = memset_bytes;
@@ -73,8 +73,8 @@ void maelys_test_free(void *p) {
     if (p) { assert(live); --live; }
     free(p);
 }
-static maelys_datalog_public_value_t symbol(const char *s) {
-    maelys_datalog_public_value_t v = {.kind=MAELYS_DATALOG_VALUE_SYMBOL};
+static maelys_datalog_value_t symbol(const char *s) {
+    maelys_datalog_value_t v = {.kind=MAELYS_DATALOG_VALUE_SYMBOL};
     v.as.symbol = s; return v;
 }
 static void aggregate_without_allocator(unsigned op) {
@@ -91,7 +91,7 @@ static void aggregate_without_allocator(unsigned op) {
         MAELYS_DATALOG_EXPLAIN_TRUE | MAELYS_DATALOG_EXPLAIN_FALSE) == 0);
     assert(maelys_datalog_session_create_configured(policy, 0, config, &session) == 0);
     assert(maelys_datalog_session_config_free(config) == 0);
-    maelys_datalog_public_fact_t facts[40] = {0};
+    maelys_datalog_fact_t facts[40] = {0};
     for (size_t i = 0; i < 40; ++i) {
         facts[i].predicate = "seed"; facts[i].arity = 1;
         facts[i].terms[0].kind = MAELYS_DATALOG_VALUE_INTEGER;
@@ -103,7 +103,7 @@ static void aggregate_without_allocator(unsigned op) {
         assert(maelys_datalog_session_solve(session,facts,n,&result,NULL) == 0);
         int64_t expected = op == 0 ? (int64_t)n : op == 1 ? (int64_t)(40u-n) : op == 2 ? 39 : (int64_t)(n*(79u-n)/2u);
         const int empty = !n && (op == 1 || op == 2);
-        maelys_datalog_public_value_t query = {.kind=MAELYS_DATALOG_VALUE_INTEGER,.as.integer=expected};
+        maelys_datalog_value_t query = {.kind=MAELYS_DATALOG_VALUE_INTEGER,.as.integer=expected};
         int present;
         assert(maelys_datalog_result_query(result,"allow",&query,1,&present) == 0 && present == !empty);
         char text[4096]; size_t required;
@@ -143,14 +143,14 @@ static void predicate_declarations_without_allocator(void) {
     char low_name[] = "decl_owned_low", public_name[] = "decl_owned_public";
     char name[] = "edge", atom[] = "alice", description[] = "owned metadata";
     const char *atoms[] = {atom};
-    maelys_datalog_public_predicate_t declarations[] = {
+    maelys_datalog_predicate_t declarations[] = {
         {name, 2u, MAELYS_DATALOG_PREDICATE_EDB},
     };
     maelys_datalog_domain_def_t low = {
         .domain_name = low_name, .predicates = declarations, .predicate_count = 1u,
         .atoms = atoms, .atom_count = 1u, .description = description,
     };
-    maelys_datalog_public_domain_t public = {public_name, declarations, 1u, atoms, 1u};
+    maelys_datalog_domain_t public = {public_name, declarations, 1u, atoms, 1u};
     forbidden = 1;
     assert(maelys_datalog_domain_registry_register(&low) == MAELYS_OK);
     assert(maelys_datalog_domain_register(&public) == MAELYS_DATALOG_STATUS_OK);
@@ -176,10 +176,10 @@ static void predicate_declarations_without_allocator(void) {
     assert(memcmp(&a, &b, sizeof(a)) == 0);
 
     char long_name[65]; memset(long_name, 'p', 64u); long_name[64] = '\0';
-    maelys_datalog_public_predicate_t batch[] = {{"first", 1u, MAELYS_DATALOG_PREDICATE_EDB},
+    maelys_datalog_predicate_t batch[] = {{"first", 1u, MAELYS_DATALOG_PREDICATE_EDB},
                                                {long_name, 1u, MAELYS_DATALOG_PREDICATE_EDB}};
     low = (maelys_datalog_domain_def_t){.domain_name="decl_retry", .predicates=batch, .predicate_count=2u};
-    public = (maelys_datalog_public_domain_t){"decl_retry_public", batch, 2u, NULL, 0u};
+    public = (maelys_datalog_domain_t){"decl_retry_public", batch, 2u, NULL, 0u};
     assert(maelys_datalog_domain_registry_register(&low) == MAELYS_ERR_INVALID_FIELD);
     assert(maelys_datalog_domain_register(&public) == MAELYS_DATALOG_STATUS_INVALID_FIELD);
     assert(!maelys_datalog_domain_registry_find(low.domain_name));
@@ -197,10 +197,10 @@ static void predicate_declarations_without_allocator(void) {
     assert(maelys_datalog_domain_registry_find("decl_retry")->predicates[1].name[0] == 'p');
 
     char names[MAELYS_DATALOG_MAX_PREDICATES][16];
-    maelys_datalog_public_predicate_t full[MAELYS_DATALOG_MAX_PREDICATES];
+    maelys_datalog_predicate_t full[MAELYS_DATALOG_MAX_PREDICATES];
     for (size_t i = 0; i < MAELYS_DATALOG_MAX_PREDICATES; ++i) {
         snprintf(names[i], sizeof(names[i]), "p%zu", i);
-        full[i] = (maelys_datalog_public_predicate_t){names[i], 1u, MAELYS_DATALOG_PREDICATE_EDB};
+        full[i] = (maelys_datalog_predicate_t){names[i], 1u, MAELYS_DATALOG_PREDICATE_EDB};
     }
     low = (maelys_datalog_domain_def_t){.domain_name="decl_full", .predicates=full,
         .predicate_count=MAELYS_DATALOG_MAX_PREDICATES + 1u};
@@ -225,12 +225,12 @@ static void predicate_declarations_without_allocator(void) {
 }
 
 int main(void) {
-    const maelys_datalog_public_predicate_t predicates[] = {
+    const maelys_datalog_predicate_t predicates[] = {
         {"seed", 1, MAELYS_DATALOG_PREDICATE_EDB},
         {"blocked", 1, MAELYS_DATALOG_PREDICATE_EDB},
         {"allow", 1, MAELYS_DATALOG_PREDICATE_IDB | MAELYS_DATALOG_PREDICATE_QUERY},
     };
-    const maelys_datalog_public_domain_t domain = {"hot_path", predicates, 3, NULL, 0};
+    const maelys_datalog_domain_t domain = {"hot_path", predicates, 3, NULL, 0};
     assert(maelys_datalog_domain_register(&domain) == 0);
     const char *source = "allow(X) :- seed(X), not(blocked(X)).";
     maelys_datalog_public_diagnostic_t diag;
@@ -272,7 +272,7 @@ int main(void) {
         /* Sorting, duplicate text and multi-instance isolation are exercised. */
         /* More than the insertion cutoff: exercise the partitioning path in
          * both symbol and fact sorts, not just the tiny-array fast path. */
-        maelys_datalog_public_fact_t facts[33] = {0};
+        maelys_datalog_fact_t facts[33] = {0};
         for (size_t i = 0; i < 32u; ++i) {
             facts[i].predicate = "seed"; facts[i].arity = 1;
             facts[i].terms[0] = symbol(names[cycle % 2u ? 31u-i : (i * 13u) % 32u]);
@@ -286,7 +286,7 @@ int main(void) {
         maelys_datalog_result_t *rejected = NULL;
         assert(maelys_datalog_session_solve_edb(session, edb, &rejected, &diag) == MAELYS_DATALOG_STATUS_INVALID_STATE && !rejected);
         assert(maelys_datalog_input_edb_clear(edb) == 0);
-        maelys_datalog_public_value_t alpha = symbol("alpha"), zeta = symbol("zeta");
+        maelys_datalog_value_t alpha = symbol("alpha"), zeta = symbol("zeta");
         int present = 0;
         assert(maelys_datalog_result_query(result, "allow", &alpha, 1u, &present) == 0 && present);
         assert(maelys_datalog_result_query(result, "allow", &zeta, 1u, &present) == 0 && !present);
@@ -306,12 +306,12 @@ int main(void) {
      * A subsequent duplicate still fails before dedup; rejection is reusable. */
     assert(maelys_datalog_input_edb_clear(edb) == 0);
     for (size_t i = 0; i < MAELYS_DATALOG_MAX_FACTS_PER_PRED; ++i) {
-        maelys_datalog_public_value_t v = {.kind=MAELYS_DATALOG_VALUE_INTEGER, .as.integer=(int64_t)i};
+        maelys_datalog_value_t v = {.kind=MAELYS_DATALOG_VALUE_INTEGER, .as.integer=(int64_t)i};
         assert(maelys_datalog_input_edb_add_fact(edb, "seed", &v, 1u, NULL) == 0);
     }
     assert(maelys_datalog_session_solve_edb(session, edb, &result, &diag) == 0);
     release_bounded(result);
-    maelys_datalog_public_value_t duplicate = {.kind=MAELYS_DATALOG_VALUE_INTEGER, .as.integer=0};
+    maelys_datalog_value_t duplicate = {.kind=MAELYS_DATALOG_VALUE_INTEGER, .as.integer=0};
     assert(maelys_datalog_input_edb_add_fact(edb, "seed", &duplicate, 1u, NULL) == 0);
     assert(maelys_datalog_session_solve_edb(session, edb, &result, &diag) ==
            MAELYS_DATALOG_STATUS_PAYLOAD_TOO_LARGE && result == NULL);
@@ -321,11 +321,11 @@ int main(void) {
     release_bounded(result);
     /* Fail inside the solver (not just during input validation), then reuse the
      * same native result workspace. No result is published on filter errors. */
-    maelys_datalog_public_value_t integer = {.kind=MAELYS_DATALOG_VALUE_INTEGER, .as.integer=7};
+    maelys_datalog_value_t integer = {.kind=MAELYS_DATALOG_VALUE_INTEGER, .as.integer=7};
     assert(maelys_datalog_input_edb_add_fact(edb, "seed", &integer, 1u, NULL) == 0);
     assert(maelys_datalog_session_solve_edb(filtered, edb, &result, &diag) != 0 && !result);
     assert(maelys_datalog_input_edb_clear(edb) == 0);
-    maelys_datalog_public_value_t path = symbol("docs/api");
+    maelys_datalog_value_t path = symbol("docs/api");
     assert(maelys_datalog_input_edb_add_fact(edb, "seed", &path, 1u, NULL) == 0);
     assert(maelys_datalog_session_solve_edb(filtered, edb, &result, &diag) == 0);
     int present = 0;

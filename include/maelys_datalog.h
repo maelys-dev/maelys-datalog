@@ -3,8 +3,9 @@
 /* Legacy/advanced alpha aggregation surface.
  *
  * New consumers should include <maelys/datalog.h>, whose handles are opaque
- * and whose installation does not expose implementation headers. This alpha
- * umbrella remains source-compatible while existing consumers migrate. */
+ * and whose CMake installation does not expose implementation headers. This
+ * historical surface is source-breaking in 0.10.0: implementation types now
+ * carry internal_ names. New application and extension code uses maelys/*.h. */
 
 /* Version macros live in the generated header (single source: VERSION).
  * Regenerate with scripts/generate-version-header.sh; never edit either

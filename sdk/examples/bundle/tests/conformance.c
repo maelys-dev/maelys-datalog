@@ -8,8 +8,8 @@ static int context(const maelys_datalog_extension_t *e, maelys_datalog_context_t
     MC_OK(maelys_datalog_context_seal(*out, NULL));
     return 0;
 }
-static maelys_datalog_public_fact_t candidate(const char *name) {
-    maelys_datalog_public_fact_t f = {0};
+static maelys_datalog_fact_t candidate(const char *name) {
+    maelys_datalog_fact_t f = {0};
     f.predicate = "candidate";
     f.arity = 1;
     f.terms[0].kind = MAELYS_DATALOG_VALUE_SYMBOL;
@@ -56,7 +56,7 @@ static int end_to_end(void) {
     MC_OK(maelys_datalog_program_rule(program, 1, &rule));
     MC_REQUIRE(rule.source.line == 3 && rule.source.column == 1);
 
-    maelys_datalog_public_fact_t facts[] = {candidate("alice"), candidate("bob"),
+    maelys_datalog_fact_t facts[] = {candidate("alice"), candidate("bob"),
                                             candidate("carol")};
     maelys_datalog_result_t *r;
     MC_OK(maelys_datalog_session_solve(s, facts, 3, &r, NULL));
@@ -161,14 +161,14 @@ static int syntax_and_validation(void) {
     return 0;
 }
 int main(void) {
-    const maelys_datalog_public_predicate_t predicates[] = {
+    const maelys_datalog_predicate_t predicates[] = {
         {"candidate", 1, MAELYS_DATALOG_PREDICATE_EDB},
         {"allow", 1, MAELYS_DATALOG_PREDICATE_IDB | MAELYS_DATALOG_PREDICATE_QUERY}};
-    const maelys_datalog_public_domain_t domain = {"bundle_example", predicates, 2, NULL, 0};
+    const maelys_datalog_domain_t domain = {"bundle_example", predicates, 2, NULL, 0};
     MC_OK(maelys_datalog_domain_register(&domain));
-    const maelys_datalog_public_predicate_t wrong[] = {
+    const maelys_datalog_predicate_t wrong[] = {
         {"candidate", 1, MAELYS_DATALOG_PREDICATE_EDB}, {"allow", 1, MAELYS_DATALOG_PREDICATE_EDB}};
-    const maelys_datalog_public_domain_t invalid = {"bundle_bad_domain", wrong, 2, NULL, 0};
+    const maelys_datalog_domain_t invalid = {"bundle_bad_domain", wrong, 2, NULL, 0};
     MC_OK(maelys_datalog_domain_register(&invalid));
     maelys_datalog_extension_t e = example_bundle_extension();
     const maelys_conformance_filter_case_t cases[] = {

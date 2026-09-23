@@ -131,10 +131,10 @@ static int write_valid_policy_and_manifest(file_fixture_t *fx, const char *mode,
     return write_manifest(fx, k_domain, "policy.dl", sha, mode, enabled);
 }
 
-static maelys_datalog_term_t symbol_term(maelys_datalog_ruleset_t *ruleset, const char *text) {
+static maelys_datalog_internal_term_t symbol_term(maelys_datalog_internal_ruleset_t *ruleset, const char *text) {
     maelys_datalog_symbol_id_t id = 0;
     (void)maelys_datalog_symbol_intern(&ruleset->symbols, text, strlen(text), &id);
-    maelys_datalog_term_t term = {.kind = MAELYS_DATALOG_TERM_SYMBOL};
+    maelys_datalog_internal_term_t term = {.kind = MAELYS_DATALOG_TERM_SYMBOL};
     term.as.symbol = id;
     return term;
 }
@@ -145,8 +145,8 @@ static int test_manifest_file_wrapper_load_ex_basic(void) {
     file_fixture_t fx;
     TEST_ASSERT_TRUE(init_fixture(&fx));
     TEST_ASSERT_TRUE(write_valid_policy_and_manifest(&fx, "enforce", 1));
-    maelys_datalog_policy_set_t set;
-    maelys_datalog_diagnostic_t diag;
+    maelys_datalog_internal_policy_set_t set;
+    maelys_datalog_internal_diagnostic_t diag;
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       maelys_datalog_manifest_load_ex(fx.manifest_path, 0, &set, &diag),
                       "%d");
@@ -164,9 +164,9 @@ static int test_manifest_file_wrapper_load_simple_matches_ex_success(void) {
     file_fixture_t fx;
     TEST_ASSERT_TRUE(init_fixture(&fx));
     TEST_ASSERT_TRUE(write_valid_policy_and_manifest(&fx, "enforce", 1));
-    maelys_datalog_policy_set_t simple_set;
-    maelys_datalog_policy_set_t ex_set;
-    maelys_datalog_diagnostic_t diag;
+    maelys_datalog_internal_policy_set_t simple_set;
+    maelys_datalog_internal_policy_set_t ex_set;
+    maelys_datalog_internal_diagnostic_t diag;
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       maelys_datalog_manifest_load_ex(fx.manifest_path, 0, &ex_set, &diag),
                       "%d");
@@ -188,7 +188,7 @@ static int test_manifest_file_wrapper_load_ex_null_diag(void) {
     file_fixture_t fx;
     TEST_ASSERT_TRUE(init_fixture(&fx));
     TEST_ASSERT_TRUE(write_valid_policy_and_manifest(&fx, "enforce", 1));
-    maelys_datalog_policy_set_t set;
+    maelys_datalog_internal_policy_set_t set;
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       maelys_datalog_manifest_load_ex(fx.manifest_path, 0, &set, NULL),
                       "%d");
@@ -202,9 +202,9 @@ static int test_manifest_file_wrapper_missing_manifest(void) {
     TEST_BEGIN();
     file_fixture_t fx;
     TEST_ASSERT_TRUE(init_fixture(&fx));
-    maelys_datalog_policy_set_t set;
+    maelys_datalog_internal_policy_set_t set;
     set.policy_count = 99u;
-    maelys_datalog_diagnostic_t diag;
+    maelys_datalog_internal_diagnostic_t diag;
     TEST_ASSERT_EQUAL(MAELYS_ERR_NOT_FOUND,
                       maelys_datalog_manifest_load_ex(fx.manifest_path, 0, &set, &diag),
                       "%d");
@@ -221,9 +221,9 @@ static int test_manifest_file_wrapper_missing_policy_file(void) {
     char sha[65];
     sha_bytes(k_policy_src, strlen(k_policy_src), sha);
     TEST_ASSERT_TRUE(write_manifest(&fx, k_domain, "policy.dl", sha, "enforce", 1));
-    maelys_datalog_policy_set_t set;
+    maelys_datalog_internal_policy_set_t set;
     set.policy_count = 99u;
-    maelys_datalog_diagnostic_t diag;
+    maelys_datalog_internal_diagnostic_t diag;
     TEST_ASSERT_EQUAL(MAELYS_ERR_NOT_FOUND,
                       maelys_datalog_manifest_load_ex(fx.manifest_path, 0, &set, &diag),
                       "%d");
@@ -239,9 +239,9 @@ static int test_manifest_file_wrapper_sha_mismatch(void) {
     TEST_ASSERT_TRUE(init_fixture(&fx));
     TEST_ASSERT_TRUE(write_file_text(fx.policy_path, k_policy_src, strlen(k_policy_src)));
     TEST_ASSERT_TRUE(write_manifest(&fx, k_domain, "policy.dl", k_zero_sha, "enforce", 1));
-    maelys_datalog_policy_set_t set;
+    maelys_datalog_internal_policy_set_t set;
     set.policy_count = 99u;
-    maelys_datalog_diagnostic_t diag;
+    maelys_datalog_internal_diagnostic_t diag;
     TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_FIELD,
                       maelys_datalog_manifest_load_ex(fx.manifest_path, 0, &set, &diag),
                       "%d");
@@ -257,9 +257,9 @@ static int test_manifest_file_wrapper_test_only_rejected(void) {
     file_fixture_t fx;
     TEST_ASSERT_TRUE(init_fixture(&fx));
     TEST_ASSERT_TRUE(write_valid_policy_and_manifest(&fx, "test_only", 1));
-    maelys_datalog_policy_set_t set;
+    maelys_datalog_internal_policy_set_t set;
     set.policy_count = 99u;
-    maelys_datalog_diagnostic_t diag;
+    maelys_datalog_internal_diagnostic_t diag;
     TEST_ASSERT_EQUAL(MAELYS_ERR_FORBIDDEN,
                       maelys_datalog_manifest_load_ex(fx.manifest_path, 0, &set, &diag),
                       "%d");
@@ -275,7 +275,7 @@ static int test_manifest_file_wrapper_test_only_allowed_with_flag(void) {
     file_fixture_t fx;
     TEST_ASSERT_TRUE(init_fixture(&fx));
     TEST_ASSERT_TRUE(write_valid_policy_and_manifest(&fx, "test_only", 1));
-    maelys_datalog_policy_set_t set;
+    maelys_datalog_internal_policy_set_t set;
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       maelys_datalog_manifest_load_ex(fx.manifest_path,
                                                       MAELYS_DATALOG_MANIFEST_ALLOW_TEST_ONLY,
@@ -297,9 +297,9 @@ static int test_manifest_file_wrapper_unknown_domain(void) {
     sha_bytes(k_policy_src, strlen(k_policy_src), sha);
     TEST_ASSERT_TRUE(write_file_text(fx.policy_path, k_policy_src, strlen(k_policy_src)));
     TEST_ASSERT_TRUE(write_manifest(&fx, "missing_file_wrapper_domain", "policy.dl", sha, "enforce", 1));
-    maelys_datalog_policy_set_t set;
+    maelys_datalog_internal_policy_set_t set;
     set.policy_count = 99u;
-    maelys_datalog_diagnostic_t diag;
+    maelys_datalog_internal_diagnostic_t diag;
     TEST_ASSERT_EQUAL(MAELYS_ERR_UNSUPPORTED,
                       maelys_datalog_manifest_load_ex(fx.manifest_path, 0, &set, &diag),
                       "%d");
@@ -315,7 +315,7 @@ static int test_manifest_file_wrapper_disabled_policy_skipped(void) {
     file_fixture_t fx;
     TEST_ASSERT_TRUE(init_fixture(&fx));
     TEST_ASSERT_TRUE(write_manifest(&fx, k_domain, "missing-disabled-policy.dl", k_zero_sha, "enforce", 0));
-    maelys_datalog_policy_set_t set;
+    maelys_datalog_internal_policy_set_t set;
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       maelys_datalog_manifest_load_ex(fx.manifest_path, 0, &set, NULL),
                       "%d");
@@ -330,7 +330,7 @@ static int test_manifest_file_wrapper_out_set_cleared_on_failure(void) {
     file_fixture_t fx;
     TEST_ASSERT_TRUE(init_fixture(&fx));
     TEST_ASSERT_TRUE(write_valid_policy_and_manifest(&fx, "enforce", 1));
-    maelys_datalog_policy_set_t set;
+    maelys_datalog_internal_policy_set_t set;
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       maelys_datalog_manifest_load_ex(fx.manifest_path, 0, &set, NULL),
                       "%d");
@@ -351,12 +351,12 @@ static int test_manifest_file_wrapper_solve_query(void) {
     file_fixture_t fx;
     TEST_ASSERT_TRUE(init_fixture(&fx));
     TEST_ASSERT_TRUE(write_valid_policy_and_manifest(&fx, "enforce", 1));
-    maelys_datalog_policy_set_t set;
+    maelys_datalog_internal_policy_set_t set;
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       maelys_datalog_manifest_load_ex(fx.manifest_path, 0, &set, NULL),
                       "%d");
-    maelys_datalog_fact_t facts[4];
-    maelys_datalog_edb_t edb;
+    maelys_datalog_internal_fact_t facts[4];
+    maelys_datalog_internal_edb_t edb;
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       maelys_datalog_edb_init(&edb,
                                               facts,
@@ -364,10 +364,10 @@ static int test_manifest_file_wrapper_solve_query(void) {
                                               &set.policies[0].symbols,
                                               &set.policies[0].registry),
                       "%d");
-    maelys_datalog_term_t alice = symbol_term(&set.policies[0], "alice");
+    maelys_datalog_internal_term_t alice = symbol_term(&set.policies[0], "alice");
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_add_fact(&edb, "safe", &alice, 1), "%d");
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_finalize(&edb), "%d");
-    maelys_datalog_solve_result_t *result = NULL;
+    maelys_datalog_internal_solve_result_t *result = NULL;
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_solve_once(&set.policies[0], &edb, &result), "%d");
     bool present = false;
     TEST_ASSERT_EQUAL(MAELYS_OK,
@@ -388,8 +388,8 @@ static int test_manifest_file_wrapper_reject_absolute_policy_path(void) {
     char sha[65];
     sha_bytes(k_policy_src, strlen(k_policy_src), sha);
     TEST_ASSERT_TRUE(write_manifest(&fx, k_domain, fx.policy_path, sha, "enforce", 1));
-    maelys_datalog_policy_set_t set;
-    maelys_datalog_diagnostic_t diag;
+    maelys_datalog_internal_policy_set_t set;
+    maelys_datalog_internal_diagnostic_t diag;
     TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_FIELD,
                       maelys_datalog_manifest_load_ex(fx.manifest_path, 0, &set, &diag),
                       "%d");
@@ -407,8 +407,8 @@ static int test_manifest_file_wrapper_reject_parent_directory_policy_path(void) 
     char sha[65];
     sha_bytes(k_policy_src, strlen(k_policy_src), sha);
     TEST_ASSERT_TRUE(write_manifest(&fx, k_domain, "../policy.dl", sha, "enforce", 1));
-    maelys_datalog_policy_set_t set;
-    maelys_datalog_diagnostic_t diag;
+    maelys_datalog_internal_policy_set_t set;
+    maelys_datalog_internal_diagnostic_t diag;
     TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_FIELD,
                       maelys_datalog_manifest_load_ex(fx.manifest_path, 0, &set, &diag),
                       "%d");

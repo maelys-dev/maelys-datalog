@@ -8,12 +8,12 @@
 #include <string.h>
 #include <sys/stat.h>
 
-static void manifest_diag(maelys_datalog_diagnostic_t *diag,
+static void manifest_diag(maelys_datalog_internal_diagnostic_t *diag,
                           maelys_datalog_diag_code_t code,
                           const char *file,
                           const char *message,
                           const char *hint) {
-    maelys_datalog_diagnostic_set(diag, code, "manifest", file, 0, 0, message, hint);
+    maelys_datalog_internal_diagnostic_set(diag, code, "manifest", file, 0, 0, message, hint);
 }
 
 static int safe_relative_path(const char *path) {
@@ -101,7 +101,7 @@ static maelys_result_t build_bundle_from_manifest(
     maelys_datalog_policy_bundle_entry_t **out_bundle,
     char ***out_src_buffers,
     size_t *out_bundle_count,
-    maelys_datalog_diagnostic_t *out_diag) {
+    maelys_datalog_internal_diagnostic_t *out_diag) {
     *out_bundle = NULL;
     *out_src_buffers = NULL;
     *out_bundle_count = 0u;
@@ -213,17 +213,17 @@ static maelys_result_t build_bundle_from_manifest(
 
 maelys_result_t maelys_datalog_manifest_load(const char *manifest_path,
                                              unsigned flags,
-                                             maelys_datalog_policy_set_t *out_set) {
+                                             maelys_datalog_internal_policy_set_t *out_set) {
     return maelys_datalog_manifest_load_ex(manifest_path, flags, out_set, NULL);
 }
 
 maelys_result_t maelys_datalog_manifest_load_ex(const char *manifest_path,
                                                 unsigned flags,
-                                                maelys_datalog_policy_set_t *out_set,
-                                                maelys_datalog_diagnostic_t *out_diag) {
+                                                maelys_datalog_internal_policy_set_t *out_set,
+                                                maelys_datalog_internal_diagnostic_t *out_diag) {
     if (!manifest_path || !out_set) return MAELYS_ERR_INVALID_ARGUMENT;
     memset(out_set, 0, sizeof(*out_set));
-    if (out_diag) maelys_datalog_diagnostic_clear(out_diag);
+    if (out_diag) maelys_datalog_internal_diagnostic_clear(out_diag);
 
     char *manifest_buf = NULL;
     size_t manifest_len = 0u;

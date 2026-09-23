@@ -7,19 +7,19 @@
 #include <stdlib.h>
 #include <string.h>
 #define OK(call) do { int rc_=(call); if(rc_) { fprintf(stderr,"%s:%d: %s -> %d\n",__FILE__,__LINE__,#call,rc_); abort(); } } while(0)
-static maelys_datalog_public_value_t integer(int64_t x) {
-    maelys_datalog_public_value_t v={.kind=MAELYS_DATALOG_VALUE_INTEGER}; v.as.integer=x; return v;
+static maelys_datalog_value_t integer(int64_t x) {
+    maelys_datalog_value_t v={.kind=MAELYS_DATALOG_VALUE_INTEGER}; v.as.integer=x; return v;
 }
-static maelys_datalog_public_value_t symbol(const char *x) {
-    maelys_datalog_public_value_t v={.kind=MAELYS_DATALOG_VALUE_SYMBOL}; v.as.symbol=x; return v;
+static maelys_datalog_value_t symbol(const char *x) {
+    maelys_datalog_value_t v={.kind=MAELYS_DATALOG_VALUE_SYMBOL}; v.as.symbol=x; return v;
 }
-static maelys_datalog_public_value_t boolean(int x) {
-    maelys_datalog_public_value_t v={.kind=MAELYS_DATALOG_VALUE_BOOLEAN}; v.as.boolean=x; return v;
+static maelys_datalog_value_t boolean(int x) {
+    maelys_datalog_value_t v={.kind=MAELYS_DATALOG_VALUE_BOOLEAN}; v.as.boolean=x; return v;
 }
-static maelys_datalog_public_fact_t pair(const char *p,int64_t a,int64_t b) {
-    maelys_datalog_public_fact_t f={.predicate=p,.arity=2}; f.terms[0]=integer(a); f.terms[1]=integer(b); return f;
+static maelys_datalog_fact_t pair(const char *p,int64_t a,int64_t b) {
+    maelys_datalog_fact_t f={.predicate=p,.arity=2}; f.terms[0]=integer(a); f.terms[1]=integer(b); return f;
 }
-static const maelys_datalog_public_predicate_t predicates[]={
+static const maelys_datalog_predicate_t predicates[]={
     {"group",1,MAELYS_DATALOG_PREDICATE_POLICY_FACT},
     {"reading",2,MAELYS_DATALOG_PREDICATE_EDB},
     {"typed",1,MAELYS_DATALOG_PREDICATE_EDB},
@@ -43,7 +43,7 @@ static const char *source="group(0). copy(I,V) :- reading(I,V). "
     "allowed(G) :- group(G), not(block(G)). "
     "path(X,Y) :- edge(X,Y). path(X,Z) :- path(X,Y), edge(Y,Z).";
 
-typedef struct { uint32_t id; maelys_datalog_public_fact_t *facts; size_t count; } model_group;
+typedef struct { uint32_t id; maelys_datalog_fact_t *facts; size_t count; } model_group;
 typedef struct {
     maelys_datalog_session_t *a,*b,*oracle;
     maelys_datalog_group_window_t *w;
@@ -60,12 +60,12 @@ static void drop_group(model_group *g) {
     }
     free(g->facts);
 }
-static model_group own_group(uint32_t id,const maelys_datalog_public_fact_t *facts,size_t n) {
+static model_group own_group(uint32_t id,const maelys_datalog_fact_t *facts,size_t n) {
     model_group g={id,calloc(n+1,sizeof(*facts)),n}; assert(g.facts);
     for(size_t i=0;i<n;++i) {
         g.facts[i]=facts[i]; g.facts[i].predicate=copy_text(facts[i].predicate);
         for(size_t j=0;j<facts[i].arity;++j) {
-            maelys_datalog_public_value_t *v=&g.facts[i].terms[j];
+            maelys_datalog_value_t *v=&g.facts[i].terms[j];
             if(v->kind==MAELYS_DATALOG_VALUE_SYMBOL) v->as.symbol=copy_text(v->as.symbol);
             if(v->kind==MAELYS_DATALOG_VALUE_BOOLEAN) v->as.boolean=!!v->as.boolean;
         }
@@ -102,10 +102,10 @@ static maelys_datalog_result_t *result(fixture *f) {
 }
 /* Deliberately independent O(C^2) set construction, no production comparator,
  * no sorting, no adapter views used to compute the expected snapshot. */
-static int equal_fact(const maelys_datalog_public_fact_t *a,const maelys_datalog_public_fact_t *b) {
+static int equal_fact(const maelys_datalog_fact_t *a,const maelys_datalog_fact_t *b) {
     if(a->arity!=b->arity || strcmp(a->predicate,b->predicate)) return 0;
     for(size_t j=0;j<a->arity;++j) {
-        const maelys_datalog_public_value_t *x=&a->terms[j],*y=&b->terms[j];
+        const maelys_datalog_value_t *x=&a->terms[j],*y=&b->terms[j];
         if(x->kind!=y->kind) return 0;
         switch(x->kind) {
             case MAELYS_DATALOG_VALUE_INTEGER: if(x->as.integer!=y->as.integer) return 0; break;
@@ -122,7 +122,7 @@ static int same_result(const maelys_datalog_result_t *a, const maelys_datalog_re
     OK(maelys_datalog_result_derived_fact_count(b,&nb));
     if (na != nb) return 0;
     OK(maelys_datalog_limit_get(MAELYS_DATALOG_LIMIT_MAX_FACTS_PER_PRED,&capacity));
-    maelys_datalog_public_fact_view_t *fa = calloc(capacity,sizeof(*fa)), *fb = calloc(capacity,sizeof(*fb));
+    maelys_datalog_fact_view_t *fa = calloc(capacity,sizeof(*fa)), *fb = calloc(capacity,sizeof(*fb));
     assert(fa && fb); int equal = 1;
     for (size_t p=0; p<sizeof(predicates)/sizeof(*predicates) && equal; ++p) {
         if (!(predicates[p].flags & MAELYS_DATALOG_PREDICATE_IDB)) continue;
@@ -132,7 +132,7 @@ static int same_result(const maelys_datalog_result_t *a, const maelys_datalog_re
         for (size_t i=0; i<na && equal; ++i) {
             if (fa[i].arity!=fb[i].arity) { equal=0; break; }
             for (size_t j=0; j<fa[i].arity; ++j) {
-                const maelys_datalog_public_term_view_t *x=&fa[i].terms[j], *y=&fb[i].terms[j];
+                const maelys_datalog_term_view_t *x=&fa[i].terms[j], *y=&fb[i].terms[j];
                 if (x->kind!=y->kind) { equal=0; break; }
                 if (x->kind==MAELYS_DATALOG_VALUE_SYMBOL) {
                     const char *sa, *sb; size_t la,lb;
@@ -149,9 +149,9 @@ static int same_result(const maelys_datalog_result_t *a, const maelys_datalog_re
 }
 static int oracle_matches(fixture *f) {
     size_t c=0,u=0,ng,nraw,nfacts;
-    maelys_datalog_public_fact_t *set=calloc(f->caps.contributions,sizeof(*set)); assert(set);
+    maelys_datalog_fact_t *set=calloc(f->caps.contributions,sizeof(*set)); assert(set);
     const maelys_datalog_event_group_t *groups;
-    const maelys_datalog_public_fact_t *raw,*facts;
+    const maelys_datalog_fact_t *raw,*facts;
     OK(maelys_datalog_group_window_groups(f->w,&groups,&ng));
     OK(maelys_datalog_group_window_contributions(f->w,&raw,&nraw));
     OK(maelys_datalog_group_window_facts(f->w,&facts,&nfacts));
@@ -159,7 +159,7 @@ static int oracle_matches(fixture *f) {
     for(size_t g=0;g<f->count;++g) {
         if(g>=ng || groups[g].id!=f->fifo[g].id || groups[g].fact_offset!=c || groups[g].fact_count!=f->fifo[g].count) same=0;
         for(size_t i=0;i<f->fifo[g].count;++i) {
-            maelys_datalog_public_fact_t *v=&f->fifo[g].facts[i];
+            maelys_datalog_fact_t *v=&f->fifo[g].facts[i];
             if(c>=nraw || !equal_fact(v,&raw[c])) same=0;
             ++c; size_t j=0; for(;j<u;++j) if(equal_fact(v,&set[j])) break;
             if(j==u) set[u++]=*v;
@@ -180,14 +180,14 @@ static int oracle_matches(fixture *f) {
     if(!same_result(result(f),expected)) same=0;
     OK(maelys_datalog_result_free(expected)); free(set); return same;
 }
-static void accept(fixture *f,const maelys_datalog_public_fact_t *facts,size_t n) {
+static void accept(fixture *f,const maelys_datalog_fact_t *facts,size_t n) {
     uint32_t id=UINT32_MAX;
     OK(maelys_datalog_group_window_push(f->w,facts,n,&id,NULL)); assert(id==f->next);
     if(f->count==f->caps.groups) { drop_group(f->fifo); --f->count; memmove(f->fifo,f->fifo+1,f->count*sizeof(*f->fifo)); }
     f->fifo[f->count++]=own_group(id,facts,n); ++f->next;
     assert(oracle_matches(f));
 }
-static void reject(fixture *f,const maelys_datalog_public_fact_t *facts,size_t n,int expected) {
+static void reject(fixture *f,const maelys_datalog_fact_t *facts,size_t n,int expected) {
     maelys_datalog_group_window_usage_t before={0},after={0};
     maelys_datalog_result_t *r=result(f); uint32_t id=123;
     OK(maelys_datalog_group_window_state(f->w,&before));
@@ -200,14 +200,14 @@ static void reject(fixture *f,const maelys_datalog_public_fact_t *facts,size_t n
     assert(oracle_matches(f));
 }
 static void query(fixture *f,const char *predicate,int64_t x,int expected) {
-    maelys_datalog_public_value_t v=integer(x); int found=-1;
+    maelys_datalog_value_t v=integer(x); int found=-1;
     OK(maelys_datalog_result_query(result(f),predicate,&v,1,&found)); assert(found==expected);
 }
 static void shared_and_empty(void) {
     fixture f; sessions(&f,source); init(&f,2,4,3,128,0); assert(oracle_matches(&f));
-    maelys_datalog_public_fact_t a[]={pair("reading",1,5),pair("reading",2,5),pair("reading",1,5)};
+    maelys_datalog_fact_t a[]={pair("reading",1,5),pair("reading",2,5),pair("reading",1,5)};
     accept(&f,a,3); accept(&f,a,1); query(&f,"total",10,1); query(&f,"counted",1,1);
-    maelys_datalog_public_fact_t bad=pair("reading",3,INT32_MAX);
+    maelys_datalog_fact_t bad=pair("reading",3,INT32_MAX);
     reject(&f,&bad,1,MAELYS_DATALOG_STATUS_INVALID_FIELD);
     accept(&f,NULL,0); query(&f,"total",5,1);
     accept(&f,NULL,0); query(&f,"total",0,1); query(&f,"lowest",0,0); query(&f,"highest",0,0);
@@ -217,7 +217,7 @@ static void shared_and_empty(void) {
 static void typed_and_permuted(void) {
     fixture f; sessions(&f,source); init(&f,2,20,16,512,0);
     char name[]="typed", text[]="1";
-    maelys_datalog_public_fact_t a[6]={{.predicate=name,.arity=1},{.predicate="typed",.arity=1},
+    maelys_datalog_fact_t a[6]={{.predicate=name,.arity=1},{.predicate="typed",.arity=1},
         {.predicate="typed",.arity=1},{.predicate="typed",.arity=1},
         {.predicate="mixed",.arity=4},{.predicate="block",.arity=1}};
     a[0].terms[0]=symbol(text); a[1].terms[0]=integer(1); a[2].terms[0]=boolean(7); a[3].terms[0]=boolean(-1);
@@ -227,17 +227,17 @@ static void typed_and_permuted(void) {
     /* Returned success owns predicate and symbol bytes, including model copies. */
     name[0]='X'; text[0]='X'; assert(oracle_matches(&f));
     a[0].predicate="typed"; a[0].terms[0]=symbol("1");
-    for(size_t i=0;i<3;++i) { maelys_datalog_public_fact_t t=a[i]; a[i]=a[5-i]; a[5-i]=t; }
+    for(size_t i=0;i<3;++i) { maelys_datalog_fact_t t=a[i]; a[i]=a[5-i]; a[5-i]=t; }
     a[1].terms[0]=symbol("1"); /* mixed's first term used the mutated borrowed string. */
     accept(&f,a,6);
-    maelys_datalog_public_fact_t wrong={.predicate="reading",.arity=1}; wrong.terms[0]=integer(0);
+    maelys_datalog_fact_t wrong={.predicate="reading",.arity=1}; wrong.terms[0]=integer(0);
     reject(&f,&wrong,1,MAELYS_DATALOG_STATUS_INVALID_FIELD);
     wrong=pair("unknown",1,1); reject(&f,&wrong,1,MAELYS_DATALOG_STATUS_INVALID_FIELD);
     close_fixture(&f);
 }
 static void capacities(void) {
     fixture f; sessions(&f,source); init(&f,2,3,2,128,0);
-    maelys_datalog_public_fact_t a[]={pair("reading",1,1),pair("reading",1,1)};
+    maelys_datalog_fact_t a[]={pair("reading",1,1),pair("reading",1,1)};
     accept(&f,a,2); accept(&f,a,1); accept(&f,a,2); /* At C=3: remove two, add two. */
     reject(&f,a,3,MAELYS_DATALOG_STATUS_PAYLOAD_TOO_LARGE);
     reject(&f,a,SIZE_MAX,MAELYS_DATALOG_STATUS_PAYLOAD_TOO_LARGE);
@@ -248,7 +248,7 @@ static void capacities(void) {
     reject(&f,a,2,MAELYS_DATALOG_STATUS_PAYLOAD_TOO_LARGE); accept(&f,a,1); close_fixture(&f);
     size_t max,per; OK(maelys_datalog_limit_get(MAELYS_DATALOG_LIMIT_MAX_EDB_FACTS,&max));
     OK(maelys_datalog_limit_get(MAELYS_DATALOG_LIMIT_MAX_FACTS_PER_PRED,&per));
-    maelys_datalog_public_fact_t *many=calloc(max+1,sizeof(*many)); assert(many);
+    maelys_datalog_fact_t *many=calloc(max+1,sizeof(*many)); assert(many);
     for(size_t i=0;i<=max;++i) many[i]=pair("reading",1,1);
     sessions(&f,source); init(&f,1,max,1,128,0); accept(&f,many,max); accept(&f,many,max);
     reject(&f,many,max+1,MAELYS_DATALOG_STATUS_PAYLOAD_TOO_LARGE); close_fixture(&f);
@@ -261,7 +261,7 @@ static void capacities(void) {
 }
 static void vocabulary_and_text(void) {
     fixture f; sessions(&f,source); init(&f,1,2,1,16,0);
-    maelys_datalog_public_fact_t v[2]={{.predicate="typed",.arity=1},{.predicate="typed",.arity=1}};
+    maelys_datalog_fact_t v[2]={{.predicate="typed",.arity=1},{.predicate="typed",.arity=1}};
     for(unsigned i=0;i<600;++i) {
         char text[16]; snprintf(text,sizeof(text),"s%u",i); v[0].terms[0]=v[1].terms[0]=symbol(text);
         accept(&f,v,2); memset(text,'x',strlen(text)); assert(oracle_matches(&f));
@@ -272,14 +272,14 @@ static void vocabulary_and_text(void) {
 }
 static void leases_and_lifecycle(void) {
     fixture f; sessions(&f,source); init(&f,1,2,2,128,INT32_MAX);
-    maelys_datalog_public_fact_t a=pair("reading",1,5); accept(&f,&a,1);
+    maelys_datalog_fact_t a=pair("reading",1,5); accept(&f,&a,1);
     reject(&f,NULL,0,MAELYS_DATALOG_STATUS_PAYLOAD_TOO_LARGE);
     close_fixture(&f);
     sessions(&f,source); init(&f,2,4,4,128,0); accept(&f,&a,1);
     size_t bytes,alignment;
     OK(maelys_datalog_session_explanation_storage_bound(f.a,MAELYS_DATALOG_EXPLAIN_TRUE,&bytes,&alignment));
     void *workspace=malloc(bytes); assert(workspace); maelys_datalog_prepared_explanation_t *e=NULL;
-    maelys_datalog_public_value_t v=integer(5);
+    maelys_datalog_value_t v=integer(5);
     OK(maelys_datalog_result_prepare_explanation(result(&f),MAELYS_DATALOG_EXPLAIN_TRUE,"total",&v,1,workspace,bytes,&e));
     reject(&f,&a,1,MAELYS_DATALOG_STATUS_INVALID_STATE);
     assert(maelys_datalog_group_window_free(f.w)==MAELYS_DATALOG_STATUS_INVALID_STATE);
@@ -288,7 +288,7 @@ static void leases_and_lifecycle(void) {
     OK(maelys_datalog_group_window_init(f.storage,f.bytes,&f.caps,7,f.a,f.b,&f.w,NULL));
     OK(maelys_datalog_group_window_free(f.w));
     OK(maelys_datalog_session_free(f.a)); f.a=NULL; OK(maelys_datalog_session_free(f.b)); f.b=NULL;
-    maelys_datalog_result_t *r=NULL; const maelys_datalog_public_fact_t *facts=NULL;
+    maelys_datalog_result_t *r=NULL; const maelys_datalog_fact_t *facts=NULL;
     const maelys_datalog_event_group_t *groups=NULL; size_t count=99; uint32_t id=77;
     maelys_datalog_group_window_usage_t usage={0},before=usage;
     assert(maelys_datalog_group_window_push(f.w,&a,1,&id,NULL)==MAELYS_DATALOG_STATUS_INVALID_STATE && id==77);
@@ -305,19 +305,19 @@ static void generated(void) {
     for(size_t seed=0;seed<3;++seed) {
         fixture f; sessions(&f,source); init(&f,4,20,20,512,0); uint32_t random=seeds[seed];
         for(unsigned step=0;step<160;++step) {
-            maelys_datalog_public_fact_t batch[5]; random=random*1664525u+1013904223u; size_t n=random%6;
+            maelys_datalog_fact_t batch[5]; random=random*1664525u+1013904223u; size_t n=random%6;
             for(size_t i=0;i<n;++i) {
                 random=random*1664525u+1013904223u; unsigned v=random%8;
                 if(v<4) batch[i]=pair("reading",v,v+1);
                 else if(v<6) batch[i]=pair("edge",v-4,v-3);
-                else { batch[i]=(maelys_datalog_public_fact_t){.predicate=v==6?"block":"typed",.arity=1}; batch[i].terms[0]=v==6?integer(0):symbol("shared"); }
+                else { batch[i]=(maelys_datalog_fact_t){.predicate=v==6?"block":"typed",.arity=1}; batch[i].terms[0]=v==6?integer(0):symbol("shared"); }
             }
             accept(&f,batch,n);
         }
         close_fixture(&f);
     }
     fixture f; sessions(&f,source); init(&f,2,4,4,64,0);
-    maelys_datalog_public_fact_t a=pair("reading",1,5); accept(&f,&a,1);
+    maelys_datalog_fact_t a=pair("reading",1,5); accept(&f,&a,1);
     f.fifo[0].facts[0].terms[1]=integer(6); assert(!oracle_matches(&f)); f.fifo[0].facts[0].terms[1]=integer(5);
     ++f.fifo[0].id; assert(!oracle_matches(&f)); --f.fifo[0].id;
     f.count=0; assert(!oracle_matches(&f)); f.count=1; assert(oracle_matches(&f)); close_fixture(&f);
@@ -361,7 +361,7 @@ static void admission(void) {
 }
 static unsigned fault_phase,reentries;
 static maelys_datalog_group_window_t *callback_window;
-static maelys_datalog_status_t injected_solve(void *state,const maelys_datalog_public_fact_t *facts,
+static maelys_datalog_status_t injected_solve(void *state,const maelys_datalog_fact_t *facts,
     size_t count,maelys_datalog_backend_output_t *out,void **r,maelys_datalog_public_diagnostic_t *diag) {
     if(callback_window) {
         maelys_datalog_group_window_usage_t u;
@@ -386,12 +386,12 @@ static void backend_failures(void) {
     OK(maelys_datalog_session_free(f.a)); OK(maelys_datalog_session_free(f.b));
     OK(maelys_datalog_session_create_ex(p,0,&options,&f.a)); OK(maelys_datalog_session_create_ex(p,0,&options,&f.b));
     OK(maelys_datalog_policy_free(p)); init(&f,1,2,2,128,0); callback_window=f.w;
-    maelys_datalog_public_fact_t a=pair("reading",1,5); accept(&f,&a,1);
+    maelys_datalog_fact_t a=pair("reading",1,5); accept(&f,&a,1);
     for(fault_phase=1;fault_phase<=2;++fault_phase) reject(&f,NULL,0,MAELYS_DATALOG_STATUS_INTERNAL);
     fault_phase=0; accept(&f,NULL,0); assert(reentries==4); callback_window=NULL; close_fixture(&f);
 }
 int main(void) {
-    maelys_datalog_public_domain_t domain={"group_window",predicates,sizeof(predicates)/sizeof(*predicates),NULL,0};
+    maelys_datalog_domain_t domain={"group_window",predicates,sizeof(predicates)/sizeof(*predicates),NULL,0};
     OK(maelys_datalog_domain_register(&domain));
     admission(); shared_and_empty(); typed_and_permuted(); capacities();
     vocabulary_and_text(); leases_and_lifecycle(); generated(); backend_failures();

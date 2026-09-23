@@ -71,7 +71,7 @@ class FacadeTest(unittest.TestCase):
         edb = rules.edb(fact_capacity=4, text_capacity=7)
         self.addCleanup(edb.close)
         edb.add_facts([("seed", [1]), ("seed", [True]), ("seed", ["1"]), ("seed", [1])])
-        facts = binding.ffi.new("const maelys_datalog_public_fact_t **")
+        facts = binding.ffi.new("const maelys_datalog_fact_t **")
         count = binding.ffi.new("size_t *")
         self.assertEqual(binding.lib.maelys_datalog_input_edb_view(edb._edb, facts, count), 0)
         self.assertEqual(count[0], 4)  # Raw entries, including the duplicate.

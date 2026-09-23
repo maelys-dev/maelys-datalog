@@ -2,16 +2,16 @@
 
 Status: next minor release, targeting 0.10.0; not part of published 0.9.0.
 
-Every input predicate table uses `maelys_datalog_public_predicate_t` from
+Every input predicate table uses `maelys_datalog_predicate_t` from
 `<maelys/datalog.h>`:
 
 ```c
-static const maelys_datalog_public_predicate_t predicates[] = {
+static const maelys_datalog_predicate_t predicates[] = {
     {.name = "edge", .arity = 2, .flags = MAELYS_DATALOG_PREDICATE_EDB},
 };
 ```
 
-Both `maelys_datalog_public_domain_t` and the advanced
+Both `maelys_datalog_domain_t` and the advanced
 `maelys_datalog_domain_def_t` accept that same array. The advanced inline loader
 also accepts it. The stable domain remains declarative; the advanced domain
 still offers its existing installer callback and descriptive metadata. No cast
@@ -50,7 +50,7 @@ output contract is distinct from registration's synchronous copy contract.
 ## Complete migration
 
 - Replace declaration tables of `maelys_datalog_predicate_def_t` with
-  `maelys_datalog_public_predicate_t`, and their `kind_flags` field with `flags`.
+  `maelys_datalog_predicate_t`, and their `kind_flags` field with `flags`.
   Never replace the name pointer with an inline array or alias either layout.
 - Rebuild all advanced C consumers: input-array stride changes, and the private
   return type of `domain_registry_find` is now a stored entry view. There is no

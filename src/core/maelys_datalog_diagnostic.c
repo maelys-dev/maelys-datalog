@@ -14,12 +14,12 @@ static int copy_bounded(char *dst, size_t cap, const char *src) {
     return n >= 0 && (size_t)n < cap;
 }
 
-void maelys_datalog_diagnostic_clear(maelys_datalog_diagnostic_t *diag) {
+void maelys_datalog_internal_diagnostic_clear(maelys_datalog_internal_diagnostic_t *diag) {
     if (!diag) return;
     memset(diag, 0, sizeof(*diag));
 }
 
-void maelys_datalog_diagnostic_set(maelys_datalog_diagnostic_t *diag,
+void maelys_datalog_internal_diagnostic_set(maelys_datalog_internal_diagnostic_t *diag,
                                    maelys_datalog_diag_code_t code,
                                    const char *phase,
                                    const char *file,
@@ -28,7 +28,7 @@ void maelys_datalog_diagnostic_set(maelys_datalog_diagnostic_t *diag,
                                    const char *message,
                                    const char *hint) {
     if (!diag) return;
-    maelys_datalog_diagnostic_clear(diag);
+    maelys_datalog_internal_diagnostic_clear(diag);
     diag->code = code;
     diag->line = line;
     diag->column = column;
@@ -38,7 +38,7 @@ void maelys_datalog_diagnostic_set(maelys_datalog_diagnostic_t *diag,
     (void)copy_bounded(diag->hint, sizeof(diag->hint), hint);
 }
 
-void maelys_datalog_diagnostic_set_predicate(maelys_datalog_diagnostic_t *diag,
+void maelys_datalog_internal_diagnostic_set_predicate(maelys_datalog_internal_diagnostic_t *diag,
                                              const char *predicate,
                                              size_t arity) {
     if (!diag) return;
@@ -46,7 +46,7 @@ void maelys_datalog_diagnostic_set_predicate(maelys_datalog_diagnostic_t *diag,
     diag->arity = arity;
 }
 
-void maelys_datalog_diagnostic_set_limit(maelys_datalog_diagnostic_t *diag,
+void maelys_datalog_internal_diagnostic_set_limit(maelys_datalog_internal_diagnostic_t *diag,
                                          size_t count,
                                          size_t limit) {
     if (!diag) return;
@@ -54,7 +54,7 @@ void maelys_datalog_diagnostic_set_limit(maelys_datalog_diagnostic_t *diag,
     diag->limit = limit;
 }
 
-void maelys_datalog_diagnostic_set_comparison_error(maelys_datalog_diagnostic_t *diag,
+void maelys_datalog_internal_diagnostic_set_comparison_error(maelys_datalog_internal_diagnostic_t *diag,
                                                     uint8_t compare_result,
                                                     uint8_t expected_kind,
                                                     uint8_t observed_lhs_kind,

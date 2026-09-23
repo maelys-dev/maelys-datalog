@@ -50,7 +50,7 @@ typedef struct {
     size_t column;
     maelys_result_t error;
     const char *file_path;
-    maelys_datalog_diagnostic_t *diag;
+    maelys_datalog_internal_diagnostic_t *diag;
 } maelys_datalog_lexer_t;
 
 maelys_result_t maelys_datalog_lexer_init(maelys_datalog_lexer_t *lexer,
@@ -60,13 +60,13 @@ maelys_result_t maelys_datalog_lexer_init_ex(maelys_datalog_lexer_t *lexer,
                                              const char *src,
                                              size_t len,
                                              const char *file_path,
-                                             maelys_datalog_diagnostic_t *out_diag);
+                                             maelys_datalog_internal_diagnostic_t *out_diag);
 maelys_result_t maelys_datalog_lexer_next(maelys_datalog_lexer_t *lexer,
                                           maelys_datalog_token_t *out);
 maelys_result_t maelys_datalog_lexer_validate(const char *src, size_t len);
 maelys_result_t maelys_datalog_lexer_validate_ex(const char *src,
                                                  size_t len,
                                                  const char *file_path,
-                                                 maelys_datalog_diagnostic_t *out_diag);
+                                                 maelys_datalog_internal_diagnostic_t *out_diag);
 
 #endif

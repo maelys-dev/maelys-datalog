@@ -13,9 +13,9 @@
 typedef struct {
     maelys_datalog_lexer_t lexer;
     maelys_datalog_token_t tok;
-    maelys_datalog_ruleset_t *ruleset;
+    maelys_datalog_internal_ruleset_t *ruleset;
     const char *file_path;
-    maelys_datalog_diagnostic_t *diag;
+    maelys_datalog_internal_diagnostic_t *diag;
     unsigned anonymous_var_count;
     unsigned flags;
     maelys_datalog_parse_origin_t *origin;
@@ -42,7 +42,7 @@ static void parser_diag(parser_t *p,
                         maelys_datalog_diag_code_t code,
                         const char *message,
                         const char *hint) {
-    maelys_datalog_diagnostic_set(p ? p->diag : NULL,
+    maelys_datalog_internal_diagnostic_set(p ? p->diag : NULL,
                                   code,
                                   "parser",
                                   p ? p->file_path : NULL,
@@ -76,14 +76,14 @@ static int token_is_contextual_or(const maelys_datalog_token_t *tok) {
            tok->len == 2u && memcmp(tok->text, "or", 2u) == 0;
 }
 
-static maelys_result_t allocate_anonymous_variable(parser_t *p, maelys_datalog_term_t *term) {
+static maelys_result_t allocate_anonymous_variable(parser_t *p, maelys_datalog_internal_term_t *term) {
     unsigned id = MAELYS_DATALOG_NAMED_VARIABLE_COUNT + p->anonymous_var_count;
     if (id >= MAELYS_DATALOG_MAX_RULE_VARIABLES) {
         parser_diag(p,
                     MAELYS_DATALOG_DIAG_PARSER_TOO_MANY_VARIABLES,
                     "rule variable limit exceeded",
                     "reduce anonymous variables or split the rule");
-        maelys_datalog_diagnostic_set_limit(p->diag,
+        maelys_datalog_internal_diagnostic_set_limit(p->diag,
                                             (size_t)id + 1u,
                                             MAELYS_DATALOG_MAX_RULE_VARIABLES);
         return MAELYS_ERR_PAYLOAD_TOO_LARGE;
@@ -112,7 +112,7 @@ static maelys_result_t validate_policy_symbol_constant(parser_t *p) {
                     MAELYS_DATALOG_DIAG_LEXER_STRING_TOO_LONG,
                     "policy atom exceeds capacity",
                     "limit policy atoms to 63 UTF-8 bytes");
-        maelys_datalog_diagnostic_set_limit(
+        maelys_datalog_internal_diagnostic_set_limit(
             p->diag, p->tok.len, max_policy_atom_bytes);
         return MAELYS_ERR_PAYLOAD_TOO_LARGE;
     }
@@ -126,7 +126,7 @@ static maelys_result_t validate_policy_symbol_constant(parser_t *p) {
                     MAELYS_DATALOG_DIAG_LEXER_STRING_TOO_LONG,
                     "policy atom count exceeds capacity",
                     "limit each ruleset to 256 distinct policy atoms");
-        maelys_datalog_diagnostic_set_limit(
+        maelys_datalog_internal_diagnostic_set_limit(
             p->diag, p->ruleset->symbols.count + 1u, MAELYS_DATALOG_MAX_ATOMS);
         return MAELYS_ERR_PAYLOAD_TOO_LARGE;
     }
@@ -135,7 +135,7 @@ static maelys_result_t validate_policy_symbol_constant(parser_t *p) {
 
 static maelys_result_t intern_policy_symbol_constant(
     parser_t *p,
-    maelys_datalog_term_t *term) {
+    maelys_datalog_internal_term_t *term) {
     maelys_result_t rc = validate_policy_symbol_constant(p);
     if (rc != MAELYS_OK) return rc;
     maelys_datalog_symbol_id_t sid;
@@ -148,7 +148,7 @@ static maelys_result_t intern_policy_symbol_constant(
 }
 
 static maelys_result_t parse_term(parser_t *p,
-                                  maelys_datalog_term_t *term,
+                                  maelys_datalog_internal_term_t *term,
                                   maelys_datalog_term_parse_context_t context,
                                   int *has_anonymous) {
     memset(term, 0, sizeof(*term));
@@ -196,7 +196,7 @@ static maelys_result_t parse_term(parser_t *p,
 }
 
 static maelys_result_t parse_atom(parser_t *p,
-                                  maelys_datalog_fact_t *atom,
+                                  maelys_datalog_internal_fact_t *atom,
                                   maelys_datalog_term_parse_context_t context,
                                   int *has_anonymous) {
     if (p->tok.kind != MAELYS_DATALOG_TOKEN_PREDICATE) {
@@ -226,12 +226,12 @@ static maelys_result_t parse_atom(parser_t *p,
                     MAELYS_DATALOG_DIAG_LEXER_INVALID_TOKEN,
                     "expected predicate argument list",
                     "add parentheses after the predicate name");
-        maelys_datalog_diagnostic_set_predicate(p->diag, pred, 0);
+        maelys_datalog_internal_diagnostic_set_predicate(p->diag, pred, 0);
         return MAELYS_ERR_INVALID_FIELD;
     }
     rc = next(p);
     if (rc != MAELYS_OK) return rc;
-    maelys_datalog_term_t terms[MAELYS_DATALOG_MAX_TERMS];
+    maelys_datalog_internal_term_t terms[MAELYS_DATALOG_MAX_TERMS];
     size_t arity = 0;
     if (p->tok.kind != MAELYS_DATALOG_TOKEN_RPAREN) {
         for (;;) {
@@ -240,8 +240,8 @@ static maelys_result_t parse_atom(parser_t *p,
                             MAELYS_DATALOG_DIAG_PARSER_ARITY_MISMATCH,
                             "predicate arity exceeds maximum",
                             "reduce predicate arity or update the accepted predicate declaration");
-                maelys_datalog_diagnostic_set_predicate(p->diag, pred, arity + 1u);
-                maelys_datalog_diagnostic_set_limit(p->diag, arity + 1u, MAELYS_DATALOG_MAX_TERMS);
+                maelys_datalog_internal_diagnostic_set_predicate(p->diag, pred, arity + 1u);
+                maelys_datalog_internal_diagnostic_set_limit(p->diag, arity + 1u, MAELYS_DATALOG_MAX_TERMS);
                 return MAELYS_ERR_PAYLOAD_TOO_LARGE;
             }
             rc = parse_term(p, &terms[arity++], context, has_anonymous);
@@ -259,12 +259,12 @@ static maelys_result_t parse_atom(parser_t *p,
                     MAELYS_DATALOG_DIAG_LEXER_INVALID_TOKEN,
                     "expected closing parenthesis",
                     "close the predicate argument list");
-        maelys_datalog_diagnostic_set_predicate(p->diag, pred, arity);
+        maelys_datalog_internal_diagnostic_set_predicate(p->diag, pred, arity);
         return MAELYS_ERR_INVALID_FIELD;
     }
     maelys_datalog_predicate_id_t pid;
     if (!maelys_datalog_predicate_registry_find(&p->ruleset->registry, pred, arity, &pid)) {
-        maelys_datalog_diagnostic_set(p->diag,
+        maelys_datalog_internal_diagnostic_set(p->diag,
                                       predicate_name_exists(&p->ruleset->registry, pred)
                                           ? MAELYS_DATALOG_DIAG_PARSER_ARITY_MISMATCH
                                           : MAELYS_DATALOG_DIAG_PARSER_UNKNOWN_PREDICATE,
@@ -278,7 +278,7 @@ static maelys_result_t parse_atom(parser_t *p,
                                       predicate_name_exists(&p->ruleset->registry, pred)
                                           ? "check registry or manifest arity"
                                           : "declare predicate in the domain registry");
-        maelys_datalog_diagnostic_set_predicate(p->diag, pred, arity);
+        maelys_datalog_internal_diagnostic_set_predicate(p->diag, pred, arity);
         return MAELYS_ERR_INVALID_FIELD;
     }
     memset(atom, 0, sizeof(*atom));
@@ -302,7 +302,7 @@ static maelys_datalog_cmp_op_t cmp_kind(maelys_datalog_token_kind_t k) {
 
 typedef struct {
     uint8_t root;
-    maelys_datalog_term_t term;
+    maelys_datalog_internal_term_t term;
     int has_simple_term;
     int is_composite;
 } arith_operand_t;
@@ -319,7 +319,7 @@ static int token_starts_comparison_operand(maelys_datalog_token_kind_t kind) {
 static maelys_result_t arith_expr_add_node(parser_t *p,
                                            maelys_datalog_rule_t *rule,
                                            maelys_datalog_arith_expr_kind_t kind,
-                                           const maelys_datalog_term_t *term,
+                                           const maelys_datalog_internal_term_t *term,
                                            uint8_t left,
                                            uint8_t right,
                                            uint8_t *out_index) {
@@ -329,7 +329,7 @@ static maelys_result_t arith_expr_add_node(parser_t *p,
                     MAELYS_DATALOG_DIAG_PARSER_INVALID_COMPARISON,
                     "arithmetic expression node limit exceeded",
                     "simplify the arithmetic expression");
-        maelys_datalog_diagnostic_set_limit(p->diag,
+        maelys_datalog_internal_diagnostic_set_limit(p->diag,
                                             (size_t)rule->expr_node_count + 1u,
                                             MAELYS_DATALOG_MAX_ARITH_EXPR_NODES);
         return MAELYS_ERR_PAYLOAD_TOO_LARGE;
@@ -361,14 +361,14 @@ static maelys_result_t parse_arith_atom(parser_t *p,
                     MAELYS_DATALOG_DIAG_PARSER_INVALID_COMPARISON,
                     "arithmetic expression depth limit exceeded",
                     "reduce parentheses or split the expression");
-        maelys_datalog_diagnostic_set_limit(p->diag,
+        maelys_datalog_internal_diagnostic_set_limit(p->diag,
                                             (size_t)depth,
                                             MAELYS_DATALOG_MAX_ARITH_EXPR_DEPTH);
         return MAELYS_ERR_PAYLOAD_TOO_LARGE;
     }
     if (p->tok.kind == MAELYS_DATALOG_TOKEN_INTEGER ||
         p->tok.kind == MAELYS_DATALOG_TOKEN_VARIABLE) {
-        maelys_datalog_term_t term;
+        maelys_datalog_internal_term_t term;
         int has_anonymous = 0;
         maelys_result_t rc = parse_term(p, &term, MAELYS_DATALOG_TERM_CTX_COMPARISON, &has_anonymous);
         if (rc != MAELYS_OK) return rc;
@@ -527,7 +527,7 @@ static maelys_result_t parse_filter_literal(
                     "bind a symbol variable in a positive atom or use an allowed symbol");
         return MAELYS_ERR_INVALID_FIELD;
     }
-    maelys_datalog_term_t value;
+    maelys_datalog_internal_term_t value;
     memset(&value, 0, sizeof(value));
     char value_text[MAELYS_DATALOG_MAX_STRING_BYTES];
     size_t value_length = 0u;
@@ -567,7 +567,7 @@ static maelys_result_t parse_filter_literal(
                     MAELYS_DATALOG_DIAG_PARSER_INVALID_FILTER,
                     "filter pattern exceeds capacity",
                     "shorten the constant pattern");
-        maelys_datalog_diagnostic_set_limit(
+        maelys_datalog_internal_diagnostic_set_limit(
             p->diag, p->tok.len, MAELYS_DATALOG_MAX_FILTER_PATTERN_BYTES);
         return MAELYS_ERR_PAYLOAD_TOO_LARGE;
     }
@@ -576,7 +576,7 @@ static maelys_result_t parse_filter_literal(
                     MAELYS_DATALOG_DIAG_PARSER_INVALID_FILTER,
                     "filter program capacity exceeded",
                     "reduce the number of filter literals");
-        maelys_datalog_diagnostic_set_limit(
+        maelys_datalog_internal_diagnostic_set_limit(
             p->diag,
             p->ruleset->filter_program_count + 1u,
             MAELYS_DATALOG_MAX_FILTER_PROGRAMS);
@@ -588,7 +588,7 @@ static maelys_result_t parse_filter_literal(
                     MAELYS_DATALOG_DIAG_PARSER_INVALID_FILTER,
                     "filter pattern pool capacity exceeded",
                     "reduce the total pattern bytes");
-        maelys_datalog_diagnostic_set_limit(
+        maelys_datalog_internal_diagnostic_set_limit(
             p->diag,
             p->ruleset->filter_pattern_pool_used + p->tok.len,
             MAELYS_DATALOG_FILTER_PATTERN_POOL_BYTES);
@@ -781,8 +781,8 @@ static maelys_result_t parse_literal(parser_t *p,
             lit->lhs = lhs.term;
             lit->rhs = rhs.term;
         } else {
-            lit->lhs = lhs.has_simple_term ? lhs.term : (maelys_datalog_term_t){0};
-            lit->rhs = rhs.has_simple_term ? rhs.term : (maelys_datalog_term_t){0};
+            lit->lhs = lhs.has_simple_term ? lhs.term : (maelys_datalog_internal_term_t){0};
+            lit->rhs = rhs.has_simple_term ? rhs.term : (maelys_datalog_internal_term_t){0};
             lit->lhs_expr_root = lhs.root;
             lit->rhs_expr_root = rhs.root;
             lit->has_arith_expr = 1;
@@ -815,7 +815,7 @@ static maelys_result_t parse_literal(parser_t *p,
     return MAELYS_ERR_INVALID_FIELD;
 }
 
-static void clear_staged_rules(maelys_datalog_ruleset_t *ruleset,
+static void clear_staged_rules(maelys_datalog_internal_ruleset_t *ruleset,
                                size_t base,
                                size_t count) {
     if (!ruleset || base >= MAELYS_DATALOG_MAX_RULES) return;
@@ -835,7 +835,7 @@ static maelys_result_t normalize_anonymous_variables(parser_t *p,
             continue;
         }
         for (size_t t = 0; t < literal->atom.arity; t++) {
-            maelys_datalog_term_t *term = &literal->atom.terms[t];
+            maelys_datalog_internal_term_t *term = &literal->atom.terms[t];
             if (term->kind != MAELYS_DATALOG_TERM_VAR ||
                 term->as.variable < MAELYS_DATALOG_NAMED_VARIABLE_COUNT) {
                 continue;
@@ -845,7 +845,7 @@ static maelys_result_t normalize_anonymous_variables(parser_t *p,
                             MAELYS_DATALOG_DIAG_PARSER_TOO_MANY_VARIABLES,
                             "rule variable limit exceeded",
                             "reduce anonymous variables or split the rule");
-                maelys_datalog_diagnostic_set_limit(
+                maelys_datalog_internal_diagnostic_set_limit(
                     p->diag,
                     (size_t)next_anonymous + 1u,
                     MAELYS_DATALOG_MAX_RULE_VARIABLES);
@@ -862,14 +862,14 @@ static void parser_rule_expansion_overflow(parser_t *p, size_t requested) {
                 MAELYS_DATALOG_DIAG_PARSER_RULE_BODY_LITERAL_OVERFLOW,
                 "OR expansion exceeds rule capacity",
                 "reduce OR alternatives or split the policy");
-    maelys_datalog_diagnostic_set_limit(p->diag,
+    maelys_datalog_internal_diagnostic_set_limit(p->diag,
                                         requested,
                                         MAELYS_DATALOG_MAX_RULES);
 }
 
 static maelys_result_t parse_clause(parser_t *p) {
     const maelys_datalog_source_location_t source = {p->tok.line, p->tok.column};
-    maelys_datalog_fact_t head;
+    maelys_datalog_internal_fact_t head;
     int head_has_anonymous = 0;
     p->anonymous_var_count = 0;
     maelys_result_t rc = parse_atom(p,
@@ -885,7 +885,7 @@ static maelys_result_t parse_clause(parser_t *p) {
                         MAELYS_DATALOG_DIAG_PARSER_FACT_USES_NON_BASE_PREDICATE,
                         "direct fact uses non-policy predicate",
                         "direct .dl facts must use policy fact predicates");
-            if (def) maelys_datalog_diagnostic_set_predicate(p->diag, def->name, def->arity);
+            if (def) maelys_datalog_internal_diagnostic_set_predicate(p->diag, def->name, def->arity);
             return MAELYS_ERR_INVALID_FIELD;
         }
         if (head_has_anonymous) {
@@ -893,7 +893,7 @@ static maelys_result_t parse_clause(parser_t *p) {
                         MAELYS_DATALOG_DIAG_PARSER_ANONYMOUS_VARIABLE_IN_FACT,
                         "anonymous variable is not allowed in direct facts",
                         "direct .dl facts must be ground policy facts");
-            if (def) maelys_datalog_diagnostic_set_predicate(p->diag, def->name, def->arity);
+            if (def) maelys_datalog_internal_diagnostic_set_predicate(p->diag, def->name, def->arity);
             return MAELYS_ERR_INVALID_FIELD;
         }
         if (p->ruleset->fact_count >= MAELYS_DATALOG_MAX_RULE_FACTS) return MAELYS_ERR_PAYLOAD_TOO_LARGE;
@@ -903,7 +903,7 @@ static maelys_result_t parse_clause(parser_t *p) {
                             MAELYS_DATALOG_DIAG_PARSER_ANONYMOUS_VARIABLE_IN_FACT,
                             "variables are not allowed in direct facts",
                             "direct .dl facts must be ground policy facts");
-                if (def) maelys_datalog_diagnostic_set_predicate(p->diag, def->name, def->arity);
+                if (def) maelys_datalog_internal_diagnostic_set_predicate(p->diag, def->name, def->arity);
                 return MAELYS_ERR_INVALID_FIELD;
             }
         }
@@ -926,7 +926,7 @@ static maelys_result_t parse_clause(parser_t *p) {
                     "use named head variables bound by positive body atoms");
         const maelys_datalog_predicate_entry_t *def =
             maelys_datalog_predicate_registry_get(&p->ruleset->registry, head.predicate_id);
-        if (def) maelys_datalog_diagnostic_set_predicate(p->diag, def->name, def->arity);
+        if (def) maelys_datalog_internal_diagnostic_set_predicate(p->diag, def->name, def->arity);
         return MAELYS_ERR_INVALID_FIELD;
     }
     rc = next(p);
@@ -951,8 +951,8 @@ static maelys_result_t parse_clause(parser_t *p) {
                         MAELYS_DATALOG_DIAG_PARSER_RULE_BODY_LITERAL_OVERFLOW,
                         "rule body literal limit exceeded",
                         "split rule into IDB helper predicates");
-            if (def) maelys_datalog_diagnostic_set_predicate(p->diag, def->name, def->arity);
-            maelys_datalog_diagnostic_set_limit(p->diag,
+            if (def) maelys_datalog_internal_diagnostic_set_predicate(p->diag, def->name, def->arity);
+            maelys_datalog_internal_diagnostic_set_limit(p->diag,
                                                 first->body_count + 1u,
                                                 MAELYS_DATALOG_MAX_BODY_LITERALS);
             rc = MAELYS_ERR_PAYLOAD_TOO_LARGE;
@@ -969,7 +969,7 @@ static maelys_result_t parse_clause(parser_t *p) {
 
         if (first->body[body_index].kind == MAELYS_DATALOG_LITERAL_ATOM &&
             token_is_contextual_or(&p->tok)) {
-            maelys_datalog_fact_t alternatives[MAELYS_DATALOG_MAX_RULES];
+            maelys_datalog_internal_fact_t alternatives[MAELYS_DATALOG_MAX_RULES];
             size_t alternative_count = 1u;
             unsigned max_anonymous = p->anonymous_var_count;
             alternatives[0] = first->body[body_index].atom;
@@ -1083,28 +1083,28 @@ fail_staged_clause:
     return rc;
 }
 
-maelys_result_t maelys_datalog_parse_ruleset(maelys_datalog_ruleset_t *ruleset,
+maelys_result_t maelys_datalog_parse_ruleset(maelys_datalog_internal_ruleset_t *ruleset,
                                              const char *src,
                                              size_t len) {
     return maelys_datalog_parse_ruleset_ex(ruleset, src, len, NULL, NULL);
 }
 
-maelys_result_t maelys_datalog_parse_ruleset_ex(maelys_datalog_ruleset_t *ruleset,
+maelys_result_t maelys_datalog_parse_ruleset_ex(maelys_datalog_internal_ruleset_t *ruleset,
                                                 const char *src,
                                                 size_t len,
                                                 const char *file_path,
-                                                maelys_datalog_diagnostic_t *out_diag) {
+                                                maelys_datalog_internal_diagnostic_t *out_diag) {
     return maelys_datalog_parse_ruleset_ex_with_flags(
         ruleset, src, len, file_path, 0u, out_diag);
 }
 
 maelys_result_t maelys_datalog_parse_ruleset_ex_with_flags(
-    maelys_datalog_ruleset_t *ruleset,
+    maelys_datalog_internal_ruleset_t *ruleset,
     const char *src,
     size_t len,
     const char *file_path,
     unsigned flags,
-    maelys_datalog_diagnostic_t *out_diag) {
+    maelys_datalog_internal_diagnostic_t *out_diag) {
     maelys_datalog_parse_origin_t origin = {0};
     maelys_result_t rc = maelys_datalog_parse_only(
         ruleset, src, len, file_path, flags, &origin, out_diag);
@@ -1115,14 +1115,14 @@ maelys_result_t maelys_datalog_parse_ruleset_ex_with_flags(
 /* Validation runs once after the whole source is parsed, but a clause-local
  * error in an earlier clause must still win over a later parse error, as it
  * did when every clause was validated as soon as it was parsed. */
-static maelys_result_t earliest_clause_error(maelys_datalog_ruleset_t *ruleset,
+static maelys_result_t earliest_clause_error(maelys_datalog_internal_ruleset_t *ruleset,
                                              const char *file_path,
                                              const maelys_datalog_parse_origin_t *origin,
-                                             maelys_datalog_diagnostic_t *out_diag,
+                                             maelys_datalog_internal_diagnostic_t *out_diag,
                                              maelys_result_t parse_rc) {
     if (!origin || ruleset->rule_count == 0) return parse_rc;
-    maelys_datalog_diagnostic_t prefix;
-    maelys_datalog_diagnostic_clear(&prefix);
+    maelys_datalog_internal_diagnostic_t prefix;
+    maelys_datalog_internal_diagnostic_clear(&prefix);
     maelys_result_t rc = maelys_datalog_validate_parsed_prefix(ruleset, file_path, origin, &prefix);
     if (rc == MAELYS_OK) return parse_rc;
     if (out_diag) *out_diag = prefix;
@@ -1130,16 +1130,16 @@ static maelys_result_t earliest_clause_error(maelys_datalog_ruleset_t *ruleset,
 }
 
 maelys_result_t maelys_datalog_parse_only(
-    maelys_datalog_ruleset_t *ruleset, const char *src, size_t len, const char *file_path,
-    unsigned flags, maelys_datalog_parse_origin_t *origin, maelys_datalog_diagnostic_t *out_diag) {
+    maelys_datalog_internal_ruleset_t *ruleset, const char *src, size_t len, const char *file_path,
+    unsigned flags, maelys_datalog_parse_origin_t *origin, maelys_datalog_internal_diagnostic_t *out_diag) {
     if (!ruleset || !ruleset->loaded) return MAELYS_ERR_INVALID_STATE;
     MAELYS_DATALOG_COUNT_PIPELINE(parses);
     if (flags & ~MAELYS_DATALOG_PARSE_ALLOW_UNDECLARED_POLICY_ATOMS) {
         return MAELYS_ERR_INVALID_ARGUMENT;
     }
-    if (out_diag) maelys_datalog_diagnostic_clear(out_diag);
+    if (out_diag) maelys_datalog_internal_diagnostic_clear(out_diag);
     if (!maelys_datalog_predicate_registry_is_frozen(&ruleset->registry)) {
-        maelys_datalog_diagnostic_set(out_diag,
+        maelys_datalog_internal_diagnostic_set(out_diag,
                                       MAELYS_DATALOG_DIAG_REGISTRY_MUTATION_AFTER_FREEZE,
                                       "registry",
                                       file_path,

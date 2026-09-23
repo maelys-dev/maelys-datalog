@@ -29,14 +29,14 @@ static maelys_result_t install_callback_test_predicates(maelys_datalog_predicate
                                                         MAELYS_DATALOG_PRED_KIND_EDB);
 }
 
-static const maelys_datalog_public_predicate_t k_static_table_a[] = {
+static const maelys_datalog_predicate_t k_static_table_a[] = {
     {.name = "static_safe", .arity = 1, .flags = MAELYS_DATALOG_PRED_KIND_EDB},
     {.name = "static_allow",
      .arity = 1,
      .flags = MAELYS_DATALOG_PRED_KIND_IDB | MAELYS_DATALOG_PRED_KIND_QUERY},
 };
 
-static const maelys_datalog_public_predicate_t k_static_table_b[] = {
+static const maelys_datalog_predicate_t k_static_table_b[] = {
     {.name = "static_blocked", .arity = 1, .flags = MAELYS_DATALOG_PRED_KIND_EDB},
 };
 
@@ -62,7 +62,7 @@ static maelys_result_t register_callback_atoms(void) {
 
 static int test_callback_and_table_install_same_atoms(void) {
     TEST_BEGIN();
-    const maelys_datalog_public_predicate_t predicates[] = {
+    const maelys_datalog_predicate_t predicates[] = {
         {.name = "callback_pred", .arity = 1u, .flags = MAELYS_DATALOG_PRED_KIND_EDB},
     };
     const char *atoms[] = {"alice", "bob", "alice"};

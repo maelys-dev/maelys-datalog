@@ -228,7 +228,7 @@ static void check_regime(size_t text_capacity, int indexed) {
     assert(!maelys_datalog_input_edb_init(arena.bytes, sizeof(arena.bytes), 8u, text_capacity, &edb));
     assert(!!edb->index_slots == indexed);
     assert(!!edb->index == indexed && !!edb->pending == indexed && !!edb->generations == indexed);
-    maelys_datalog_public_fact_t batch[2] = {0};
+    maelys_datalog_fact_t batch[2] = {0};
     batch[0].predicate = "p"; batch[0].arity = 1u;
     batch[0].terms[0].kind = MAELYS_DATALOG_VALUE_SYMBOL;
     batch[0].terms[0].as.symbol = "p";
@@ -237,7 +237,7 @@ static void check_regime(size_t text_capacity, int indexed) {
         assert(!maelys_datalog_input_edb_add_facts(edb, batch, 2u, NULL));
         assert(edb->text_used == 4u);
         assert(edb->facts[0].predicate == edb->facts[1].terms[0].as.symbol);
-        maelys_datalog_public_fact_t bad[2] = {batch[0], batch[1]};
+        maelys_datalog_fact_t bad[2] = {batch[0], batch[1]};
         bad[0].predicate = "new";
         bad[1].terms[0].as.symbol = NULL;
         memcpy(snapshot, arena.bytes, sizeof(snapshot));
@@ -261,7 +261,7 @@ static void check_rollback_prefixes(void) {
     memset(arena.bytes, 0xA5, sizeof(arena.bytes));
     maelys_datalog_input_edb_t *edb;
     assert(!maelys_datalog_input_edb_init(arena.bytes, sizeof(arena.bytes), 16u, 512u, &edb));
-    maelys_datalog_public_fact_t batch[8] = {0}, bad[8];
+    maelys_datalog_fact_t batch[8] = {0}, bad[8];
     const char *names[] = {"a", "b", "c", "d", "e", "f", "g", "h"};
     for (size_t i = 0; i < 8u; ++i) {
         batch[i].predicate = names[i]; batch[i].arity = 4u;
@@ -326,15 +326,15 @@ int main(void) {
     assert(maelys_datalog_input_edb_init(NULL, bytes, 8u, 256u, &edb) != 0 && !edb);
     assert(memcmp(snapshot, arena.bytes, sizeof(snapshot)) == 0);
     assert(maelys_datalog_input_edb_init(arena.bytes, bytes, 8u, 256u, &edb) == 0);
-    assert(bytes == facts_offset() + 8u * sizeof(maelys_datalog_public_fact_t) +
+    assert(bytes == facts_offset() + 8u * sizeof(maelys_datalog_fact_t) +
         3u * edb->index_slots + 2u * input_distinct_bound(8u, 256u) + 256u);
     char predicate[] = "seen", symbol[] = "alice";
-    maelys_datalog_public_value_t value = {.kind = MAELYS_DATALOG_VALUE_SYMBOL, .as.symbol = symbol};
+    maelys_datalog_value_t value = {.kind = MAELYS_DATALOG_VALUE_SYMBOL, .as.symbol = symbol};
     assert(maelys_datalog_input_edb_add_fact(edb, predicate, &value, 1u, NULL) == 0);
     predicate[0] = 'x'; symbol[0] = 'x';
     assert(strcmp(edb->facts[0].predicate, "seen") == 0);
     assert(strcmp(edb->facts[0].terms[0].as.symbol, "alice") == 0);
-    maelys_datalog_public_fact_t batch[2] = {0};
+    maelys_datalog_fact_t batch[2] = {0};
     batch[0].predicate = "seen"; batch[0].arity = 1; batch[0].terms[0] = value;
     batch[1] = batch[0]; batch[1].terms[0].as.symbol = NULL;
     maelys_datalog_public_diagnostic_t diag;
@@ -406,7 +406,7 @@ int main(void) {
      * This is indexed, fills its entire D-entry journal and its text arena. */
     assert(!maelys_datalog_input_edb_init(arena.bytes, sizeof(arena.bytes), 8u, 31u, &edb));
     char tiny_names[16][2] = {{0}};
-    maelys_datalog_public_fact_t tiny_batch[4] = {0};
+    maelys_datalog_fact_t tiny_batch[4] = {0};
     for (size_t i = 1u; i < 16u; ++i) tiny_names[i][0] = (char)('a' + i - 1u);
     for (size_t i = 0u; i < 4u; ++i) {
         tiny_batch[i].predicate = tiny_names[4u * i];
@@ -507,9 +507,9 @@ int main(void) {
     /* Highest pending ordinal in a maximum-sized batch, not merely a small
      * ordinal in a default-sized buffer. A failed preflight must undo stale
      * committed entries before the successful retry. */
-    static maelys_datalog_public_fact_t maximum[MAELYS_DATALOG_MAX_EDB_FACTS];
+    static maelys_datalog_fact_t maximum[MAELYS_DATALOG_MAX_EDB_FACTS];
     for (size_t i = 0u; i < MAELYS_DATALOG_MAX_EDB_FACTS; ++i) maximum[i].predicate = "p";
-    maelys_datalog_public_fact_t *tail = &maximum[MAELYS_DATALOG_MAX_EDB_FACTS - 1u];
+    maelys_datalog_fact_t *tail = &maximum[MAELYS_DATALOG_MAX_EDB_FACTS - 1u];
     tail->arity = MAELYS_DATALOG_MAX_TERMS;
     for (size_t j = 0u; j < tail->arity; ++j) tail->terms[j].kind = MAELYS_DATALOG_VALUE_INTEGER;
     tail->terms[tail->arity - 1u].kind = MAELYS_DATALOG_VALUE_SYMBOL;

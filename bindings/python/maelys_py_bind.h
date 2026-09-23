@@ -6,8 +6,6 @@
 #include <stdint.h>
 #include "maelys/datalog.h"
 
-#include "src/core/maelys_datalog_types.h"
-
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -59,15 +57,15 @@ typedef struct {
 maelys_py_engine_t *maelys_py_engine_new(void);
 void maelys_py_engine_free(maelys_py_engine_t *engine);
 
-int maelys_py_get_build_limits(maelys_datalog_build_limits_t *out);
+int maelys_py_limit_get(int limit, size_t *out);
 void maelys_py_get_abi_layout(maelys_py_abi_layout_t *out);
 void maelys_py_get_abi_constants(maelys_py_abi_constants_t *out);
 
 int maelys_py_register_domain(const char *domain_name,
-                              const maelys_datalog_public_predicate_t *predicates,
+                              const maelys_datalog_predicate_t *predicates,
                               size_t predicate_count);
 int maelys_py_find_domain(const char *domain_name,
-                          maelys_datalog_public_predicate_t *out_predicates,
+                          maelys_datalog_predicate_t *out_predicates,
                           size_t out_capacity,
                           size_t *out_count,
                           int *out_found,

@@ -15,7 +15,7 @@
  * description is metadata only; it does not affect loading or evaluation. */
 typedef struct {
     const char *domain_name;
-    const maelys_datalog_public_predicate_t *predicates;
+    const maelys_datalog_predicate_t *predicates;
     size_t predicate_count;
     /* Installed after the table or callback succeeds; creates no facts. */
     const char *const *atoms;

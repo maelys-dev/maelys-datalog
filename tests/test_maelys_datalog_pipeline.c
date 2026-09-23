@@ -131,7 +131,7 @@ static void probe_case(size_t index, const char *source, int loader) {
     assert(!maelys_datalog_program_fingerprint(program, fingerprint)); /* Cached second read. */
     assert(!maelys_datalog_session_execution_fingerprint(session, fingerprint));
     hash_text(&hash, fingerprint);
-    maelys_datalog_public_fact_t facts[7] = {0};
+    maelys_datalog_fact_t facts[7] = {0};
     const char *predicates[] = {"seed", "seed", "extra", "blocked", "number", "edge", "edge"};
     const char *values[] = {"alice", "bob", "bob", "bob", "unused", "alice", "bob"};
     for (size_t i = 0; i < 7; ++i) {
@@ -169,13 +169,13 @@ static void probe_case(size_t index, const char *source, int loader) {
         maelys_sha256_final(&symbols_hash, symbols_digest);
         if (!repeat) memcpy(first_symbols, symbols_digest, sizeof(first_symbols));
         else assert(!memcmp(first_symbols, symbols_digest, sizeof(first_symbols)));
-        maelys_datalog_public_value_t value = {0};
+        maelys_datalog_value_t value = {0};
         value.kind = MAELYS_DATALOG_VALUE_SYMBOL;
         for (size_t absent = 0; absent < 2; ++absent) {
             value.as.symbol = absent ? "carol" : "alice";
             size_t size;
             maelys_datalog_status_t (*explain)(const maelys_datalog_result_t *, const char *,
-                                               const maelys_datalog_public_value_t *, size_t,
+                                               const maelys_datalog_value_t *, size_t,
                                                char *, size_t, size_t *) =
                 absent ? maelys_datalog_result_explain_false_text
                        : maelys_datalog_result_explain_true_text;
@@ -198,7 +198,7 @@ static void probe_case(size_t index, const char *source, int loader) {
         }
         assert(!maelys_datalog_result_free(result));
         for (size_t i = 0; i < 3; ++i) {
-            maelys_datalog_public_fact_t f = facts[i];
+            maelys_datalog_fact_t f = facts[i];
             facts[i] = facts[6 - i];
             facts[6 - i] = f;
         }
@@ -298,7 +298,7 @@ static void bench(void) {
                                               NULL));
     assert(!maelys_datalog_session_create(policy, 0, &session));
     assert(!maelys_datalog_policy_free(policy));
-    maelys_datalog_public_fact_t fact = {0};
+    maelys_datalog_fact_t fact = {0};
     fact.predicate = "seed";
     fact.arity = 1;
     fact.terms[0].kind = MAELYS_DATALOG_VALUE_SYMBOL;
@@ -333,7 +333,7 @@ int main(int argc, char **argv) {
                                                    counted_cost,
                                                    counted_evaluate};
     assert(!maelys_datalog_register_filter_module(&module));
-    const maelys_datalog_public_predicate_t predicates[] = {
+    const maelys_datalog_predicate_t predicates[] = {
         {"seed", 1, MAELYS_DATALOG_PREDICATE_EDB},
         {"extra", 1, MAELYS_DATALOG_PREDICATE_EDB},
         {"blocked", 1, MAELYS_DATALOG_PREDICATE_EDB},
@@ -343,7 +343,7 @@ int main(int argc, char **argv) {
         {"reach", 2, MAELYS_DATALOG_PREDICATE_IDB},
         {"allow", 1, MAELYS_DATALOG_PREDICATE_IDB | MAELYS_DATALOG_PREDICATE_QUERY}};
     const char *atoms[] = {"alice", "carol"};
-    const maelys_datalog_public_domain_t domain = {"pipeline", predicates, 8, atoms, 2};
+    const maelys_datalog_domain_t domain = {"pipeline", predicates, 8, atoms, 2};
     assert(!maelys_datalog_domain_register(&domain));
     const char *sources[] = {
         "base(\"alice\"). allow(X) :- base(X). allow(X) :- seed(X) or extra(X).",

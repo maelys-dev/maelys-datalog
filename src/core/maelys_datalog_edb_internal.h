@@ -16,10 +16,10 @@ typedef struct {
  * the index again. Up to 32 distinct facts use the scan; insertion of fact 33
  * backfills the index once. No allocation or heap fallback. */
 maelys_result_t maelys_datalog_edb_add_fact_indexed(
-    maelys_datalog_edb_t *edb, const char *predicate,
-    const maelys_datalog_term_t *terms, size_t arity,
+    maelys_datalog_internal_edb_t *edb, const char *predicate,
+    const maelys_datalog_internal_term_t *terms, size_t arity,
     maelys_datalog_edb_insert_index_t *index);
 
 #ifdef MAELYS_TESTING
-size_t maelys_datalog_test_edb_insert_bucket(const maelys_datalog_fact_t *fact);
+size_t maelys_datalog_test_edb_insert_bucket(const maelys_datalog_internal_fact_t *fact);
 #endif

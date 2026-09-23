@@ -51,7 +51,7 @@ static const char *const FUZZ_ATOMS[] = {
     NULL
 };
 
-static const maelys_datalog_public_predicate_t FUZZ_PREDS[] = {
+static const maelys_datalog_predicate_t FUZZ_PREDS[] = {
     {"user", 1, MAELYS_DATALOG_PRED_KIND_EDB},
     {"owns", 2, MAELYS_DATALOG_PRED_KIND_EDB},
     {"safe", 1, MAELYS_DATALOG_PRED_KIND_EDB},
@@ -85,8 +85,8 @@ int main(int argc, char **argv) {
 
         if (size == 0u || size > 4096u) continue;
 
-        maelys_datalog_ruleset_t ruleset = {0};
-        maelys_datalog_diagnostic_t diag = {0};
+        maelys_datalog_internal_ruleset_t ruleset = {0};
+        maelys_datalog_internal_diagnostic_t diag = {0};
 
         if (maelys_datalog_ruleset_init(&ruleset,
                                         "afl.main",

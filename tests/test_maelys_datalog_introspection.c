@@ -6,20 +6,18 @@
 
 static int test_build_limits_match_compile_time_macros(void) {
     TEST_BEGIN();
-    maelys_datalog_build_limits_t limits;
-    maelys_datalog_get_build_limits(&limits);
 
     const struct { maelys_datalog_limit_t key; size_t expected; } public_limits[] = {
-        {MAELYS_DATALOG_LIMIT_MAX_SYMBOLS, limits.max_symbols},
-        {MAELYS_DATALOG_LIMIT_STRING_POOL_BYTES, limits.string_pool_bytes},
-        {MAELYS_DATALOG_LIMIT_MAX_PREDICATES, limits.max_predicates},
-        {MAELYS_DATALOG_LIMIT_MAX_RULES, limits.max_rules},
-        {MAELYS_DATALOG_LIMIT_MAX_ARITY, limits.max_arity},
-        {MAELYS_DATALOG_LIMIT_MAX_BODY_LITERALS, limits.max_body_literals},
-        {MAELYS_DATALOG_LIMIT_MAX_DEPTH, limits.max_depth},
-        {MAELYS_DATALOG_LIMIT_MAX_EDB_FACTS, limits.max_edb_facts},
-        {MAELYS_DATALOG_LIMIT_MAX_IDB_FACTS, limits.max_idb_facts},
-        {MAELYS_DATALOG_LIMIT_MAX_FACTS_PER_PRED, limits.max_facts_per_pred},
+        {MAELYS_DATALOG_LIMIT_MAX_SYMBOLS, MAELYS_DATALOG_MAX_SYMBOLS},
+        {MAELYS_DATALOG_LIMIT_STRING_POOL_BYTES, MAELYS_DATALOG_STRING_POOL_BYTES},
+        {MAELYS_DATALOG_LIMIT_MAX_PREDICATES, MAELYS_DATALOG_MAX_PREDICATES},
+        {MAELYS_DATALOG_LIMIT_MAX_RULES, MAELYS_DATALOG_MAX_RULES},
+        {MAELYS_DATALOG_LIMIT_MAX_ARITY, MAELYS_DATALOG_MAX_ARITY},
+        {MAELYS_DATALOG_LIMIT_MAX_BODY_LITERALS, MAELYS_DATALOG_MAX_BODY_LITERALS},
+        {MAELYS_DATALOG_LIMIT_MAX_DEPTH, MAELYS_DATALOG_MAX_DEPTH},
+        {MAELYS_DATALOG_LIMIT_MAX_EDB_FACTS, MAELYS_DATALOG_MAX_EDB_FACTS},
+        {MAELYS_DATALOG_LIMIT_MAX_IDB_FACTS, MAELYS_DATALOG_MAX_IDB_FACTS},
+        {MAELYS_DATALOG_LIMIT_MAX_FACTS_PER_PRED, MAELYS_DATALOG_MAX_FACTS_PER_PRED},
         {MAELYS_DATALOG_LIMIT_MAX_STRING_BYTES, MAELYS_DATALOG_MAX_STRING_BYTES},
     };
     for (size_t i = 0u; i < sizeof(public_limits) / sizeof(public_limits[0]); ++i) {
@@ -29,34 +27,30 @@ static int test_build_limits_match_compile_time_macros(void) {
         TEST_ASSERT_EQUAL(public_limits[i].expected, actual, "%zu");
     }
 
-    TEST_ASSERT_EQUAL((size_t)MAELYS_DATALOG_MAX_SYMBOLS, limits.max_symbols, "%zu");
-    TEST_ASSERT_EQUAL((size_t)MAELYS_DATALOG_STRING_POOL_BYTES, limits.string_pool_bytes, "%zu");
-    TEST_ASSERT_EQUAL((size_t)MAELYS_DATALOG_MAX_PREDICATES, limits.max_predicates, "%zu");
-    TEST_ASSERT_EQUAL((size_t)MAELYS_DATALOG_MAX_RULES, limits.max_rules, "%zu");
-    TEST_ASSERT_EQUAL((size_t)MAELYS_DATALOG_MAX_ARITY, limits.max_arity, "%zu");
-    TEST_ASSERT_EQUAL((size_t)MAELYS_DATALOG_MAX_BODY_LITERALS, limits.max_body_literals, "%zu");
-    TEST_ASSERT_EQUAL((size_t)MAELYS_DATALOG_MAX_DEPTH, limits.max_depth, "%zu");
-    TEST_ASSERT_EQUAL((size_t)MAELYS_DATALOG_MAX_EDB_FACTS, limits.max_edb_facts, "%zu");
-    TEST_ASSERT_EQUAL((size_t)MAELYS_DATALOG_MAX_IDB_FACTS, limits.max_idb_facts, "%zu");
-    TEST_ASSERT_EQUAL((size_t)MAELYS_DATALOG_MAX_FACTS_PER_PRED,
-                      limits.max_facts_per_pred,
-                      "%zu");
+    size_t untouched = 73u;
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_UNSUPPORTED,
+        maelys_datalog_limit_get((maelys_datalog_limit_t)0, &untouched), "%d");
+    TEST_ASSERT_EQUAL((size_t)73u, untouched, "%zu");
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_INVALID_ARGUMENT,
+        maelys_datalog_limit_get(MAELYS_DATALOG_LIMIT_MAX_SYMBOLS, NULL), "%d");
     TEST_END();
 }
 
 static int test_profile_specific_limits_match_active_profile(void) {
     TEST_BEGIN();
-    maelys_datalog_build_limits_t limits;
-    maelys_datalog_get_build_limits(&limits);
 
+    size_t edb = 0u, idb = 0u, per_pred = 0u;
+    TEST_ASSERT_EQUAL(0, maelys_datalog_limit_get(MAELYS_DATALOG_LIMIT_MAX_EDB_FACTS, &edb), "%d");
+    TEST_ASSERT_EQUAL(0, maelys_datalog_limit_get(MAELYS_DATALOG_LIMIT_MAX_IDB_FACTS, &idb), "%d");
+    TEST_ASSERT_EQUAL(0, maelys_datalog_limit_get(MAELYS_DATALOG_LIMIT_MAX_FACTS_PER_PRED, &per_pred), "%d");
 #if defined(MAELYS_DATALOG_PROFILE_LARGE)
-    TEST_ASSERT_EQUAL((size_t)2048u, limits.max_edb_facts, "%zu");
-    TEST_ASSERT_EQUAL((size_t)2048u, limits.max_idb_facts, "%zu");
-    TEST_ASSERT_EQUAL((size_t)256u, limits.max_facts_per_pred, "%zu");
+    TEST_ASSERT_EQUAL((size_t)2048u, edb, "%zu");
+    TEST_ASSERT_EQUAL((size_t)2048u, idb, "%zu");
+    TEST_ASSERT_EQUAL((size_t)256u, per_pred, "%zu");
 #else
-    TEST_ASSERT_EQUAL((size_t)1024u, limits.max_edb_facts, "%zu");
-    TEST_ASSERT_EQUAL((size_t)1024u, limits.max_idb_facts, "%zu");
-    TEST_ASSERT_EQUAL((size_t)64u, limits.max_facts_per_pred, "%zu");
+    TEST_ASSERT_EQUAL((size_t)1024u, edb, "%zu");
+    TEST_ASSERT_EQUAL((size_t)1024u, idb, "%zu");
+    TEST_ASSERT_EQUAL((size_t)64u, per_pred, "%zu");
 #endif
     TEST_END();
 }

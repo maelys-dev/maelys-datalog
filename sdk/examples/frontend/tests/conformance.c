@@ -2,10 +2,10 @@
 #include "extension.h"
 #include "maelys_conformance.h"
 int main(void) {
-    const maelys_datalog_public_predicate_t predicates[] = {
+    const maelys_datalog_predicate_t predicates[] = {
         {"seed", 1, MAELYS_DATALOG_PREDICATE_EDB},
         {"allow", 1, MAELYS_DATALOG_PREDICATE_IDB | MAELYS_DATALOG_PREDICATE_QUERY}};
-    const maelys_datalog_public_domain_t domain = {"frontend_example", predicates, 2, NULL, 0};
+    const maelys_datalog_domain_t domain = {"frontend_example", predicates, 2, NULL, 0};
     MC_OK(maelys_datalog_domain_register(&domain));
     maelys_datalog_extension_t e = example_frontend_extension();
     MC_REQUIRE(

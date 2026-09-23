@@ -10,7 +10,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-static int add_predicate(maelys_datalog_ruleset_t *ruleset,
+static int add_predicate(maelys_datalog_internal_ruleset_t *ruleset,
                          const char *name,
                          uint8_t arity,
                          uint8_t kind) {
@@ -18,7 +18,7 @@ static int add_predicate(maelys_datalog_ruleset_t *ruleset,
         &ruleset->registry, name, arity, kind);
 }
 
-static int init_ruleset(maelys_datalog_ruleset_t *ruleset) {
+static int init_ruleset(maelys_datalog_internal_ruleset_t *ruleset) {
     memset(ruleset, 0, sizeof(*ruleset));
     int rc = maelys_datalog_ruleset_init(
         ruleset, "v2.conformance", "v2", MAELYS_DATALOG_SHA256_UNSET, 1);
@@ -54,8 +54,8 @@ static int init_ruleset(maelys_datalog_ruleset_t *ruleset) {
     return maelys_datalog_predicate_registry_freeze(&ruleset->registry);
 }
 
-static int parse_source(const char *source, maelys_datalog_diagnostic_t *diag) {
-    maelys_datalog_ruleset_t ruleset;
+static int parse_source(const char *source, maelys_datalog_internal_diagnostic_t *diag) {
+    maelys_datalog_internal_ruleset_t ruleset;
     int rc = init_ruleset(&ruleset);
     if (rc == MAELYS_OK) {
         rc = maelys_datalog_parse_ruleset_ex(
@@ -74,7 +74,7 @@ static int test_v2_profile_and_source_contract(void) {
         "path(X, Y) :- edge(X, Y) or owns(X, Y).\n"
         "path(X, Y) :- edge(X, Y), edge(X, _).\n"
         "allow(X) :- score(X, S), S * 2 + 1 >= 7.\n";
-    maelys_datalog_diagnostic_t diag = {0};
+    maelys_datalog_internal_diagnostic_t diag = {0};
     TEST_ASSERT_EQUAL(MAELYS_OK, parse_source(source, &diag), "%d");
 
     TEST_ASSERT_TRUE(parse_source("allow(_) :- user(_).\n", &diag) != MAELYS_OK);
@@ -86,7 +86,7 @@ static int test_v2_profile_and_source_contract(void) {
 
 static int test_contextual_or_and_atomic_rejection(void) {
     TEST_BEGIN();
-    maelys_datalog_ruleset_t ruleset;
+    maelys_datalog_internal_ruleset_t ruleset;
     TEST_ASSERT_EQUAL(MAELYS_OK, init_ruleset(&ruleset), "%d");
     const char valid[] = "path(X,Y) :- edge(X,Y) or or(X,Y).\n";
     TEST_ASSERT_EQUAL(MAELYS_OK,
@@ -105,8 +105,8 @@ static int test_contextual_or_and_atomic_rejection(void) {
 static int test_v2_canonical_hash_stability(void) {
     TEST_BEGIN();
     const char source[] = "allow(X) :- user(X), not(blocked(X)).\n";
-    maelys_datalog_ruleset_t first;
-    maelys_datalog_ruleset_t second;
+    maelys_datalog_internal_ruleset_t first;
+    maelys_datalog_internal_ruleset_t second;
     TEST_ASSERT_EQUAL(MAELYS_OK, init_ruleset(&first), "%d");
     TEST_ASSERT_EQUAL(MAELYS_OK, init_ruleset(&second), "%d");
     TEST_ASSERT_EQUAL(MAELYS_OK,
@@ -127,7 +127,7 @@ static int test_v2_canonical_hash_stability(void) {
 
 static int test_v2_ground_filter_literals(void) {
     TEST_BEGIN();
-    maelys_datalog_diagnostic_t diag = {0};
+    maelys_datalog_internal_diagnostic_t diag = {0};
     TEST_ASSERT_EQUAL(
         MAELYS_OK,
         parse_source(
@@ -152,7 +152,7 @@ static int test_v2_ground_filter_literals(void) {
 
 static int test_v2_why_true_envelope_states(void) {
     TEST_BEGIN();
-    maelys_datalog_ruleset_t ruleset;
+    maelys_datalog_internal_ruleset_t ruleset;
     TEST_ASSERT_EQUAL(MAELYS_OK, init_ruleset(&ruleset), "%d");
     maelys_datalog_explanation_t *explanation = calloc(1u, sizeof(*explanation));
     TEST_ASSERT_NOT_NULL(explanation);
@@ -183,7 +183,7 @@ static int test_v2_why_true_envelope_states(void) {
 
 static int test_v2_why_false_envelope_states(void) {
     TEST_BEGIN();
-    maelys_datalog_ruleset_t ruleset;
+    maelys_datalog_internal_ruleset_t ruleset;
     TEST_ASSERT_EQUAL(MAELYS_OK, init_ruleset(&ruleset), "%d");
     maelys_datalog_why_false_explanation_t *explanation = calloc(1u, sizeof(*explanation));
     TEST_ASSERT_NOT_NULL(explanation);
@@ -234,7 +234,7 @@ static int test_v2_why_false_envelope_states(void) {
 
 static int test_v2_shared_explanation_envelope(void) {
     TEST_BEGIN();
-    maelys_datalog_ruleset_t ruleset;
+    maelys_datalog_internal_ruleset_t ruleset;
     TEST_ASSERT_EQUAL(MAELYS_OK, init_ruleset(&ruleset), "%d");
     maelys_datalog_explanation_t *why_true = calloc(1u, sizeof(*why_true));
     maelys_datalog_why_false_explanation_t *why_false = calloc(1u, sizeof(*why_false));

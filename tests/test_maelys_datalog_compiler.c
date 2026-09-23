@@ -15,14 +15,14 @@
 extern const maelys_datalog_frontend_t *example_arrow_frontend(void);
 extern const maelys_datalog_backend_t *example_naive_backend(void);
 
-static maelys_datalog_public_value_t symbol(const char *s) {
-    maelys_datalog_public_value_t v = {0};
+static maelys_datalog_value_t symbol(const char *s) {
+    maelys_datalog_value_t v = {0};
     v.kind = MAELYS_DATALOG_VALUE_SYMBOL;
     v.as.symbol = s;
     return v;
 }
-static maelys_datalog_public_fact_t fact(const char *p, const char *value) {
-    maelys_datalog_public_fact_t f = {0};
+static maelys_datalog_fact_t fact(const char *p, const char *value) {
+    maelys_datalog_fact_t f = {0};
     f.predicate = p;
     f.arity = 1u;
     f.terms[0] = symbol(value);
@@ -47,7 +47,7 @@ static maelys_datalog_status_t load(const char *source, const maelys_datalog_fro
                                                frontend, out, diag);
 }
 static int setup(void) {
-    const maelys_datalog_public_predicate_t predicates[] = {
+    const maelys_datalog_predicate_t predicates[] = {
         {"seed", 1, MAELYS_DATALOG_PREDICATE_EDB},
         {"extra", 1, MAELYS_DATALOG_PREDICATE_EDB},
         {"edge", 2, MAELYS_DATALOG_PREDICATE_EDB},
@@ -58,7 +58,7 @@ static int setup(void) {
         {"aux", 1, MAELYS_DATALOG_PREDICATE_IDB | MAELYS_DATALOG_PREDICATE_QUERY},
         {"helper", 1, MAELYS_DATALOG_PREDICATE_IDB}};
     const char *const atoms[] = {"alice", "bob", "carol"};
-    maelys_datalog_public_domain_t d = {"compiler", predicates,
+    maelys_datalog_domain_t d = {"compiler", predicates,
                                         sizeof(predicates) / sizeof(predicates[0]), atoms, 3};
     OK(maelys_datalog_domain_register(&d));
     d.name = "compiler_other";
@@ -99,17 +99,17 @@ static int frontend_and_backend_cross_product(void) {
             OK(maelys_datalog_program_info(program, &info));
             CHECK(info.required_capabilities == MAELYS_DATALOG_CAP_POSITIVE);
             for (size_t k = 0; k < info.predicate_count; ++k) {
-                maelys_datalog_public_predicate_t pred;
+                maelys_datalog_predicate_t pred;
                 OK(maelys_datalog_program_predicate(program, k, &pred));
                 CHECK(pred.name && pred.arity <= 4u);
             }
-            maelys_datalog_public_predicate_t sentinel = {"sentinel", 77u, 0};
+            maelys_datalog_predicate_t sentinel = {"sentinel", 77u, 0};
             CHECK(maelys_datalog_program_predicate(program, info.predicate_count, &sentinel) ==
                   MAELYS_DATALOG_STATUS_NOT_FOUND);
             CHECK(sentinel.arity == 77u);
             for (size_t repeat = 0; repeat < 2; ++repeat) {
                 char input_text[] = "alice";
-                maelys_datalog_public_fact_t input = fact("seed", input_text);
+                maelys_datalog_fact_t input = fact("seed", input_text);
                 maelys_datalog_result_t *result = NULL;
                 OK(maelys_datalog_session_solve(sessions[j], &input, 1u, &result, NULL));
                 memset(input_text, 'x', 5u); /* result doesn't borrow source/EDB */
@@ -120,10 +120,10 @@ static int frontend_and_backend_cross_product(void) {
                       MAELYS_DATALOG_STATUS_INVALID_STATE);
                 CHECK(blocked_result == NULL);
                 int present = -1;
-                maelys_datalog_public_value_t value = symbol("alice");
+                maelys_datalog_value_t value = symbol("alice");
                 OK(maelys_datalog_result_query(result, "allow", &value, 1u, &present));
                 CHECK(present == 1);
-                maelys_datalog_public_fact_view_t f;
+                maelys_datalog_fact_view_t f;
                 size_t count = 0;
                 OK(maelys_datalog_result_enumerate(result, "allow", 1u, &f, 1u, &count));
                 CHECK(count == 1);
@@ -317,7 +317,7 @@ static int capabilities_and_identity(void) {
     o = options(example_naive_backend());
     o.work_limit = 1;
     OK(maelys_datalog_session_create_ex(p, 0, &o, &s));
-    maelys_datalog_public_fact_t input = fact("seed", "alice");
+    maelys_datalog_fact_t input = fact("seed", "alice");
     maelys_datalog_result_t *result = NULL;
     CHECK(maelys_datalog_session_solve(s, &input, 1, &result, NULL) ==
           MAELYS_DATALOG_STATUS_PAYLOAD_TOO_LARGE);
@@ -340,14 +340,14 @@ static int graph_differential(void) {
     const char *nodes[] = {"n0", "n1", "n2", "n3", "n4", "n5"};
     for (size_t trial = 0; trial < 20; ++trial) {
         int reachable[6][6] = {{0}};
-        maelys_datalog_public_fact_t inputs[40];
+        maelys_datalog_fact_t inputs[40];
         size_t count = 0;
         inputs[count++] = fact("seed", "n0");
         for (size_t a = 0; a < 6; ++a)
             for (size_t b = 0; b < 6; ++b) {
                 random = random * 1664525u + 1013904223u;
                 if (trial == 0 || (random >> 29u) < 3u) {
-                    maelys_datalog_public_fact_t f = fact("edge", nodes[a]);
+                    maelys_datalog_fact_t f = fact("edge", nodes[a]);
                     f.arity = 2;
                     f.terms[1] = symbol(nodes[b]);
                     inputs[count++] = f;
@@ -358,12 +358,12 @@ static int graph_differential(void) {
             for (size_t a = 0; a < 6; ++a)
                 for (size_t b = 0; b < 6; ++b)
                     reachable[a][b] |= reachable[a][k] && reachable[k][b];
-        maelys_datalog_public_fact_view_t views[2][36];
+        maelys_datalog_fact_view_t views[2][36];
         size_t totals[2];
         for (size_t backend = 0; backend < 2; ++backend) {
             if (backend)
                 for (size_t i = 0; i < count / 2; ++i) {
-                    maelys_datalog_public_fact_t tmp = inputs[i];
+                    maelys_datalog_fact_t tmp = inputs[i];
                     inputs[i] = inputs[count - 1 - i];
                     inputs[count - 1 - i] = tmp;
                 }
@@ -374,7 +374,7 @@ static int graph_differential(void) {
                                                &totals[backend]));
             for (size_t a = 0; a < 6; ++a)
                 for (size_t b = 0; b < 6; ++b) {
-                    maelys_datalog_public_value_t query[] = {symbol(nodes[a]), symbol(nodes[b])};
+                    maelys_datalog_value_t query[] = {symbol(nodes[a]), symbol(nodes[b])};
                     int present;
                     OK(maelys_datalog_result_query(result, "reach", query, 2, &present));
                     CHECK(present == reachable[a][b]);
@@ -491,7 +491,7 @@ static int ir_roundtrip(void) {
         OK(maelys_datalog_policy_free(p));
         OK(maelys_datalog_session_free(original));
         roundtrip_program = NULL;
-        maelys_datalog_public_fact_t inputs[] = {fact("seed", "alice"), fact("seed", "alice"),
+        maelys_datalog_fact_t inputs[] = {fact("seed", "alice"), fact("seed", "alice"),
                                                  fact("seed", "alice")};
         inputs[1].terms[0].kind = MAELYS_DATALOG_VALUE_INTEGER;
         inputs[1].terms[0].as.integer = 7;
@@ -503,7 +503,7 @@ static int ir_roundtrip(void) {
         OK(maelys_datalog_result_enumerate(result, "allow", 1, NULL, 0, &count));
         CHECK(count == (i ? 1u : 3u));
         int present;
-        maelys_datalog_public_value_t value = symbol("alice");
+        maelys_datalog_value_t value = symbol("alice");
         OK(maelys_datalog_result_query(result, "base", &value, 1, &present));
         CHECK(present);
         OK(maelys_datalog_result_free(result));
@@ -531,7 +531,7 @@ static void fake_destroy_result(void *state, void *result) {
     ++result_destroys;
     free(result);
 }
-static maelys_datalog_status_t bad_emit(void *state, const maelys_datalog_public_fact_t *facts,
+static maelys_datalog_status_t bad_emit(void *state, const maelys_datalog_fact_t *facts,
                                         size_t count, maelys_datalog_backend_output_t *out,
                                         void **result, maelys_datalog_public_diagnostic_t *diag) {
     (void)state;
@@ -539,12 +539,12 @@ static maelys_datalog_status_t bad_emit(void *state, const maelys_datalog_public
     (void)count;
     (void)diag;
     *result = malloc(1);
-    maelys_datalog_public_fact_t f = fact("seed", "alice");
+    maelys_datalog_fact_t f = fact("seed", "alice");
     (void)maelys_datalog_backend_emit(out, &f); /* forbidden base predicate */
     return MAELYS_DATALOG_STATUS_OK;
 }
 static maelys_datalog_status_t ignored_budget(void *state,
-                                              const maelys_datalog_public_fact_t *facts,
+                                              const maelys_datalog_fact_t *facts,
                                               size_t count, maelys_datalog_backend_output_t *out,
                                               void **result,
                                               maelys_datalog_public_diagnostic_t *diag) {
@@ -557,7 +557,7 @@ static maelys_datalog_status_t ignored_budget(void *state,
     return MAELYS_DATALOG_STATUS_OK;
 }
 static maelys_datalog_status_t partial_failure(void *state,
-                                               const maelys_datalog_public_fact_t *facts,
+                                               const maelys_datalog_fact_t *facts,
                                                size_t count, maelys_datalog_backend_output_t *out,
                                                void **result,
                                                maelys_datalog_public_diagnostic_t *diag) {
@@ -566,11 +566,11 @@ static maelys_datalog_status_t partial_failure(void *state,
     (void)count;
     (void)diag;
     *result = malloc(1);
-    maelys_datalog_public_fact_t f = fact("allow", "alice");
+    maelys_datalog_fact_t f = fact("allow", "alice");
     (void)maelys_datalog_backend_emit(out, &f);
     return (maelys_datalog_status_t)1234;
 }
-static maelys_datalog_status_t forged_symbol(void *state, const maelys_datalog_public_fact_t *facts,
+static maelys_datalog_status_t forged_symbol(void *state, const maelys_datalog_fact_t *facts,
                                              size_t count, maelys_datalog_backend_output_t *out,
                                              void **result,
                                              maelys_datalog_public_diagnostic_t *diag) {
@@ -579,7 +579,7 @@ static maelys_datalog_status_t forged_symbol(void *state, const maelys_datalog_p
     (void)count;
     (void)diag;
     (void)result;
-    maelys_datalog_public_fact_t f = fact("allow", "unavailable");
+    maelys_datalog_fact_t f = fact("allow", "unavailable");
     (void)maelys_datalog_backend_emit(out, &f);
     return MAELYS_DATALOG_STATUS_OK;
 }
@@ -604,7 +604,7 @@ static maelys_datalog_status_t filter_prepare(const maelys_datalog_program_t *p,
     *out = r;
     return r ? maelys_datalog_program_rule(p, 0, r) : MAELYS_DATALOG_STATUS_INTERNAL;
 }
-static maelys_datalog_status_t filter_solve(void *state, const maelys_datalog_public_fact_t *facts,
+static maelys_datalog_status_t filter_solve(void *state, const maelys_datalog_fact_t *facts,
                                             size_t count, maelys_datalog_backend_output_t *out,
                                             void **result,
                                             maelys_datalog_public_diagnostic_t *diag) {
@@ -623,7 +623,7 @@ static maelys_datalog_status_t filter_solve(void *state, const maelys_datalog_pu
         if (rc)
             return MAELYS_DATALOG_STATUS_OK; /* Host must remember the error. */
         if (matched) {
-            maelys_datalog_public_fact_t derived = facts[i];
+            maelys_datalog_fact_t derived = facts[i];
             derived.predicate = r->head.predicate;
             rc = maelys_datalog_backend_emit(out, &derived);
             if (rc)
@@ -646,7 +646,7 @@ static int shared_filter_service(void) {
     maelys_datalog_session_t *s;
     OK(maelys_datalog_session_create_ex(p, 0, &o, &s));
     OK(maelys_datalog_policy_free(p));
-    maelys_datalog_public_fact_t inputs[] = {fact("seed", "alice"), fact("seed", "bob")};
+    maelys_datalog_fact_t inputs[] = {fact("seed", "alice"), fact("seed", "bob")};
     const maelys_datalog_status_t expected[] = {MAELYS_DATALOG_STATUS_OK,
                                                 MAELYS_DATALOG_STATUS_UNSUPPORTED,
                                                 MAELYS_DATALOG_STATUS_INVALID_FIELD};
@@ -674,7 +674,7 @@ static int backend_failures_are_atomic(void) {
     size_t before = destroys;
     CHECK(maelys_datalog_session_create_ex(p, 0, &o, &s) == MAELYS_DATALOG_STATUS_UNSUPPORTED);
     CHECK(s == NULL && destroys == before + 1);
-    maelys_datalog_status_t (*callbacks[])(void *, const maelys_datalog_public_fact_t *, size_t,
+    maelys_datalog_status_t (*callbacks[])(void *, const maelys_datalog_fact_t *, size_t,
                                            maelys_datalog_backend_output_t *, void **,
                                            maelys_datalog_public_diagnostic_t *) = {
         bad_emit, ignored_budget, partial_failure, forged_symbol};
@@ -688,7 +688,7 @@ static int backend_failures_are_atomic(void) {
         before = result_destroys;
         for (size_t n = 0; n < 2; ++n) {
             maelys_datalog_result_t *result = (void *)(uintptr_t)1;
-            maelys_datalog_public_fact_t input = fact("seed", "alice");
+            maelys_datalog_fact_t input = fact("seed", "alice");
             CHECK(maelys_datalog_session_solve(s, &input, 1u, &result, NULL) == expected[i]);
             CHECK(result == NULL);
         }
@@ -727,7 +727,7 @@ static int descriptor_validation(void) {
 }
 static size_t reference_solve_calls;
 static maelys_datalog_status_t
-counted_reference_solve(void *state, const maelys_datalog_public_fact_t *facts, size_t count,
+counted_reference_solve(void *state, const maelys_datalog_fact_t *facts, size_t count,
                         maelys_datalog_backend_output_t *output, void **result,
                         maelys_datalog_public_diagnostic_t *diag) {
     ++reference_solve_calls;
@@ -743,12 +743,12 @@ static int why_false_backend_contract(void) {
     o.required_capabilities = MAELYS_DATALOG_CAP_EXPLAIN_FALSE;
     maelys_datalog_session_t *session;
     OK(maelys_datalog_session_create_ex(policy, 0, &o, &session));
-    maelys_datalog_public_fact_t inputs[] = {fact("seed", "alice"), fact("extra", "alice"),
+    maelys_datalog_fact_t inputs[] = {fact("seed", "alice"), fact("extra", "alice"),
                                              fact("seed", "bob")};
     maelys_datalog_result_t *result;
     reference_solve_calls = 0;
     OK(maelys_datalog_session_solve(session, inputs, 3, &result, NULL));
-    maelys_datalog_public_value_t alice = symbol("alice"), bob = symbol("bob");
+    maelys_datalog_value_t alice = symbol("alice"), bob = symbol("bob");
     char before[8192], after[8192], text[8192];
     size_t required = 0, again;
     OK(maelys_datalog_result_explain_true_text(result, "allow", &alice, 1, before, sizeof(before),
@@ -774,7 +774,7 @@ static int why_false_backend_contract(void) {
     OK(maelys_datalog_result_explain_true_text(result, "allow", &alice, 1, after, sizeof(after),
                                                &again));
     CHECK(!strcmp(before, after) && reference_solve_calls == 1);
-    maelys_datalog_public_value_t unknown = symbol("unknown");
+    maelys_datalog_value_t unknown = symbol("unknown");
     again = 123;
     text[0] = 'X';
     CHECK(maelys_datalog_result_explain_false_text(result, "allow", &unknown, 1, text, sizeof(text),
@@ -831,7 +831,7 @@ static int why_false_obstacles_and_truncation(void) {
         maelys_datalog_session_t *session;
         OK(maelys_datalog_session_create_ex(policy, 0, &o, &session));
         OK(maelys_datalog_policy_free(policy));
-        maelys_datalog_public_fact_t inputs[] = {fact("seed", "alice"), fact("blocked", "alice")};
+        maelys_datalog_fact_t inputs[] = {fact("seed", "alice"), fact("blocked", "alice")};
         if (!i) {
             inputs[0].terms[0].kind = MAELYS_DATALOG_VALUE_INTEGER;
             inputs[0].terms[0].as.integer = 7;

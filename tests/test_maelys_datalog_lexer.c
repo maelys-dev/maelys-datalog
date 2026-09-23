@@ -71,7 +71,7 @@ static int test_lexer_token_not_exact_keyword(void) {
 
 static int test_lexer_diag_unsupported_matches(void) {
     TEST_BEGIN();
-    maelys_datalog_diagnostic_t diag;
+    maelys_datalog_internal_diagnostic_t diag;
     const char *src = "a(X) :- X MATCHES \"x\".";
     TEST_ASSERT_EQUAL(MAELYS_ERR_UNSUPPORTED,
                       maelys_datalog_lexer_validate_ex(src, strlen(src), "test.dl", &diag),
@@ -84,7 +84,7 @@ static int test_lexer_diag_unsupported_matches(void) {
 static int test_lexer_diag_invalid_utf8(void) {
     TEST_BEGIN();
     const char invalid_utf8[] = { 'p', '(', '"', (char)0xff, '"', ')', '.', '\0' };
-    maelys_datalog_diagnostic_t diag;
+    maelys_datalog_internal_diagnostic_t diag;
     TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_FIELD,
                       maelys_datalog_lexer_validate_ex(invalid_utf8, 7, "test.dl", &diag),
                       "%d");
@@ -100,7 +100,7 @@ static int test_lexer_diag_string_too_long(void) {
     text[0] = '"';
     text[1026] = '"';
     text[1027] = '\0';
-    maelys_datalog_diagnostic_t diag;
+    maelys_datalog_internal_diagnostic_t diag;
     TEST_ASSERT_EQUAL(MAELYS_ERR_PAYLOAD_TOO_LARGE,
                       maelys_datalog_lexer_validate_ex(text, 1027, "test.dl", &diag),
                       "%d");
@@ -171,7 +171,7 @@ static int test_datalog_lexer_comment_underscore_ignored(void) {
 
 static int test_datalog_lexer_leading_underscore_identifier_not_split(void) {
     TEST_BEGIN();
-    maelys_datalog_diagnostic_t diag;
+    maelys_datalog_internal_diagnostic_t diag;
     TEST_ASSERT_EQUAL(MAELYS_ERR_UNSUPPORTED,
                       maelys_datalog_lexer_validate_ex("_foo", 4, "test.dl", &diag),
                       "%d");

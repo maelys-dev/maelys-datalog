@@ -32,7 +32,7 @@ void *maelys_test_memset(void *p, int c, size_t n) { return memset(p, c, n); }
 
 static maelys_datalog_status_t counted_prepare(void *s, void *r,
     maelys_datalog_explanation_kind_t kind, const char *name,
-    const maelys_datalog_public_value_t *terms, size_t arity,
+    const maelys_datalog_value_t *terms, size_t arity,
     void *storage, size_t bytes, size_t *length) {
     ++prepares;
     if (fail_prepare) return MAELYS_DATALOG_STATUS_INTERNAL;
@@ -44,8 +44,8 @@ static maelys_datalog_status_t checked_write(void *s, void *r,
     if (fail_write) return MAELYS_DATALOG_STATUS_IO;
     return maelys_datalog_backend_reference()->explanation_write_text(s, r, kind, storage, text, bytes);
 }
-static maelys_datalog_public_value_t symbol(const char *text) {
-    maelys_datalog_public_value_t term = MAELYS_DATALOG_SYMBOL(text);
+static maelys_datalog_value_t symbol(const char *text) {
+    maelys_datalog_value_t term = MAELYS_DATALOG_SYMBOL(text);
     return term;
 }
 static maelys_datalog_session_t *configured(maelys_datalog_policy_t *policy, unsigned kinds) {
@@ -163,9 +163,9 @@ static void cache_contract(maelys_datalog_policy_t *policy, maelys_datalog_input
     char text[8192];
     size_t length = 0;
     for (unsigned i = 0; i < 40; ++i) {
-        maelys_datalog_public_value_t term = symbol(i % 2 ? "bob" : "alice");
+        maelys_datalog_value_t term = symbol(i % 2 ? "bob" : "alice");
         maelys_datalog_status_t (*explain)(const maelys_datalog_result_t *, const char *,
-            const maelys_datalog_public_value_t *, size_t, char *, size_t, size_t *) = i % 2
+            const maelys_datalog_value_t *, size_t, char *, size_t, size_t *) = i % 2
             ? maelys_datalog_result_explain_false_text : maelys_datalog_result_explain_true_text;
         OK(explain(r, "allow", &term, 1, NULL, 0, &length));
         assert(prepares == p0 + i + 1);
@@ -180,7 +180,7 @@ static void cache_contract(maelys_datalog_policy_t *policy, maelys_datalog_input
         assert(strstr(text, i % 2 ? "document=why-false" : "document=why-true"));
     }
     assert(allocations == a0 && deallocations == f0);
-    maelys_datalog_public_value_t term = symbol("alice");
+    maelys_datalog_value_t term = symbol("alice");
     OK(maelys_datalog_result_explain_true_text(r, "allow", &term, 1, NULL, 0, &length));
     p0 = prepares;
     char same_value[] = "alice", same_name[] = "allow";
@@ -199,7 +199,7 @@ static void cache_contract(maelys_datalog_policy_t *policy, maelys_datalog_input
     assert(maelys_datalog_result_explain_false_text(r, "allow", &term, 2,
         text, sizeof(text), &length) != MAELYS_DATALOG_STATUS_OK);
     assert(prepares == p0);
-    maelys_datalog_public_value_t unknown = symbol("unknown");
+    maelys_datalog_value_t unknown = symbol("unknown");
     assert(maelys_datalog_result_explain_false_text(r, "allow", &unknown, 1,
         text, sizeof(text), &length) == MAELYS_DATALOG_STATUS_NOT_FOUND);
     assert(prepares == p0);
@@ -233,10 +233,10 @@ static void cache_contract(maelys_datalog_policy_t *policy, maelys_datalog_input
     OK(maelys_datalog_result_explain_true_text(r, "allow", &term, 1, NULL, 0, &length));
     assert(prepares == p0 + 1); /* The reused result address is not an identity. */
     /* Distinct value kinds must not share a cache entry. */
-    term = (maelys_datalog_public_value_t){.kind = MAELYS_DATALOG_VALUE_INTEGER, .as.integer = 1};
+    term = (maelys_datalog_value_t){.kind = MAELYS_DATALOG_VALUE_INTEGER, .as.integer = 1};
     OK(maelys_datalog_result_explain_true_text(r, "allow", &term, 1, text, sizeof(text), &length));
     p0 = prepares;
-    term = (maelys_datalog_public_value_t){.kind = MAELYS_DATALOG_VALUE_BOOLEAN, .as.boolean = 1};
+    term = (maelys_datalog_value_t){.kind = MAELYS_DATALOG_VALUE_BOOLEAN, .as.boolean = 1};
     OK(maelys_datalog_result_explain_true_text(r, "allow", &term, 1, text, sizeof(text), &length));
     assert(prepares == p0 + 1);
     OK(maelys_datalog_result_explain_true_text(r, "copy", &term, 1, text, sizeof(text), &length));
@@ -252,7 +252,7 @@ static void distinct_requests(maelys_datalog_policy_t *policy) {
     maelys_datalog_session_t *s = configured(policy, BOTH);
     maelys_datalog_input_edb_t *edb;
     OK(maelys_datalog_input_edb_create(&edb));
-    maelys_datalog_public_value_t alice = symbol("alice");
+    maelys_datalog_value_t alice = symbol("alice");
     char first[8192], text[8192];
     size_t length, a0 = allocations, f0 = deallocations, p0 = prepares;
     forbidden = 1;
@@ -283,7 +283,7 @@ static void leases_and_fallback(maelys_datalog_policy_t *policy, maelys_datalog_
     size_t bytes, alignment, required;
     OK(maelys_datalog_result_explanation_storage_requirements(r, MAELYS_DATALOG_EXPLAIN_TRUE, &bytes, &alignment));
     void *storage = malloc(bytes); assert(storage);
-    maelys_datalog_public_value_t term = symbol("alice");
+    maelys_datalog_value_t term = symbol("alice");
     maelys_datalog_prepared_explanation_t *external;
     size_t a0 = allocations, f0 = deallocations;
     forbidden = 1;
@@ -312,11 +312,11 @@ static void leases_and_fallback(maelys_datalog_policy_t *policy, maelys_datalog_
 }
 
 int main(void) {
-    const maelys_datalog_public_predicate_t predicates[] = {
+    const maelys_datalog_predicate_t predicates[] = {
         MAELYS_DATALOG_EDB("seed", 1), MAELYS_DATALOG_EDB("blocked", 1),
         MAELYS_DATALOG_IDB_QUERY("allow", 1), MAELYS_DATALOG_IDB_QUERY("copy", 1),
     };
-    const maelys_datalog_public_domain_t domain = {"session_explanations", predicates, 4, NULL, 0};
+    const maelys_datalog_domain_t domain = {"session_explanations", predicates, 4, NULL, 0};
     OK(maelys_datalog_domain_register(&domain));
     const char *source = "allow(X) :- seed(X), not(blocked(X)). copy(X) :- allow(X).";
     maelys_datalog_policy_t *policy;

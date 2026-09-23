@@ -2,6 +2,9 @@
 #ifndef MAELYS_DATALOG_PUBLIC_H
 #define MAELYS_DATALOG_PUBLIC_H
 
+/* Shared application data declarations; not the backend callback ABI. */
+#define MAELYS_DATALOG_APPLICATION_TYPES_VERSION 1u
+
 #include <stddef.h>
 #include <stdint.h>
 
@@ -146,18 +149,18 @@ typedef struct {
     const char *name;
     size_t arity;
     unsigned flags;
-} maelys_datalog_public_predicate_t;
+} maelys_datalog_predicate_t;
 
 /* Stable declarative vocabulary, copied by domain_register. Predicates and
  * policy-source atoms are explicit; internal registry callbacks and metadata
  * are not part of this consumer contract. This is not a low-level struct alias. */
 typedef struct {
     const char *name;
-    const maelys_datalog_public_predicate_t *predicates;
+    const maelys_datalog_predicate_t *predicates;
     size_t predicate_count;
     const char *const *atoms;
     size_t atom_count;
-} maelys_datalog_public_domain_t;
+} maelys_datalog_domain_t;
 
 typedef struct {
     maelys_datalog_value_kind_t kind;
@@ -166,13 +169,13 @@ typedef struct {
         int64_t integer;
         int boolean;
     } as;
-} maelys_datalog_public_value_t;
+} maelys_datalog_value_t;
 
 typedef struct {
     const char *predicate;
     size_t arity;
-    maelys_datalog_public_value_t terms[MAELYS_DATALOG_PUBLIC_MAX_TERMS];
-} maelys_datalog_public_fact_t;
+    maelys_datalog_value_t terms[MAELYS_DATALOG_PUBLIC_MAX_TERMS];
+} maelys_datalog_fact_t;
 
 typedef struct {
     maelys_datalog_value_kind_t kind;
@@ -181,12 +184,12 @@ typedef struct {
         int64_t integer;
         int boolean;
     } as;
-} maelys_datalog_public_term_view_t;
+} maelys_datalog_term_view_t;
 
 typedef struct {
     size_t arity;
-    maelys_datalog_public_term_view_t terms[MAELYS_DATALOG_PUBLIC_MAX_TERMS];
-} maelys_datalog_public_fact_view_t;
+    maelys_datalog_term_view_t terms[MAELYS_DATALOG_PUBLIC_MAX_TERMS];
+} maelys_datalog_fact_view_t;
 
 typedef struct maelys_datalog_policy maelys_datalog_policy_t;
 typedef struct maelys_datalog_session maelys_datalog_session_t;
@@ -229,7 +232,7 @@ MAELYS_DATALOG_API void maelys_datalog_public_diagnostic_clear(
  * predicate; writing blocked("mallory"). also requires POLICY_FACT origin.
  * Standard filter pattern parameters have their own validation. */
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_domain_register(
-    const maelys_datalog_public_domain_t *domain);
+    const maelys_datalog_domain_t *domain);
 
 /* The Datalog inline path checks domain constants with no permission override.
  * It takes no flags and reads no manifest test_only metadata. This signature
@@ -349,7 +352,7 @@ MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_session_execution_fing
  * backends/filter callbacks and host libc internals are outside this guarantee. */
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_session_solve(
     maelys_datalog_session_t *session,
-    const maelys_datalog_public_fact_t *facts,
+    const maelys_datalog_fact_t *facts,
     size_t fact_count,
     maelys_datalog_result_t **out_result,
     maelys_datalog_public_diagnostic_t *out_diagnostic);
@@ -407,10 +410,10 @@ MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_input_edb_create(
     maelys_datalog_input_edb_t **out_edb);
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_input_edb_add_fact(
     maelys_datalog_input_edb_t *edb, const char *predicate,
-    const maelys_datalog_public_value_t *terms, size_t arity,
+    const maelys_datalog_value_t *terms, size_t arity,
     maelys_datalog_public_diagnostic_t *out_diagnostic);
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_input_edb_add_facts(
-    maelys_datalog_input_edb_t *edb, const maelys_datalog_public_fact_t *facts,
+    maelys_datalog_input_edb_t *edb, const maelys_datalog_fact_t *facts,
     size_t fact_count, maelys_datalog_public_diagnostic_t *out_diagnostic);
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_input_edb_count(
     const maelys_datalog_input_edb_t *edb, size_t *out_count);
@@ -427,7 +430,7 @@ MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_input_edb_text_usage(
  * No allocation. Errors leave both outputs unchanged. */
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_input_edb_view(
     const maelys_datalog_input_edb_t *edb,
-    const maelys_datalog_public_fact_t **out_facts, size_t *out_count);
+    const maelys_datalog_fact_t **out_facts, size_t *out_count);
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_input_edb_clear(
     maelys_datalog_input_edb_t *edb);
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_input_edb_free(
@@ -445,14 +448,14 @@ MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_session_free(
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_result_query(
     const maelys_datalog_result_t *result,
     const char *predicate,
-    const maelys_datalog_public_value_t *terms,
+    const maelys_datalog_value_t *terms,
     size_t arity,
     int *out_present);
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_result_enumerate(
     const maelys_datalog_result_t *result,
     const char *predicate,
     size_t arity,
-    maelys_datalog_public_fact_view_t *out_facts,
+    maelys_datalog_fact_view_t *out_facts,
     size_t out_capacity,
     size_t *out_count);
 /* Number of distinct derived IDB facts across ALL predicates, including those
@@ -487,7 +490,7 @@ MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_result_symbol_text(
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_result_explain_true_text(
     const maelys_datalog_result_t *result,
     const char *predicate,
-    const maelys_datalog_public_value_t *terms,
+    const maelys_datalog_value_t *terms,
     size_t arity,
     char *out_text,
     size_t out_capacity,
@@ -508,7 +511,7 @@ MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_result_explain_true_te
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_result_explain_false_text(
     const maelys_datalog_result_t *result,
     const char *predicate,
-    const maelys_datalog_public_value_t *terms,
+    const maelys_datalog_value_t *terms,
     size_t arity,
     char *out_text,
     size_t out_capacity,
@@ -560,7 +563,7 @@ MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_session_explanation_st
  */
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_result_explain_text_in(
     maelys_datalog_result_t *result, maelys_datalog_explanation_kind_t kind,
-    const char *predicate, const maelys_datalog_public_value_t *terms, size_t arity,
+    const char *predicate, const maelys_datalog_value_t *terms, size_t arity,
     void *storage, size_t storage_bytes, char *out_text, size_t capacity,
     size_t *out_required);
 
@@ -592,7 +595,7 @@ MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_result_explanation_sto
     size_t *out_bytes, size_t *out_alignment);
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_result_prepare_explanation(
     maelys_datalog_result_t *result, maelys_datalog_explanation_kind_t kind,
-    const char *predicate, const maelys_datalog_public_value_t *terms, size_t arity,
+    const char *predicate, const maelys_datalog_value_t *terms, size_t arity,
     void *storage, size_t storage_bytes, maelys_datalog_prepared_explanation_t **out);
 /* Cached size, excluding the terminating NUL; no formatting or proof traversal. */
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_prepared_explanation_text_size(

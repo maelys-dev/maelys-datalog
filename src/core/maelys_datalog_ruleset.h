@@ -37,7 +37,7 @@ typedef struct {
     int test_only;
     maelys_datalog_symbol_table_t symbols;
     maelys_datalog_predicate_registry_t registry;
-    maelys_datalog_fact_t facts[MAELYS_DATALOG_MAX_RULE_FACTS];
+    maelys_datalog_internal_fact_t facts[MAELYS_DATALOG_MAX_RULE_FACTS];
     size_t fact_count;
     maelys_datalog_rule_t rules[MAELYS_DATALOG_MAX_RULES];
     maelys_datalog_source_location_t rule_sources[MAELYS_DATALOG_MAX_RULES];
@@ -54,18 +54,18 @@ typedef struct {
     size_t filter_pattern_pool_used;
     /* Keep existing hot-field offsets when adding optional language state. */
     int aggregates_supported;
-} maelys_datalog_ruleset_t;
+} maelys_datalog_internal_ruleset_t;
 
-maelys_result_t maelys_datalog_ruleset_init(maelys_datalog_ruleset_t *ruleset,
+maelys_result_t maelys_datalog_ruleset_init(maelys_datalog_internal_ruleset_t *ruleset,
                                             const char *policy_id,
                                             const char *domain,
                                             const char *sha256,
                                             int test_only);
-void maelys_datalog_ruleset_clear(maelys_datalog_ruleset_t *ruleset);
-maelys_result_t maelys_datalog_ruleset_init_in(maelys_datalog_ruleset_t *, const char *,
+void maelys_datalog_ruleset_clear(maelys_datalog_internal_ruleset_t *ruleset);
+maelys_result_t maelys_datalog_ruleset_init_in(maelys_datalog_internal_ruleset_t *, const char *,
     const char *, const char *, int, struct maelys_datalog_context *);
-int maelys_datalog_ruleset_has_allow_all(const maelys_datalog_ruleset_t *ruleset);
-maelys_result_t maelys_datalog_ruleset_finalize_sha256(maelys_datalog_ruleset_t *ruleset);
+int maelys_datalog_ruleset_has_allow_all(const maelys_datalog_internal_ruleset_t *ruleset);
+maelys_result_t maelys_datalog_ruleset_finalize_sha256(maelys_datalog_internal_ruleset_t *ruleset);
 
 #ifdef __cplusplus
 }

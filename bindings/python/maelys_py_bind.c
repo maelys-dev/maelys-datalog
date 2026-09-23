@@ -22,33 +22,32 @@ _Static_assert(sizeof(((maelys_py_term_t *)0)->value) == sizeof(int64_t),
                "maelys_py_term_t.value must stay int64_t");
 _Static_assert(offsetof(maelys_py_term_t, kind) < offsetof(maelys_py_term_t, value),
                "maelys_py_term_t field order changed");
-_Static_assert(sizeof(((maelys_datalog_public_predicate_t *)0)->arity) == sizeof(size_t),
-               "maelys_datalog_public_predicate_t.arity must stay size_t");
+_Static_assert(sizeof(((maelys_datalog_predicate_t *)0)->arity) == sizeof(size_t),
+               "maelys_datalog_predicate_t.arity must stay size_t");
 
 struct maelys_py_engine {
-    maelys_datalog_build_limits_t limits;
-    maelys_datalog_diagnostic_t last_diag;
+    maelys_datalog_internal_diagnostic_t last_diag;
 };
 
 struct maelys_py_ruleset {
-    maelys_datalog_policy_set_t policy_set;
-    maelys_datalog_ruleset_t *ruleset;
+    maelys_datalog_internal_policy_set_t policy_set;
+    maelys_datalog_internal_ruleset_t *ruleset;
 };
 
 struct maelys_py_edb {
     maelys_py_ruleset_t *ruleset;
-    maelys_datalog_edb_t edb;
-    maelys_datalog_fact_t fact_pool[MAELYS_DATALOG_MAX_EDB_FACTS];
+    maelys_datalog_internal_edb_t edb;
+    maelys_datalog_internal_fact_t fact_pool[MAELYS_DATALOG_MAX_EDB_FACTS];
     int finalized;
 };
 
 struct maelys_py_result {
     maelys_py_ruleset_t *ruleset;
-    maelys_datalog_solve_result_t *result;
+    maelys_datalog_internal_solve_result_t *result;
 };
 
 static int py_predicates_equal(const maelys_datalog_domain_entry_t *domain,
-                               const maelys_datalog_public_predicate_t *predicates,
+                               const maelys_datalog_predicate_t *predicates,
                                size_t predicate_count) {
     if (!domain || !domain->predicates || !predicates ||
         domain->predicate_count != predicate_count) {
@@ -56,7 +55,7 @@ static int py_predicates_equal(const maelys_datalog_domain_entry_t *domain,
     }
     for (size_t i = 0u; i < predicate_count; i++) {
         const maelys_datalog_predicate_entry_t *a = &domain->predicates[i];
-        const maelys_datalog_public_predicate_t *b = &predicates[i];
+        const maelys_datalog_predicate_t *b = &predicates[i];
         if (!b->name || strcmp(a->name, b->name) != 0 ||
             a->arity != b->arity ||
             a->kind_flags != b->flags) {
@@ -67,7 +66,7 @@ static int py_predicates_equal(const maelys_datalog_domain_entry_t *domain,
 }
 
 static maelys_result_t py_term_to_native(const maelys_py_term_t *src,
-                                         maelys_datalog_term_t *dst) {
+                                         maelys_datalog_internal_term_t *dst) {
     if (!src || !dst) return MAELYS_ERR_INVALID_ARGUMENT;
     memset(dst, 0, sizeof(*dst));
     if (src->kind == (int32_t)MAELYS_DATALOG_TERM_SYMBOL) {
@@ -90,7 +89,7 @@ static maelys_result_t py_term_to_native(const maelys_py_term_t *src,
     return MAELYS_ERR_INVALID_FIELD;
 }
 
-static void native_term_to_py(const maelys_datalog_term_t *src,
+static void native_term_to_py(const maelys_datalog_internal_term_t *src,
                               maelys_py_term_t *dst) {
     memset(dst, 0, sizeof(*dst));
     dst->kind = (int32_t)src->kind;
@@ -108,8 +107,7 @@ static void native_term_to_py(const maelys_datalog_term_t *src,
 maelys_py_engine_t *maelys_py_engine_new(void) {
     maelys_py_engine_t *engine = (maelys_py_engine_t *)calloc(1u, sizeof(*engine));
     if (!engine) return NULL;
-    maelys_datalog_get_build_limits(&engine->limits);
-    maelys_datalog_diagnostic_clear(&engine->last_diag);
+    maelys_datalog_internal_diagnostic_clear(&engine->last_diag);
     return engine;
 }
 
@@ -117,10 +115,8 @@ void maelys_py_engine_free(maelys_py_engine_t *engine) {
     free(engine);
 }
 
-int maelys_py_get_build_limits(maelys_datalog_build_limits_t *out) {
-    if (!out) return (int)MAELYS_ERR_INVALID_ARGUMENT;
-    maelys_datalog_get_build_limits(out);
-    return (int)MAELYS_OK;
+int maelys_py_limit_get(int limit, size_t *out) {
+    return (int)maelys_datalog_limit_get((maelys_datalog_limit_t)limit, out);
 }
 
 void maelys_py_get_abi_layout(maelys_py_abi_layout_t *out) {
@@ -128,10 +124,10 @@ void maelys_py_get_abi_layout(maelys_py_abi_layout_t *out) {
     out->term_size = sizeof(maelys_py_term_t);
     out->term_kind_offset = offsetof(maelys_py_term_t, kind);
     out->term_value_offset = offsetof(maelys_py_term_t, value);
-    out->predicate_def_size = sizeof(maelys_datalog_public_predicate_t);
-    out->predicate_def_name_offset = offsetof(maelys_datalog_public_predicate_t, name);
-    out->predicate_def_arity_offset = offsetof(maelys_datalog_public_predicate_t, arity);
-    out->predicate_def_flags_offset = offsetof(maelys_datalog_public_predicate_t, flags);
+    out->predicate_def_size = sizeof(maelys_datalog_predicate_t);
+    out->predicate_def_name_offset = offsetof(maelys_datalog_predicate_t, name);
+    out->predicate_def_arity_offset = offsetof(maelys_datalog_predicate_t, arity);
+    out->predicate_def_flags_offset = offsetof(maelys_datalog_predicate_t, flags);
 }
 
 void maelys_py_get_abi_constants(maelys_py_abi_constants_t *out) {
@@ -154,7 +150,7 @@ void maelys_py_get_abi_constants(maelys_py_abi_constants_t *out) {
 }
 
 int maelys_py_find_domain(const char *domain_name,
-                          maelys_datalog_public_predicate_t *out_predicates,
+                          maelys_datalog_predicate_t *out_predicates,
                           size_t out_capacity,
                           size_t *out_count,
                           int *out_found,
@@ -187,7 +183,7 @@ int maelys_py_find_domain(const char *domain_name,
 }
 
 int maelys_py_register_domain(const char *domain_name,
-                              const maelys_datalog_public_predicate_t *predicates,
+                              const maelys_datalog_predicate_t *predicates,
                               size_t predicate_count) {
     if (!domain_name || !predicates || predicate_count == 0u ||
         predicate_count > MAELYS_DATALOG_MAX_PREDICATES) {
@@ -219,7 +215,7 @@ int maelys_py_load_inline_ruleset(maelys_py_engine_t *engine,
         return (int)MAELYS_ERR_INVALID_ARGUMENT;
     }
     *out_ruleset = NULL;
-    maelys_datalog_diagnostic_clear(&engine->last_diag);
+    maelys_datalog_internal_diagnostic_clear(&engine->last_diag);
     maelys_py_ruleset_t *ruleset = (maelys_py_ruleset_t *)calloc(1u, sizeof(*ruleset));
     if (!ruleset) return (int)MAELYS_ERR_INTERNAL;
     maelys_result_t rc = maelys_datalog_load_policy_inline(domain_name,
@@ -290,7 +286,7 @@ int maelys_py_edb_add_fact(maelys_py_edb_t *edb,
         return (int)MAELYS_ERR_INVALID_ARGUMENT;
     }
     if (edb->finalized) return (int)MAELYS_ERR_INVALID_STATE;
-    maelys_datalog_term_t native_terms[MAELYS_DATALOG_MAX_ARITY];
+    maelys_datalog_internal_term_t native_terms[MAELYS_DATALOG_MAX_ARITY];
     for (size_t i = 0u; i < arity; i++) {
         maelys_result_t rc = py_term_to_native(&terms[i], &native_terms[i]);
         if (rc != MAELYS_OK) return (int)rc;
@@ -423,7 +419,7 @@ int maelys_py_result_contains_fact(maelys_py_result_t *result,
     if (arity > MAELYS_DATALOG_MAX_ARITY) {
         return (int)MAELYS_ERR_INVALID_FIELD;
     }
-    maelys_datalog_term_t native_terms[MAELYS_DATALOG_MAX_ARITY];
+    maelys_datalog_internal_term_t native_terms[MAELYS_DATALOG_MAX_ARITY];
     for (size_t i = 0u; i < arity; i++) {
         maelys_result_t rc = py_term_to_native(&terms[i], &native_terms[i]);
         if (rc != MAELYS_OK) return (int)rc;
@@ -477,7 +473,7 @@ int maelys_py_result_explain_fact_text(maelys_py_result_t *result,
         return (int)MAELYS_ERR_INVALID_STATE;
     }
 
-    maelys_datalog_fact_t queried_fact;
+    maelys_datalog_internal_fact_t queried_fact;
     memset(&queried_fact, 0, sizeof(queried_fact));
     queried_fact.predicate_id = predicate_id;
     queried_fact.arity = (uint8_t)arity;
@@ -526,8 +522,8 @@ int maelys_py_result_enumerate_predicate_facts(maelys_py_result_t *result,
         return (int)maelys_datalog_solve_result_enumerate_predicate_facts(
             result->result, predicate, arity, NULL, 0u, out_count);
     }
-    maelys_datalog_fact_t *facts =
-        (maelys_datalog_fact_t *)calloc(out_capacity, sizeof(*facts));
+    maelys_datalog_internal_fact_t *facts =
+        (maelys_datalog_internal_fact_t *)calloc(out_capacity, sizeof(*facts));
     if (!facts) return (int)MAELYS_ERR_INTERNAL;
     maelys_result_t rc = maelys_datalog_solve_result_enumerate_predicate_facts(
         result->result, predicate, arity, facts, out_capacity, out_count);
