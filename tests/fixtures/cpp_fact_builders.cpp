@@ -33,6 +33,19 @@ static_assert(cpp_declarations[3].flags ==
 static_assert(cpp_declarations[4].flags == MAELYS_DATALOG_PREDICATE_POLICY_FACT, "policy fact");
 static_assert(cpp_declarations[5].flags ==
     (MAELYS_DATALOG_PREDICATE_POLICY_FACT | MAELYS_DATALOG_PREDICATE_QUERY), "policy fact query");
+constexpr const char *cpp_atoms[] = {"alice", "mallory"};
+constexpr maelys_datalog_public_domain_t cpp_with_atoms =
+    MAELYS_DATALOG_DOMAIN_WITH_ATOMS("cpp_with_atoms", cpp_declarations, cpp_atoms);
+constexpr maelys_datalog_public_domain_t cpp_no_atoms =
+    MAELYS_DATALOG_DOMAIN_NO_ATOMS("cpp_no_atoms", cpp_declarations);
+static_assert(cpp_with_atoms.predicates == cpp_declarations, "borrow predicates");
+static_assert(cpp_no_atoms.predicates == cpp_declarations, "borrow predicates");
+static_assert(cpp_with_atoms.predicate_count == 6u, "count predicates");
+static_assert(cpp_no_atoms.predicate_count == 6u, "count predicates");
+static_assert(cpp_with_atoms.atoms == cpp_atoms, "borrow atoms");
+static_assert(cpp_with_atoms.atom_count == 2u, "count atoms separately");
+static_assert(cpp_no_atoms.atoms == nullptr && cpp_no_atoms.atom_count == 0u,
+    "no atoms is a null pointer and a zero count");
 maelys_datalog_status_t cpp_consumer(maelys_datalog_input_edb_t *edb) {
     maelys_datalog_public_value_t value = MAELYS_DATALOG_SYMBOL("alice");
     return maelys_datalog_input_edb_add_fact(edb, "user", &value, 1u, nullptr);

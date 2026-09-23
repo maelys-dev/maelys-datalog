@@ -44,6 +44,26 @@
 #define MAELYS_DATALOG_POLICY_FACT_QUERY(name, arity) \
     { (name), (arity), MAELYS_DATALOG_PREDICATE_POLICY_FACT | MAELYS_DATALOG_PREDICATE_QUERY }
 
+/* Public domain initializers (C and C++), not expressions or registration calls.
+ * predicates and atoms must be actual, nonempty fixed-size arrays in scope,
+ * never pointers (including array parameters) or VLAs: sizeof derives counts.
+ * For dynamic tables, explicit counts or no predicates, initialize the ordinary
+ * public_domain_t directly. WITH_ATOMS requires an atom array; use NO_ATOMS for
+ * an empty vocabulary. These macros do not check the array-only precondition.
+ * NO_ATOMS declares no policy-source atoms; it does not forbid request EDB
+ * symbols and does not change loading permissions such as PUBLIC_ALLOW_NONE.
+ * No allocation, copying or registration occurs. Names/tables/strings are
+ * borrowed until domain_register returns; successful registration owns copies.
+ * Each argument is evaluated once (sizeof operands are not evaluated for these
+ * fixed-size arrays). Constant arguments permit file-scope static initializers.
+ * Validation remains the responsibility of domain_register and policy loading.
+ */
+#define MAELYS_DATALOG_DOMAIN_NO_ATOMS(name, predicates) \
+    { (name), (predicates), sizeof(predicates) / sizeof((predicates)[0]), NULL, 0u }
+#define MAELYS_DATALOG_DOMAIN_WITH_ATOMS(name, predicates, atoms) \
+    { (name), (predicates), sizeof(predicates) / sizeof((predicates)[0]), \
+      (atoms), sizeof(atoms) / sizeof((atoms)[0]) }
+
 /* Symbol value initializer (C and C++), not an expression or a copy.
  * The argument is evaluated once. The borrowed string must remain valid until
  * the consuming call returns; that call still validates it (including NULL).

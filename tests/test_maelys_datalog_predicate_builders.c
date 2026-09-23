@@ -16,7 +16,61 @@ static unsigned name_calls, arity_calls;
 static const char *name_once(void) { ++name_calls; return "dynamic"; }
 static size_t arity_once(void) { ++arity_calls; return 2; }
 
+static const char *const atoms[] = {"alice", "mallory"};
+static const maelys_datalog_public_domain_t domain =
+    MAELYS_DATALOG_DOMAIN_WITH_ATOMS("predicate_builders", declarations, atoms);
+static const maelys_datalog_public_domain_t no_atoms =
+    MAELYS_DATALOG_DOMAIN_NO_ATOMS("domain_builders_no_atoms", declarations);
+
+static void test_domain_initializers(void) {
+    assert(domain.predicates == declarations && domain.predicate_count == 6u);
+    assert(domain.atoms == atoms && domain.atom_count == 2u);
+    assert(no_atoms.predicates == declarations && no_atoms.predicate_count == 6u);
+    assert(no_atoms.atoms == NULL && no_atoms.atom_count == 0u);
+    name_calls = 0u;
+    const maelys_datalog_public_domain_t local_with =
+        MAELYS_DATALOG_DOMAIN_WITH_ATOMS(name_once(), declarations, atoms);
+    const maelys_datalog_public_domain_t local_without =
+        MAELYS_DATALOG_DOMAIN_NO_ATOMS(name_once(), declarations);
+    assert(name_calls == 2u);
+    assert(strcmp(local_with.name, "dynamic") == 0);
+    assert(strcmp(local_without.name, "dynamic") == 0);
+
+    /* NO_ATOMS preserves source vocabulary validation but permits runtime
+     * strings. The WITH_ATOMS domain accepts the same quoted source below. */
+    assert(!maelys_datalog_domain_register(&no_atoms));
+    maelys_datalog_policy_t *policy = NULL;
+    const char *quoted = "fixed(\"mallory\"). allow(X) :- fixed(X).";
+    assert(maelys_datalog_policy_load_inline(no_atoms.name, "quoted", quoted,
+        strlen(quoted), &policy, NULL) == MAELYS_DATALOG_STATUS_INVALID_FIELD);
+    assert(policy == NULL);
+    assert(!maelys_datalog_domain_register(&domain));
+    assert(!maelys_datalog_policy_load_inline(domain.name, "quoted", quoted,
+        strlen(quoted), &policy, NULL));
+    assert(!maelys_datalog_policy_free(policy));
+    policy = NULL;
+    const char *variables = "allow(X) :- seed(X).";
+    assert(!maelys_datalog_policy_load_inline(no_atoms.name, "variables", variables,
+        strlen(variables), &policy, NULL));
+    maelys_datalog_session_t *session = NULL;
+    maelys_datalog_result_t *result = NULL;
+    assert(!maelys_datalog_session_create(policy, 0, &session));
+    maelys_datalog_public_fact_t fact = {0};
+    fact.predicate = "seed";
+    fact.arity = 1u;
+    fact.terms[0] = (maelys_datalog_public_value_t)MAELYS_DATALOG_SYMBOL("mallory");
+    assert(!maelys_datalog_session_solve(session, &fact, 1u, &result, NULL));
+    int present = 0;
+    assert(!maelys_datalog_result_query(result, "allow", fact.terms, 1u, &present));
+    assert(present == 1);
+    assert(!maelys_datalog_result_free(result));
+    assert(!maelys_datalog_session_free(session));
+    assert(!maelys_datalog_policy_free(policy));
+    name_calls = 0u;
+}
+
 int main(void) {
+    test_domain_initializers();
     assert(strcmp(declarations[0].name, "seed") == 0);
     assert(declarations[0].arity == 1);
     assert(declarations[0].flags == MAELYS_DATALOG_PREDICATE_EDB);
@@ -40,10 +94,6 @@ int main(void) {
     for (size_t i = 0; i < 6; ++i) {
         assert(strcmp(dynamic[i].name, "dynamic") == 0 && dynamic[i].arity == 2);
     }
-    const char *const atoms[] = {"alice"};
-    const maelys_datalog_public_domain_t domain = {
-        "predicate_builders", declarations, 6, atoms, 1,
-    };
     assert(maelys_datalog_domain_register(&domain) == MAELYS_DATALOG_STATUS_OK);
     maelys_datalog_policy_t *policy = NULL;
     maelys_datalog_session_t *session = NULL;
@@ -84,9 +134,8 @@ int main(void) {
     const maelys_datalog_public_predicate_t invalid[] = {
         MAELYS_DATALOG_EDB("bad", MAELYS_DATALOG_PUBLIC_MAX_TERMS + 1),
     };
-    const maelys_datalog_public_domain_t bad_domain = {
-        "predicate_builders_invalid", invalid, 1, NULL, 0,
-    };
+    const maelys_datalog_public_domain_t bad_domain =
+        MAELYS_DATALOG_DOMAIN_NO_ATOMS("predicate_builders_invalid", invalid);
     assert(maelys_datalog_domain_register(&bad_domain) == MAELYS_DATALOG_STATUS_INVALID_FIELD);
     const maelys_datalog_public_predicate_t query_only = {
         "query_only", 1, MAELYS_DATALOG_PREDICATE_QUERY,
@@ -102,6 +151,6 @@ int main(void) {
     assert(maelys_datalog_policy_load_inline(invalid_origin.name, "invalid", invalid_source,
         strlen(invalid_source), &policy, NULL) != MAELYS_DATALOG_STATUS_OK);
     assert(policy == NULL);
-    puts("predicate builders: exact flags, static/runtime initializers, single evaluation, registration validation PASS");
+    puts("predicate/domain builders: static/runtime initializers, single evaluation, registration validation, source atoms vs EDB symbols PASS");
     return 0;
 }
