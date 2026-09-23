@@ -8,10 +8,15 @@
 
 #define MAELYS_DATALOG_MAX_REGISTERED_DOMAINS 16u
 
+/* Low-level declaration: exactly one of a predicate table or an installer.
+ * Registration copies the name, table, atoms and optional description into
+ * bounded storage. Callback code must remain available for later policy loads.
+ * description is metadata only; it does not affect loading or evaluation. */
 typedef struct {
     const char *domain_name;
     const maelys_datalog_predicate_def_t *predicates;
     size_t predicate_count;
+    /* Installed after the table or callback succeeds; creates no facts. */
     const char *const *atoms;
     size_t atom_count;
     const char *description;
