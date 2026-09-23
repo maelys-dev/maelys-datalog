@@ -66,6 +66,17 @@ class SessionDiagnosticsTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "oracle"):
                 verify_count(prefix, "SMALL", meta["base"], ("inert", "sorted", "integer", "33"), "0123456789abcdef")
 
+    def test_trailing_zero_costs_are_implicit(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "counts"
+            path.write_text("events: Ir Dr Dw I1mr D1mr D1mw ILmr DLmr DLmw\nsummary: 10000 200 100 1 2 3 1\n")
+            counts = events(path)
+            self.assertEqual((counts["Ir"],counts["Dw"],counts["D1mw"],counts["DLmr"],counts["DLmw"]),
+                             (10000,100,3,0,0))
+            path.write_text(path.read_text().replace("summary: 10000 200 100 1 2 3 1", "summary: 1 2 3 4 5 6 7 8 9 10"))
+            with self.assertRaisesRegex(ValueError, "events"):
+                events(path)
+
     def test_missing_write_counts_are_rejected(self):
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "counts"

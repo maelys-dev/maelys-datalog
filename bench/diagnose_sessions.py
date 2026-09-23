@@ -32,8 +32,10 @@ def events(path):
     if len(labels) != 1 or len(totals) != 1:
         raise ValueError("missing Callgrind cache events/summary")
     names, values = labels[0].split(), totals[0].split()
-    if set(names) != set(EVENTS) or len(names) != len(values) or len(names) != len(EVENTS):
+    if set(names) != set(EVENTS) or not values or len(values) > len(names) or len(names) != len(EVENTS):
         raise ValueError("unexpected Callgrind cache events")
+    # Callgrind omits trailing zero cost fields, including in summary records.
+    values += ["0"] * (len(names) - len(values))
     result = dict(zip(names, map(int, values)))
     if result["Ir"] <= 0 or any(v < 0 for v in result.values()):
         raise ValueError("invalid Callgrind counts")
