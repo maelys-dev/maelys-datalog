@@ -2,10 +2,27 @@ import unittest
 import json
 from pathlib import Path
 import tempfile
-from session_proof import CASES, TARGET, PREPARED, annotated, strict_verdict, count_report
+from session_proof import CASES, TARGET, PREPARED, annotated, exclusive_dump, strict_verdict, count_report
 
 
 class SessionProofTests(unittest.TestCase):
+    def test_zero_call_arc_is_not_an_exclusive_cost(self):
+        profile = """positions: line
+events: Ir Dr Dw Bcm I1mr
+fn=(1) solve_once_derive_ordered
+10 12 3 2 1 0
+cfn=(2) child
+calls=0 20
+10 999 888 777 666 555
+fn=(2)
+20 5 4 3 2 1
+fn=(3) solve_once_derive_ordered'2
+30 1 1
+"""
+        self.assertEqual(exclusive_dump(profile), {
+            TARGET: dict(Ir=13, Dr=4, Dw=2, Bcm=1, I1mr=0),
+            "child": dict(Ir=5, Dr=4, Dw=3, Bcm=2, I1mr=1)})
+
     def test_one_extra_event_refuses(self):
         original = dict(Ir=130, Dr=129, Dw=66)
         for event in original:
