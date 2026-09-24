@@ -68,6 +68,7 @@ jobs:
         run: |
           bash tools/check_module_sdk.sh "$PWD/build/cmake"
           bash tools/check_sdk_archive.sh "$PWD/build/cmake"
+          python3 tools/check_native_reproducibility.py SMALL
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -86,6 +87,7 @@ jobs:
           ctest --test-dir build/cmake-large --output-on-failure
           bash tools/check_module_sdk.sh "$PWD/build/cmake-large"
           bash tools/check_sdk_archive.sh "$PWD/build/cmake-large"
+          python3 tools/check_native_reproducibility.py LARGE
           bash tools/check_python_binding.sh "$PWD/build/cmake-large" python large
 
   # The socle's sanitizers job covers SMALL on Linux; the three other cells

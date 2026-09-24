@@ -427,6 +427,25 @@ table, and a subsequent solve succeeds. Normal success only resets metadata and
 the scratch span needed to drop pointers and initialize the index; inactive facts
 are retained until overwritten, with no secure-erasure guarantee or new storage.
 
+## Native archive reproducibility
+
+`python3 tools/check_native_reproducibility.py SMALL` (or `LARGE`) builds the
+same sources in two distinct checkout/build paths with different file mtimes,
+then compares the static libraries and entire SDK tarballs byte for byte.
+It requires retained canonical debug paths and rejects leaked temporary paths.
+Both profiles run on Linux and macOS in the SDK jobs.
+
+Native release packaging enables `MAELYS_DATALOG_REPRODUCIBLE_PATHS` explicitly;
+normal developer builds retain their paths. Source and build paths (including
+macOS canonical aliases) map to `/maelys-datalog` and `/maelys-datalog-build`.
+Debuggers can substitute these paths to local sources. Debug information remains
+present. The archive sorts members, normalizes owner/mode/mtime, excludes host
+xattrs and fixes the gzip timestamp/name. `SOURCE_DATE_EPOCH` defaults to the
+source commit time. Reproduction requires identical sources, compiler, SDK,
+build flags and compression toolchain; this is not a cross-toolchain guarantee.
+Release receipts and attestations describe each execution and are not made
+byte-identical. Wasm packaging is outside this native correction.
+
 ## Aggregate rejection diagnostics
 
 The allocator-disabled aggregate test rejects negative and out-of-range int64

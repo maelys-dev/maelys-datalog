@@ -10,6 +10,29 @@ message(STATUS "Maelys Datalog release: ${MAELYS_DATALOG_RELEASE_VERSION}")
 
 set(CMAKE_C_STANDARD 11)
 
+# Release artifacts retain DWARF, but never embed temporary checkout/build paths.
+# Opt-in so local development keeps its normal debugger source locations.
+option(MAELYS_DATALOG_REPRODUCIBLE_PATHS "Map source/build paths in native artifacts" OFF)
+if(MAELYS_DATALOG_REPRODUCIBLE_PATHS)
+    include(CheckCCompilerFlag)
+    check_c_compiler_flag("-ffile-prefix-map=/maelys-probe=." MAELYS_HAS_FILE_PREFIX_MAP)
+    if(NOT MAELYS_HAS_FILE_PREFIX_MAP)
+        message(FATAL_ERROR "Reproducible native builds require -ffile-prefix-map")
+    endif()
+    # Clang may canonicalize /var to /private/var on macOS. Map both spellings.
+    # The build mapping follows the source mapping for builds inside the source.
+    foreach(kind SOURCE BINARY)
+        get_filename_component(real_path "${CMAKE_CURRENT_${kind}_DIR}" REALPATH)
+        if(kind STREQUAL "SOURCE")
+            set(mapped_path "/maelys-datalog")
+        else()
+            set(mapped_path "/maelys-datalog-build")
+        endif()
+        add_compile_options("-ffile-prefix-map=${CMAKE_CURRENT_${kind}_DIR}=${mapped_path}"
+                            "-ffile-prefix-map=${real_path}=${mapped_path}")
+    endforeach()
+endif()
+
 # Shared with every Make build; private modules are linked by their consumer.
 file(STRINGS build-support/core-sources.txt ENGINE_SRCS)
 file(STRINGS build-support/native-sources.txt NATIVE_SRCS)
