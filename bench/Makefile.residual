@@ -1,0 +1,19 @@
+# SPDX-License-Identifier: MPL-2.0
+include $(DRIVER)/bench/Makefile.compare
+PADS = 0 16 32 48 64 128
+residual: all $(foreach pad,$(PADS),$(OUT)/session-residual-$(pad))
+ifeq ($(PROFILE),LARGE)
+residual: $(foreach pad,$(PADS),$(OUT)/solver-residual-$(pad))
+endif
+$(OUT)/session-residual.o: $(DRIVER)/bench/bench_sessions_residual.c
+	$(CC) $(FLAGS) $(DEFS) -c $< -o $@
+$(OUT)/solver-residual.o: $(DRIVER)/bench/bench_solver_residual.c
+	$(CC) $(FLAGS) $(DEFS) -c $< -o $@
+$(OUT)/residual-pad-%.o:
+	printf '.text\n.balign 16\n.space %s, 0x90\n.section .note.GNU-stack,"",@progbits\n' '$*' | $(CC) -x assembler -c -o $@ -
+$(OUT)/session-residual-%: $(OUT)/session-residual.o $(OBJECTS) $(OUT)/residual-pad-%.o
+	$(CC) $(FLAGS) $(OUT)/session-residual.o $(foreach obj,$(OBJECTS),$(if $(filter %/src/core/maelys_datalog_edb.o,$(obj)),$(OUT)/residual-pad-$*.o) $(obj)) -o $@
+$(OUT)/solver-residual-%: $(OUT)/solver-residual.o $(OBJECTS) $(OUT)/residual-pad-%.o
+	$(CC) $(FLAGS) $(OUT)/solver-residual.o $(foreach obj,$(OBJECTS),$(if $(filter %/src/core/maelys_datalog_edb.o,$(obj)),$(OUT)/residual-pad-$*.o) $(obj)) -o $@
+.SECONDARY:
+.PHONY: residual

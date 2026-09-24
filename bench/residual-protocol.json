@@ -1,0 +1,1104 @@
+{
+  "status": "prepared_not_dispatched",
+  "max_hosted_measurement_runs": 1,
+  "revisions": {
+    "A": "fe987dcaf98376313d2504a7ed88dff475a96065",
+    "B": "2f933260bb127facda4f94e70e192d4cdaa0938c",
+    "C": "1fa69cbd2014915cd53d9d19af28e59ea245a86e"
+  },
+  "pads_bytes": [
+    0,
+    16,
+    32,
+    48,
+    64,
+    128
+  ],
+  "fixtures": [
+    {
+      "profile": "SMALL",
+      "case": [
+        "derive",
+        "permuted",
+        "symbol",
+        "31"
+      ]
+    },
+    {
+      "profile": "SMALL",
+      "case": [
+        "derive",
+        "sorted",
+        "integer",
+        "31"
+      ],
+      "residual": true
+    },
+    {
+      "profile": "LARGE",
+      "case": [
+        "inert",
+        "permuted",
+        "integer",
+        "maximum"
+      ]
+    },
+    {
+      "profile": "LARGE",
+      "case": [
+        "inert",
+        "duplicate",
+        "integer",
+        "maximum"
+      ]
+    },
+    {
+      "profile": "LARGE",
+      "case": [
+        "derive",
+        "strided",
+        "integer",
+        "256"
+      ]
+    },
+    {
+      "profile": "LARGE",
+      "case": [
+        "derive",
+        "sorted",
+        "symbol",
+        "maximum"
+      ]
+    },
+    {
+      "profile": "LARGE",
+      "case": [
+        "solver_size_pure",
+        "2048"
+      ],
+      "residual": true
+    }
+  ],
+  "drivers": [
+    "SMALL-session-controls",
+    "LARGE-session-controls",
+    "LARGE-solver-2048"
+  ],
+  "session_samples": 301,
+  "session_warmups": 50,
+  "solver_samples": 1000,
+  "solver_warmups": 500,
+  "counts_repeats": 2,
+  "schedule": [
+    {
+      "phase": "AA",
+      "repeat": 1,
+      "driver": "SMALL-session-controls",
+      "role": "A",
+      "pad": 0
+    },
+    {
+      "phase": "AA",
+      "repeat": 1,
+      "driver": "SMALL-session-controls",
+      "role": "B",
+      "pad": 0
+    },
+    {
+      "phase": "AA",
+      "repeat": 1,
+      "driver": "SMALL-session-controls",
+      "role": "C",
+      "pad": 0
+    },
+    {
+      "phase": "AA",
+      "repeat": 1,
+      "driver": "LARGE-session-controls",
+      "role": "A",
+      "pad": 0
+    },
+    {
+      "phase": "AA",
+      "repeat": 1,
+      "driver": "LARGE-session-controls",
+      "role": "B",
+      "pad": 0
+    },
+    {
+      "phase": "AA",
+      "repeat": 1,
+      "driver": "LARGE-session-controls",
+      "role": "C",
+      "pad": 0
+    },
+    {
+      "phase": "AA",
+      "repeat": 1,
+      "driver": "LARGE-solver-2048",
+      "role": "A",
+      "pad": 0
+    },
+    {
+      "phase": "AA",
+      "repeat": 1,
+      "driver": "LARGE-solver-2048",
+      "role": "B",
+      "pad": 0
+    },
+    {
+      "phase": "AA",
+      "repeat": 1,
+      "driver": "LARGE-solver-2048",
+      "role": "C",
+      "pad": 0
+    },
+    {
+      "phase": "AA",
+      "repeat": 2,
+      "driver": "LARGE-solver-2048",
+      "role": "C",
+      "pad": 0
+    },
+    {
+      "phase": "AA",
+      "repeat": 2,
+      "driver": "LARGE-solver-2048",
+      "role": "B",
+      "pad": 0
+    },
+    {
+      "phase": "AA",
+      "repeat": 2,
+      "driver": "LARGE-solver-2048",
+      "role": "A",
+      "pad": 0
+    },
+    {
+      "phase": "AA",
+      "repeat": 2,
+      "driver": "LARGE-session-controls",
+      "role": "C",
+      "pad": 0
+    },
+    {
+      "phase": "AA",
+      "repeat": 2,
+      "driver": "LARGE-session-controls",
+      "role": "B",
+      "pad": 0
+    },
+    {
+      "phase": "AA",
+      "repeat": 2,
+      "driver": "LARGE-session-controls",
+      "role": "A",
+      "pad": 0
+    },
+    {
+      "phase": "AA",
+      "repeat": 2,
+      "driver": "SMALL-session-controls",
+      "role": "C",
+      "pad": 0
+    },
+    {
+      "phase": "AA",
+      "repeat": 2,
+      "driver": "SMALL-session-controls",
+      "role": "B",
+      "pad": 0
+    },
+    {
+      "phase": "AA",
+      "repeat": 2,
+      "driver": "SMALL-session-controls",
+      "role": "A",
+      "pad": 0
+    },
+    {
+      "phase": "AA",
+      "repeat": 3,
+      "driver": "SMALL-session-controls",
+      "role": "A",
+      "pad": 0
+    },
+    {
+      "phase": "AA",
+      "repeat": 3,
+      "driver": "SMALL-session-controls",
+      "role": "B",
+      "pad": 0
+    },
+    {
+      "phase": "AA",
+      "repeat": 3,
+      "driver": "SMALL-session-controls",
+      "role": "C",
+      "pad": 0
+    },
+    {
+      "phase": "AA",
+      "repeat": 3,
+      "driver": "LARGE-session-controls",
+      "role": "A",
+      "pad": 0
+    },
+    {
+      "phase": "AA",
+      "repeat": 3,
+      "driver": "LARGE-session-controls",
+      "role": "B",
+      "pad": 0
+    },
+    {
+      "phase": "AA",
+      "repeat": 3,
+      "driver": "LARGE-session-controls",
+      "role": "C",
+      "pad": 0
+    },
+    {
+      "phase": "AA",
+      "repeat": 3,
+      "driver": "LARGE-solver-2048",
+      "role": "A",
+      "pad": 0
+    },
+    {
+      "phase": "AA",
+      "repeat": 3,
+      "driver": "LARGE-solver-2048",
+      "role": "B",
+      "pad": 0
+    },
+    {
+      "phase": "AA",
+      "repeat": 3,
+      "driver": "LARGE-solver-2048",
+      "role": "C",
+      "pad": 0
+    },
+    {
+      "phase": "AA",
+      "repeat": 4,
+      "driver": "LARGE-solver-2048",
+      "role": "C",
+      "pad": 0
+    },
+    {
+      "phase": "AA",
+      "repeat": 4,
+      "driver": "LARGE-solver-2048",
+      "role": "B",
+      "pad": 0
+    },
+    {
+      "phase": "AA",
+      "repeat": 4,
+      "driver": "LARGE-solver-2048",
+      "role": "A",
+      "pad": 0
+    },
+    {
+      "phase": "AA",
+      "repeat": 4,
+      "driver": "LARGE-session-controls",
+      "role": "C",
+      "pad": 0
+    },
+    {
+      "phase": "AA",
+      "repeat": 4,
+      "driver": "LARGE-session-controls",
+      "role": "B",
+      "pad": 0
+    },
+    {
+      "phase": "AA",
+      "repeat": 4,
+      "driver": "LARGE-session-controls",
+      "role": "A",
+      "pad": 0
+    },
+    {
+      "phase": "AA",
+      "repeat": 4,
+      "driver": "SMALL-session-controls",
+      "role": "C",
+      "pad": 0
+    },
+    {
+      "phase": "AA",
+      "repeat": 4,
+      "driver": "SMALL-session-controls",
+      "role": "B",
+      "pad": 0
+    },
+    {
+      "phase": "AA",
+      "repeat": 4,
+      "driver": "SMALL-session-controls",
+      "role": "A",
+      "pad": 0
+    },
+    {
+      "phase": "placement",
+      "round": 1,
+      "driver": "SMALL-session-controls",
+      "role": "A",
+      "pad": 0
+    },
+    {
+      "phase": "placement",
+      "round": 1,
+      "driver": "SMALL-session-controls",
+      "role": "B",
+      "pad": 0
+    },
+    {
+      "phase": "placement",
+      "round": 1,
+      "driver": "SMALL-session-controls",
+      "role": "C",
+      "pad": 0
+    },
+    {
+      "phase": "placement",
+      "round": 1,
+      "driver": "LARGE-session-controls",
+      "role": "B",
+      "pad": 0
+    },
+    {
+      "phase": "placement",
+      "round": 1,
+      "driver": "LARGE-session-controls",
+      "role": "C",
+      "pad": 0
+    },
+    {
+      "phase": "placement",
+      "round": 1,
+      "driver": "LARGE-session-controls",
+      "role": "A",
+      "pad": 0
+    },
+    {
+      "phase": "placement",
+      "round": 1,
+      "driver": "LARGE-solver-2048",
+      "role": "C",
+      "pad": 0
+    },
+    {
+      "phase": "placement",
+      "round": 1,
+      "driver": "LARGE-solver-2048",
+      "role": "A",
+      "pad": 0
+    },
+    {
+      "phase": "placement",
+      "round": 1,
+      "driver": "LARGE-solver-2048",
+      "role": "B",
+      "pad": 0
+    },
+    {
+      "phase": "placement",
+      "round": 1,
+      "driver": "SMALL-session-controls",
+      "role": "B",
+      "pad": 48
+    },
+    {
+      "phase": "placement",
+      "round": 1,
+      "driver": "SMALL-session-controls",
+      "role": "C",
+      "pad": 48
+    },
+    {
+      "phase": "placement",
+      "round": 1,
+      "driver": "SMALL-session-controls",
+      "role": "A",
+      "pad": 48
+    },
+    {
+      "phase": "placement",
+      "round": 1,
+      "driver": "LARGE-session-controls",
+      "role": "C",
+      "pad": 48
+    },
+    {
+      "phase": "placement",
+      "round": 1,
+      "driver": "LARGE-session-controls",
+      "role": "A",
+      "pad": 48
+    },
+    {
+      "phase": "placement",
+      "round": 1,
+      "driver": "LARGE-session-controls",
+      "role": "B",
+      "pad": 48
+    },
+    {
+      "phase": "placement",
+      "round": 1,
+      "driver": "LARGE-solver-2048",
+      "role": "A",
+      "pad": 48
+    },
+    {
+      "phase": "placement",
+      "round": 1,
+      "driver": "LARGE-solver-2048",
+      "role": "B",
+      "pad": 48
+    },
+    {
+      "phase": "placement",
+      "round": 1,
+      "driver": "LARGE-solver-2048",
+      "role": "C",
+      "pad": 48
+    },
+    {
+      "phase": "placement",
+      "round": 1,
+      "driver": "SMALL-session-controls",
+      "role": "C",
+      "pad": 16
+    },
+    {
+      "phase": "placement",
+      "round": 1,
+      "driver": "SMALL-session-controls",
+      "role": "A",
+      "pad": 16
+    },
+    {
+      "phase": "placement",
+      "round": 1,
+      "driver": "SMALL-session-controls",
+      "role": "B",
+      "pad": 16
+    },
+    {
+      "phase": "placement",
+      "round": 1,
+      "driver": "LARGE-session-controls",
+      "role": "A",
+      "pad": 16
+    },
+    {
+      "phase": "placement",
+      "round": 1,
+      "driver": "LARGE-session-controls",
+      "role": "B",
+      "pad": 16
+    },
+    {
+      "phase": "placement",
+      "round": 1,
+      "driver": "LARGE-session-controls",
+      "role": "C",
+      "pad": 16
+    },
+    {
+      "phase": "placement",
+      "round": 1,
+      "driver": "LARGE-solver-2048",
+      "role": "B",
+      "pad": 16
+    },
+    {
+      "phase": "placement",
+      "round": 1,
+      "driver": "LARGE-solver-2048",
+      "role": "C",
+      "pad": 16
+    },
+    {
+      "phase": "placement",
+      "round": 1,
+      "driver": "LARGE-solver-2048",
+      "role": "A",
+      "pad": 16
+    },
+    {
+      "phase": "placement",
+      "round": 1,
+      "driver": "SMALL-session-controls",
+      "role": "A",
+      "pad": 128
+    },
+    {
+      "phase": "placement",
+      "round": 1,
+      "driver": "SMALL-session-controls",
+      "role": "B",
+      "pad": 128
+    },
+    {
+      "phase": "placement",
+      "round": 1,
+      "driver": "SMALL-session-controls",
+      "role": "C",
+      "pad": 128
+    },
+    {
+      "phase": "placement",
+      "round": 1,
+      "driver": "LARGE-session-controls",
+      "role": "B",
+      "pad": 128
+    },
+    {
+      "phase": "placement",
+      "round": 1,
+      "driver": "LARGE-session-controls",
+      "role": "C",
+      "pad": 128
+    },
+    {
+      "phase": "placement",
+      "round": 1,
+      "driver": "LARGE-session-controls",
+      "role": "A",
+      "pad": 128
+    },
+    {
+      "phase": "placement",
+      "round": 1,
+      "driver": "LARGE-solver-2048",
+      "role": "C",
+      "pad": 128
+    },
+    {
+      "phase": "placement",
+      "round": 1,
+      "driver": "LARGE-solver-2048",
+      "role": "A",
+      "pad": 128
+    },
+    {
+      "phase": "placement",
+      "round": 1,
+      "driver": "LARGE-solver-2048",
+      "role": "B",
+      "pad": 128
+    },
+    {
+      "phase": "placement",
+      "round": 1,
+      "driver": "SMALL-session-controls",
+      "role": "B",
+      "pad": 32
+    },
+    {
+      "phase": "placement",
+      "round": 1,
+      "driver": "SMALL-session-controls",
+      "role": "C",
+      "pad": 32
+    },
+    {
+      "phase": "placement",
+      "round": 1,
+      "driver": "SMALL-session-controls",
+      "role": "A",
+      "pad": 32
+    },
+    {
+      "phase": "placement",
+      "round": 1,
+      "driver": "LARGE-session-controls",
+      "role": "C",
+      "pad": 32
+    },
+    {
+      "phase": "placement",
+      "round": 1,
+      "driver": "LARGE-session-controls",
+      "role": "A",
+      "pad": 32
+    },
+    {
+      "phase": "placement",
+      "round": 1,
+      "driver": "LARGE-session-controls",
+      "role": "B",
+      "pad": 32
+    },
+    {
+      "phase": "placement",
+      "round": 1,
+      "driver": "LARGE-solver-2048",
+      "role": "A",
+      "pad": 32
+    },
+    {
+      "phase": "placement",
+      "round": 1,
+      "driver": "LARGE-solver-2048",
+      "role": "B",
+      "pad": 32
+    },
+    {
+      "phase": "placement",
+      "round": 1,
+      "driver": "LARGE-solver-2048",
+      "role": "C",
+      "pad": 32
+    },
+    {
+      "phase": "placement",
+      "round": 1,
+      "driver": "SMALL-session-controls",
+      "role": "C",
+      "pad": 64
+    },
+    {
+      "phase": "placement",
+      "round": 1,
+      "driver": "SMALL-session-controls",
+      "role": "A",
+      "pad": 64
+    },
+    {
+      "phase": "placement",
+      "round": 1,
+      "driver": "SMALL-session-controls",
+      "role": "B",
+      "pad": 64
+    },
+    {
+      "phase": "placement",
+      "round": 1,
+      "driver": "LARGE-session-controls",
+      "role": "A",
+      "pad": 64
+    },
+    {
+      "phase": "placement",
+      "round": 1,
+      "driver": "LARGE-session-controls",
+      "role": "B",
+      "pad": 64
+    },
+    {
+      "phase": "placement",
+      "round": 1,
+      "driver": "LARGE-session-controls",
+      "role": "C",
+      "pad": 64
+    },
+    {
+      "phase": "placement",
+      "round": 1,
+      "driver": "LARGE-solver-2048",
+      "role": "B",
+      "pad": 64
+    },
+    {
+      "phase": "placement",
+      "round": 1,
+      "driver": "LARGE-solver-2048",
+      "role": "C",
+      "pad": 64
+    },
+    {
+      "phase": "placement",
+      "round": 1,
+      "driver": "LARGE-solver-2048",
+      "role": "A",
+      "pad": 64
+    },
+    {
+      "phase": "placement",
+      "round": 2,
+      "driver": "LARGE-solver-2048",
+      "role": "A",
+      "pad": 64
+    },
+    {
+      "phase": "placement",
+      "round": 2,
+      "driver": "LARGE-solver-2048",
+      "role": "C",
+      "pad": 64
+    },
+    {
+      "phase": "placement",
+      "round": 2,
+      "driver": "LARGE-solver-2048",
+      "role": "B",
+      "pad": 64
+    },
+    {
+      "phase": "placement",
+      "round": 2,
+      "driver": "LARGE-session-controls",
+      "role": "C",
+      "pad": 64
+    },
+    {
+      "phase": "placement",
+      "round": 2,
+      "driver": "LARGE-session-controls",
+      "role": "B",
+      "pad": 64
+    },
+    {
+      "phase": "placement",
+      "round": 2,
+      "driver": "LARGE-session-controls",
+      "role": "A",
+      "pad": 64
+    },
+    {
+      "phase": "placement",
+      "round": 2,
+      "driver": "SMALL-session-controls",
+      "role": "B",
+      "pad": 64
+    },
+    {
+      "phase": "placement",
+      "round": 2,
+      "driver": "SMALL-session-controls",
+      "role": "A",
+      "pad": 64
+    },
+    {
+      "phase": "placement",
+      "round": 2,
+      "driver": "SMALL-session-controls",
+      "role": "C",
+      "pad": 64
+    },
+    {
+      "phase": "placement",
+      "round": 2,
+      "driver": "LARGE-solver-2048",
+      "role": "C",
+      "pad": 32
+    },
+    {
+      "phase": "placement",
+      "round": 2,
+      "driver": "LARGE-solver-2048",
+      "role": "B",
+      "pad": 32
+    },
+    {
+      "phase": "placement",
+      "round": 2,
+      "driver": "LARGE-solver-2048",
+      "role": "A",
+      "pad": 32
+    },
+    {
+      "phase": "placement",
+      "round": 2,
+      "driver": "LARGE-session-controls",
+      "role": "B",
+      "pad": 32
+    },
+    {
+      "phase": "placement",
+      "round": 2,
+      "driver": "LARGE-session-controls",
+      "role": "A",
+      "pad": 32
+    },
+    {
+      "phase": "placement",
+      "round": 2,
+      "driver": "LARGE-session-controls",
+      "role": "C",
+      "pad": 32
+    },
+    {
+      "phase": "placement",
+      "round": 2,
+      "driver": "SMALL-session-controls",
+      "role": "A",
+      "pad": 32
+    },
+    {
+      "phase": "placement",
+      "round": 2,
+      "driver": "SMALL-session-controls",
+      "role": "C",
+      "pad": 32
+    },
+    {
+      "phase": "placement",
+      "round": 2,
+      "driver": "SMALL-session-controls",
+      "role": "B",
+      "pad": 32
+    },
+    {
+      "phase": "placement",
+      "round": 2,
+      "driver": "LARGE-solver-2048",
+      "role": "B",
+      "pad": 128
+    },
+    {
+      "phase": "placement",
+      "round": 2,
+      "driver": "LARGE-solver-2048",
+      "role": "A",
+      "pad": 128
+    },
+    {
+      "phase": "placement",
+      "round": 2,
+      "driver": "LARGE-solver-2048",
+      "role": "C",
+      "pad": 128
+    },
+    {
+      "phase": "placement",
+      "round": 2,
+      "driver": "LARGE-session-controls",
+      "role": "A",
+      "pad": 128
+    },
+    {
+      "phase": "placement",
+      "round": 2,
+      "driver": "LARGE-session-controls",
+      "role": "C",
+      "pad": 128
+    },
+    {
+      "phase": "placement",
+      "round": 2,
+      "driver": "LARGE-session-controls",
+      "role": "B",
+      "pad": 128
+    },
+    {
+      "phase": "placement",
+      "round": 2,
+      "driver": "SMALL-session-controls",
+      "role": "C",
+      "pad": 128
+    },
+    {
+      "phase": "placement",
+      "round": 2,
+      "driver": "SMALL-session-controls",
+      "role": "B",
+      "pad": 128
+    },
+    {
+      "phase": "placement",
+      "round": 2,
+      "driver": "SMALL-session-controls",
+      "role": "A",
+      "pad": 128
+    },
+    {
+      "phase": "placement",
+      "round": 2,
+      "driver": "LARGE-solver-2048",
+      "role": "A",
+      "pad": 16
+    },
+    {
+      "phase": "placement",
+      "round": 2,
+      "driver": "LARGE-solver-2048",
+      "role": "C",
+      "pad": 16
+    },
+    {
+      "phase": "placement",
+      "round": 2,
+      "driver": "LARGE-solver-2048",
+      "role": "B",
+      "pad": 16
+    },
+    {
+      "phase": "placement",
+      "round": 2,
+      "driver": "LARGE-session-controls",
+      "role": "C",
+      "pad": 16
+    },
+    {
+      "phase": "placement",
+      "round": 2,
+      "driver": "LARGE-session-controls",
+      "role": "B",
+      "pad": 16
+    },
+    {
+      "phase": "placement",
+      "round": 2,
+      "driver": "LARGE-session-controls",
+      "role": "A",
+      "pad": 16
+    },
+    {
+      "phase": "placement",
+      "round": 2,
+      "driver": "SMALL-session-controls",
+      "role": "B",
+      "pad": 16
+    },
+    {
+      "phase": "placement",
+      "round": 2,
+      "driver": "SMALL-session-controls",
+      "role": "A",
+      "pad": 16
+    },
+    {
+      "phase": "placement",
+      "round": 2,
+      "driver": "SMALL-session-controls",
+      "role": "C",
+      "pad": 16
+    },
+    {
+      "phase": "placement",
+      "round": 2,
+      "driver": "LARGE-solver-2048",
+      "role": "C",
+      "pad": 48
+    },
+    {
+      "phase": "placement",
+      "round": 2,
+      "driver": "LARGE-solver-2048",
+      "role": "B",
+      "pad": 48
+    },
+    {
+      "phase": "placement",
+      "round": 2,
+      "driver": "LARGE-solver-2048",
+      "role": "A",
+      "pad": 48
+    },
+    {
+      "phase": "placement",
+      "round": 2,
+      "driver": "LARGE-session-controls",
+      "role": "B",
+      "pad": 48
+    },
+    {
+      "phase": "placement",
+      "round": 2,
+      "driver": "LARGE-session-controls",
+      "role": "A",
+      "pad": 48
+    },
+    {
+      "phase": "placement",
+      "round": 2,
+      "driver": "LARGE-session-controls",
+      "role": "C",
+      "pad": 48
+    },
+    {
+      "phase": "placement",
+      "round": 2,
+      "driver": "SMALL-session-controls",
+      "role": "A",
+      "pad": 48
+    },
+    {
+      "phase": "placement",
+      "round": 2,
+      "driver": "SMALL-session-controls",
+      "role": "C",
+      "pad": 48
+    },
+    {
+      "phase": "placement",
+      "round": 2,
+      "driver": "SMALL-session-controls",
+      "role": "B",
+      "pad": 48
+    },
+    {
+      "phase": "placement",
+      "round": 2,
+      "driver": "LARGE-solver-2048",
+      "role": "B",
+      "pad": 0
+    },
+    {
+      "phase": "placement",
+      "round": 2,
+      "driver": "LARGE-solver-2048",
+      "role": "A",
+      "pad": 0
+    },
+    {
+      "phase": "placement",
+      "round": 2,
+      "driver": "LARGE-solver-2048",
+      "role": "C",
+      "pad": 0
+    },
+    {
+      "phase": "placement",
+      "round": 2,
+      "driver": "LARGE-session-controls",
+      "role": "A",
+      "pad": 0
+    },
+    {
+      "phase": "placement",
+      "round": 2,
+      "driver": "LARGE-session-controls",
+      "role": "C",
+      "pad": 0
+    },
+    {
+      "phase": "placement",
+      "round": 2,
+      "driver": "LARGE-session-controls",
+      "role": "B",
+      "pad": 0
+    },
+    {
+      "phase": "placement",
+      "round": 2,
+      "driver": "SMALL-session-controls",
+      "role": "C",
+      "pad": 0
+    },
+    {
+      "phase": "placement",
+      "round": 2,
+      "driver": "SMALL-session-controls",
+      "role": "B",
+      "pad": 0
+    },
+    {
+      "phase": "placement",
+      "round": 2,
+      "driver": "SMALL-session-controls",
+      "role": "A",
+      "pad": 0
+    }
+  ],
+  "hardware_counters": "No dedicated run, installation, permission change or hardware-counter comparison. Record availability metadata if readable; lack of access is a reported limit, not a failed timing measurement.",
+  "stop_rule": "After this one run, preserve all outcomes. If no mechanism is isolated, retain the residuals as unattributed, document the limit in AGENTS.md via a separate documentation PR, and stop. Do not block 0.10.0 or change engine code from timings alone."
+}

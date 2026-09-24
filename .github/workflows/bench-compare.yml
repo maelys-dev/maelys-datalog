@@ -4,48 +4,20 @@ on:
   workflow_dispatch:
     inputs:
       base:
-        description: Baseline branch, tag or commit SHA
+        description: Immutable baseline from the archived residual protocol
         required: true
         type: string
       head:
-        description: Candidate branch, tag or commit SHA
+        description: Immutable corrected candidate from the archived residual protocol
         required: true
-        type: string
-
-      diagnostic_original:
-        description: Optional original candidate SHA for LARGE Callgrind and layout diagnosis
-        required: false
-        default: ''
-        type: string
-      diagnostic_size:
-        description: Predeclared solver_size_pure case for the optional diagnostic
-        required: false
-        default: '2048'
-        type: choice
-        options: ['1024', '2048']
-      session_diagnostics:
-        description: Count declared controls and residuals with cache/branch simulation
-        required: false
-        default: false
-        type: boolean
-      report_proof_run:
-        description: Optional completed proof run to assemble reports without building or timing
-        required: false
-        default: ''
-        type: string
-      report_historic_run:
-        description: Original run whose raw passes must remain in the report
-        required: false
-        default: '35970341635'
         type: string
 
 permissions:
   contents: read
-  actions: read
 
 jobs:
   compare:
-    name: ${{ inputs.report_proof_run != '' && 'Assemble preserved benchmark reports' || 'Sequential A-A and A-B comparison' }}
+    name: One bounded sequential placement diagnostic
     runs-on: ubuntu-latest
     timeout-minutes: 180
     steps:
@@ -53,72 +25,52 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - name: Check comparison tooling
-        run: python3 -m unittest discover -s bench -p 'test_compare*.py'
-      - name: Prepare optional diagnostic tool
-        if: inputs.report_proof_run == '' && (inputs.diagnostic_original != '' || inputs.session_diagnostics)
+      - name: Check tooling
+        run: python3 -m unittest discover -s bench -p 'test_*.py'
+      - name: Prepare diagnostic tool
         run: |
           if ! command -v valgrind >/dev/null; then
             sudo apt-get update
             sudo apt-get install -y valgrind
           fi
-      - name: Compare immutable revisions
-        if: inputs.report_proof_run == ''
-        env:
-          SESSION_FULL_PROOF: '1'
-          BASE_REF: ${{ inputs.base }}
-          HEAD_REF: ${{ inputs.head }}
-          SESSION_DIAGNOSTICS: ${{ inputs.session_diagnostics && '1' || '0' }}
-        run: bash bench/compare_revisions.sh "$BASE_REF" "$HEAD_REF" "$RUNNER_TEMP/bench-comparison"
-      - name: Diagnose instructions and binary layout
-        if: inputs.report_proof_run == '' && inputs.diagnostic_original != ''
+      - name: Freeze inputs before any build or measurement
         env:
           BASE_REF: ${{ inputs.base }}
-          ORIGINAL_REF: ${{ inputs.diagnostic_original }}
-          DIAGNOSTIC_SIZE: ${{ inputs.diagnostic_size || '2048' }}
           HEAD_REF: ${{ inputs.head }}
-        run: bash bench/diagnose_solver_layout.sh "$BASE_REF" "$ORIGINAL_REF" "$HEAD_REF" "$RUNNER_TEMP/bench-diagnostic"
-      - name: Upload measurements and report (including partial failed runs)
-        if: always() && inputs.report_proof_run == ''
+        run: python3 bench/bounded_residual.py prepare "$RUNNER_TEMP/bounded-residual" --base "$BASE_REF" --head "$HEAD_REF"
+      - name: Archive declared protocol before measurement
         uses: actions/upload-artifact@v4
         with:
-          name: bench-comparison-${{ github.run_id }}-${{ github.run_attempt }}
-          path: |
-            ${{ runner.temp }}/bench-comparison/
-            ${{ runner.temp }}/bench-diagnostic/
-          if-no-files-found: warn
-          retention-days: 30
-      - name: Download completed proof
-        if: inputs.report_proof_run != ''
-        uses: actions/download-artifact@v4
-        with:
-          github-token: ${{ github.token }}
-          run-id: ${{ inputs.report_proof_run }}
-          name: bench-comparison-${{ inputs.report_proof_run }}-1
-          path: ${{ runner.temp }}/proof-source
-      - name: Download original measurements
-        if: inputs.report_proof_run != ''
-        uses: actions/download-artifact@v4
-        with:
-          github-token: ${{ github.token }}
-          run-id: ${{ inputs.report_historic_run }}
-          name: bench-comparison-${{ inputs.report_historic_run }}-1
-          path: ${{ runner.temp }}/historic-source
-      - name: Assemble reports without executing a benchmark
-        if: inputs.report_proof_run != ''
-        env:
-          PROOF_RUN: ${{ inputs.report_proof_run }}
-          HISTORIC_RUN: ${{ inputs.report_historic_run }}
-          BASE_REF: ${{ inputs.base }}
-          HEAD_REF: ${{ inputs.head }}
-        run: |
-          python3 bench/bundle_session_proof.py "$RUNNER_TEMP/proof-source/bench-comparison" "$RUNNER_TEMP/historic-source/bench-comparison" "$RUNNER_TEMP/bench-proof-report" "$PROOF_RUN" "$HISTORIC_RUN" "$BASE_REF" "$HEAD_REF"
-          cat "$RUNNER_TEMP/bench-proof-report/README.md" >> "$GITHUB_STEP_SUMMARY"
-      - name: Upload consolidated proof report
-        if: inputs.report_proof_run != ''
-        uses: actions/upload-artifact@v4
-        with:
-          name: bench-proof-report-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/bench-proof-report/
+          name: residual-preregistered-${{ github.run_id }}
+          path: ${{ runner.temp }}/bounded-residual/preregistered/
           if-no-files-found: error
+          retention-days: 30
+      - name: Finish every build and verify symbol displacement
+        run: python3 bench/bounded_residual.py build "$RUNNER_TEMP/bounded-residual"
+      - name: Archive binary manifest before measurement
+        uses: actions/upload-artifact@v4
+        with:
+          name: residual-binary-manifest-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/bounded-residual/binaries/manifest.json
+            ${{ runner.temp }}/bounded-residual/build-complete.json
+          if-no-files-found: error
+          retention-days: 30
+      - name: Retain full general solver input and session matrices
+        run: python3 bench/bounded_residual.py general "$RUNNER_TEMP/bounded-residual"
+      - name: Execute exactly the archived timing schedule
+        run: python3 bench/bounded_residual.py timings "$RUNNER_TEMP/bounded-residual"
+      - name: Repeat scoped counts in separate processes
+        run: python3 bench/bounded_residual.py counts "$RUNNER_TEMP/bounded-residual"
+      - name: Report every pass and strict count comparison
+        run: python3 bench/bounded_residual.py report "$RUNNER_TEMP/bounded-residual"
+      - name: Upload raw evidence including partial failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bounded-residual-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/bounded-residual/
+            !${{ runner.temp }}/bounded-residual/workspace/
+          if-no-files-found: warn
           retention-days: 30
