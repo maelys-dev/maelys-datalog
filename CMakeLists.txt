@@ -57,29 +57,38 @@ set_target_properties(maelys_datalog_shared PROPERTIES
     MACOSX_RPATH TRUE
     INSTALL_NAME_DIR "@rpath")
 
-install(TARGETS maelys_datalog maelys_datalog_shared
-    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
-    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+# The release archive uses these same install rules, selecting SDK + static.
+# Keep shared libraries available to ordinary CMake installs, not native tarballs.
+install(TARGETS maelys_datalog
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR} COMPONENT sdk-static)
+install(TARGETS maelys_datalog_shared
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR} COMPONENT sdk-shared
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT sdk-shared)
 install(FILES include/maelys/datalog_advanced.h include/maelys/datalog_details.h include/maelys/datalog.h include/maelys/datalog_builders.h include/maelys/datalog_module.h
     include/maelys/datalog_program.h include/maelys/datalog_backend.h include/maelys/datalog_extension.h
     include/maelys/datalog_window.h include/maelys/datalog_group_window.h
-    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/maelys)
-install(FILES LICENSE DESTINATION ${CMAKE_INSTALL_DATADIR}/maelys-datalog)
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/maelys COMPONENT sdk)
+install(FILES LICENSE DESTINATION ${CMAKE_INSTALL_DATADIR}/maelys-datalog COMPONENT sdk)
 install(FILES sdk/conformance/maelys_conformance.h sdk/conformance/README.md
-    DESTINATION ${CMAKE_INSTALL_DATADIR}/maelys-datalog/conformance)
-install(FILES vendor/yyjson/LICENSE DESTINATION ${CMAKE_INSTALL_DATADIR}/maelys-datalog/yyjson)
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/maelys-datalog/conformance COMPONENT sdk)
+install(FILES vendor/yyjson/LICENSE DESTINATION ${CMAKE_INSTALL_DATADIR}/maelys-datalog/yyjson COMPONENT sdk)
 install(FILES sdk/templates/README.md
-    DESTINATION ${CMAKE_INSTALL_DATADIR}/maelys-datalog/templates)
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/maelys-datalog/templates COMPONENT sdk)
 foreach(role frontend backend planner filter)
     set(starter sdk/templates/${role})
     set(destination ${CMAKE_INSTALL_DATADIR}/maelys-datalog/templates/${role})
     install(FILES ${starter}/LICENSE ${starter}/README.md ${starter}/CMakeLists.txt
-        DESTINATION ${destination})
-    install(FILES ${starter}/include/extension.h DESTINATION ${destination}/include)
-    install(FILES ${starter}/src/extension.c DESTINATION ${destination}/src)
-    install(FILES ${starter}/tests/smoke.c DESTINATION ${destination}/tests)
+        DESTINATION ${destination} COMPONENT sdk)
+    install(FILES ${starter}/include/extension.h DESTINATION ${destination}/include COMPONENT sdk)
+    install(FILES ${starter}/src/extension.c DESTINATION ${destination}/src COMPONENT sdk)
+    install(FILES ${starter}/tests/smoke.c DESTINATION ${destination}/tests COMPONENT sdk)
 endforeach()
+
+# Archive metadata preserves the existing tarball locations. It is not part
+# of a normal prefix installation and contains no second list of headers.
+install(FILES LICENSE CHANGELOG.md DESTINATION . COMPONENT release-metadata EXCLUDE_FROM_ALL)
+install(FILES vendor/yyjson/LICENSE DESTINATION licenses/yyjson
+    COMPONENT release-metadata EXCLUDE_FROM_ALL)
 
 include(CTest)
 if(BUILD_TESTING)

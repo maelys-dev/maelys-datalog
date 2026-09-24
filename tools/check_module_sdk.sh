@@ -3,11 +3,29 @@
 # Compile consumers copied OUTSIDE the tree, using only a fresh installed SDK.
 set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"
-build="$(cd "${1:-$root/build/cmake}" && pwd)"
 scratch="$(mktemp -d "${TMPDIR:-/tmp}/maelys-sdk.XXXXXX")"
 trap 'rm -rf -- "$scratch"' EXIT
-prefix="$scratch/prefix"
-cmake --install "$build" --prefix "$prefix"
+linkages=(static shared)
+if [[ "${1:-}" == --prefix ]]; then
+  prefix="$(cd "${2:?--prefix requires an installed/extracted SDK}" && pwd)"
+  if [[ "${3:-}" == --static-only && $# == 3 ]]; then
+    linkages=(static)
+  elif [[ $# != 2 ]]; then
+    echo 'usage: check_module_sdk.sh --prefix PREFIX [--static-only]' >&2; exit 2
+  fi
+else
+  if [[ $# -gt 1 ]]; then echo 'usage: check_module_sdk.sh [CMAKE_BUILD]' >&2; exit 2; fi
+  build="$(cd "${1:-$root/build/cmake}" && pwd)"
+  prefix="$scratch/prefix"
+  cmake --install "$build" --prefix "$prefix"
+fi
+# include/maelys is the public source surface; no manually maintained second list.
+(cd "$root/include" && find maelys -type f | LC_ALL=C sort) > "$scratch/expected-headers"
+(cd "$prefix/include" && find . -type f | sed 's@^./@@' | LC_ALL=C sort) > "$scratch/actual-headers"
+diff -u "$scratch/expected-headers" "$scratch/actual-headers"
+if [[ -n "$(find "$prefix/include" -type l -print)" ]]; then
+  echo 'FAIL: SDK include tree contains symlinks' >&2; exit 1
+fi
 cp "$root/tests/fixtures/public_api_consumer.c" "$scratch/"
 cp "$root/tests/fixtures/sdk_header.c" "$scratch/"
 cp "$root/tests/fixtures/cpp_fact_builders.cpp" "$scratch/"
@@ -30,11 +48,29 @@ unset CPATH C_INCLUDE_PATH CPLUS_INCLUDE_PATH LIBRARY_PATH
 cc="${CC:-cc}"
 cxx="${CXX:-c++}"
 flags=(-std=c11 -Wall -Wextra -Werror -I"$prefix/include")
-for header in datalog_advanced.h datalog_details.h datalog.h datalog_builders.h datalog_module.h datalog_program.h datalog_backend.h datalog_extension.h datalog_window.h datalog_group_window.h; do
+for header_path in "$prefix/include/maelys/"*.h; do
+  header="$(basename "$header_path")"
   "$cc" "${flags[@]}" -DSDK_HEADER="\"maelys/$header\"" -fsyntax-only sdk_header.c
   "$cxx" -x c++ -std=c++17 -Wall -Wextra -Werror -I"$prefix/include" \
     -DSDK_HEADER="\"maelys/$header\"" -fsyntax-only sdk_header.c
 done
+# The old aggregation surface and representative private includes must be absent,
+# not just unused by successful consumers. Inventory equality above also catches
+# a copied private file whose own dependencies would prevent it from compiling.
+for header in maelys_datalog.h maelys_datalog_version.h src/core/maelys_datalog_types.h src/manifest/maelys_datalog_manifest.h common/maelys_errors.h; do
+  for language in c c++; do
+    compiler="$cc"; standard=c11
+    if [[ "$language" == c++ ]]; then compiler="$cxx"; standard=c++17; fi
+    if "$compiler" -x "$language" -std="$standard" -I"$prefix/include" \
+        -DSDK_HEADER="\"$header\"" -fsyntax-only sdk_header.c > private.log 2>&1; then
+      echo "FAIL: private header accepted: $header ($language)" >&2; exit 1
+    fi
+    if ! grep -Eq 'file not found|No such file' private.log; then
+      cat private.log >&2; exit 1
+    fi
+  done
+done
+echo 'SDK boundary: public inventory matches; legacy/private includes rejected'
 "$cxx" -std=c++17 -Wall -Wextra -Werror -pedantic-errors -I"$prefix/include" \
   -fsyntax-only cpp_fact_builders.cpp
 "$cc" "${flags[@]}" -Wvla -pedantic-errors explanation_storage.c -o storage-c
@@ -66,7 +102,9 @@ if [[ ! -f "$libdir/libmaelys_datalog.a" ]]; then libdir="$prefix/lib64"; fi
 # Test-only pipeline counters compile to nothing outside MAELYS_TESTING; the
 # installed libraries must not carry their symbol.
 for library in "$libdir/libmaelys_datalog.a" "$libdir"/libmaelys_datalog_shared.*; do
-  if nm -g "$library" 2>/dev/null | grep -Eq 'maelys_datalog_(pipeline_counts|base_lookup_counts)'; then
+  [[ -f "$library" ]] || continue
+  nm -g "$library" > symbols.log 2>/dev/null
+  if grep -Eq 'maelys_datalog_(pipeline_counts|base_lookup_counts)' symbols.log; then
     echo "FAIL: test instrumentation symbol in $library" >&2; exit 1
   fi
 done
@@ -80,11 +118,11 @@ for role in frontend backend planner filter; do
     grep -q 'SPDX-License-Identifier: MIT' "$starter/$source"
   done
 done
-for linkage in static shared; do
+for linkage in "${linkages[@]}"; do
   if [[ "$linkage" == static ]]; then
     libs=("$libdir/libmaelys_datalog.a")
   else
-    libs=(-L"$libdir" -lmaelys_datalog_shared -Wl,-rpath,"$libdir")
+    libs=(-L"$libdir" -lmaelys_datalog_shared "-Wl,-rpath,$libdir")
   fi
   "$cc" "${flags[@]}" public_api_consumer.c "${libs[@]}" -o facade
   ./facade

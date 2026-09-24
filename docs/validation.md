@@ -231,16 +231,33 @@ cmake -S . -B build/cmake
 cmake --build build/cmake --parallel 3
 ctest --test-dir build/cmake --output-on-failure
 bash tools/check_module_sdk.sh "$PWD/build/cmake"
+bash tools/check_sdk_archive.sh "$PWD/build/cmake"
 ```
 
 Repeat in `build/cmake-large` with `-DMAELYS_DATALOG_PROFILE_LARGE=ON`.
 The SDK check installs into a fresh temporary prefix, copies all consumers and
 providers outside the source tree and builds them with only installed includes
-and libraries, both static and shared. It checks all five headers independently
-as C11/C++17 and rejects `sizeof` on all eleven opaque handle types. All five
+and libraries, both static and shared. It checks all ten headers independently
+as C11/C++17 and rejects `sizeof` on all twelve opaque handle types. All five
 standalone examples (including the frontend/filter bundle) are copied out, built
 with their own CMake projects and run through the installed conformance kit in
 both linkage modes and size profiles.
+
+The archive gate invokes the release's `package-native-sdk.sh` against that
+same build, extracts the real tarball into a fresh directory, and compares its
+headers, library, SDK support files and licenses with CMake installation.
+It reuses the external SDK consumers, examples and starters with static linkage,
+checks the profile through `limit_get`, and rejects historical/private includes
+in C11/C++17. The source public-header directory supplies the expected inventory,
+so forgetting a new header in the sole CMake list also fails. Neither consumer
+build inherits ambient include/library search paths.
+
+Negative controls remove `datalog_details.h` and inject the historical aggregator
+into the extracted copy; both must make the validator fail, with the relevant
+filename in its diagnostic. They never modify the source or the archive. Both
+SMALL and LARGE run in the existing SDK CI jobs. Release packaging runs the gate
+on its actual SMALL artifact before writing checksums/receipts. These tests do
+not establish performance or change the engine's allocation guarantees.
 
 The same check copies the four MIT starters from the installed prefix, verifies
 their packaged LICENSE files and MIT identifiers, then builds/runs each standalone

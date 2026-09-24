@@ -98,42 +98,24 @@ emsdk_recorded="null"
 # Native artifact.
 # ---------------------------------------------------------------------------
 if [ "$target" != wasm32 ]; then
-  if [ ! -f include/maelys_datalog_version.h ]; then
-    echo "error: include/maelys_datalog_version.h not found. Run scripts/generate-version-header.sh first." >&2
-    exit 1
-  fi
-
-  echo "==> native artifact (${target})"
-  make clean
-  make libmaelys_datalog.a
-
-  stage="$(mktemp -d)"
-  mkdir -p "$stage/lib" "$stage/include/src/core" "$stage/include/src/manifest" "$stage/include/common"
-  mkdir -p "$stage/include/maelys" "$stage/licenses/yyjson"
-  cp libmaelys_datalog.a "$stage/lib/"
-  cp include/maelys_datalog.h "$stage/include/"
-  cp include/maelys_datalog_version.h "$stage/include/"
-  cp include/maelys/datalog.h include/maelys/datalog_builders.h include/maelys/datalog_module.h \
-     include/maelys/datalog_program.h include/maelys/datalog_backend.h \
-     include/maelys/datalog_extension.h include/maelys/datalog_window.h \
-     include/maelys/datalog_group_window.h "$stage/include/maelys/"
-  mkdir -p "$stage/share/maelys-datalog/conformance"
-  cp sdk/conformance/maelys_conformance.h sdk/conformance/README.md \
-     "$stage/share/maelys-datalog/conformance/"
-  # Le header public inclut les headers moteur par chemins relatifs au dépôt
-  # ("src/core/...", "common/..."). Sans cette fermeture, le tarball serait
-  # incompilable pour un consommateur — même arborescence que la formule brew.
-  cp src/core/*.h "$stage/include/src/core/"
-  cp src/manifest/*.h "$stage/include/src/manifest/"
-  cp common/*.h "$stage/include/common/"
-  cp LICENSE "$stage/"
-  cp vendor/yyjson/LICENSE "$stage/licenses/yyjson/"
-  cp CHANGELOG.md "$stage/"
-
+  # Fresh build: no reuse of another profile's objects or caller's CMake cache.
+  native_scratch="$(mktemp -d)"
+  trap 'rm -rf -- "$native_scratch"' EXIT
+  build="$native_scratch/build"
+  # Preserve the old Make packaging default: clang, -g, no optimization.
+  # Do not silently switch release code generation as part of SDK cleanup.
+  cmake -S "$root" -B "$build" -DBUILD_TESTING=OFF \
+    -DCMAKE_C_COMPILER="${CC:-clang}" -DCMAKE_BUILD_TYPE=Debug \
+    -DCMAKE_C_FLAGS_DEBUG=-g -DCMAKE_INSTALL_LIBDIR=lib \
+    -DCMAKE_INSTALL_INCLUDEDIR=include -DMAELYS_DATALOG_PROFILE_LARGE=OFF
+  cmake --build "$build" --target maelys_datalog --parallel 4
   native_name="maelys-datalog-${version}-${target}.tar.gz"
-  tar -czf "$dist/${native_name}" -C "$stage" .
+  bash scripts/package-native-sdk.sh "$build" "$dist/$native_name"
+  # Check the actual extracted artifact before writing its checksum or receipt.
+  bash tools/check_sdk_archive.sh "$build" "$dist/$native_name"
   ( cd "$dist" && sha256 "${native_name}" > "${native_name}.sha256" )
-  rm -rf "$stage"
+  rm -rf -- "$native_scratch"
+  trap - EXIT
 
   echo "packaged ${native_name}"
   artifacts+=("$native_name")

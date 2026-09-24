@@ -149,6 +149,13 @@ profiles. These are layout observations, not absolute cache alignment or speed
 claims. The private-to-public conversion happens at the boundary, outside the
 solver's recursive frames.
 
-The legacy aggregate header and native Python/Wasm representations are not
-removed by this tranche. Their coordinated replacement and archive/header
-boundary checks remain required before publishing the complete 0.10.0 migration.
+The coordinated A3/A4 follow-up replaces native-object Python/Wasm bindings
+with public-SDK consumers and closes the distributed header surface. In 0.10.0,
+native archives and CMake installations use one public install inventory.
+Include `maelys/datalog.h` for application operations, `maelys/datalog_advanced.h`
+for advanced operations on those handles, or the relevant `maelys/` extension
+header. The historical aggregator, version-macro header and private implementation
+headers are no longer shipped. Native implementation types are not replacements
+for the public values, facts and opaque handles. External consumers are built
+and run against both the installed prefix and an extracted archive before
+publication; C11/C++17 checks reject historical/private includes.

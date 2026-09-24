@@ -23,6 +23,16 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ### Changed
 
+- Native SDK archives now use the CMake installation inventory. Ship the complete
+  public `maelys/` surface, including `datalog_details.h` required by the facade
+  and `datalog_advanced.h`, plus the installed conformance kit and MIT starters.
+  Stop distributing `maelys_datalog.h`, the historical version-macro header,
+  `src/` and `common/` implementation headers; migrate consumers to the public
+  facade or advanced/extension headers and recompile for 0.10.0. Native release
+  archives remain SMALL/static; CMake still supports SMALL/LARGE and shared
+  libraries. Extracted-archive consumers and deliberate missing/private-header
+  mutations now guard packaging on both profiles. No engine/API/ABI change.
+
 - Replace the Wasm native-object binding with an installed-public-SDK consumer.
   A single typed API accepts atomic multi-predicate batches and arities 0–4,
   transports signed int64 exactly (`bigint`, or safe integer `number` inputs),
@@ -46,7 +56,7 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
   require caller migration; see `bindings/python/README.md`. Python/CFFI still
   allocate. SMALL/LARGE tests compile outside the checkout against a fresh SDK;
   independent expected answers and migrated V1 contracts replace dual-binding
-  parity. Archive cleanup remains separate work.
+  parity. Native archives now share CMake's public installation inventory.
 
 
 - Reference solving classifies base-predicate presence once per rule application
