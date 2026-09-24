@@ -23,6 +23,12 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ### Changed
 
+- Native release builds retain debug information with canonical source/build
+  paths. Tar/gzip metadata is normalized to `SOURCE_DATE_EPOCH` (default: source
+  commit time). Two independent builds under different paths are checked on
+  SMALL/LARGE. Reproduction requires the same toolchain, flags and inputs;
+  receipts/provenance remain records of each execution.
+
 - Native SDK archives now use the CMake installation inventory. Ship the complete
   public `maelys/` surface, including `datalog_details.h` required by the facade
   and `datalog_advanced.h`, plus the installed conformance kit and MIT starters.

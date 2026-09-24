@@ -13,9 +13,10 @@ trap 'rm -rf -- "$scratch"' EXIT
 for component in sdk sdk-static release-metadata; do
   cmake --install "$build" --prefix "$scratch/prefix" --component "$component"
 done
-# Do not ship AppleDouble entries for host extended attributes. BSD tar would
-# silently consume them on local extraction, while other platforms see files.
-# GNU tar ignores this environment variable. Preserve actual SDK file contents.
+# Normalize container metadata as well as compiler paths; never include host
+# xattrs/AppleDouble. The default epoch belongs to the source commit, not the run.
+root="$(cd "$(dirname "$0")/.." && pwd)"
+epoch="${SOURCE_DATE_EPOCH:-$(git -C "$root" log -1 --format=%ct)}"
+python3 "$root/tools/package_deterministic_tar.py" "$scratch/prefix" "$scratch/sdk.tar.gz" "$epoch"
 # Do not touch a prior artifact if staging fails.
-COPYFILE_DISABLE=1 tar -czf "$scratch/sdk.tar.gz" -C "$scratch/prefix" .
 mv "$scratch/sdk.tar.gz" "$archive"
