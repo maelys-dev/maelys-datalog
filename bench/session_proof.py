@@ -13,7 +13,7 @@ import sys
 
 from compare_runs import compare, display
 from compare_sessions import CASES, KEY, load
-from diagnose_sessions import CACHE_FLAGS, events
+from diagnose_sessions import CACHE_FLAGS, CONTROLS, events
 
 PADS = (0, 16, 64, 256)
 EVENTS = ("Ir", "Dr", "Dw", "Bcm", "I1mr")
@@ -169,7 +169,10 @@ def bulk_counts(root, workspace, metadata, general, pad=0):
     for profile in ("SMALL", "LARGE"):
         for role in ("A", "B"):
             revision = metadata["base" if role == "A" else "head"]
-            expected = load(general / f"{profile}-sessions-ab-{role}1.csv", profile, revision)
+            oracle_rows = list(csv.DictReader((root / f"oracle-{profile}-{role}.csv").open()))
+            expected = {tuple(r[k] for k in KEY): r for r in oracle_rows}
+            if len(oracle_rows) != 200 or expected.keys() != CASES:
+                raise ValueError("incomplete native oracle inventory")
             binary = workspace / f"bin-{role}-{profile}/proof-counts-{pad}"
             for repeat in (1, 2):
                 prefix = output / f"{profile}-{role}-{repeat}"
@@ -219,7 +222,8 @@ def bulk_counts(root, workspace, metadata, general, pad=0):
 
 
 def count_report(root, costs):
-    report = ["# Exhaustive session Callgrind acceptance", "",+              "All 400 cases (200 per profile), two separate processes per revision/profile. Each case has 50 uncounted warmups followed by exactly one counted solve_edb. Per-case dump and reset happen after collection is disabled. Setup, clocks, oracle and result release are excluded. Batch fixture order is identical on A/B; this count driver is separate from timing and its cache/history differs from the old single-case driver.", "",
+    report = ["# Exhaustive session Callgrind acceptance", "",
+              "All 400 cases (200 per profile), two separate processes per revision/profile. Each case has 50 uncounted warmups followed by exactly one counted solve_edb. Per-case dump and reset happen after collection is disabled. Setup, clocks, oracle and result release are excluded. Batch fixture order is identical on A/B; this count driver is separate from timing and its cache/history differs from the old single-case driver.", "",
               "Ir/Dr/Dw are exclusive software event counts, not CPU cycles or byte counts. Bcm and I1mr are reported separately and never used to relax the strict count criterion. Every one-unit increase in solve_once_derive_ordered is a refusal. Repeated Ir/Dr/Dw maps must agree. Any aggregate-path execution in this aggregate-free matrix is a refusal. The known prepared-session +8 Ir/+2 Dw is recorded explicitly, not silently waived; its treatment follows the user's clarification.", "",
               "| Profile | Case | A Ir | B Ir | Delta Ir | A Dr | B Dr | Delta Dr | A Dw | B Dw | Delta Dw | Repeats | Verdict |",
               "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---|"]
@@ -265,6 +269,15 @@ def count_report(root, costs):
     (root / "counts.json").write_text(json.dumps(table, indent=2) + "\n")
     (root / "functions.json").write_text(json.dumps(function_rows, indent=2) + "\n")
     (root / "acceptance.json").write_text(json.dumps(dict(strict_failures=failures, unexpected_increases=unexpected), indent=2) + "\n")
+    cache_report = ["# Separate placement-sensitive events: ordered derivation", "",
+                    "Bcm and I1mr are modelled events, not acceptance thresholds for Ir/Dr/Dw.", "",
+                    "| Profile | Case | Event | A1 | A2 | B1 | B2 | B1-A1 |",
+                    "|---|---|---|---:|---:|---:|---:|---:|"]
+    for row in table:
+        for event in ("Bcm", "I1mr"):
+            values = row[event]
+            cache_report.append(f"| {row['profile']} | {' / '.join(row['case'])} | {event} | {values['a']} | {values['a_repeat2']} | {values['b']} | {values['b_repeat2']} | {values['delta']:+d} |")
+    (root / "placement-events.md").write_text("\n".join(cache_report) + "\n")
     return failures, unexpected
 
 
@@ -315,7 +328,57 @@ def layout_count_check(root, base_costs, padded_costs, pad):
     return failures
 
 
-def main(general, workspace):
+def quality_and_controls(root, general, metadata):
+    pass_names = ("aa-1", "aa-2", "aa-3", "aa-4", "ab-A1", "ab-B1", "ab-A2", "ab-B2")
+    runs = {}
+    quality = ["# Median/minimum quality check, all general session passes", "",
+               "The directive's threshold is 1.2. All flagged cases and original samples are retained; no statistic or case selection is changed. A threshold crossing alone does not prove the cause of an anomaly.", "",
+               "| Profile | Pass | Cases | Cases with median/min >= 1.2 | Maximum ratio |",
+               "|---|---|---:|---:|---:|"]
+    flagged = []
+    for profile in ("SMALL", "LARGE"):
+        oracle = {tuple(r[k] for k in KEY): r["result_digest"] for r in csv.DictReader((root / f"oracle-{profile}-A.csv").open())}
+        for p in pass_names:
+            revision = metadata["head"] if p.startswith("ab-B") else metadata["base"]
+            data = load(general / f"{profile}-sessions-{p}.csv", profile, revision)
+            runs[profile, p] = data
+            if any(data[k]["result_digest"] != oracle[k] for k in CASES):
+                raise ValueError("native timed/count-mode oracle drift")
+            ratios = {k: float(r["median_us"]) / float(r["min_us"]) for k, r in data.items()}
+            bad = [(k, v) for k, v in ratios.items() if v >= 1.2]
+            quality.append(f"| {profile} | {p} | 200 | {len(bad)} | {max(ratios.values()):.6f} |")
+            for key, value in bad:
+                samples = [float(r["elapsed_us"]) for r in csv.DictReader((general / f"{profile}-sessions-{p}.samples.csv").open()) if tuple(r[k] for k in KEY) == key]
+                assert len(samples) == 301
+                flagged.append(dict(profile=profile, pass_name=p, case=key, median_min_ratio=value, samples=samples))
+    quality += ["", "| Profile | Pass | Case | Median/min |", "|---|---|---|---:|"]
+    for row in flagged:
+        quality.append(f"| {row['profile']} | {row['pass_name']} | {' / '.join(row['case'])} | {row['median_min_ratio']:.6f} |")
+    (root / "pass-quality.md").write_text("\n".join(quality) + "\n")
+    (root / "pass-quality.json").write_text(json.dumps(flagged, indent=2) + "\n")
+    controls = ["# Six predeclared session controls", "",
+                "The general benchmark residual and A/A verdict remain unchanged. The control band comes from the same case under all declared neutral padding variants of each revision in the separate placement fixture. Inside-band residuals are labelled placement by the directive's operational convention; this does not by itself establish a causal explanation across different driver layouts. Above-band residuals remain unattributed. All underlying case/pass classifications remain available.", "",
+                "| Profile | Case | Metric | General B/A | A/A floor | Original verdict | Control band | Residual classification |",
+                "|---|---|---|---:|---:|---|---:|---|"]
+    for profile, key in CONTROLS:
+        aa = [runs[profile, f"aa-{p}"][key] for p in range(1, 5)]
+        metrics = ("min_us",) if statistics.median(float(r["median_us"]) for r in aa) < 10 else ("median_us", "p95_us")
+        for metric in metrics:
+            av, bv, ratio, floor, verdict = compare(aa, [runs[profile, f"ab-A{p}"][key] for p in (1, 2)],
+                                                   [runs[profile, f"ab-B{p}"][key] for p in (1, 2)], metric)
+            aggregate = min if metric == "min_us" else statistics.median
+            band = 0
+            for role in ("A", "B"):
+                revision = metadata["base" if role == "A" else "head"]
+                values = [aggregate(float(load(root / f"{profile}-{role}-pad-{pad}-{p}.csv", profile, revision)[key][metric]) for p in (1, 2)) for pad in PADS]
+                band = max(band, max(values) / min(values) - 1)
+            deviation = max(ratio, 1 / ratio) - 1
+            classification = "indeterminate" if verdict.startswith("indéterminé") else "placement (directive's band convention)" if deviation <= band else "unattributed (above band)"
+            controls.append(f"| {profile} | {' / '.join(key)} | {metric} | {display(ratio)} | {display(floor, True)} | {verdict} | {band:.2%} | {classification} |")
+    (root / "controls.md").write_text("\n".join(controls) + "\n")
+
+
+def counts_phase(general, workspace):
     root = general / "session-proof"
     root.mkdir()
     metadata = json.loads((general / "metadata.json").read_text())
@@ -326,8 +389,22 @@ def main(general, workspace):
                                                        pads=PADS, cases_per_profile=200, counted_repeats=2, warmup=50,
                                                        cache_model=CACHE_FLAGS, harness_sha256=hashes), indent=2) + "\n")
     record_binaries(root, workspace)
-    separate_passes(root, general, metadata)
-    placement(root, workspace, metadata)
+    # Execute the count-only driver natively to check oracles before timing.
+    # This mode contains no clock calls and produces exactly zero timing fields.
+    for profile in ("SMALL", "LARGE"):
+        oracles = {}
+        for role in ("A", "B"):
+            prefix = root / f"oracle-{profile}-{role}"
+            run_timing(workspace / f"bin-{role}-{profile}/proof-counts-0", prefix)
+            rows = list(csv.DictReader(prefix.with_suffix(".csv").open()))
+            if len(rows) != 200 or {tuple(r[k] for k in KEY) for r in rows} != CASES:
+                raise ValueError("native count-mode oracle inventory")
+            for row in rows:
+                if any(row[e] != "0.000000" for e in ("min_us", "median_us", "p95_us")) or row["samples"] != "1":
+                    raise ValueError("native oracle unexpectedly measured time")
+            oracles[role] = {tuple(r[k] for k in KEY): r["result_digest"] for r in rows}
+        if oracles["A"] != oracles["B"]:
+            raise ValueError("native A/B oracle drift before timing")
     costs = bulk_counts(root, workspace, metadata, general)
     failures, unexpected = count_report(root, costs)
     if failures or unexpected:
@@ -339,9 +416,24 @@ def main(general, workspace):
     (root / "placement-counts.md").write_text(f"# Repeated exclusive counts for all neutral layouts\n\nAll 400 cases, both revisions, two processes each, all 0/16/64/256-byte pads. Ir/Dr/Dw drift relative to the same revision's unpadded binary: {len(drift)} differences. Bcm/I1mr are retained separately in placement-counts-*.json; neither changes the strict criterion.\n")
     if drift:
         raise SystemExit("Neutral placement changed executed counts; no placement attribution accepted")
+    (root / "counts-gate.json").write_text(json.dumps(dict(strict_ordered_counts_pass=True,
+                                                         neutral_layout_counts_identical=True,
+                                                         prepared_exception_max=dict(Ir=8, Dr=0, Dw=2))) + "\n")
+
+
+def timings_phase(general, workspace):
+    root = general / "session-proof"
+    gate = json.loads((root / "counts-gate.json").read_text())
+    if not gate["strict_ordered_counts_pass"] or not gate["neutral_layout_counts_identical"]:
+        raise ValueError("count gate not satisfied")
+    metadata = json.loads((general / "metadata.json").read_text())
+    separate_passes(root, general, metadata)
+    placement(root, workspace, metadata)
+    quality_and_controls(root, general, metadata)
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 3:
-        raise SystemExit("usage: session_proof.py GENERAL_REPORT WORKSPACE")
-    main(Path(sys.argv[1]), Path(sys.argv[2]))
+    if len(sys.argv) != 4 or sys.argv[1] not in ("counts", "timings"):
+        raise SystemExit("usage: session_proof.py counts|timings GENERAL_REPORT WORKSPACE")
+    phase = counts_phase if sys.argv[1] == "counts" else timings_phase
+    phase(Path(sys.argv[2]), Path(sys.argv[3]))

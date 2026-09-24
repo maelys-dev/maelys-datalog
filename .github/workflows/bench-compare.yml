@@ -51,6 +51,13 @@ jobs:
             sudo apt-get update
             sudo apt-get install -y valgrind
           fi
+      - name: Compare immutable revisions
+        env:
+          SESSION_FULL_PROOF: '1'
+          BASE_REF: ${{ inputs.base }}
+          HEAD_REF: ${{ inputs.head }}
+          SESSION_DIAGNOSTICS: ${{ inputs.session_diagnostics && '1' || '0' }}
+        run: bash bench/compare_revisions.sh "$BASE_REF" "$HEAD_REF" "$RUNNER_TEMP/bench-comparison"
       - name: Diagnose instructions and binary layout
         if: inputs.diagnostic_original != ''
         env:
@@ -59,13 +66,6 @@ jobs:
           DIAGNOSTIC_SIZE: ${{ inputs.diagnostic_size || '2048' }}
           HEAD_REF: ${{ inputs.head }}
         run: bash bench/diagnose_solver_layout.sh "$BASE_REF" "$ORIGINAL_REF" "$HEAD_REF" "$RUNNER_TEMP/bench-diagnostic"
-      - name: Compare immutable revisions
-        env:
-          SESSION_FULL_PROOF: '1'
-          BASE_REF: ${{ inputs.base }}
-          HEAD_REF: ${{ inputs.head }}
-          SESSION_DIAGNOSTICS: ${{ inputs.session_diagnostics && '1' || '0' }}
-        run: bash bench/compare_revisions.sh "$BASE_REF" "$HEAD_REF" "$RUNNER_TEMP/bench-comparison"
       - name: Upload measurements and report (including partial failed runs)
         if: always()
         uses: actions/upload-artifact@v4

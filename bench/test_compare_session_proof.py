@@ -1,5 +1,8 @@
 import unittest
-from session_proof import annotated, strict_verdict
+import json
+from pathlib import Path
+import tempfile
+from session_proof import CASES, TARGET, PREPARED, annotated, strict_verdict, count_report
 
 
 class SessionProofTests(unittest.TestCase):
@@ -20,6 +23,26 @@ class SessionProofTests(unittest.TestCase):
         self.assertEqual(annotated(text), {"solve_once_derive_ordered": dict(Ir=2798, Dr=131, Dw=69, Bcm=4, I1mr=9)})
         with self.assertRaises(ValueError):
             annotated("Ir Dr Dw Bcm I1mr PROGRAM TOTALS\n")
+
+    def test_full_inventory_reports_cache_separately_and_refuses_one_unit(self):
+        costs = {}
+        for profile in ("SMALL", "LARGE"):
+            for role in ("A", "B"):
+                for repeat in (1, 2):
+                    for key in CASES:
+                        costs[profile, role, repeat, key] = {
+                            TARGET: dict(Ir=100, Dr=30, Dw=20, Bcm=repeat, I1mr=3),
+                            PREPARED: dict(Ir=41 if role == "A" else 49, Dr=10, Dw=5 if role == "A" else 7, Bcm=0, I1mr=0)}
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.assertEqual(count_report(root, costs), ([], []))
+            self.assertEqual(len(json.loads((root / "counts.json").read_text())), 400)
+            key = sorted(CASES)[0]
+            for repeat in (1, 2):
+                costs["SMALL", "B", repeat, key][TARGET]["Dw"] += 1
+            failures, unexpected = count_report(root, costs)
+            self.assertEqual(len(failures), 1)
+            self.assertEqual(len(unexpected), 1)
 
 
 if __name__ == "__main__":

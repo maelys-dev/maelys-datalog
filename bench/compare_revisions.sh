@@ -70,6 +70,7 @@ for role in A B; do
       DRIVER="$driver" OUT="$workspace/bin-$role-$profile" REVISION="$revision" PROFILE="$profile"
   done
 done
+python3 "$driver/bench/session_proof.py" counts "$output" "$workspace"
 fi
 run_pass() {
   local profile=$1 role=$2 name=$3
@@ -113,6 +114,6 @@ if test "$session_diagnostics" = 1; then
   mv "$output/sessions-diagnostic.incomplete.md" "$output/sessions-diagnostic.md"
 fi
 if test "${SESSION_FULL_PROOF:-0}" = 1; then
-  python3 "$driver/bench/session_proof.py" "$output" "$workspace"
+  python3 "$driver/bench/session_proof.py" timings "$output" "$workspace"
 fi
 # Deliberately no git writes, PR comments, release, or bench/results files.
