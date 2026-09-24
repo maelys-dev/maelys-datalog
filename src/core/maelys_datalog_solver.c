@@ -2133,7 +2133,7 @@ _Static_assert((int)MAELYS_DATALOG_LITERAL_COUNT == (int)MAELYS_DATALOG_EXPLANAT
                (int)MAELYS_DATALOG_LITERAL_SUM == (int)MAELYS_DATALOG_EXPLANATION_PREMISE_SUM,
                "aggregate literal/witness kinds");
 
-static int solve_aggregate_literal(maelys_datalog_internal_solve_result_t *result,
+static __attribute__((noinline)) int solve_aggregate_literal(maelys_datalog_internal_solve_result_t *result,
                                const maelys_datalog_literal_t *literal,
                                size_t body_index, solve_once_bindings_t *bindings) {
     maelys_datalog_internal_fact_t pattern;
