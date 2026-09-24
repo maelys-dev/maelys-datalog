@@ -5,6 +5,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include "src/core/maelys_datalog_aggregate_error.h"
 
 #include "common/maelys_errors.h"
 #include "src/core/maelys_datalog_edb.h"
@@ -27,7 +28,9 @@ typedef enum {
     MAELYS_DATALOG_SOLVE_DIAG_MALFORMED_EDB,
     MAELYS_DATALOG_SOLVE_DIAG_INVALID_STATE,
     MAELYS_DATALOG_SOLVE_DIAG_INVALID_ARGUMENT,
-    MAELYS_DATALOG_SOLVE_DIAG_INTERNAL_ERROR
+    MAELYS_DATALOG_SOLVE_DIAG_INTERNAL_ERROR,
+    MAELYS_DATALOG_SOLVE_DIAG_AGGREGATE_DOMAIN_ERROR,
+    MAELYS_DATALOG_SOLVE_DIAG_SUM_OVERFLOW
 } maelys_datalog_solve_diag_category_t;
 
 typedef struct {
@@ -36,19 +39,28 @@ typedef struct {
     maelys_datalog_solve_diag_category_t category;
     uint16_t predicate_id;
     uint16_t rule_id;
-    uint16_t depth;
-    uint16_t depth_limit;
-    uint16_t capacity;
-    uint16_t count_observed;
-    uint8_t lhs_kind;
-    uint8_t rhs_kind;
-    uint8_t comparison_op;
-    uint8_t term_index;
-    uint8_t arity_expected;
-    uint8_t arity_observed;
-    uint8_t limit_kind; /* maelys_datalog_limit_t, zero when unavailable. */
-    uint8_t _pad[1];
+    union {
+        struct {
+            uint16_t depth;
+            uint16_t depth_limit;
+            uint16_t capacity;
+            uint16_t count_observed;
+            uint8_t lhs_kind;
+            uint8_t rhs_kind;
+            uint8_t comparison_op;
+            uint8_t term_index;
+            uint8_t arity_expected;
+            uint8_t arity_observed;
+            uint8_t limit_kind; /* maelys_datalog_limit_t, zero when unavailable. */
+            uint8_t _pad[1];
+        };
+        maelys_datalog_aggregate_error_t aggregate;
+    };
 } maelys_datalog_internal_solve_diagnostic_t;
+
+void maelys_datalog_copy_solve_diagnostic(maelys_datalog_diagnostic_t *,
+                                          const maelys_datalog_internal_solve_diagnostic_t *,
+    const maelys_datalog_internal_ruleset_t *, maelys_result_t);
 
 const char *maelys_datalog_solve_diagnostic_category_name(
     maelys_datalog_solve_diag_category_t category);

@@ -9,6 +9,15 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 
+- Aggregate rejections now distinguish `solve_aggregate_domain_error` from
+  `solve_sum_overflow`, preserving `INVALID_FIELD` and atomic failure. The
+  diagnostic names the source predicate, operator, projected argument, offending
+  typed value (or first overflowing partial sum) and numeric bound. A new
+  `DIAGNOSTIC_AGGREGATE` presence bit uses existing fields; public layouts and
+  backend ABI 4 are unchanged. Update exhaustive diagnostic-code switches for
+  the two additive codes. Python carries the common fields; Wasm exposes an
+  immutable `aggregate` section with exact decimal integer text.
+
 - Advanced operations on the existing application handles: in-memory manifest
   bundles, caller-owned policy storage, bounded domain installers, composed
   session backend/context configuration, reference structured explanations,

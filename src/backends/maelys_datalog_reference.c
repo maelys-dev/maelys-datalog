@@ -23,9 +23,8 @@ static maelys_datalog_status_t solve(void *state, const maelys_datalog_fact_t *f
     maelys_datalog_internal_solve_result_t *result = NULL;
     maelys_datalog_internal_solve_diagnostic_t diag = {0};
     maelys_result_t rc =
-        maelys_datalog_prepared_session_solve_materialized_ex(session, &result, &diag);
+        maelys_datalog_prepared_session_solve_materialized_ex(session, &result, &diag, diagnostic);
     if (rc != MAELYS_OK) {
-        maelys_datalog_copy_solve_diagnostic(diagnostic, &diag, &session->working, rc);
         return (maelys_datalog_status_t)rc;
     }
     *out_result = result; /* The host cleans up even if emission fails. */

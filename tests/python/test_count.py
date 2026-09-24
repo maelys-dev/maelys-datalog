@@ -2,7 +2,7 @@
 import subprocess
 import sys
 import unittest
-from maelys_datalog import Capability, Engine, Predicate, PRED_EDB, PRED_IDB, PRED_QUERY
+from maelys_datalog import MaelysDatalogError, Capability, Engine, Predicate, PRED_EDB, PRED_IDB, PRED_QUERY
 
 
 class CountTest(unittest.TestCase):
@@ -59,6 +59,22 @@ class CountTest(unittest.TestCase):
                     self.assertIn(f"{op}-empty", result.explain_false("total", ["worker", 0]))
                 result.close()
                 edb.close()
+                for bad in (-1, -(1 << 63), (1 << 63) - 1, 2147483648, True, "wrong"):
+                    invalid = rules.edb()
+                    invalid.add_facts([("group", ["api"]), ("event", [1, "api", bad])])
+                    with self.assertRaises(MaelysDatalogError) as caught:
+                        prepared.solve(invalid)
+                    d = caught.exception.diagnostic
+                    self.assertEqual(d.message, "aggregate_domain_error")
+                    self.assertEqual((d.predicate, d.field, d.term_index, d.limit), ("event", op, 2, 2147483647))
+                    self.assertEqual(d.token, "true" if bad is True else str(bad))
+                    self.assertTrue(d.present & 256)
+                    self.assertFalse(d.present & 4)
+                    invalid.close()
+                empty = rules.edb()
+                result = prepared.solve(empty)
+                result.close()
+                empty.close()
                 prepared.close()
                 rules.close()
 

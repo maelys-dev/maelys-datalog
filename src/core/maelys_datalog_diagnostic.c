@@ -1,5 +1,7 @@
 #include "src/core/maelys_datalog_diagnostic.h"
 
+#include "src/core/maelys_datalog_solver.h"
+#include <inttypes.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -8,6 +10,18 @@ _Static_assert(offsetof(maelys_datalog_internal_diagnostic_t, limit_kind) + 1u <
                "bound identity occupies the pre-existing alignment gap");
 _Static_assert(MAELYS_DATALOG_LIMIT_MAX_FACTS_PER_PRED <= UINT8_MAX,
                "compact bound identity must fit");
+
+/* Reuse existing private error storage without changing hot result layouts. */
+_Static_assert(sizeof(maelys_datalog_aggregate_error_t) == 16u, "compact aggregate error");
+_Static_assert(sizeof(maelys_datalog_internal_solve_diagnostic_t) == 32u, "compact solve diagnostic");
+_Static_assert(_Alignof(maelys_datalog_internal_solve_diagnostic_t) == _Alignof(maelys_result_t),
+               "compact solve diagnostic alignment");
+_Static_assert(offsetof(maelys_datalog_internal_diagnostic_t, token) ==
+               offsetof(maelys_datalog_internal_diagnostic_t, arity) + sizeof(size_t),
+               "aggregate payload must not move the token storage");
+_Static_assert(offsetof(maelys_datalog_internal_diagnostic_t, field) ==
+               offsetof(maelys_datalog_internal_diagnostic_t, token) + 96u,
+               "aggregate payload must not move following fields");
 
 /* Returns 1 when the null-terminated source fits, 0 on truncation or error.
  * Current callers pass string literals or file paths; this guards future long
@@ -123,6 +137,8 @@ const char *maelys_datalog_diag_code_name(maelys_datalog_diag_code_t code) {
         case MAELYS_DATALOG_DIAG_SOLVE_INVALID_STATE: return "solve_invalid_state";
         case MAELYS_DATALOG_DIAG_SOLVE_INVALID_ARGUMENT: return "solve_invalid_argument";
         case MAELYS_DATALOG_DIAG_SOLVE_INTERNAL_ERROR: return "solve_internal_error";
+        case MAELYS_DATALOG_DIAG_SOLVE_AGGREGATE_DOMAIN_ERROR: return "solve_aggregate_domain_error";
+        case MAELYS_DATALOG_DIAG_SOLVE_SUM_OVERFLOW: return "solve_sum_overflow";
         default: return "unknown";
     }
 }
@@ -156,4 +172,74 @@ maelys_datalog_status_t maelys_datalog_diagnostic_clear(maelys_datalog_diagnosti
     d->phase[0] = d->message[0] = d->hint[0] = d->file[0] = d->predicate[0] = '\0';
     d->token[0] = d->field[0] = d->domain[0] = '\0';
     return MAELYS_DATALOG_STATUS_OK;
+}
+
+void maelys_datalog_copy_solve_diagnostic(maelys_datalog_diagnostic_t *out,
+    const maelys_datalog_internal_solve_diagnostic_t *in,
+    const maelys_datalog_internal_ruleset_t *ruleset, maelys_result_t status) {
+    if (!out || !in || maelys_datalog_diagnostic_clear(out)) return;
+    out->source = MAELYS_DATALOG_DIAGNOSTIC_SOLVE;
+    out->status = (maelys_datalog_status_t)status;
+    static const maelys_datalog_diag_code_t codes[] = {
+        MAELYS_DATALOG_DIAG_OPERATION_REJECTED,
+        MAELYS_DATALOG_DIAG_SOLVE_MAX_DEPTH, MAELYS_DATALOG_DIAG_SOLVE_IDB_OVERFLOW,
+        MAELYS_DATALOG_DIAG_SOLVE_COMPARISON_TYPE_ERROR, MAELYS_DATALOG_DIAG_SOLVE_FILTER_ERROR,
+        MAELYS_DATALOG_DIAG_SOLVE_MALFORMED_FACT, MAELYS_DATALOG_DIAG_SOLVE_MALFORMED_EDB,
+        MAELYS_DATALOG_DIAG_SOLVE_INVALID_STATE, MAELYS_DATALOG_DIAG_SOLVE_INVALID_ARGUMENT,
+        MAELYS_DATALOG_DIAG_SOLVE_INTERNAL_ERROR,
+        MAELYS_DATALOG_DIAG_SOLVE_AGGREGATE_DOMAIN_ERROR, MAELYS_DATALOG_DIAG_SOLVE_SUM_OVERFLOW
+    };
+    out->code = (unsigned)in->category < sizeof(codes)/sizeof(codes[0]) ? codes[in->category] : MAELYS_DATALOG_DIAG_SOLVE_INTERNAL_ERROR;
+    snprintf(out->phase, sizeof(out->phase), "solve");
+    snprintf(out->message, sizeof(out->message), "%s", maelys_datalog_solve_diagnostic_category_name(in->category));
+    const maelys_datalog_predicate_entry_t *pred = ruleset ? maelys_datalog_predicate_registry_get(&ruleset->registry, in->predicate_id) : NULL;
+    if (pred) {
+        out->present |= MAELYS_DATALOG_DIAGNOSTIC_PREDICATE;
+        snprintf(out->predicate, sizeof(out->predicate), "%s", pred->name); out->arity = pred->arity;
+    }
+    if (in->rule_id != UINT16_MAX && ruleset && in->rule_id < ruleset->rule_count) {
+        out->present |= MAELYS_DATALOG_DIAGNOSTIC_RULE; out->rule_id = in->rule_id;
+    }
+    if (in->category == MAELYS_DATALOG_SOLVE_DIAG_AGGREGATE_DOMAIN_ERROR ||
+        in->category == MAELYS_DATALOG_SOLVE_DIAG_SUM_OVERFLOW) {
+        const maelys_datalog_aggregate_error_t *a = &in->aggregate;
+        int64_t value;
+        memcpy(&value, a->value_words, sizeof(value));
+        out->present |= MAELYS_DATALOG_DIAGNOSTIC_AGGREGATE | MAELYS_DATALOG_DIAGNOSTIC_CONTEXT;
+        out->lhs_kind = a->kind;
+        out->term_index = a->term_index;
+        out->limit = MAELYS_DATALOG_MAX_INT;
+        snprintf(out->field, sizeof(out->field), "%s", a->literal_kind == MAELYS_DATALOG_LITERAL_MIN
+            ? "min" : a->literal_kind == MAELYS_DATALOG_LITERAL_MAX ? "max" : "sum");
+        if (a->kind == MAELYS_DATALOG_TERM_INT)
+            snprintf(out->token, sizeof(out->token), "%" PRId64, value);
+        else if (a->kind == MAELYS_DATALOG_TERM_BOOL)
+            snprintf(out->token, sizeof(out->token), "%s", value ? "true" : "false");
+        else if (a->kind == MAELYS_DATALOG_TERM_SYMBOL && ruleset) {
+            const char *text = maelys_datalog_symbol_text(&ruleset->symbols, (maelys_datalog_symbol_id_t)value);
+            snprintf(out->token, sizeof(out->token), "%s", text ? text : "");
+        }
+        snprintf(out->hint, sizeof(out->hint), "%s", a->overflow
+            ? "The sum of distinct source facts must not exceed 2147483647."
+            : "Each projected value must be an integer in [0, 2147483647]; no coercion is performed.");
+        return; /* The compact aggregate payload aliases the other error sections. */
+    }
+    if (in->depth_limit) {
+        out->present |= MAELYS_DATALOG_DIAGNOSTIC_DEPTH;
+        out->depth = in->depth; out->depth_limit = in->depth_limit;
+    }
+    if (in->capacity || in->count_observed) {
+        out->present |= MAELYS_DATALOG_DIAGNOSTIC_CAPACITY;
+        out->observed_count = in->count_observed; out->limit = in->capacity;
+        out->limit_kind = (maelys_datalog_limit_t)in->limit_kind;
+    }
+    if (in->category == MAELYS_DATALOG_SOLVE_DIAG_COMPARISON_TYPE_ERROR) {
+        out->present |= MAELYS_DATALOG_DIAGNOSTIC_COMPARISON;
+        out->lhs_kind = in->lhs_kind; out->rhs_kind = in->rhs_kind;
+        out->comparison_op = in->comparison_op; out->term_index = in->term_index;
+    }
+    if (in->category == MAELYS_DATALOG_SOLVE_DIAG_MALFORMED_FACT) {
+        out->present |= MAELYS_DATALOG_DIAGNOSTIC_ARITY;
+        out->expected_arity = in->arity_expected; out->observed_arity = in->arity_observed;
+    }
 }

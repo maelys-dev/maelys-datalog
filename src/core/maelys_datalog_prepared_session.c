@@ -362,18 +362,24 @@ maelys_result_t maelys_datalog_prepared_session_solve_ex(
     if (!out_result) return MAELYS_ERR_INVALID_ARGUMENT;
     maelys_result_t rc = maelys_datalog_prepared_session_materialize_inputs(session, facts, fact_count);
     if (rc != MAELYS_OK) return rc;
-    return maelys_datalog_prepared_session_solve_materialized_ex(session, out_result, out_diag);
+    return maelys_datalog_prepared_session_solve_materialized_ex(session, out_result, out_diag, NULL);
 }
 
 maelys_result_t maelys_datalog_prepared_session_solve_materialized_ex(
     maelys_datalog_internal_prepared_session_t *session,
-    maelys_datalog_internal_solve_result_t **out_result, maelys_datalog_internal_solve_diagnostic_t *out_diag) {
+    maelys_datalog_internal_solve_result_t **out_result, maelys_datalog_internal_solve_diagnostic_t *out_diag,
+    maelys_datalog_diagnostic_t *public_diag) {
     if (out_result) *out_result = NULL;
     if (!session || !out_result) return MAELYS_ERR_INVALID_ARGUMENT;
     if (session->active_result || !session->edb.immutable) return MAELYS_ERR_INVALID_STATE;
     maelys_result_t rc = maelys_datalog_solve_reusing_workspace(
         &session->working, &session->edb, session->result_workspace, out_result, out_diag);
-    if (rc != MAELYS_OK) return reject_transaction(session, rc);
+    if (rc != MAELYS_OK) {
+        /* Resolve rejected symbol IDs while this transaction's vocabulary still
+         * exists. The subsequent rollback restores the prepared dictionary. */
+        maelys_datalog_copy_solve_diagnostic(public_diag, out_diag, &session->working, rc);
+        return reject_transaction(session, rc);
+    }
     maelys_datalog_solve_result_set_release(
         *out_result,
         session,

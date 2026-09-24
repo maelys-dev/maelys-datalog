@@ -101,6 +101,8 @@ class MaelysPlayground {
     if (present & 32n) d.arity = Object.freeze({ expected: n(20), observed: n(21), termIndex: n(19) });
     if (present & 64n) d.rule = Object.freeze({ id: n(12) });
     if (present & 128n) d.context = Object.freeze({ token: text(5), field: text(6), domain: text(7) });
+    if (present & 256n) d.aggregate = Object.freeze({ operator: text(6), value: text(5),
+      valueKind: n(15), termIndex: n(19), limit: n(9) });
     return Object.freeze(d);
   }
   _check(rc, operation) { if (rc !== 0) throw new DatalogError(operation, rc, this._diagnostic()); }
