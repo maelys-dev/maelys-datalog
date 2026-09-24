@@ -210,6 +210,24 @@ when it has what they name.
   for scoped instruction counts or neutral-placement controls. If attribution
   remains unresolved, state that limit rather than discarding passes or changing
   the interpretation of the statistic.
+- The [bounded #110 follow-up](https://github.com/maelys-dev/maelys-datalog/actions/runs/36025333350)
+  used pads 0/16/32/48/64/128 and two counterbalanced rounds on seven declared
+  fixtures. All 42 fixture/placement instruction comparisons passed; Ir/Dr/Dw
+  repeated exactly and did not drift with placement within a revision. Retain
+  the named prepared-entry exception (+8 Ir/+1 Dr/+2 Dw), not a claim of zero
+  overhead. The separate LARGE/2048 driver's corrected/base median gap changed
+  from +9.83% at pad 0 to -6.16% at pad 48, with the same signs in both rounds.
+  This supports
+  placement sensitivity in that driver, not a specific hardware mechanism or
+  a universal tolerance. The full SMALL derive/sorted/integer/31 case still
+  measured +4.96% above its 2.01% A/A floor; its diagnostic does not erase it.
+  Preserve the earlier +6.44% and +10.38% observations in their original run
+  context. Hardware counters were not measured, and translating text does not
+  control every inter-function distance or internal data address. This bounded
+  investigation is closed with those attribution limits: no further padding
+  sweep or timing-only engine fix follows from it. Preserve the original hosted
+  report alongside the offline solver-quantile correction; combined timing
+  classifications are unchanged, but one individual p95 round changes class.
 - Upload raw CSV and the comparison report as run artifacts only. Never commit
   generated results or add automatic PR comments. Distinguish synthetic tooling
   tests/local Docker smoke from actual hosted-runner performance measurements.
