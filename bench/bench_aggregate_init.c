@@ -63,17 +63,17 @@ int main(int argc, char **argv) {
             double samples[SAMPLES];
 #ifdef AGGREGATE_COUNT
             char count_label[100];
+            char warmup_label[110];
             snprintf(count_label, sizeof(count_label), "%s/%s/%zu", ops[op], orders[order], n);
+            snprintf(warmup_label, sizeof(warmup_label), "warmup/%s", count_label);
 #endif
             for (unsigned s = 0; s < WARMUP + SAMPLES; ++s) {
                 maelys_datalog_result_t *result = NULL;
                 maelys_datalog_diagnostic_t diagnostic = MAELYS_DATALOG_DIAGNOSTIC_INIT;
 #ifdef AGGREGATE_COUNT
-                if (s == WARMUP) {
-                    /* Collection-off still records calls: discard warmups too. */
-                    CALLGRIND_ZERO_STATS;
-                    CALLGRIND_TOGGLE_COLLECT;
-                }
+                if (s == 0) { CALLGRIND_TOGGLE_COLLECT; }
+                /* A separate collected dump resets both costs and call edges. */
+                if (s == WARMUP) { CALLGRIND_DUMP_STATS_AT(warmup_label); }
                 int status = maelys_datalog_session_solve_edb(sessions[op], edb, &result, &diagnostic);
                 if (s == WARMUP) {
                     CALLGRIND_TOGGLE_COLLECT;

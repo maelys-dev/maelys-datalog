@@ -86,7 +86,7 @@ def count(root, workspace):
     protocol = dict(base_head=json.loads((root / 'metadata.json').read_text()),
                     target=TARGET, expected_per_call=dict(Ir=2, Dr=0, Dw=1),
                     target_architecture=platform.machine(), profiles=PROFILES,
-                    cases_per_profile=100, warmups=50, counted_samples=1, repeats=2,
+                    cases_per_profile=100, warmups=50, warmups_dumped_separately=True, counted_samples=1, repeats=2,
                     harness_sha256={name: hashlib.sha256((driver / name).read_bytes()).hexdigest()
                                     for name in ('bench_aggregate_init.c', 'aggregate_init_proof.py',
                                                  'callgrind_exclusive.py', 'Makefile.compare', 'compare_revisions.sh')})
@@ -110,13 +110,21 @@ def count(root, workspace):
                 rows = load_rows(prefix.with_suffix('.csv'), profile)
                 assert all(all(r[k] == '0.000000' for k in ('min_us', 'median_us', 'p95_us')) for r in rows.values())
                 dumps = list(out.glob(prefix.name + '.out.*'))
-                assert len(dumps) == 100
+                assert len(dumps) == 200
                 seen = set()
+                warmups = set()
                 for path in dumps:
                     key, costs, calls = parse(path.read_text())
+                    if key[0] == 'warmup':
+                        key = key[1:]
+                        assert key in cases(profile) and key not in warmups
+                        assert calls == 50
+                        warmups.add(key)
+                        continue
                     assert key in cases(profile) and key not in seen
                     seen.add(key)
                     data[profile, role, repeat, key] = (costs, calls)
+                assert warmups == seen == cases(profile)
                 print('counted', profile, role, repeat, '100 cases', flush=True)
     (out / 'binaries.sha256.json').write_text(json.dumps(hashes, indent=2) + '\n')
     for profile in PROFILES:
@@ -131,7 +139,7 @@ def count(root, workspace):
             table.append(dict(profile=profile, case=key, calls=acalls, a=a[TARGET], b=b[TARGET], delta=delta, repeats_identical=True))
     (out / 'counts.json').write_text(json.dumps(table, indent=2) + '\n')
     lines = ['# Aggregate initializer: scoped exclusive counts', '',
-             'Linux x86_64, Clang -O2 -g -UNDEBUG, SMALL/LARGE. 100 cases per profile: count/min/max/sum, five orders, sizes 0/1/8/32/capacity. Count one successful solve_edb after 50 uncounted warmups; fixture preparation, checks, clocks and release are excluded. Two processes per revision/profile. All output values are checked.', '',
+             'Linux x86_64, Clang -O2 -g -UNDEBUG, SMALL/LARGE. 100 cases per profile: count/min/max/sum, five orders, sizes 0/1/8/32/capacity. Count one successful solve_edb after 50 separately dumped warmups; fixture preparation, checks, clocks and release are excluded. Two processes per revision/profile. All output values are checked.', '',
              'Expected x86 change per evaluated aggregate literal: +2 Ir (zero register and store), +0 Dr, +1 Dw (16-byte store). No other exclusive Ir/Dr/Dw change is permitted; all repetitions must be identical. Cache/branch model events remain in raw files and do not relax this gate.', '',
              '| Profile | Case | Calls | A Ir/Dr/Dw | B Ir/Dr/Dw | Delta | Repeats identical |',
              '|---|---|---:|---|---|---|---|']
