@@ -184,14 +184,10 @@ ensure_pinned_emsdk() {
 if [ "$target" = wasm32 ]; then
   ensure_pinned_emsdk
 
-  dts_path=""
-  if [ -f "bindings/wasm/maelys_playground.d.ts" ]; then
-    dts_path="bindings/wasm/maelys_playground.d.ts"
-  else
-    dts_path="$(find . -path ./build -prune -o -path ./dist -prune -o -iname 'maelys_playground.d.ts' -print 2>/dev/null | head -n1)"
-  fi
-  if [ -z "$dts_path" ]; then
-    echo "note: maelys_playground.d.ts not found anywhere in the repo; omitting it from the wasm tarballs" >&2
+  dts_path="bindings/wasm/maelys_playground.d.ts"
+  if [ ! -f "$dts_path" ]; then
+    echo "error: the Wasm SDK requires its TypeScript declarations" >&2
+    exit 1
   fi
 
   build_wasm_profile() {  # $1 = small|large, $2 = WASM_BUILD_DIR
@@ -207,10 +203,8 @@ if [ "$target" = wasm32 ]; then
     stage="$(mktemp -d)"
     cp "$build_dir/maelys_datalog_dynamic.js" "$stage/"
     cp "$build_dir/maelys_datalog_dynamic.wasm" "$stage/"
-    cp bindings/wasm/maelys_playground.js "$stage/"
-    if [ -n "$dts_path" ]; then
-      cp "$dts_path" "$stage/maelys_playground.d.ts"
-    fi
+    cp "$build_dir/maelys_playground.js" "$stage/"
+    cp "$build_dir/maelys_playground.d.ts" "$stage/"
 
     local name="maelys-datalog-${version}-wasm-${suffix}.tar.gz"
     tar -czf "$dist/${name}" -C "$stage" .

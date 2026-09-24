@@ -64,6 +64,9 @@ $(BUILD_DIR)/tests/test_maelys_datalog_diagnostic_writes: tests/test_maelys_data
 $(BUILD_DIR)/tests/test_maelys_datalog_input_edb_alloc: tests/test_maelys_datalog_input_edb_alloc.c $(SRCS) $(ENGINE_HEADERS) | $(BUILD_DIR)/tests
 	$(CC) $(TEST_CFLAGS) -UNDEBUG -I. -Iinclude $(filter-out src/runtime/maelys_datalog_input_edb.c,$(SRCS)) $< -o $@
 
+$(BUILD_DIR)/tests/test_maelys_datalog_wasm_builder: tests/test_maelys_datalog_wasm_builder.c tests/fixtures/allocation_guard.h $(SRCS) $(WASM_TEST_SRCS) $(WASM_TEST_HEADERS) $(ENGINE_HEADERS) | $(BUILD_DIR)/tests
+	$(CC) $(TEST_CFLAGS) -UNDEBUG -DMAELYS_WASM_ALLOCATION_TEST -include tests/fixtures/allocation_guard.h $(SRCS) $(WASM_TEST_SRCS) $< -o $@
+
 $(BUILD_DIR)/tests/test_maelys_datalog_hot_path_alloc $(BUILD_DIR)/tests/test_maelys_datalog_prepared_explanations: $(BUILD_DIR)/tests/%: tests/%.c tests/fixtures/allocation_guard.h $(SRCS) $(ENGINE_HEADERS) | $(BUILD_DIR)/tests
 	$(CC) $(TEST_CFLAGS) -UNDEBUG -include tests/fixtures/allocation_guard.h $(SRCS) $< -o $@
 

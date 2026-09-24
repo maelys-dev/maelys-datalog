@@ -291,8 +291,8 @@ The single Python binding’s build/test commands, migration table and lifecycle
 examples are in its [README](../bindings/python/README.md); test SMALL and LARGE.
 
 The WASM C boundary and JavaScript wrapper live together in
-[`bindings/wasm/`](../bindings/wasm/README.md). Tests import the wrapper from
-there; generated modules remain under `build/wasm` and `build/wasm-large`.
+[`bindings/wasm/`](../bindings/wasm/README.md). Generated modules remain under `build/wasm` and `build/wasm-large`. The gate
+copies the built wrapper and tests outside the checkout before execution.
 
 After each profile’s CMake build, run the isolated installed-SDK Python gate:
 
@@ -318,9 +318,7 @@ API 2 guard. Removing that guard makes both negative controls fail.
 ```sh
 for profile in small large; do
   make -B -f Makefile.wasm maelys_datalog_dynamic.js WASM_PROFILE="$profile" EM_CACHE="$PWD/build/emscripten-cache"
-  for script in tests/wasm/*.mjs; do
-    MAELYS_WASM_PROFILE="$profile" node "$script"
-  done
+  bash tools/check_wasm_binding.sh "$profile"
   EM_CACHE="$PWD/build/emscripten-cache" bash tools/check_wasm_extensions.sh "$profile"
 done
 ```
@@ -332,10 +330,17 @@ WASM module. It runs all five conformance executables under Node; it does not us
 side modules or alter the shipped JavaScript wrapper.
 
 CI runs both profiles with Emscripten 3.1.61 (the release toolchain) and
-4.0.14. Allocation-instrumentation tests resolve lazy `_malloc`/`_free`
-exports before installing hooks; warm-up allocations are outside the
-measured operations and injected failures. No production wrapper warm-up
-or relaxed allocation assertions are needed.
+4.0.14. The builder installs an Emscripten static SDK in a fresh prefix and
+compiles the adapter outside the source tree using only its public headers.
+API 1/3 and private-header negative controls must fail. A separate C consumer
+compares results and canonical explanation bytes with the public SDK; native
+ASan/UBSan and allocation guards also exercise malformed frames, rollback,
+int64 extremes, short-output retry, close and reuse. The actual Wasm export
+table must contain the binding allowlist and no historical native exports.
+Node tests cover typed inputs, all aggregate operators, atom authority, result
+leases, structured capacity diagnostics, both explanation kinds/truncation,
+exact int64, copied values, multi-predicate atomicity and memory-view growth.
+No timing or whole-binding zero-allocation claim follows from these tests.
 
 ## Bounded robustness smoke and guards
 

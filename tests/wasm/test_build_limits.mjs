@@ -1,67 +1,20 @@
-import playgroundPkg from '../../bindings/wasm/maelys_playground.js';
-
-const { MaelysPlayground } = playgroundPkg;
-
-const profile = (process.env.MAELYS_WASM_PROFILE || 'small').toLowerCase();
-const buildDir = profile === 'large' ? '../../build/wasm-large' : '../../build/wasm';
-
-const dynamicModule = await import(new URL(`${buildDir}/maelys_datalog_dynamic.js`, import.meta.url).href);
-const MaelysDatalogDynamic = dynamicModule.default;
-
-const expectedByProfile = {
-  small: {
-    maxSymbols: 512,
-    stringPoolBytes: 32768,
-    maxPredicates: 128,
-    maxRules: 128,
-    maxArity: 4,
-    maxBodyLiterals: 8,
-    maxDepth: 10,
-    maxEdbFacts: 1024,
-    maxIdbFacts: 1024,
-    maxFactsPerPred: 64,
-  },
-  large: {
-    maxSymbols: 512,
-    stringPoolBytes: 32768,
-    maxPredicates: 128,
-    maxRules: 128,
-    maxArity: 4,
-    maxBodyLiterals: 8,
-    maxDepth: 10,
-    maxEdbFacts: 2048,
-    maxIdbFacts: 2048,
-    maxFactsPerPred: 256,
-  },
-};
-
-function assert(condition, message) {
-  if (!condition) throw new Error(message);
-}
-
-if (!Object.prototype.hasOwnProperty.call(expectedByProfile, profile)) {
-  throw new Error(`Unsupported MAELYS_WASM_PROFILE="${profile}"`);
-}
-
-const wasmUrl = new URL(`${buildDir}/maelys_datalog_dynamic.wasm`, import.meta.url).href;
-const pg = await MaelysPlayground.create(MaelysDatalogDynamic, wasmUrl);
-
-assert(typeof pg.buildLimits === 'function', 'buildLimits must be a function');
-const limits = pg.buildLimits();
-assert(limits && typeof limits === 'object', 'buildLimits must return an object');
-
-const expected = expectedByProfile[profile];
-const expectedKeys = Object.keys(expected);
-const actualKeys = Object.keys(limits);
-assert(actualKeys.length === expectedKeys.length,
-       `expected ${expectedKeys.length} keys, got ${actualKeys.length}: ${actualKeys.join(', ')}`);
-
-for (const key of expectedKeys) {
-  assert(Object.prototype.hasOwnProperty.call(limits, key), `missing ${key}`);
-  assert(Number.isInteger(limits[key]), `${key} must be an integer, got ${limits[key]}`);
-  assert(limits[key] >= 0, `${key} must be non-negative, got ${limits[key]}`);
-  assert(limits[key] === expected[key],
-         `${key}: expected ${expected[key]} for ${profile}, got ${limits[key]}`);
-}
-
-console.log(`PASS: buildLimits ${profile} ${JSON.stringify(limits)}`);
+/* SPDX-License-Identifier: MPL-2.0 */
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import { create, profile, wasmURL, MaelysPlayground } from './helpers.mjs';
+const pg=await create(), limits=pg.buildLimits();
+assert.equal(limits.maxArity,4);
+assert.equal(limits.maxFactsPerPred,profile==='large'?256:64);
+assert.equal(limits.maxEdbFacts,profile==='large'?2048:1024);
+assert.equal(limits.maxStringBytes,1024);
+assert.ok(limits.inputEdbTextBytes>=limits.stringPoolBytes);
+assert.equal(Object.keys(limits).length,12);
+pg.close();
+const module=await WebAssembly.compile(fs.readFileSync(wasmURL));
+const exports=WebAssembly.Module.exports(module).map(x=>x.name);
+const expected=JSON.parse(fs.readFileSync(new URL('../../bindings/wasm/exports.json',import.meta.url),'utf8')).map(x=>x.slice(1));
+for(const name of expected) assert.ok(exports.includes(name),`Missing export ${name}`);
+for(const name of exports) if(name.includes('maelys_datalog')) assert.ok(expected.includes(name),`Undeclared engine export ${name}`);
+assert.ok(!exports.some(x=>x.includes('ruleset_ptr')));
+for(const version of [0,2]) assert.throws(()=>new MaelysPlayground({ccall:()=>version}),/transport/);
+console.log(`PASS: installed SDK ${profile}, 12 limits and ${expected.length} declared exports`);

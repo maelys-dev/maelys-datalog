@@ -1,0 +1,23 @@
+[
+  "_maelys_datalog_wasm_transport_version",
+  "_maelys_datalog_wasm_open",
+  "_maelys_datalog_wasm_close",
+  "_maelys_datalog_wasm_limit",
+  "_maelys_datalog_wasm_register_domain",
+  "_maelys_datalog_wasm_load_policy",
+  "_maelys_datalog_wasm_clear_facts",
+  "_maelys_datalog_wasm_add_facts",
+  "_maelys_datalog_wasm_input_usage",
+  "_maelys_datalog_wasm_solve",
+  "_maelys_datalog_wasm_free_result",
+  "_maelys_datalog_wasm_query",
+  "_maelys_datalog_wasm_enumerate",
+  "_maelys_datalog_wasm_symbol_text",
+  "_maelys_datalog_wasm_explain",
+  "_maelys_datalog_wasm_derived_count",
+  "_maelys_datalog_wasm_fingerprint",
+  "_maelys_datalog_wasm_diagnostic_scalar",
+  "_maelys_datalog_wasm_diagnostic_text",
+  "_malloc",
+  "_free"
+]
