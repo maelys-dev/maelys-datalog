@@ -18,11 +18,11 @@
 #undef realloc
 #undef free
 #undef memset
-static size_t calls, live_allocations;
+static size_t calls, live_allocations, fail_call;
 static int forbidden;
-void *maelys_test_malloc(size_t n) { ++calls; if (forbidden) return NULL; void *p=malloc(n); if(p) ++live_allocations; return p; }
-void *maelys_test_calloc(size_t n,size_t s) { ++calls; if(forbidden) return NULL; void *p=calloc(n,s); if(p) ++live_allocations; return p; }
-void *maelys_test_realloc(void *p,size_t n) { ++calls; if(forbidden) return NULL; void *r=realloc(p,n); if(r && !p) ++live_allocations; return r; }
+void *maelys_test_malloc(size_t n) { ++calls; if (forbidden || calls == fail_call) return NULL; void *p=malloc(n); if(p) ++live_allocations; return p; }
+void *maelys_test_calloc(size_t n,size_t s) { ++calls; if(forbidden || calls == fail_call) return NULL; void *p=calloc(n,s); if(p) ++live_allocations; return p; }
+void *maelys_test_realloc(void *p,size_t n) { ++calls; if(forbidden || calls == fail_call) return NULL; void *r=realloc(p,n); if(r && !p) ++live_allocations; return r; }
 void maelys_test_free(void *p) { ++calls; if(p) --live_allocations; free(p); }
 void *maelys_test_memset(void *p,int c,size_t n) { return memset(p,c,n); }
 #endif
@@ -40,7 +40,11 @@ int main(void) {
     forbidden=1;
     assert(maelys_datalog_wasm_open()==MAELYS_DATALOG_STATUS_INTERNAL);
     assert(live_allocations==0);
-    forbidden=0; calls=0;
+    forbidden=0; calls=0; fail_call=2;
+    /* Input allocation fails after conversion scratch was already acquired. */
+    assert(maelys_datalog_wasm_open()==MAELYS_DATALOG_STATUS_INTERNAL);
+    assert(live_allocations==0);
+    fail_call=0; calls=0;
 #endif
     assert(maelys_datalog_wasm_open()==0);
 #ifdef MAELYS_WASM_ALLOCATION_TEST
@@ -132,7 +136,7 @@ int main(void) {
     char fp[65],expected_fp[65];
     assert(maelys_datalog_wasm_fingerprint(1,fp,sizeof(fp))==0);
     assert(maelys_datalog_policy_fingerprint(policy,expected_fp)==0 && strcmp(fp,expected_fp)==0);
-    assert(maelys_datalog_result_free(result)==0); assert(maelys_datalog_session_free(session)==0); assert(maelys_datalog_policy_free(policy)==0);
+    assert(maelys_datalog_result_free(result)==0); result=NULL;
 #ifdef MAELYS_WASM_ALLOCATION_TEST
     forbidden=1; calls=0;
 #endif
@@ -148,11 +152,19 @@ int main(void) {
         uint64_t bits; memcpy(&bits,&ints[i],sizeof(bits));
         unary[3]=2; unary[4]=(uint32_t)bits; unary[5]=(uint32_t)(bits>>32);
         assert(maelys_datalog_wasm_add_facts(unary,15,1,text,sizeof(text))==0);
-        assert(maelys_datalog_wasm_solve()==0);
+        expected.terms[0].kind=MAELYS_DATALOG_VALUE_INTEGER;
+        expected.terms[0].as.integer=ints[i];
+        const int oracle_status=maelys_datalog_session_solve(session,&expected,1,&result,&diag);
+        const int adapter_status=maelys_datalog_wasm_solve();
+        assert(oracle_status==0 && adapter_status==oracle_status);
         assert(maelys_datalog_wasm_enumerate("q",1,terms,1,&count)==0 && count==1);
+        assert(maelys_datalog_result_enumerate(result,"q",1,&view,1,&count_native)==0 && count_native==count);
+        assert(view.terms[0].kind==MAELYS_DATALOG_VALUE_INTEGER && view.terms[0].as.integer==ints[i]);
         assert(terms[0]==2 && terms[1]==(uint32_t)bits && terms[2]==(uint32_t)(bits>>32));
+        assert(maelys_datalog_result_free(result)==0); result=NULL;
         assert(maelys_datalog_wasm_free_result()==0); assert(maelys_datalog_wasm_clear_facts()==0);
     }
+    assert(maelys_datalog_session_free(session)==0); assert(maelys_datalog_policy_free(policy)==0);
     assert(maelys_datalog_wasm_close()==0);
     assert(maelys_datalog_wasm_close()==MAELYS_DATALOG_STATUS_INVALID_STATE);
     assert(maelys_datalog_wasm_solve()==MAELYS_DATALOG_STATUS_INVALID_STATE);
