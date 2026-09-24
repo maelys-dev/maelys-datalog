@@ -38,3 +38,11 @@ $(OUT)/sessions: $(OBJECTS) $(DRIVER)/bench/bench_sessions.c
 
 $(OUT)/sessions-counts: $(OBJECTS) $(DRIVER)/bench/bench_sessions.c
 	$(CC) $(FLAGS) $(DEFS) -DMAELYS_BENCH_COUNT $(DRIVER)/bench/bench_sessions.c $(OBJECTS) -o $@
+
+ifeq ($(AGGREGATE_DIAGNOSTICS),1)
+all: $(OUT)/aggregates $(OUT)/aggregates-counts
+endif
+$(OUT)/aggregates: $(OBJECTS) $(DRIVER)/bench/bench_aggregate_init.c
+	$(CC) $(FLAGS) $(DRIVER)/bench/bench_aggregate_init.c $(OBJECTS) -o $@
+$(OUT)/aggregates-counts: $(OBJECTS) $(DRIVER)/bench/bench_aggregate_init.c
+	$(CC) $(FLAGS) -DAGGREGATE_COUNT $(DRIVER)/bench/bench_aggregate_init.c $(OBJECTS) -o $@

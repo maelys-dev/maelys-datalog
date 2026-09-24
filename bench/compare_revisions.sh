@@ -45,6 +45,8 @@ if grep -q 'maelys_datalog_session_config_set_explanation_workspace(' "$workspac
 fi
 printf '%s\n' "$explanations" > "$output/explanations-enabled.txt"
 unset MAKEFLAGS MFLAGS
+aggregate_diagnostics=${AGGREGATE_DIAGNOSTICS:-0}
+case "$aggregate_diagnostics" in 0|1) ;; *) echo 'AGGREGATE_DIAGNOSTICS must be 0 or 1' >&2; exit 2;; esac
 session_diagnostics=${SESSION_DIAGNOSTICS:-0}
 case "$session_diagnostics" in 0|1) ;; *) echo 'SESSION_DIAGNOSTICS must be 0 or 1' >&2; exit 2;; esac
 printf '%s\n' "$session_diagnostics" > "$output/session-diagnostics-enabled.txt"
@@ -58,9 +60,12 @@ for role in A B; do
   for profile in SMALL LARGE; do
     make -j1 -C "$workspace/$role" -f "$driver/bench/Makefile.compare" \
       DRIVER="$driver" OUT="$workspace/bin-$role-$profile" REVISION="$revision" PROFILE="$profile" \
-      EXPLANATIONS="$build_explanations" SESSION_DIAGNOSTICS="$session_diagnostics"
+      EXPLANATIONS="$build_explanations" SESSION_DIAGNOSTICS="$session_diagnostics" AGGREGATE_DIAGNOSTICS="$aggregate_diagnostics"
   done
 done
+if test "$aggregate_diagnostics" = 1; then
+  python3 "$driver/bench/aggregate_init_proof.py" counts "$output" "$workspace"
+fi
 run_pass() {
   local profile=$1 role=$2 name=$3
   MAELYS_BENCH_SAMPLES=1000 "$workspace/bin-$role-$profile/solver" \
@@ -69,6 +74,10 @@ run_pass() {
     "$output/$profile-input-$name.csv" "$output/$profile-input-$name.samples.csv"
   "$workspace/bin-$role-$profile/sessions" \
     "$output/$profile-sessions-$name.csv" "$output/$profile-sessions-$name.samples.csv"
+  if test "$aggregate_diagnostics" = 1; then
+    "$workspace/bin-$role-$profile/aggregates" \
+      "$output/$profile-aggregates-$name.csv" "$output/$profile-aggregates-$name.samples.csv"
+  fi
 }
 run_explanations() {
   local profile=$1 mode=$2 name=$3
@@ -101,5 +110,8 @@ mv "$output/sessions.incomplete.md" "$output/sessions.md"
 if test "$session_diagnostics" = 1; then
   python3 "$driver/bench/diagnose_sessions.py" "$output" "$workspace" > "$output/sessions-diagnostic.incomplete.md"
   mv "$output/sessions-diagnostic.incomplete.md" "$output/sessions-diagnostic.md"
+fi
+if test "$aggregate_diagnostics" = 1; then
+  python3 "$driver/bench/aggregate_init_proof.py" report "$output" "$workspace"
 fi
 # Deliberately no git writes, PR comments, release, or bench/results files.
