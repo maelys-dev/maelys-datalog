@@ -1,6 +1,7 @@
 # Predicate declaration and storage contract
 
-Status: next minor release, targeting 0.10.0; not part of published 0.9.0.
+Available in 0.10.0. This declaration migration is part of the coordinated
+[0.10.0 API migration](../api-type-migration.md).
 
 Every input predicate table uses `maelys_datalog_predicate_t` from
 `<maelys/datalog.h>`:
@@ -58,14 +59,14 @@ output contract is distinct from registration's synchronous copy contract.
 - Python uses the common public declaration directly through CFFI. The shim
   and `maelys_py_predicate_def_t` are removed. Use `Predicate.flags` (formerly
   `kind_flags`) or named constructors, and rebuild against the installed SDK.
-- The Wasm builder still copies each name when it is added. Its fixed staging
-  storage owns names across calls. Commit constructs a temporary bounded array
-  of common declarations, which registration copies before returning. This adds
-  at most `MAX_PREDICATES * sizeof(public_predicate_t)` automatic bytes during
-  commit; persistent builder storage and exported JS/Wasm signatures are unchanged.
-- Stable C declarations/layouts, backend ABI 3, program ABI 1, language syntax,
-  fact semantics and memory profiles are unchanged. This does not freeze ABI 4
-  or establish a whole-engine zero-heap guarantee.
+- Wasm now consumes the installed public SDK through its typed API. The old
+  native-object builder and raw exports are removed without aliases; see the
+  [Wasm migration](../../bindings/wasm/README.md).
+- The declaration migration preserves stable C declaration layouts, language
+  syntax, fact semantics and memory profiles. The coordinated 0.10.0 diagnostic
+  migration separately requires consumer API 2, backend ABI 4 and program ABI 2.
+  This does not freeze future interfaces or establish a whole-engine zero-heap
+  guarantee.
 
 ## Validation
 

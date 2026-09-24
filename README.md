@@ -193,14 +193,14 @@ New integrations use the opaque, installed C API:
 #include <maelys/datalog.h>
 ```
 
-In 0.10.0 (unreleased), CMake installations and native SDK archives share the
+In 0.10.0, CMake installations and native SDK archives share the
 same public headers under `include/maelys/`. Advanced operations use
 `<maelys/datalog_advanced.h>` on the same opaque handles. The historical
 `maelys_datalog.h` umbrella, version-macro header and `src/`/`common/` headers
 are no longer distributed; they remain private to repository builds. There
 are no compatibility aliases for the concrete native representations.
 
-In the next minor release (unreleased), stable and low-level predicate tables
+In 0.10.0, stable and low-level predicate tables
 both use `maelys_datalog_predicate_t` (`name`, `arity`, `flags`). Domain
 registration copies names into bounded owned storage; pointer declarations do
 not require heap allocation. The old low-level and Python-shim C predicate
@@ -235,7 +235,7 @@ inject policy facts or derived facts. The ordinary struct initializer remains
 available. The existing C11 `MAELYS_DATALOG_QUERY(result, ...)` is different:
 it executes a membership query; it does not declare a predicate.
 
-Domain initializers (unreleased) also derive the counts from fixed-size arrays:
+Domain initializers, added in 0.10.0, also derive the counts from fixed-size arrays:
 
 ```c
 static const maelys_datalog_domain_t domain =

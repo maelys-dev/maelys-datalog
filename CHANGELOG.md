@@ -7,6 +7,28 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## 0.10.0 — 2026-09-24
+
+Coordinated C, Python, Wasm and SDK migration. The released contracts are
+consumer API 2, frontend/program ABI 2 and backend ABI 4. Recompile C/CFFI
+consumers and migrate removed interfaces; there are no compatibility aliases.
+
+- C declarations, input types and callback/diagnostic contracts change together
+  in [#98](https://github.com/maelys-dev/maelys-datalog/pull/98),
+  [#102](https://github.com/maelys-dev/maelys-datalog/pull/102) and
+  [#103](https://github.com/maelys-dev/maelys-datalog/pull/103).
+- Python [#106](https://github.com/maelys-dev/maelys-datalog/pull/106),
+  Wasm [#107](https://github.com/maelys-dev/maelys-datalog/pull/107) and native
+  archives [#108](https://github.com/maelys-dev/maelys-datalog/pull/108) move
+  together to the installed public SDK.
+- This release also includes domain initializers
+  [#101](https://github.com/maelys-dev/maelys-datalog/pull/101), solver changes
+  [#104](https://github.com/maelys-dev/maelys-datalog/pull/104) and
+  [#105](https://github.com/maelys-dev/maelys-datalog/pull/105), reproducible
+  archives [#109](https://github.com/maelys-dev/maelys-datalog/pull/109), and
+  aggregate diagnostics [#110](https://github.com/maelys-dev/maelys-datalog/pull/110)
+  with defensive initialization [#111](https://github.com/maelys-dev/maelys-datalog/pull/111).
+
 ### Added
 
 - Aggregate rejections now distinguish `solve_aggregate_domain_error` from
@@ -31,6 +53,12 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
   not restrict request EDB symbols or change loading permissions.
 
 ### Changed
+
+- Initialize aggregate rejection scratch before evaluation, including on the
+  successful path. Current rejection sites already populate it; this defensive
+  change protects against a future propagated error that omits those fields.
+  Aggregate evaluation remains outside the ordinary rule-derivation frame.
+  Public layouts, diagnostic codes, statuses and backend ABI 4 are unchanged.
 
 - Native release builds retain debug information with canonical source/build
   paths. Tar/gzip metadata is normalized to `SOURCE_DATE_EPOCH` (default: source
@@ -104,20 +132,23 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
   `maelys_datalog_build_limits_t` and `maelys_datalog_get_build_limits`; Python and
   Wasm read the scalar limits while preserving their existing language-level
   results. Rebuild C/CFFI consumers for the coordinated 0.10.0 source migration.
-  These type-name changes preserve existing layouts and backend ABI 3 signatures
-  at the binary level; they do not implement the future resource contract.
+  These type-name changes alone preserve existing layouts and callback signatures;
+  the coordinated diagnostic migration above requires backend ABI 4. They do not
+  implement the future resource contract.
 
 - Unify predicate declarations on `maelys_datalog_predicate_t` for stable
-  and low-level domains, inline domain loading, and the Python C shim. Remove
+  and low-level domains and inline domain loading. Remove
   `maelys_datalog_predicate_def_t` and `maelys_py_predicate_def_t` without aliases;
   migrate declarations from `kind_flags` to `flags` and rebuild low-level/CFFI
-  consumers together. This source/binary break in the advanced interfaces targets
-  0.10.0. Stable C layouts, backend ABI 3 and program ABI 1 remain unchanged.
+  consumers together. The declaration migration changes the advanced interfaces
+  while preserving stable C declaration layouts; the diagnostic migration above
+  separately changes backend and program callback contracts.
 - Separate declarations from private owned registry entries, retaining inline
   bounded names and existing registry/ruleset layouts. Registration copies input
-  strings synchronously without allocation. The legacy Python shim no longer
-  reserves a redundant process-wide domain table; the Wasm builder keeps owned
-  staged names and constructs bounded declaration views only during commit.
+  strings synchronously without allocation. The legacy Python shim and its
+  redundant process-wide domain table are removed. Language bindings now use the
+  public SDK as described above.
+
 ## 0.9.1 — 2026-09-23
 
 One fix on the low-level domain registry. No public surface, behavior,
