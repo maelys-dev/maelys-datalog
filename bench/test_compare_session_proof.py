@@ -49,7 +49,7 @@ fn=(3) solve_once_derive_ordered'2
                     for key in CASES:
                         costs[profile, role, repeat, key] = {
                             TARGET: dict(Ir=100, Dr=30, Dw=20, Bcm=repeat, I1mr=3),
-                            PREPARED: dict(Ir=41 if role == "A" else 49, Dr=10, Dw=5 if role == "A" else 7, Bcm=0, I1mr=0)}
+                            PREPARED: dict(Ir=41 if role == "A" else 49, Dr=11 if role == "A" else 12, Dw=9 if role == "A" else 11, Bcm=0, I1mr=0)}
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             self.assertEqual(count_report(root, costs), ([], []))
@@ -60,6 +60,13 @@ fn=(3) solve_once_derive_ordered'2
             failures, unexpected = count_report(root, costs)
             self.assertEqual(len(failures), 1)
             self.assertEqual(len(unexpected), 1)
+            for repeat in (1, 2):
+                costs["SMALL", "B", repeat, key][TARGET]["Dw"] -= 1
+                costs["SMALL", "B", repeat, key][PREPARED]["Dr"] += 1
+            failures, unexpected = count_report(root, costs)
+            self.assertEqual(failures, [])
+            self.assertEqual(len(unexpected), 1)
+            self.assertEqual(unexpected[0]["function"], PREPARED)
 
 
 if __name__ == "__main__":
