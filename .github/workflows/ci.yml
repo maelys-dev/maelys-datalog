@@ -65,7 +65,9 @@ jobs:
           ctest --test-dir build/cmake --output-on-failure
 
       - name: Verify installed SDK consumers, examples and MIT starters
-        run: bash tools/check_module_sdk.sh "$PWD/build/cmake"
+        run: |
+          bash tools/check_module_sdk.sh "$PWD/build/cmake"
+          bash tools/check_sdk_archive.sh "$PWD/build/cmake"
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -83,6 +85,7 @@ jobs:
           cmake --build build/cmake-large --parallel 4
           ctest --test-dir build/cmake-large --output-on-failure
           bash tools/check_module_sdk.sh "$PWD/build/cmake-large"
+          bash tools/check_sdk_archive.sh "$PWD/build/cmake-large"
           bash tools/check_python_binding.sh "$PWD/build/cmake-large" python large
 
   # The socle's sanitizers job covers SMALL on Linux; the three other cells

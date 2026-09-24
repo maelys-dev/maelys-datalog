@@ -1,11 +1,12 @@
 #pragma once
 
-/* Legacy/advanced alpha aggregation surface.
+/* Repository-private historical aggregation surface.
  *
- * New consumers should include <maelys/datalog.h>, whose handles are opaque
- * and whose CMake installation does not expose implementation headers. This
- * historical surface is source-breaking in 0.10.0: implementation types now
- * carry internal_ names. New application and extension code uses the headers under maelys/. */
+ * Not installed or shipped in SDK archives since 0.10.0. Internal tests and
+ * benchmarks may use it; application and extension code includes maelys/.
+ * Use <maelys/datalog.h> and, for advanced operations on the same handles,
+ * <maelys/datalog_advanced.h>. Implementation types are not an SDK contract.
+ */
 
 /* Version macros live in the generated header (single source: VERSION).
  * Regenerate with scripts/generate-version-header.sh; never edit either

@@ -18,6 +18,11 @@ without `--apply` and writes with it.
 Write the changelog entry `## X.Y.Z — YYYY-MM-DD` under `[Unreleased]`, on
 `main`, through an ordinary pull request. The cut refuses to run without it.
 
+Before cutting 0.10.0, the SDK CI jobs must pass the installed-prefix and
+extracted-archive consumers in both SMALL and LARGE. Native packaging itself
+runs the extracted-archive gate before producing a checksum or receipt; no
+release may bypass a missing-header or private-header failure.
+
 Then run the two local gates on the tree that will be released:
 
 ```bash

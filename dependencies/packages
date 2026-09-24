@@ -1,7 +1,14 @@
 # System packages the release build needs on the socle's runners, installed
 # by release.yml after the socle's own packaging tools (docs/conventions.md,
 # "Dependencies"). The Makefiles compile with clang; package-release.sh
-# writes the receipt with jq. macOS runners ship both.
+# writes the receipt with jq, stages through CMake and inspects raw tar members
+# with Python's standard library (BSD tar hides AppleDouble metadata).
 [linux]
 clang
 jq
+cmake
+python3
+
+[macos]
+cmake
+python@3.12

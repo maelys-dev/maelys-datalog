@@ -47,9 +47,32 @@ target on an Ubuntu runner, not a separate job.
 
 | Artifact | Targets | Contents |
 |---|---|---|
-| `maelys-datalog-X.Y.Z-<target>.tar.gz` | linux-x86_64, linux-arm64, macos-arm64 | `lib/libmaelys_datalog.a`, `include/maelys_datalog.h`, `include/maelys_datalog_version.h`, `LICENSE`, `CHANGELOG.md` |
+| `maelys-datalog-X.Y.Z-<target>.tar.gz` | linux-x86_64, linux-arm64, macos-arm64 | `lib/libmaelys_datalog.a` (SMALL), `include/maelys/*.h`, SDK conformance kit/MIT starters and licenses under `share/maelys-datalog/`, `LICENSE`, `CHANGELOG.md`, `licenses/yyjson/LICENSE` |
 | `maelys-datalog-X.Y.Z-wasm-small.tar.gz` | wasm32 (profile `small`) | `maelys_datalog_dynamic.js`, `maelys_datalog_dynamic.wasm`, `maelys_playground.js`, `maelys_playground.d.ts` |
 | `maelys-datalog-X.Y.Z-wasm-large.tar.gz` | wasm32 (profile `large`, `-DMAELYS_DATALOG_PROFILE_LARGE`) | same layout |
+
+Native staging uses the `sdk` and `sdk-static` CMake install components;
+CMake is the only install list for public headers and SDK support files. The
+`release-metadata` component preserves the tarball's root license/changelog
+and yyjson notice. Normal CMake installations also provide `sdk-shared`.
+Neither distribution installs the historical aggregation/version-macro headers
+nor private engine headers. These remain available to repository-internal
+builds only. An archive is not an SDK for the historical concrete native types.
+
+Release packaging uses a fresh SMALL build with clang by default, debug symbols
+and no optimization, preserving the former Make packaging defaults. It builds
+only the static target, packages it through `scripts/package-native-sdk.sh`,
+then compiles and executes external consumers against the **extracted archive**
+before producing its checksum and receipt. CI additionally exercises this same
+packager and gate in LARGE; this does not add a second native release artifact.
+See `tools/check_sdk_archive.sh` and `docs/validation.md` for inventory parity,
+profile checks and negative controls. Host extended attributes are not packaged;
+raw members are checked using Python's standard library because BSD tar hides
+AppleDouble metadata during both listing and extraction. On macOS, the static
+install rule scopes `ZERO_AR_DATE=1` around CMake's `ranlib` invocation so its
+index timestamp does not vary between installations. The previous environment
+is restored after that rule. No compiler or profile is inferred from
+objects left by another build.
 
 Every tarball ships with a `.sha256` sibling and a provenance attestation.
 macOS Intel is intentionally not shipped (same policy as mcp-runtime).

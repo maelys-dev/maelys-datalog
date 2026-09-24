@@ -193,8 +193,12 @@ New integrations use the opaque, installed C API:
 #include <maelys/datalog.h>
 ```
 
-The legacy `include/maelys_datalog.h` umbrella remains available for alpha
-compatibility. New modules must not depend on its internal engine types.
+In 0.10.0 (unreleased), CMake installations and native SDK archives share the
+same public headers under `include/maelys/`. Advanced operations use
+`<maelys/datalog_advanced.h>` on the same opaque handles. The historical
+`maelys_datalog.h` umbrella, version-macro header and `src/`/`common/` headers
+are no longer distributed; they remain private to repository builds. There
+are no compatibility aliases for the concrete native representations.
 
 In the next minor release (unreleased), stable and low-level predicate tables
 both use `maelys_datalog_predicate_t` (`name`, `arity`, `flags`). Domain
