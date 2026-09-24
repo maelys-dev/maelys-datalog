@@ -59,8 +59,32 @@ set_target_properties(maelys_datalog_shared PROPERTIES
 
 # The release archive uses these same install rules, selecting SDK + static.
 # Keep shared libraries available to ordinary CMake installs, not native tarballs.
+if(APPLE)
+    # CMake re-runs ranlib after installing a static archive. Apple ranlib's
+    # default index timestamp makes two installs differ at the byte level.
+    # Scope deterministic archive metadata to this install rule, not its caller.
+    install(CODE [[
+        set(_maelys_had_zero_ar_date FALSE)
+        if(DEFINED ENV{ZERO_AR_DATE})
+            set(_maelys_had_zero_ar_date TRUE)
+            set(_maelys_zero_ar_date "$ENV{ZERO_AR_DATE}")
+        endif()
+        set(ENV{ZERO_AR_DATE} 1)
+    ]] COMPONENT sdk-static)
+endif()
 install(TARGETS maelys_datalog
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR} COMPONENT sdk-static)
+if(APPLE)
+    install(CODE [[
+        if(_maelys_had_zero_ar_date)
+            set(ENV{ZERO_AR_DATE} "${_maelys_zero_ar_date}")
+        else()
+            unset(ENV{ZERO_AR_DATE})
+        endif()
+        unset(_maelys_had_zero_ar_date)
+        unset(_maelys_zero_ar_date)
+    ]] COMPONENT sdk-static)
+endif()
 install(TARGETS maelys_datalog_shared
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR} COMPONENT sdk-shared
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT sdk-shared)

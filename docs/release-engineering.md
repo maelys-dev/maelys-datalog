@@ -68,7 +68,10 @@ packager and gate in LARGE; this does not add a second native release artifact.
 See `tools/check_sdk_archive.sh` and `docs/validation.md` for inventory parity,
 profile checks and negative controls. Host extended attributes are not packaged;
 raw members are checked using Python's standard library because BSD tar hides
-AppleDouble metadata during both listing and extraction. No compiler or profile is inferred from
+AppleDouble metadata during both listing and extraction. On macOS, the static
+install rule scopes `ZERO_AR_DATE=1` around CMake's `ranlib` invocation so its
+index timestamp does not vary between installations. The previous environment
+is restored after that rule. No compiler or profile is inferred from
 objects left by another build.
 
 Every tarball ships with a `.sha256` sibling and a provenance attestation.

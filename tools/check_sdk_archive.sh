@@ -45,6 +45,18 @@ check_raw_members "$archive"
 diff -r "$scratch/install/include" "$prefix/include"
 diff -r "$scratch/install/share" "$prefix/share"
 diff -r "$scratch/install/lib" "$prefix/lib"
+if [[ "$(uname -s)" == Darwin ]]; then
+  # Comparing two installs alone can pass accidentally within the same second.
+  # The first ar member is the symbol index: its decimal timestamp must be zero.
+  python3 - "$prefix/lib/libmaelys_datalog.a" <<'PY'
+import sys
+
+with open(sys.argv[1], "rb") as archive:
+    header = archive.read(68)  # ar magic (8) + first member header (60)
+assert header[:8] == b"!<arch>\n", "invalid static archive"
+assert int(header[24:36].strip()) == 0, "non-deterministic ranlib index timestamp"
+PY
+fi
 cmp "$root/LICENSE" "$prefix/LICENSE"
 cmp "$root/CHANGELOG.md" "$prefix/CHANGELOG.md"
 cmp "$root/vendor/yyjson/LICENSE" "$prefix/licenses/yyjson/LICENSE"

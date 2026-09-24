@@ -259,7 +259,10 @@ with extracted paths: BSD tar can silently absorb AppleDouble metadata, so its
 own listing is insufficient. Packaging disables creation of those host metadata
 entries. A third negative control duplicates an identical tar member, which
 leaves the extracted content unchanged but must fail the raw-inventory check.
-These controls never modify the source or the original archive. Both
+These controls never modify the source or the original archive.
+On macOS, CMake's post-install `ranlib` is scoped to `ZERO_AR_DATE=1` and the
+archive gate requires a zero symbol-index timestamp. This makes byte parity
+independent of whether the two installations happen in the same second. Both
 SMALL and LARGE run in the existing SDK CI jobs. Release packaging runs the gate
 on its actual SMALL artifact before writing checksums/receipts. These tests do
 not establish performance or change the engine's allocation guarantees.
