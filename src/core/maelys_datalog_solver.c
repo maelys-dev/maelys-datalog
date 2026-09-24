@@ -2140,7 +2140,7 @@ static __attribute__((noinline)) int solve_aggregate_literal(maelys_datalog_inte
     maelys_datalog_internal_term_t value;
     maelys_datalog_explanation_origin_t origin;
     int has_value;
-    maelys_datalog_aggregate_error_t error;
+    maelys_datalog_aggregate_error_t error = {0};
     maelys_result_t rc = evaluate_aggregate(result, literal, bindings, &pattern, &value, &origin, &has_value, &error);
     if (rc != MAELYS_OK) {
         solve_once_set_invalid_state(result);
