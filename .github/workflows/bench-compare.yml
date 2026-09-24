@@ -61,6 +61,7 @@ jobs:
         run: bash bench/diagnose_solver_layout.sh "$BASE_REF" "$ORIGINAL_REF" "$HEAD_REF" "$RUNNER_TEMP/bench-diagnostic"
       - name: Compare immutable revisions
         env:
+          SESSION_FULL_PROOF: '1'
           BASE_REF: ${{ inputs.base }}
           HEAD_REF: ${{ inputs.head }}
           SESSION_DIAGNOSTICS: ${{ inputs.session_diagnostics && '1' || '0' }}

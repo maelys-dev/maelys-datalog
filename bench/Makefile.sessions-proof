@@ -1,0 +1,18 @@
+# Proof-only driver; does not travel in the product PR.
+include $(DRIVER)/bench/Makefile.compare
+PADS = 0 16 64 256
+proof: $(foreach pad,$(PADS),$(OUT)/proof-counts-$(pad) $(OUT)/proof-session-$(pad))
+$(OUT)/proof-timing.o: $(DRIVER)/bench/bench_sessions.c
+	$(CC) $(FLAGS) $(DEFS) -c $< -o $@
+$(OUT)/proof-counts.o: $(DRIVER)/bench/bench_sessions_all_counts.c
+	$(CC) $(FLAGS) $(DEFS) -DMAELYS_BENCH_COUNT -c $< -o $@
+$(OUT)/proof-counts: $(OUT)/proof-counts.o $(OBJECTS)
+	$(CC) $(FLAGS) $^ -o $@
+$(OUT)/proof-counts-%: $(OUT)/proof-counts.o $(OBJECTS) $(OUT)/proof-pad-%.o
+	$(CC) $(FLAGS) $(OUT)/proof-counts.o $(foreach obj,$(OBJECTS),$(if $(filter %/src/core/maelys_datalog_edb.o,$(obj)),$(OUT)/proof-pad-$*.o) $(obj)) -o $@
+$(OUT)/proof-pad-%.o:
+	printf '.text\n.balign 16\n.space %s, 0x90\n.section .note.GNU-stack,"",@progbits\n' '$*' | $(CC) -x assembler -c -o $@ -
+$(OUT)/proof-session-%: $(OUT)/proof-timing.o $(OBJECTS) $(OUT)/proof-pad-%.o
+	$(CC) $(FLAGS) $(OUT)/proof-timing.o $(foreach obj,$(OBJECTS),$(if $(filter %/src/core/maelys_datalog_edb.o,$(obj)),$(OUT)/proof-pad-$*.o) $(obj)) -o $@
+.SECONDARY:
+.PHONY: proof

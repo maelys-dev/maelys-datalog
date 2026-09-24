@@ -61,6 +61,16 @@ for role in A B; do
       EXPLANATIONS="$build_explanations" SESSION_DIAGNOSTICS="$session_diagnostics"
   done
 done
+if test "${SESSION_FULL_PROOF:-0}" = 1; then
+for role in A B; do
+  revision=$base
+  if test "$role" = B; then revision=$candidate; fi
+  for profile in SMALL LARGE; do
+    make -j1 -C "$workspace/$role" -f "$driver/bench/Makefile.sessions-proof" proof \
+      DRIVER="$driver" OUT="$workspace/bin-$role-$profile" REVISION="$revision" PROFILE="$profile"
+  done
+done
+fi
 run_pass() {
   local profile=$1 role=$2 name=$3
   MAELYS_BENCH_SAMPLES=1000 "$workspace/bin-$role-$profile/solver" \
@@ -101,5 +111,8 @@ mv "$output/sessions.incomplete.md" "$output/sessions.md"
 if test "$session_diagnostics" = 1; then
   python3 "$driver/bench/diagnose_sessions.py" "$output" "$workspace" > "$output/sessions-diagnostic.incomplete.md"
   mv "$output/sessions-diagnostic.incomplete.md" "$output/sessions-diagnostic.md"
+fi
+if test "${SESSION_FULL_PROOF:-0}" = 1; then
+  python3 "$driver/bench/session_proof.py" "$output" "$workspace"
 fi
 # Deliberately no git writes, PR comments, release, or bench/results files.
