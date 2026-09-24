@@ -125,7 +125,8 @@ def count(root, workspace):
             b, bcalls = data[profile, 'B', 1, key]
             assert (a, acalls) == data[profile, 'A', 2, key]
             assert (b, bcalls) == data[profile, 'B', 2, key]
-            assert acalls == bcalls
+            # Each fixture has one aggregate literal, evaluated once per solve.
+            assert acalls == bcalls == 1
             delta = difference(a, b, acalls)
             table.append(dict(profile=profile, case=key, calls=acalls, a=a[TARGET], b=b[TARGET], delta=delta, repeats_identical=True))
     (out / 'counts.json').write_text(json.dumps(table, indent=2) + '\n')

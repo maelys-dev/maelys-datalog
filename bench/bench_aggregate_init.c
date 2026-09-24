@@ -69,7 +69,11 @@ int main(int argc, char **argv) {
                 maelys_datalog_result_t *result = NULL;
                 maelys_datalog_diagnostic_t diagnostic = MAELYS_DATALOG_DIAGNOSTIC_INIT;
 #ifdef AGGREGATE_COUNT
-                if (s == WARMUP) { CALLGRIND_TOGGLE_COLLECT; }
+                if (s == WARMUP) {
+                    /* Collection-off still records calls: discard warmups too. */
+                    CALLGRIND_ZERO_STATS;
+                    CALLGRIND_TOGGLE_COLLECT;
+                }
                 int status = maelys_datalog_session_solve_edb(sessions[op], edb, &result, &diagnostic);
                 if (s == WARMUP) {
                     CALLGRIND_TOGGLE_COLLECT;
