@@ -306,7 +306,10 @@ def read_stats(prefix, solver=False):
     if solver:
         if {r['result'] for r in rows} != {'17'}:
             raise ValueError('wrong solver oracle')
-        return dict(min_us=samples[0], median_us=samples[len(samples)//2], p95_us=samples[len(samples)*95//100], result_digest='17')
+        # Match report_solver_layout.py: an even-sized median averages both
+        # central samples; p95 uses nearest rank, ceil(.95*n)-1 (zero based).
+        return dict(min_us=samples[0], median_us=statistics.median(samples),
+                    p95_us=samples[math.ceil(.95 * len(samples))-1], result_digest='17')
     with Path(str(prefix) + '.csv').open() as stream:
         summary = list(csv.DictReader(stream))
     if len(summary) != 1:

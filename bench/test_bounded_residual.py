@@ -56,6 +56,15 @@ class BoundedEvidenceTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'oracle'):
                 read_stats(prefix, True)
 
+    def test_solver_statistics_match_historical_definitions(self):
+        with tempfile.TemporaryDirectory() as directory:
+            prefix = Path(directory) / 'solver'
+            Path(str(prefix) + '.samples.csv').write_text('sample,elapsed_us,result\n' +
+                ''.join(f'{i},{i+1},17\n' for i in range(1000)))
+            values = read_stats(prefix, True)
+            self.assertEqual(values['median_us'], 500.5)
+            self.assertEqual(values['p95_us'], 950)
+
     def test_complete_report_keeps_both_noise_views_and_every_count_cell(self):
         p = spec()
         rows = []
