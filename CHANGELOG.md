@@ -23,6 +23,19 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ### Changed
 
+- Consolidate Python on one `maelys_datalog` package, using the former
+  `python-next` implementation directly against the installed public SDK.
+  Remove `maelys_datalog_next`, the native-object C shim, its CMake option/target,
+  and ruleset-scoped raw symbol inputs without compatibility aliases. Sessions,
+  atomic bounded inputs, result-owned term views, diagnostics and both explanation
+  kinds are available through the single package. `Status` names native errors.
+  Predicate flags, explanation absence, thread confinement and explicit cleanup
+  require caller migration; see `bindings/python/README.md`. Python/CFFI still
+  allocate. SMALL/LARGE tests compile outside the checkout against a fresh SDK;
+  independent expected answers and migrated V1 contracts replace dual-binding
+  parity. Wasm migration and archive cleanup remain separate work.
+
+
 - Reference solving classifies base-predicate presence once per rule application
   and skips base fact membership for derived heads whose predicate is absent.
   Low-level hand-built bases retain duplicate suppression before capacity errors,

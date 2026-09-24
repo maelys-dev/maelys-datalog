@@ -14,10 +14,10 @@ import subprocess
 import sys
 import textwrap
 
-from maelys_datalog_next import (
+from maelys_datalog import (
     Capability, Engine, Predicate, PRED_EDB, PRED_IDB, PRED_QUERY, MaelysDatalogError,
 )
-from maelys_datalog_next import engine as binding
+from maelys_datalog import engine as binding
 
 
 DOMAIN = "next_complete_facade"
@@ -232,9 +232,8 @@ class FacadeTest(unittest.TestCase):
             "prepared_explanation_release": "SolveResult finally releases result lease",
             "result_free": "SolveResult.close",
         }
-        engine_dir = Path(os.environ.get("MAELYS_DATALOG_ENGINE_DIR",
-                                        Path(__file__).resolve().parents[3]))
-        header = engine_dir / "include/maelys/datalog.h"
+        sdk = Path(os.environ["MAELYS_DATALOG_SDK_PREFIX"])
+        header = sdk / "include/maelys/datalog.h"
         exports = set(re.findall(r"MAELYS_DATALOG_API\s+[^;]+?\b(maelys_datalog_\w+)\s*\(",
                                  header.read_text(encoding="utf-8")))
         self.assertEqual(exports, {"maelys_datalog_" + name for name in coverage})
@@ -242,7 +241,7 @@ class FacadeTest(unittest.TestCase):
             self.assertTrue(callable(getattr(binding.lib, name)), name)
 
     def test_bridge_depends_only_on_consumer_header(self):
-        builder = Path(__file__).resolve().parents[1] / "build_cffi.py"
+        builder = Path(__file__).resolve().parents[2] / "bindings/python/build_cffi.py"
         source = builder.read_text(encoding="utf-8")
         self.assertEqual(re.findall(r"#include\s+[<\"]([^>\"]+)[>\"]", source),
                          ["maelys/datalog.h"])
@@ -397,8 +396,8 @@ class FacadeTest(unittest.TestCase):
         # it without leaking into the rest of this test interpreter.
         program = textwrap.dedent('''
             import gc, json, sys, warnings, weakref
-            from maelys_datalog_next import Engine, Predicate, PRED_EDB, PRED_IDB, PRED_QUERY
-            from maelys_datalog_next import engine as binding
+            from maelys_datalog import Engine, Predicate, PRED_EDB, PRED_IDB, PRED_QUERY
+            from maelys_datalog import engine as binding
 
             def abandoned(closed):
                 engine = Engine()

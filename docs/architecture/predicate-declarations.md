@@ -55,10 +55,9 @@ output contract is distinct from registration's synchronous copy contract.
 - Rebuild all advanced C consumers: input-array stride changes, and the private
   return type of `domain_registry_find` is now a stored entry view. There is no
   compatibility typedef or dual declaration path.
-- The Python C shim uses the public type too; `maelys_py_predicate_def_t` is
-  removed and its CFFI declaration and layout guard use `flags`. Rebuild the
-  shim and CFFI module together. Python's high-level `Predicate.kind_flags`
-  remains the same API and maps to the common C field.
+- Python uses the common public declaration directly through CFFI. The shim
+  and `maelys_py_predicate_def_t` are removed. Use `Predicate.flags` (formerly
+  `kind_flags`) or named constructors, and rebuild against the installed SDK.
 - The Wasm builder still copies each name when it is added. Its fixed staging
   storage owns names across calls. Commit constructs a temporary bounded array
   of common declarations, which registration copies before returning. This adds

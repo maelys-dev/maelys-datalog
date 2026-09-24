@@ -1,602 +1,896 @@
+"""Python surface over the opaque Maelys Datalog C facade."""
+
 from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
+from dataclasses import dataclass, field
+import os
+from enum import IntEnum, IntFlag
 import threading
-import weakref
+import warnings
 
-from ._ffi import C, ffi, lib
-from ._types import (
-    BuildLimits,
-    Fact,
-    InputTerm,
-    Predicate,
-    RawFact,
-    Term,
-)
-from .errors import (
-    DomainAlreadyRegisteredError,
-    DomainRegistryFullError,
-    MaelysDatalogError,
-)
+from ._maelys_cffi import ffi, lib
 
 
-_DOMAIN_REGISTRY_LOCK = threading.Lock()
+PRED_EDB = int(lib.MAELYS_DATALOG_PREDICATE_EDB)
+PRED_IDB = int(lib.MAELYS_DATALOG_PREDICATE_IDB)
+PRED_QUERY = int(lib.MAELYS_DATALOG_PREDICATE_QUERY)
+PRED_POLICY_FACT = int(lib.MAELYS_DATALOG_PREDICATE_POLICY_FACT)
+_REGISTRY_LOCK = threading.RLock()
+_INT64_MIN = -(1 << 63)
+_INT64_MAX = (1 << 63) - 1
 
 
-def _raise_rc(rc: int, message: str = "", hint: str = "") -> None:
-    if rc == C.OK:
+class Status(IntEnum):
+    """Native operation statuses; diagnostic.code names the detailed cause."""
+
+    OK = int(lib.MAELYS_DATALOG_STATUS_OK)
+    INVALID_ARGUMENT = int(lib.MAELYS_DATALOG_STATUS_INVALID_ARGUMENT)
+    INVALID_FIELD = int(lib.MAELYS_DATALOG_STATUS_INVALID_FIELD)
+    NOT_FOUND = int(lib.MAELYS_DATALOG_STATUS_NOT_FOUND)
+    NOT_IMPLEMENTED = int(lib.MAELYS_DATALOG_STATUS_NOT_IMPLEMENTED)
+    UNSUPPORTED = int(lib.MAELYS_DATALOG_STATUS_UNSUPPORTED)
+    TIMEOUT = int(lib.MAELYS_DATALOG_STATUS_TIMEOUT)
+    IO = int(lib.MAELYS_DATALOG_STATUS_IO)
+    INTERNAL = int(lib.MAELYS_DATALOG_STATUS_INTERNAL)
+    UNAUTHORIZED = int(lib.MAELYS_DATALOG_STATUS_UNAUTHORIZED)
+    FORBIDDEN = int(lib.MAELYS_DATALOG_STATUS_FORBIDDEN)
+    RATE_LIMITED = int(lib.MAELYS_DATALOG_STATUS_RATE_LIMITED)
+    PAYLOAD_TOO_LARGE = int(lib.MAELYS_DATALOG_STATUS_PAYLOAD_TOO_LARGE)
+    INVALID_STATE = int(lib.MAELYS_DATALOG_STATUS_INVALID_STATE)
+    STORAGE_TOO_SMALL = int(lib.MAELYS_DATALOG_STATUS_STORAGE_TOO_SMALL)
+
+
+class Capability(IntFlag):
+    """Required backend capabilities; unsupported requests fail, never fall back."""
+
+    POSITIVE = int(lib.MAELYS_DATALOG_CAP_POSITIVE)
+    NEGATION = int(lib.MAELYS_DATALOG_CAP_NEGATION)
+    COMPARISONS = int(lib.MAELYS_DATALOG_CAP_COMPARISONS)
+    ARITHMETIC = int(lib.MAELYS_DATALOG_CAP_ARITHMETIC)
+    FILTERS = int(lib.MAELYS_DATALOG_CAP_FILTERS)
+    EXPLAIN_TRUE = int(lib.MAELYS_DATALOG_CAP_EXPLAIN_TRUE)
+    WORK_LIMIT = int(lib.MAELYS_DATALOG_CAP_WORK_LIMIT)
+    EXPLAIN_FALSE = int(lib.MAELYS_DATALOG_CAP_EXPLAIN_FALSE)
+    AGGREGATES = int(lib.MAELYS_DATALOG_CAP_AGGREGATES)
+    MIN = int(lib.MAELYS_DATALOG_CAP_MIN)
+    MAX = int(lib.MAELYS_DATALOG_CAP_MAX)
+    SUM = int(lib.MAELYS_DATALOG_CAP_SUM)
+
+
+class ExplanationKind(IntFlag):
+    """Opt-in reusable workspace kinds, distinct from backend capability bits."""
+
+    TRUE = int(lib.MAELYS_DATALOG_EXPLAIN_TRUE)
+    FALSE = int(lib.MAELYS_DATALOG_EXPLAIN_FALSE)
+
+
+@dataclass(frozen=True)
+class Predicate:
+    """Domain declaration; constructors do not register or validate a domain."""
+
+    name: str
+    arity: int
+    flags: int
+
+    @classmethod
+    def edb(cls, name: str, arity: int) -> Predicate:
+        """Declare application-supplied facts (EDB)."""
+        return cls(name, arity, PRED_EDB)
+
+    @classmethod
+    def edb_query(cls, name: str, arity: int) -> Predicate:
+        """Declare application-supplied facts that callers may query."""
+        return cls(name, arity, PRED_EDB | PRED_QUERY)
+
+    @classmethod
+    def idb(cls, name: str, arity: int) -> Predicate:
+        """Declare derived facts (IDB), without exposing a query surface."""
+        return cls(name, arity, PRED_IDB)
+
+    @classmethod
+    def idb_query(cls, name: str, arity: int) -> Predicate:
+        """Declare derived facts that callers may query (IDB | QUERY)."""
+        return cls(name, arity, PRED_IDB | PRED_QUERY)
+
+    @classmethod
+    def policy_fact(cls, name: str, arity: int) -> Predicate:
+        """Declare facts supplied by trusted policy source, not request inputs."""
+        return cls(name, arity, PRED_POLICY_FACT)
+
+    @classmethod
+    def policy_fact_query(cls, name: str, arity: int) -> Predicate:
+        """Declare policy-source facts that callers may query."""
+        return cls(name, arity, PRED_POLICY_FACT | PRED_QUERY)
+
+
+@dataclass(frozen=True)
+class Limits:
+    """Read-only capacities reported by the loaded native library."""
+
+    max_symbols: int
+    string_pool_bytes: int
+    max_predicates: int
+    max_rules: int
+    max_arity: int
+    max_body_literals: int
+    max_depth: int
+    max_edb_facts: int
+    max_idb_facts: int
+    max_facts_per_pred: int
+    max_string_bytes: int
+    input_edb_text_bytes: int
+
+    @classmethod
+    def _read(cls) -> Limits:
+        values = {}
+        out = ffi.new("size_t *")
+        for name in cls.__dataclass_fields__:
+            key = getattr(lib, "MAELYS_DATALOG_LIMIT_" + name.upper())
+            _check(lib.maelys_datalog_limit_get(key, out), "read build limit")
+            values[name] = int(out[0])
+        return cls(**values)
+
+
+@dataclass(frozen=True)
+class Diagnostic:
+    """Native diagnostic, distinct from the operation's status code."""
+
+    source: int = 0
+    status: int = 0
+    code: int = 0
+    present: int = 0
+    line: int = 0
+    column: int = 0
+    phase: str = ""
+    message: str = ""
+    hint: str = ""
+    file: str = ""
+    predicate: str = ""
+    arity: int = 0
+    observed_count: int = 0
+    limit: int = 0
+    depth: int = 0
+    depth_limit: int = 0
+    rule_id: int = 0
+    comparison_result: int = 0
+    expected_kind: int = 0
+    lhs_kind: int = 0
+    rhs_kind: int = 0
+    comparison_op: int = 0
+    limit_kind: int = 0
+    term_index: int = 0
+    expected_arity: int = 0
+    observed_arity: int = 0
+    token: str = ""
+    field: str = ""
+    domain: str = ""
+
+
+class MaelysDatalogError(RuntimeError):
+    def __init__(self, code: int, message: str, hint: str = "",
+                 *, diagnostic: Diagnostic | None = None) -> None:
+        self.code = code
+        self.status = code
+        self.message = message
+        self.hint = hint
+        self.diagnostic = diagnostic or Diagnostic()
+        super().__init__(f"{message} ({code})" + (f": {hint}" if hint else ""))
+
+
+def _text(c_string) -> str:
+    return ffi.string(c_string).decode("utf-8") if c_string != ffi.NULL else ""
+
+
+def _check(status: int, step: str, diagnostic=None) -> None:
+    if status == lib.MAELYS_DATALOG_STATUS_OK:
         return
-    if rc == C.ERR_PAYLOAD_TOO_LARGE:
-        raise DomainRegistryFullError(rc, message or "process-wide domain registry full")
-    raise MaelysDatalogError(rc, message, hint)
+    detail = Diagnostic(**{
+        name: _text(getattr(diagnostic, name)) if isinstance(field.default, str)
+        else int(getattr(diagnostic, name))
+        for name, field in Diagnostic.__dataclass_fields__.items()
+    }) if diagnostic is not None else Diagnostic()
+    raise MaelysDatalogError(
+        int(status), detail.message or f"{step}: {_text(lib.maelys_datalog_status_name(status))}",
+        detail.hint, diagnostic=detail,
+    )
 
 
-def _validate_arity(arity: int, max_arity: int) -> None:
-    if isinstance(arity, bool) or not isinstance(arity, int):
-        raise TypeError("arity must be an int, not bool")
-    if arity < 0 or arity > max_arity:
-        raise ValueError(f"arity {arity} outside supported range 0..{max_arity}")
+def _name(value: str, label: str) -> bytes:
+    if not isinstance(value, str) or not value:
+        raise TypeError(f"{label} must be a nonempty str")
+    if "\0" in value:
+        raise ValueError(f"{label} must not contain NUL")
+    return value.encode("utf-8")
 
 
-def _validate_predicate(predicate: str) -> None:
-    if not isinstance(predicate, str):
-        raise TypeError("predicate must be a str")
+def _terms(values: Sequence[object]) -> tuple[object, ...]:
+    if isinstance(values, (str, bytes)) or not isinstance(values, Sequence):
+        raise TypeError("terms must be a sequence of values, not a string")
+    if len(values) > int(lib.MAELYS_DATALOG_PUBLIC_MAX_TERMS):
+        raise ValueError("too many terms for the opaque C facade")
+    normalized = tuple(values)
+    for value in normalized:
+        if isinstance(value, str):
+            if "\0" in value:
+                raise ValueError("Datalog symbols must not contain NUL")
+            value.encode("utf-8")
+        elif isinstance(value, int):
+            if not _INT64_MIN <= value <= _INT64_MAX:
+                raise OverflowError("Datalog integer is outside signed int64 range")
+        else:
+            raise TypeError("Datalog terms must be str, int, or bool")
+    return normalized
 
 
-def _normalize(predicates: Iterable[Predicate], max_arity: int) -> tuple[Predicate, ...]:
-    normalized = []
-    for predicate in predicates:
-        if not isinstance(predicate, Predicate):
-            try:
-                predicate = Predicate(predicate.name, predicate.arity, predicate.kind_flags)
-            except AttributeError as exc:
-                raise TypeError("predicates must contain Predicate-compatible values") from exc
-        if not isinstance(predicate.name, str):
-            raise TypeError("predicate name must be a str")
-        _validate_arity(predicate.arity, max_arity)
-        if not predicate.name:
-            raise ValueError("predicate name is required")
-        normalized.append(
-            Predicate(predicate.name, predicate.arity, int(predicate.kind_flags))
-        )
-    return tuple(normalized)
+def _fill_value(slot, value: object, keepers: list[object]) -> None:
+    if isinstance(value, str):
+        text = ffi.new("char[]", value.encode("utf-8"))
+        keepers.append(text)
+        slot.kind = lib.MAELYS_DATALOG_VALUE_SYMBOL
+        getattr(slot, "as").symbol = text
+    elif isinstance(value, bool):
+        slot.kind = lib.MAELYS_DATALOG_VALUE_BOOLEAN
+        getattr(slot, "as").boolean = int(value)
+    elif isinstance(value, int):
+        if value < _INT64_MIN or value > _INT64_MAX:
+            raise OverflowError("Datalog integer is outside signed int64 range")
+        slot.kind = lib.MAELYS_DATALOG_VALUE_INTEGER
+        getattr(slot, "as").integer = value
+    else:
+        raise TypeError("Datalog terms must be str, int, or bool")
 
 
 class Engine:
-    def __init__(self):
-        self._handle = lib.maelys_py_engine_new()
-        if self._handle == ffi.NULL:
-            raise MemoryError("failed to allocate Maelys engine")
-        # IDs 1..10 are the original append-only public build-limit contract.
-        limit_names = ("max_symbols", "string_pool_bytes", "max_predicates",
-                       "max_rules", "max_arity", "max_body_literals", "max_depth",
-                       "max_edb_facts", "max_idb_facts", "max_facts_per_pred")
-        limits = {}
-        value = ffi.new("size_t *")
-        for key, name in enumerate(limit_names, 1):
-            _raise_rc(lib.maelys_py_limit_get(key, value))
-            limits[name] = int(value[0])
-        self.limits: BuildLimits = BuildLimits(**limits)
+    """Owns Python rulesets; native domain registration remains process-wide."""
+
+    def __init__(self) -> None:
+        if int(lib.MAELYS_DATALOG_PUBLIC_API_VERSION) != 2:
+            raise RuntimeError("maelys_datalog requires Maelys Datalog consumer API 2")
         self._closed = False
-        self._rulesets = weakref.WeakSet()
+        self._thread = threading.current_thread()
+        self._rulesets: list[Ruleset] = []
+        self.limits = Limits._read()
+
+    def _require_open(self) -> None:
+        self._require_thread()
+        if self._closed:
+            raise RuntimeError("Engine is closed")
+
+    def _require_thread(self) -> None:
+        if threading.current_thread() is not self._thread:
+            raise RuntimeError("Engine and its handles must be used on their creating thread")
+
+    def register_domain(
+        self, name: str, predicates: Sequence[Predicate],
+        *, atoms: Sequence[str] = (),
+    ) -> None:
+        self._require_open()
+        domain_name = ffi.new("char[]", _name(name, "domain name"))
+        if not predicates:
+            raise ValueError("at least one predicate is required")
+        declarations = ffi.new("maelys_datalog_predicate_t[]", len(predicates))
+        keepers: list[object] = [domain_name, declarations]
+        for index, predicate in enumerate(predicates):
+            if not isinstance(predicate, Predicate):
+                raise TypeError("predicates must be Predicate values")
+            if isinstance(predicate.arity, bool) or not isinstance(predicate.arity, int):
+                raise TypeError("predicate arity must be an int")
+            predicate_name = ffi.new("char[]", _name(predicate.name, "predicate name"))
+            keepers.append(predicate_name)
+            declarations[index].name = predicate_name
+            declarations[index].arity = predicate.arity
+            declarations[index].flags = predicate.flags
+
+        atom_buffers = [ffi.new("char[]", _name(atom, "atom")) for atom in atoms]
+        atom_array = (
+            ffi.new("const char *const[]", atom_buffers)
+            if atom_buffers else ffi.NULL
+        )
+        domain = ffi.new("maelys_datalog_domain_t *")
+        domain.name = domain_name
+        domain.predicates = declarations
+        domain.predicate_count = len(predicates)
+        domain.atoms = atom_array
+        domain.atom_count = len(atom_buffers)
+        with _REGISTRY_LOCK:
+            _check(lib.maelys_datalog_domain_register(domain), "register domain")
+
+    def load_inline_ruleset(
+        self, domain: str, policy_id: str, source: str,
+    ) -> Ruleset:
+        self._require_open()
+        if not isinstance(source, str):
+            raise TypeError("policy source must be str")
+        domain_name = ffi.new("char[]", _name(domain, "domain name"))
+        policy_name = ffi.new("char[]", _name(policy_id, "policy id"))
+        source_bytes = source.encode("utf-8")
+        source_buffer = ffi.new("char[]", source_bytes)
+        out = ffi.new("maelys_datalog_policy_t **")
+        diagnostic = ffi.new("maelys_datalog_diagnostic_t *")
+        lib.maelys_datalog_diagnostic_init(diagnostic, ffi.sizeof("maelys_datalog_diagnostic_t"))
+        with _REGISTRY_LOCK:
+            _check(
+                lib.maelys_datalog_policy_load_inline(
+                    domain_name, policy_name, source_buffer, len(source_bytes),
+                    out, diagnostic,
+                ),
+                "load policy", diagnostic,
+            )
+        ruleset = Ruleset(self, out[0])
+        self._rulesets.append(ruleset)
+        return ruleset
+
+    def load_manifest(
+        self, path: str | os.PathLike[str], *, allow_test_only: bool = False,
+        allow_undeclared_policy_atoms: bool = False,
+    ) -> Ruleset:
+        """Load a native manifest atomically, including its SHA-verified policies.
+
+        The two boolean permissions are independent and default to False.
+        Enabled test_only entries fail without allow_test_only; once admitted,
+        they run normally. Neither option bypasses SHA or predicate validation.
+        Policy-local vocabulary never changes the global domain or inline loads.
+        Paths in the manifest are resolved by the native loader.
+        """
+        self._require_open()
+        if not isinstance(allow_test_only, bool) or not isinstance(allow_undeclared_policy_atoms, bool):
+            raise TypeError("manifest options must be bool")
+        flags = int(lib.MAELYS_DATALOG_PUBLIC_ALLOW_NONE)
+        if allow_test_only:
+            flags |= int(lib.MAELYS_DATALOG_PUBLIC_ALLOW_TEST_ONLY)
+        if allow_undeclared_policy_atoms:
+            flags |= int(lib.MAELYS_DATALOG_PUBLIC_ALLOW_UNDECLARED_POLICY_ATOMS)
+        out = ffi.new("maelys_datalog_policy_t **")
+        diagnostic = ffi.new("maelys_datalog_diagnostic_t *")
+        lib.maelys_datalog_diagnostic_init(diagnostic, ffi.sizeof("maelys_datalog_diagnostic_t"))
+        with _REGISTRY_LOCK:
+            _check(lib.maelys_datalog_policy_load_manifest(
+                _name(os.fspath(path), "manifest path"), flags, out, diagnostic,
+            ), "load manifest", diagnostic)
+        ruleset = Ruleset(self, out[0])
+        self._rulesets.append(ruleset)
+        return ruleset
 
     def close(self) -> None:
-        if not self._closed:
-            for ruleset in list(self._rulesets):
-                ruleset.close()
-            lib.maelys_py_engine_free(self._handle)
-            self._handle = ffi.NULL
-            self._closed = True
+        self._require_thread()
+        if self._closed:
+            return
+        for ruleset in list(self._rulesets):
+            ruleset.close()
+        self._rulesets.clear()
+        self._closed = True
 
-    def __enter__(self) -> "Engine":
+    def __enter__(self) -> Engine:
+        self._require_open()
         return self
 
     def __exit__(self, *_exc) -> None:
         self.close()
 
-    def __del__(self):
-        try:
-            self.close()
-        except Exception:
-            pass
-
-    def _require_open(self) -> None:
-        if self._closed:
-            raise RuntimeError("Engine is closed")
-
-    def _find_domain(self, domain_name: str):
-        domain_b = domain_name.encode("utf-8")
-        count = ffi.new("size_t *")
-        found = ffi.new("int *")
-        inspectable = ffi.new("int *")
-        rc = lib.maelys_py_find_domain(domain_b, ffi.NULL, 0, count, found, inspectable)
-        _raise_rc(rc)
-        if not found[0] or not inspectable[0]:
-            return bool(found[0]), bool(inspectable[0]), ()
-        preds = ffi.new("maelys_datalog_predicate_t[]", count[0])
-        rc = lib.maelys_py_find_domain(domain_b, preds, count[0], count, found, inspectable)
-        _raise_rc(rc)
-        copied = []
-        for i in range(count[0]):
-            copied.append(
-                Predicate(
-                    ffi.string(preds[i].name).decode("utf-8"),
-                    int(preds[i].arity),
-                    int(preds[i].flags),
-                )
-            )
-        return True, True, tuple(copied)
-
-    def register_domain(self, domain_name: str, predicates: Iterable[Predicate]) -> None:
-        self._require_open()
-        normalized = _normalize(predicates, self.limits.max_arity)
-        with _DOMAIN_REGISTRY_LOCK:
-            found, inspectable, existing = self._find_domain(domain_name)
-            if found and not inspectable:
-                raise DomainAlreadyRegisteredError(
-                    C.ERR_UNSUPPORTED,
-                    f"domain {domain_name!r} exists via native callback and cannot be inspected",
-                )
-            if found and existing == normalized:
-                return
-            if found:
-                raise DomainAlreadyRegisteredError(
-                    C.ERR_INVALID_FIELD,
-                    f"domain {domain_name!r} already exists with a different predicate table",
-                )
-
-            domain_b = domain_name.encode("utf-8")
-            name_buffers = [ffi.new("char[]", pred.name.encode("utf-8")) for pred in normalized]
-            pred_array = ffi.new("maelys_datalog_predicate_t[]", len(normalized))
-            for i, pred in enumerate(normalized):
-                pred_array[i].name = name_buffers[i]
-                pred_array[i].arity = pred.arity
-                pred_array[i].flags = pred.kind_flags
-            rc = lib.maelys_py_register_domain(domain_b, pred_array, len(normalized))
-            if rc == C.ERR_PAYLOAD_TOO_LARGE:
-                raise DomainRegistryFullError(
-                    rc,
-                    "process-wide domain registry full (16 max, no eviction API); "
-                    "reuse stable domain_name values across hot reloads",
-                )
-            _raise_rc(rc)
-
-    def load_inline_ruleset(self, domain_name: str, ruleset_id: str, source: str) -> "Ruleset":
-        self._require_open()
-        with _DOMAIN_REGISTRY_LOCK:
-            domain_b = domain_name.encode("utf-8")
-            ruleset_b = ruleset_id.encode("utf-8")
-            source_b = source.encode("utf-8")
-            out = ffi.new("maelys_py_ruleset_t **")
-            rc = lib.maelys_py_load_inline_ruleset(
-                self._handle, domain_b, ruleset_b, source_b, len(source_b), out
-            )
-            if rc != C.OK:
-                message = ffi.string(lib.maelys_py_last_diag_message(self._handle)).decode("utf-8")
-                hint = ffi.string(lib.maelys_py_last_diag_hint(self._handle)).decode("utf-8")
-                raise MaelysDatalogError(rc, message, hint)
-            ruleset = Ruleset(out[0], self)
-            self._rulesets.add(ruleset)
-            return ruleset
-
 
 class Ruleset:
-    def __init__(self, handle, engine: Engine):
-        self._handle = handle
+    def __init__(self, engine: Engine, policy) -> None:
         self.engine = engine
-        self._symbol_lock = threading.RLock()
+        self._policy = policy
         self._closed = False
-        self._edbs = weakref.WeakSet()
-        self._results = weakref.WeakSet()
-
-    def close(self) -> None:
-        if not self._closed:
-            for result in list(self._results):
-                result.close()
-            for edb in list(self._edbs):
-                edb.close()
-            lib.maelys_py_ruleset_free(self._handle)
-            self._handle = ffi.NULL
-            self._closed = True
-
-    def __del__(self):
-        try:
-            self.close()
-        except Exception:
-            pass
+        self._results: list[SolveResult] = []
+        self._sessions: list[Session] = []
+        self._edbs: list[Edb] = []
 
     def _require_open(self) -> None:
+        self.engine._require_open()
         if self._closed:
             raise RuntimeError("Ruleset is closed")
 
-    def intern_symbol(self, text: str) -> int:
-        with self._symbol_lock:
-            self._require_open()
-            text_b = text.encode("utf-8")
-            out = ffi.new("uint32_t *")
-            _raise_rc(lib.maelys_py_intern_symbol(self._handle, text_b, out))
-            return int(out[0])
-
-    def _lookup_symbol_readonly(self, text: str) -> tuple[bool, int]:
+    @property
+    def policy_count(self) -> int:
         self._require_open()
-        text_b = text.encode("utf-8")
-        out = ffi.new("uint32_t *")
-        found = ffi.new("int *")
-        _raise_rc(
-            lib.maelys_py_symbol_lookup_readonly(
-                self._handle, text_b, len(text_b), out, found
-            )
-        )
-        return bool(found[0]), int(out[0])
+        out = ffi.new("size_t *")
+        _check(lib.maelys_datalog_policy_count(self._policy, out), "count policies")
+        return int(out[0])
 
-    def _symbol_id_is_valid(self, symbol_id: int) -> bool:
+    @property
+    def fingerprint(self) -> str:
         self._require_open()
-        valid = ffi.new("int *")
-        _raise_rc(
-            lib.maelys_py_symbol_id_is_valid(
-                self._handle, int(symbol_id), valid
-            )
-        )
-        return bool(valid[0])
+        out = ffi.new("char[65]")
+        _check(lib.maelys_datalog_policy_fingerprint(self._policy, out), "policy fingerprint")
+        return _text(out)
 
-    def symbol_text(self, symbol_id: int) -> str:
-        with self._symbol_lock:
-            self._require_open()
-            text = lib.maelys_py_symbol_text(self._handle, int(symbol_id))
-            if text == ffi.NULL:
-                raise MaelysDatalogError(C.ERR_INVALID_FIELD, "unknown symbol id")
-            return ffi.string(text).decode("utf-8")
-
-    def edb(self) -> "Edb":
+    def edb(self, *, fact_capacity: int | None = None, text_capacity: int | None = None) -> Edb:
         self._require_open()
-        handle = lib.maelys_py_edb_new(self._handle)
-        if handle == ffi.NULL:
-            raise MemoryError("failed to allocate EDB")
-        edb = Edb(handle, self)
-        self._edbs.add(edb)
-        return edb
+        return Edb(self, fact_capacity=fact_capacity, text_capacity=text_capacity)
 
-    def solve(self, edb: "Edb") -> "SolveResult":
+    def prepare(self, policy_index: int = 0, *, required_capabilities: int = 0,
+                work_limit: int = 0, explanations: ExplanationKind | int = 0) -> Session:
+        """Prepare reusable native state for one policy (no incremental solving)."""
         self._require_open()
-        if edb.ruleset is not self:
-            raise RuntimeError("Edb belongs to a different Ruleset")
-        edb._require_open()
-        out = ffi.new("maelys_py_result_t **")
-        rc = lib.maelys_py_solve(self._handle, edb._handle, out)
-        if rc != C.OK:
-            raise MaelysDatalogError(rc)
-        edb._closed_for_mutation = True
-        result = SolveResult(out[0], self)
-        self._results.add(result)
+        if isinstance(policy_index, bool) or not isinstance(policy_index, int):
+            raise TypeError("policy_index must be an int")
+        if not 0 <= policy_index < self.policy_count:
+            raise IndexError("policy_index outside the loaded policy set")
+        for name, value in (("required_capabilities", required_capabilities), ("work_limit", work_limit)):
+            if isinstance(value, bool) or not isinstance(value, int):
+                raise TypeError(f"{name} must be an int")
+            if not 0 <= value < (1 << 64):
+                raise ValueError(f"{name} must fit uint64")
+        if isinstance(explanations, bool) or not isinstance(explanations, int):
+            raise TypeError("explanations must be an ExplanationKind mask")
+        if explanations < 0 or explanations & ~int(ExplanationKind.TRUE | ExplanationKind.FALSE):
+            raise ValueError("explanations must contain only ExplanationKind.TRUE/FALSE")
+        config = ffi.new("maelys_datalog_session_config_t **")
+        _check(lib.maelys_datalog_session_config_create(config), "create session configuration")
+        out = ffi.new("maelys_datalog_session_t **")
+        try:
+            _check(lib.maelys_datalog_session_config_set_required_capabilities(
+                config[0], required_capabilities), "set required capabilities")
+            _check(lib.maelys_datalog_session_config_set_work_limit(
+                config[0], work_limit), "set work limit")
+            _check(lib.maelys_datalog_session_config_set_explanation_workspace(
+                config[0], int(explanations)), "set explanation workspace")
+            _check(lib.maelys_datalog_session_create_configured(
+                self._policy, policy_index, config[0], out), "create session")
+        finally:
+            # Native session creation snapshots values, retaining no config handle.
+            lib.maelys_datalog_session_config_free(config[0])
+        session = Session(self, out[0], explanations=explanations)
+        self._sessions.append(session)
+        return session
+
+    def solve(self, edb: Edb, *, policy_index: int = 0,
+              required_capabilities: int = 0, work_limit: int = 0,
+              explanations: ExplanationKind | int = 0) -> SolveResult:
+        """Convenience solve with a private session owned by the returned result."""
+        session = self.prepare(policy_index, required_capabilities=required_capabilities,
+                               work_limit=work_limit, explanations=explanations)
+        try:
+            result = session.solve(edb)
+        except BaseException:
+            session.close()
+            raise
+        result._owns_session = True
         return result
+
+    def close(self) -> None:
+        self.engine._require_thread()
+        if self._closed:
+            return
+        for result in list(self._results):
+            result.close()
+        for session in list(self._sessions):
+            session.close()
+        for edb in list(self._edbs):
+            edb.close()
+        _check(lib.maelys_datalog_policy_free(self._policy), "free policy")
+        self._policy = ffi.NULL
+        self._closed = True
+        self.engine._rulesets.remove(self)
+
+    def __enter__(self) -> Ruleset:
+        self._require_open()
+        return self
+
+    def __exit__(self, *_exc) -> None:
+        self.close()
+
+
+class Session:
+    """Single-threaded prepared state with at most one live result lease."""
+
+    def __init__(self, ruleset: Ruleset, session, *, explanations: ExplanationKind | int = 0) -> None:
+        self.ruleset = ruleset
+        self._session = session
+        self._closed = False
+        self._active: SolveResult | None = None
+        self._explanations = ExplanationKind(explanations)
+
+    def __del__(self) -> None:
+        if not getattr(self, "_closed", True):
+            warnings.warn("Unclosed Session; use close() or a context manager. "
+                          "Garbage collection does not release native resources.",
+                          ResourceWarning, stacklevel=2)
+
+    def _require_open(self) -> None:
+        self.ruleset._require_open()
+        if self._closed:
+            raise RuntimeError("Session is closed")
+
+    @property
+    def fingerprint(self) -> str:
+        self._require_open()
+        out = ffi.new("char[65]")
+        _check(lib.maelys_datalog_session_fingerprint(self._session, out), "session fingerprint")
+        return _text(out)
+
+    @property
+    def execution_fingerprint(self) -> str:
+        self._require_open()
+        out = ffi.new("char[65]")
+        _check(lib.maelys_datalog_session_execution_fingerprint(self._session, out),
+               "execution fingerprint")
+        return _text(out)
+
+    def solve(self, edb: Edb) -> SolveResult:
+        self._require_open()
+        if self._active is not None:
+            raise RuntimeError("Close the current result before reusing this Session")
+        if not isinstance(edb, Edb) or edb.ruleset is not self.ruleset or edb._closed:
+            raise RuntimeError("EDB belongs to another or closed Ruleset")
+        result_out = ffi.new("maelys_datalog_result_t **")
+        diagnostic = ffi.new("maelys_datalog_diagnostic_t *")
+        lib.maelys_datalog_diagnostic_init(diagnostic, ffi.sizeof("maelys_datalog_diagnostic_t"))
+        _check(lib.maelys_datalog_session_solve_edb(
+            self._session, edb._edb, result_out, diagnostic,
+        ), "solve", diagnostic)
+        edb._finalized = True
+        result = SolveResult(self.ruleset, self, result_out[0])
+        self._active = result
+        self.ruleset._results.append(result)
+        return result
+
+    def close(self) -> None:
+        self.ruleset.engine._require_thread()
+        if self._closed:
+            return
+        if self._active is not None:
+            # Prevent recursion for a convenience session owned by its result.
+            self._active._owns_session = False
+            self._active.close()
+        _check(lib.maelys_datalog_session_free(self._session), "free session")
+        self._session = ffi.NULL
+        self._closed = True
+        self.ruleset._sessions.remove(self)
+
+    def __enter__(self) -> Session:
+        self._require_open()
+        return self
+
+    def __exit__(self, *_exc) -> None:
+        self.close()
 
 
 class Edb:
-    def __init__(self, handle, ruleset: Ruleset):
-        self._handle = handle
+    """Owned native input buffer. Domain validation remains a solve operation."""
+
+    def __init__(self, ruleset: Ruleset, *, fact_capacity: int | None = None,
+                 text_capacity: int | None = None) -> None:
+        ruleset._require_open()
         self.ruleset = ruleset
+        limits = ruleset.engine.limits
+        if fact_capacity is None:
+            fact_capacity = limits.max_edb_facts
+        if isinstance(fact_capacity, bool) or not isinstance(fact_capacity, int):
+            raise TypeError("fact_capacity must be an int")
+        if not 1 <= fact_capacity <= limits.max_edb_facts:
+            raise ValueError(f"fact_capacity must be between 1 and {limits.max_edb_facts}")
+        if text_capacity is None:
+            text_capacity = limits.input_edb_text_bytes
+        if isinstance(text_capacity, bool) or not isinstance(text_capacity, int):
+            raise TypeError("text_capacity must be an int")
+        if not 0 <= text_capacity <= limits.input_edb_text_bytes:
+            raise ValueError(f"text_capacity must be between 0 and {limits.input_edb_text_bytes}")
+        out = ffi.new("maelys_datalog_input_edb_t **")
+        _check(lib.maelys_datalog_input_edb_create_with_capacity(
+            fact_capacity, text_capacity, out), "create input EDB")
+        self._edb = out[0]
+        self._fact_capacity = fact_capacity
         self._closed = False
-        self._closed_for_mutation = False
+        self._finalized = False
+        ruleset._edbs.append(self)
+
+    def __del__(self) -> None:
+        if not getattr(self, "_closed", True):
+            warnings.warn("Unclosed Edb; use close() or close its owner. "
+                          "Garbage collection does not release native resources.",
+                          ResourceWarning, stacklevel=2)
+
+    def __len__(self) -> int:
+        self.ruleset._require_open()
+        if self._closed:
+            raise RuntimeError("EDB is closed")
+        out = ffi.new("size_t *")
+        _check(lib.maelys_datalog_input_edb_count(self._edb, out), "count input entries")
+        return int(out[0])
+
+    def _require_mutable(self) -> None:
+        self.ruleset._require_open()
+        if self._closed or self.ruleset._closed or self._finalized:
+            raise RuntimeError("EDB is closed for mutation")
+
+    def add_fact(self, predicate: str, terms: Sequence[object]) -> None:
+        """Copy one fact into C-owned storage; domain checks occur at solve."""
+        self._require_mutable()
+        name = _name(predicate, "predicate")
+        normalized = _terms(terms)
+        native = ffi.new("maelys_datalog_value_t[]", len(normalized)) if normalized else ffi.NULL
+        keepers: list[object] = []
+        for index, value in enumerate(normalized):
+            _fill_value(native[index], value, keepers)
+        self._require_mutable()
+        diagnostic = ffi.new("maelys_datalog_diagnostic_t *")
+        lib.maelys_datalog_diagnostic_init(diagnostic, ffi.sizeof("maelys_datalog_diagnostic_t"))
+        _check(lib.maelys_datalog_input_edb_add_fact(
+            self._edb, name, native, len(normalized), diagnostic), "add input fact", diagnostic)
+
+    def add_facts(self, facts: Iterable[tuple[str, Sequence[object]]]) -> None:
+        """Buffer an iterable atomically: validation/iteration failure adds nothing.
+
+        Staging is bounded by this EDB's actual fact capacity. At most one
+        extra item is consumed to detect overflow, before any native call.
+        Remaining native capacity is checked atomically at append.
+        After success only the native EDB retains the input values.
+        """
+        self._require_mutable()
+        staged: list[tuple[str, tuple[object, ...]]] = []
+        for item in facts:
+            if len(staged) >= self._fact_capacity:
+                raise MaelysDatalogError(
+                    int(lib.MAELYS_DATALOG_STATUS_PAYLOAD_TOO_LARGE),
+                    "Input batch exceeds the EDB fact limit (before deduplication)",
+                    "No facts from this batch were appended; reduce the batch and retry.")
+            if isinstance(item, (str, bytes)) or not isinstance(item, Sequence) or len(item) != 2:
+                raise TypeError("each fact must be a (predicate, terms) pair")
+            predicate, terms = item
+            _name(predicate, "predicate")
+            staged.append((predicate, _terms(terms)))
+        # Iterators can execute caller code, including closing this EDB.
+        self._require_mutable()
+        native = ffi.new("maelys_datalog_fact_t[]", len(staged)) if staged else ffi.NULL
+        keepers: list[object] = []
+        for index, (predicate, terms) in enumerate(staged):
+            name = ffi.new("char[]", _name(predicate, "predicate"))
+            keepers.append(name)
+            native[index].predicate = name
+            native[index].arity = len(terms)
+            for term_index, term in enumerate(terms):
+                _fill_value(native[index].terms[term_index], term, keepers)
+        self._require_mutable()
+        diagnostic = ffi.new("maelys_datalog_diagnostic_t *")
+        lib.maelys_datalog_diagnostic_init(diagnostic, ffi.sizeof("maelys_datalog_diagnostic_t"))
+        _check(lib.maelys_datalog_input_edb_add_facts(
+            self._edb, native, len(staged), diagnostic), "add input batch", diagnostic)
+
+    def clear(self) -> None:
+        """Clear an unsolved buffer, for example after a domain-validation error."""
+        self._require_mutable()
+        _check(lib.maelys_datalog_input_edb_clear(self._edb), "clear input EDB")
+
+    def reset(self) -> None:
+        """Explicitly start a new input batch in the same native storage.
+
+        Existing results stay valid; their session's one-result lease remains.
+        Unlike clear(), this explicitly ends the successful-solve mutation freeze.
+        """
+        self.ruleset._require_open()
+        if self._closed:
+            raise RuntimeError("EDB is closed")
+        _check(lib.maelys_datalog_input_edb_clear(self._edb), "reset input EDB")
+        self._finalized = False
 
     def close(self) -> None:
-        if not self._closed:
-            lib.maelys_py_edb_free(self._handle)
-            self._handle = ffi.NULL
-            self._closed = True
-
-    def __del__(self):
-        try:
-            self.close()
-        except Exception:
-            pass
-
-    def _require_open(self) -> None:
+        self.ruleset.engine._require_thread()
         if self._closed:
-            raise RuntimeError("Edb is closed")
+            return
+        _check(lib.maelys_datalog_input_edb_free(self._edb), "free input EDB")
+        self._edb = ffi.NULL
+        self._closed = True
+        self.ruleset._edbs.remove(self)
 
-    def _term(self, value) -> Term:
-        if isinstance(value, Term):
-            if value.kind == C.TERM_SYMBOL:
-                self.ruleset.symbol_text(value.value)
-            return value
-        if isinstance(value, bool):
-            return Term.boolean(value)
-        if isinstance(value, int):
-            return Term.integer(value)
-        if isinstance(value, str):
-            return Term.symbol_id(self.ruleset.intern_symbol(value))
-        raise TypeError(f"unsupported term value {value!r}")
 
-    def add_fact(self, predicate: str, terms: Sequence[InputTerm]) -> None:
-        _validate_predicate(predicate)
-        if isinstance(terms, (str, bytes)) or not isinstance(terms, Sequence):
-            raise TypeError("terms must be a sequence, not str or bytes")
-        if len(terms) > self.ruleset.engine.limits.max_arity:
-            raise ValueError(
-                f"arity {len(terms)} outside supported range "
-                f"0..{self.ruleset.engine.limits.max_arity}"
-            )
-        with self.ruleset._symbol_lock:
-            self._require_open()
-            if self._closed_for_mutation:
-                raise RuntimeError("Edb is closed for mutation after solve()")
-            converted = [self._term(value) for value in terms]
-            arr = ffi.new("maelys_py_term_t[]", len(converted))
-            for i, term in enumerate(converted):
-                arr[i].kind = term.kind
-                arr[i].value = term.value
-            predicate_b = predicate.encode("utf-8")
-            _raise_rc(
-                lib.maelys_py_edb_add_fact(self._handle, predicate_b, arr, len(converted))
-            )
+@dataclass(frozen=True)
+class ResultTerm:
+    """Raw term view. Symbol IDs are valid only within the owning live result."""
+
+    kind: str
+    value: int | bool
+    _owner: SolveResult = field(repr=False)
+
+    def resolve(self) -> object:
+        return self._owner.resolve_term(self)
 
 
 class SolveResult:
-    def __init__(self, handle, ruleset: Ruleset):
-        self._handle = handle
+    def __init__(self, ruleset: Ruleset, session, result) -> None:
         self.ruleset = ruleset
+        self._session = session
+        self._result = result
         self._closed = False
+        self._owns_session = False
 
-    def close(self) -> None:
-        if not self._closed:
-            lib.maelys_py_result_free(self._handle)
-            self._handle = ffi.NULL
-            self._closed = True
-
-    def __del__(self):
-        try:
-            self.close()
-        except Exception:
-            pass
+    def __del__(self) -> None:
+        if not getattr(self, "_closed", True):
+            warnings.warn("Unclosed SolveResult; use close() or a context manager. "
+                          "Garbage collection does not release native resources.",
+                          ResourceWarning, stacklevel=2)
 
     def _require_open(self) -> None:
-        if self._closed:
+        self.ruleset._require_open()
+        if self._closed or self.ruleset._closed:
             raise RuntimeError("SolveResult is closed")
 
-    def derived_fact_count(self) -> int:
+    @property
+    def fingerprint(self) -> str:
         self._require_open()
-        out = ffi.new("size_t *")
-        _raise_rc(lib.maelys_py_result_derived_fact_count(self._handle, out))
-        return int(out[0])
+        return self._session.fingerprint
 
-    def _validate_query_predicate(self, predicate: str, arity: int) -> None:
-        predicate_b = predicate.encode("utf-8")
-        _raise_rc(
-            lib.maelys_py_result_validate_query_predicate(
-                self._handle, predicate_b, arity
-            )
-        )
+    @property
+    def execution_fingerprint(self) -> str:
+        self._require_open()
+        return self._session.execution_fingerprint
 
-    def _contains_fact_resolved(
-        self,
-        predicate: str,
-        terms: Sequence[Term],
-    ) -> bool:
-        arr = self._resolved_terms_array(terms)
-        present = ffi.new("int *")
-        predicate_b = predicate.encode("utf-8")
-        _raise_rc(
-            lib.maelys_py_result_contains_fact(
-                self._handle,
-                predicate_b,
-                arr,
-                len(terms),
-                present,
-            )
-        )
-        return bool(present[0])
+    def explain_true(self, predicate: str, terms: Sequence[object]) -> str:
+        """Prepare Why-true once, copy its text, then release its result lease."""
+        return self._explain(lib.MAELYS_DATALOG_EXPLAIN_TRUE, predicate, terms)
 
-    @staticmethod
-    def _resolved_terms_array(terms: Sequence[Term]):
-        if not terms:
-            return ffi.NULL
-        arr = ffi.new("maelys_py_term_t[]", len(terms))
-        for i, term in enumerate(terms):
-            arr[i].kind = term.kind
-            arr[i].value = term.value
-        return arr
+    def explain_false(self, predicate: str, terms: Sequence[object]) -> str:
+        """Return bounded Why-false text, including its completeness status.
 
-    def _resolve_ground_terms(
-        self,
-        terms: Sequence[InputTerm],
-    ) -> tuple[list[Term], bool]:
-        resolved: list[Term] = []
-        missing_symbol = False
-        for value in terms:
-            if isinstance(value, str):
-                found, symbol_id = self.ruleset._lookup_symbol_readonly(value)
-                if found:
-                    resolved.append(Term.symbol_id(symbol_id))
-                else:
-                    missing_symbol = True
-                continue
-            if isinstance(value, Term):
-                if value.kind == C.TERM_SYMBOL:
-                    if (
-                        isinstance(value.value, bool)
-                        or not isinstance(value.value, int)
-                        or value.value <= 0
-                        or value.value > 0xFFFFFFFF
-                        or not self.ruleset._symbol_id_is_valid(value.value)
-                    ):
-                        raise MaelysDatalogError(
-                            C.ERR_INVALID_FIELD,
-                            "unknown symbol id for this Ruleset",
-                        )
-                elif value.kind == C.TERM_BOOL:
-                    if value.value not in (0, 1):
-                        raise MaelysDatalogError(
-                            C.ERR_INVALID_FIELD,
-                            "boolean term value must be 0 or 1",
-                        )
-                elif value.kind == C.TERM_INT:
-                    if (
-                        isinstance(value.value, bool)
-                        or not isinstance(value.value, int)
-                        or value.value < -(1 << 63)
-                        or value.value > (1 << 63) - 1
-                    ):
-                        raise MaelysDatalogError(
-                            C.ERR_INVALID_FIELD,
-                            "integer term value outside int64 range",
-                        )
-                else:
-                    raise TypeError(f"unsupported term value {value!r}")
-                resolved.append(value)
-                continue
-            if isinstance(value, bool):
-                resolved.append(Term.boolean(value))
-                continue
-            if isinstance(value, int):
-                resolved.append(Term.integer(value))
-                continue
-            raise TypeError(f"unsupported term value {value!r}")
-        return resolved, missing_symbol
+        Truncated output is not a proof of non-derivability. Unknown symbols
+        and missing backend capabilities are native errors, not false answers.
+        """
+        return self._explain(lib.MAELYS_DATALOG_EXPLAIN_FALSE, predicate, terms)
 
-    def contains_fact(
-        self,
-        predicate: str,
-        terms: Sequence[InputTerm],
-    ) -> bool:
-        _validate_predicate(predicate)
-        if isinstance(terms, (str, bytes)) or not isinstance(terms, Sequence):
-            raise TypeError("terms must be a sequence, not str or bytes")
-        arity = len(terms)
-        _validate_arity(arity, self.ruleset.engine.limits.max_arity)
-        with self.ruleset._symbol_lock:
-            self._require_open()
-            self.ruleset._require_open()
-            self._validate_query_predicate(predicate, arity)
-            resolved, missing_symbol = self._resolve_ground_terms(terms)
-            if missing_symbol:
-                return False
-            return self._contains_fact_resolved(predicate, resolved)
-
-    def explain_fact_text(
-        self,
-        predicate: str,
-        terms: Sequence[InputTerm],
-    ) -> str | None:
-        _validate_predicate(predicate)
-        if isinstance(terms, (str, bytes)) or not isinstance(terms, Sequence):
-            raise TypeError("terms must be a sequence, not str or bytes")
-        arity = len(terms)
-        _validate_arity(arity, self.ruleset.engine.limits.max_arity)
-        with self.ruleset._symbol_lock:
-            self._require_open()
-            self.ruleset._require_open()
-            self._validate_query_predicate(predicate, arity)
-            resolved, missing_symbol = self._resolve_ground_terms(terms)
-            if missing_symbol:
-                return None
-
-            arr = self._resolved_terms_array(resolved)
-            predicate_b = predicate.encode("utf-8")
+    def _explain(self, kind, predicate: str, terms: Sequence[object]) -> str:
+        self._require_open()
+        name = _name(predicate, "predicate")
+        normalized = _terms(terms)
+        values = ffi.new("maelys_datalog_value_t[]", len(normalized)) if normalized else ffi.NULL
+        keepers: list[object] = []
+        for index, term in enumerate(normalized):
+            _fill_value(values[index], term, keepers)
+        if self._session._explanations:
+            # Both calls address the same native one-entry cache. No CFFI arena
+            # per explanation; conversion, output and Python strings still allocate.
+            explain = (lib.maelys_datalog_result_explain_true_text
+                       if kind == lib.MAELYS_DATALOG_EXPLAIN_TRUE
+                       else lib.maelys_datalog_result_explain_false_text)
             required = ffi.new("size_t *")
-            found = ffi.new("int *")
-            _raise_rc(
-                lib.maelys_py_result_explain_fact_text(
-                    self._handle,
-                    predicate_b,
-                    arr,
-                    arity,
-                    ffi.NULL,
-                    0,
-                    required,
-                    found,
-                )
-            )
-            if not found[0]:
-                if required[0] != 0:
-                    raise MaelysDatalogError(
-                        C.ERR_INVALID_STATE,
-                        "absent explanation reported a non-zero text size",
-                    )
-                return None
+            _check(explain(self._result, name, values, len(normalized),
+                           ffi.NULL, 0, required), "prepare cached explanation")
+            text = ffi.new("char[]", int(required[0]) + 1)
+            _check(explain(self._result, name, values, len(normalized),
+                           text, int(required[0]) + 1, required), "render cached explanation")
+            return bytes(ffi.buffer(text, required[0])).decode("utf-8")
+        storage_bytes = ffi.new("size_t *")
+        alignment = ffi.new("size_t *")
+        _check(lib.maelys_datalog_result_explanation_storage_requirements(
+            self._result, kind, storage_bytes, alignment), "size explanation workspace")
+        size, align = int(storage_bytes[0]), int(alignment[0])
+        if size <= 0 or align <= 0 or align & (align - 1):
+            raise RuntimeError("Native explanation workspace has invalid size or alignment")
+        # Keep the owning cdata alive until release; an aligned cast does not own
+        # this allocation. No native heap fallback is used by prepare/write.
+        storage_owner = ffi.new("unsigned char[]", size + align - 1)
+        address = int(ffi.cast("uintptr_t", storage_owner))
+        storage = ffi.cast("void *", (address + align - 1) & ~(align - 1))
+        prepared = ffi.new("maelys_datalog_prepared_explanation_t **")
+        try:
+            _check(lib.maelys_datalog_result_prepare_explanation(
+                self._result, kind, name, values, len(normalized),
+                storage, size, prepared), "prepare explanation")
+            required = ffi.new("size_t *")
+            _check(lib.maelys_datalog_prepared_explanation_text_size(prepared[0], required),
+                   "read explanation text size")
+            capacity = int(required[0]) + 1  # Native required length excludes NUL.
+            text = ffi.new("char[]", capacity)
+            _check(lib.maelys_datalog_prepared_explanation_write_text(prepared[0], text, capacity),
+                   "render prepared explanation")
+            return bytes(ffi.buffer(text, required[0])).decode("utf-8")
+        finally:
+            if prepared[0] != ffi.NULL:
+                _check(lib.maelys_datalog_prepared_explanation_release(prepared[0]),
+                       "release explanation")
+            # An explicit use/release also keeps the original allocation alive
+            # on Python implementations that can collect dead locals early.
+            ffi.release(storage_owner)
 
-            required_size = int(required[0])
-            text = ffi.new("char[]", required_size + 1)
-            written_required = ffi.new("size_t *")
-            written_found = ffi.new("int *")
-            _raise_rc(
-                lib.maelys_py_result_explain_fact_text(
-                    self._handle,
-                    predicate_b,
-                    arr,
-                    arity,
-                    text,
-                    required_size + 1,
-                    written_required,
-                    written_found,
-                )
-            )
-            if not written_found[0] or int(written_required[0]) != required_size:
-                raise MaelysDatalogError(
-                    C.ERR_INVALID_STATE,
-                    "explanation changed between count and write",
-                )
-            if text[required_size] != b"\x00":
-                raise MaelysDatalogError(
-                    C.ERR_INVALID_STATE,
-                    "explanation text is not NUL-terminated",
-                )
-            return bytes(ffi.buffer(text, required_size)).decode("utf-8")
-
-    def _enumerate_predicate_facts_raw(self, predicate: str, arity: int) -> list[RawFact]:
+    def contains_fact(self, predicate: str, terms: Sequence[object]) -> bool:
         self._require_open()
-        _validate_predicate(predicate)
-        _validate_arity(arity, self.ruleset.engine.limits.max_arity)
-        predicate_b = predicate.encode("utf-8")
+        name = ffi.new("char[]", _name(predicate, "predicate"))
+        normalized = _terms(terms)
+        values = (
+            ffi.new("maelys_datalog_value_t[]", len(normalized))
+            if normalized else ffi.NULL
+        )
+        keepers: list[object] = [name]
+        for index, term in enumerate(normalized):
+            _fill_value(values[index], term, keepers)
+        answer = ffi.new("int *")
+        _check(
+            lib.maelys_datalog_result_query(
+                self._result, name, values, len(normalized), answer,
+            ),
+            "query",
+        )
+        return bool(answer[0])
+
+    def derived_fact_count(self) -> int:
+        """Count all distinct derived facts, including non-queryable predicates."""
+        self._require_open()
         count = ffi.new("size_t *")
-        _raise_rc(
-            lib.maelys_py_result_enumerate_predicate_facts(
-                self._handle, predicate_b, arity, ffi.NULL, 0, count
-            )
+        _check(
+            lib.maelys_datalog_result_derived_fact_count(self._result, count),
+            "count all derived facts",
+        )
+        return int(count[0])
+
+    def enumerate_predicate_facts(
+        self, predicate: str, arity: int,
+    ) -> list[tuple[object, ...]]:
+        """Return Python values copied from the result (safe after close)."""
+        return [tuple(term.resolve() for term in row)
+                for row in self.enumerate_raw(predicate, arity)]
+
+    def enumerate_raw(self, predicate: str, arity: int) -> list[tuple[ResultTerm, ...]]:
+        """Return typed, result-bound views; never ruleset-scoped symbol IDs."""
+        self._require_open()
+        if isinstance(arity, bool) or not isinstance(arity, int):
+            raise TypeError("arity must be an int")
+        if arity < 0 or arity > int(lib.MAELYS_DATALOG_PUBLIC_MAX_TERMS):
+            raise ValueError("arity outside the opaque C facade limit")
+        name = ffi.new("char[]", _name(predicate, "predicate"))
+        count = ffi.new("size_t *")
+        _check(
+            lib.maelys_datalog_result_enumerate(
+                self._result, name, arity, ffi.NULL, 0, count,
+            ),
+            "count derived facts",
         )
         if count[0] == 0:
             return []
-        terms = ffi.new("maelys_py_term_t[]", count[0] * arity)
-        _raise_rc(
-            lib.maelys_py_result_enumerate_predicate_facts(
-                self._handle, predicate_b, arity, terms, count[0], count
-            )
+        views = ffi.new("maelys_datalog_fact_view_t[]", count[0])
+        _check(
+            lib.maelys_datalog_result_enumerate(
+                self._result, name, arity, views, count[0], count,
+            ),
+            "enumerate derived facts",
         )
-        facts: list[RawFact] = []
-        for i in range(count[0]):
-            row: list[Term] = []
-            for j in range(arity):
-                term = terms[i * arity + j]
-                if term.kind == C.TERM_SYMBOL:
-                    row.append(Term.symbol_id(term.value))
-                elif term.kind == C.TERM_INT:
-                    row.append(Term.integer(term.value))
-                elif term.kind == C.TERM_BOOL:
-                    row.append(Term.boolean(bool(term.value)))
+        resolved: list[tuple[ResultTerm, ...]] = []
+        for fact in views[0 : count[0]]:
+            row: list[ResultTerm] = []
+            for term in fact.terms[0:arity]:
+                if term.kind == lib.MAELYS_DATALOG_VALUE_SYMBOL:
+                    row.append(ResultTerm("symbol", int(getattr(term, "as").symbol_id), self))
+                elif term.kind == lib.MAELYS_DATALOG_VALUE_INTEGER:
+                    row.append(ResultTerm("integer", int(getattr(term, "as").integer), self))
+                elif term.kind == lib.MAELYS_DATALOG_VALUE_BOOLEAN:
+                    row.append(ResultTerm("boolean", bool(getattr(term, "as").boolean), self))
                 else:
-                    row.append(Term(int(term.kind), int(term.value)))
-            facts.append(tuple(row))
-        return facts
+                    raise RuntimeError("unknown result term kind")
+            resolved.append(tuple(row))
+        return resolved
 
-    def enumerate_predicate_facts_raw(self, predicate: str, arity: int) -> list[RawFact]:
-        return self._enumerate_predicate_facts_raw(predicate, arity)
+    def resolve_term(self, term: ResultTerm) -> object:
+        self._require_open()
+        if not isinstance(term, ResultTerm) or term._owner is not self:
+            raise ValueError("Term belongs to another result")
+        if term.kind == "symbol":
+            text = ffi.new("const char **")
+            length = ffi.new("size_t *")
+            _check(lib.maelys_datalog_result_symbol_text(
+                self._result, term.value, text, length,
+            ), "resolve result symbol")
+            return bytes(ffi.buffer(text[0], length[0])).decode("utf-8")
+        if term.kind not in ("integer", "boolean"):
+            raise ValueError("Unknown result term kind")
+        return term.value
 
-    def enumerate_predicate_facts(self, predicate: str, arity: int) -> list[Fact]:
-        raw_facts = self._enumerate_predicate_facts_raw(predicate, arity)
-        with self.ruleset._symbol_lock:
-            facts: list[Fact] = []
-            for raw_fact in raw_facts:
-                row = []
-                for term in raw_fact:
-                    if term.kind == C.TERM_SYMBOL:
-                        row.append(self.ruleset.symbol_text(term.value))
-                    elif term.kind == C.TERM_INT:
-                        row.append(term.value)
-                    elif term.kind == C.TERM_BOOL:
-                        row.append(bool(term.value))
-                    else:
-                        raise MaelysDatalogError(
-                            C.ERR_INVALID_FIELD,
-                            f"unexpected unresolved term kind {term.kind}",
-                        )
-                facts.append(tuple(row))
-            return facts
+    def close(self) -> None:
+        self.ruleset.engine._require_thread()
+        if self._closed:
+            return
+        _check(lib.maelys_datalog_result_free(self._result), "free result")
+        self._result = ffi.NULL
+        self._closed = True
+        self._session._active = None
+        if self._owns_session:
+            self._session.close()
+        if self in self.ruleset._results:
+            self.ruleset._results.remove(self)
+
+    def __enter__(self) -> SolveResult:
+        self._require_open()
+        return self
+
+    def __exit__(self, *_exc) -> None:
+        self.close()
