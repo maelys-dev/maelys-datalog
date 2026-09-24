@@ -23,6 +23,25 @@ done
 mkdir "$scratch/extracted"
 tar -xzf "$archive" -C "$scratch/extracted"
 prefix="$scratch/extracted"
+# BSD tar can absorb AppleDouble metadata on extraction. Inspect raw members
+# too: no file or duplicate entry may disappear from the extracted inventory.
+normalize_members() {
+  sed -e 's@^\./@@' -e 's@/$@@' -e '/^\.$/d' -e '/^$/d' | LC_ALL=C sort
+}
+check_raw_members() {
+  python3 - "$1" <<'PY' | normalize_members > "$scratch/members"
+import sys
+import tarfile
+
+# Unlike BSD tar's listing, the format reader retains AppleDouble members.
+with tarfile.open(sys.argv[1], "r:gz") as archive:
+    for member in archive:
+        print(member.name)
+PY
+  (cd "$prefix" && find . -print) | normalize_members > "$scratch/extracted-members"
+  diff -u "$scratch/members" "$scratch/extracted-members"
+}
+check_raw_members "$archive"
 diff -r "$scratch/install/include" "$prefix/include"
 diff -r "$scratch/install/share" "$prefix/share"
 diff -r "$scratch/install/lib" "$prefix/lib"
@@ -69,4 +88,23 @@ if bash "$root/tools/check_module_sdk.sh" --prefix "$prefix" --static-only > "$s
 fi
 grep -q maelys_datalog.h "$scratch/private.log"
 rm "$prefix/include/maelys_datalog.h"
-echo "SDK archive: install parity, external consumers, profile $limit, missing/private header mutations PASS"
+# Portable raw-inventory mutation: a duplicate of an identical member leaves the
+# extracted tree unchanged, but must still be rejected by the format-level guard.
+python3 - "$archive" "$scratch/duplicate.tar.gz" <<'PY'
+import sys
+import tarfile
+
+with tarfile.open(sys.argv[1], "r:gz") as source, tarfile.open(sys.argv[2], "w:gz") as target:
+    duplicate = None
+    for member in source:
+        target.addfile(member, source.extractfile(member) if member.isfile() else None)
+        if member.name.endswith("/datalog_details.h"):
+            duplicate = member
+    assert duplicate is not None
+    target.addfile(duplicate, source.extractfile(duplicate))
+PY
+if check_raw_members "$scratch/duplicate.tar.gz" > "$scratch/duplicate.log" 2>&1; then
+  echo 'FAIL: duplicate raw archive member was accepted' >&2; exit 1
+fi
+grep -q datalog_details.h "$scratch/duplicate.log"
+echo "SDK archive: install parity, external consumers, profile $limit, missing/private/duplicate member mutations PASS"

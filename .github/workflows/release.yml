@@ -28,8 +28,8 @@ jobs:
       product: maelys-datalog
       tag: ${{ inputs.tag || github.ref_name }}
       verify_command: bash scripts/verify-release.sh TARGET
-      linux_packages: build-essential dpkg-dev file rpm clang jq cmake
-      macos_packages: cmake
+      linux_packages: build-essential dpkg-dev file rpm clang jq cmake python3
+      macos_packages: cmake python@3.12
       targets: '[{"target": "linux-x86_64"}, {"target": "linux-arm64"}, {"target": "macos-arm64"}, {"target": "wasm32", "runner": "ubuntu-26.04"}]'
       manifest_patterns: '*.tar.gz *.deb *.rpm release-receipt-*.json'
 

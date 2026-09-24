@@ -254,7 +254,12 @@ build inherits ambient include/library search paths.
 
 Negative controls remove `datalog_details.h` and inject the historical aggregator
 into the extracted copy; both must make the validator fail, with the relevant
-filename in its diagnostic. They never modify the source or the archive. Both
+filename in its diagnostic. A format-level check also compares raw tar members
+with extracted paths: BSD tar can silently absorb AppleDouble metadata, so its
+own listing is insufficient. Packaging disables creation of those host metadata
+entries. A third negative control duplicates an identical tar member, which
+leaves the extracted content unchanged but must fail the raw-inventory check.
+These controls never modify the source or the original archive. Both
 SMALL and LARGE run in the existing SDK CI jobs. Release packaging runs the gate
 on its actual SMALL artifact before writing checksums/receipts. These tests do
 not establish performance or change the engine's allocation guarantees.

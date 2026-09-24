@@ -66,7 +66,9 @@ then compiles and executes external consumers against the **extracted archive**
 before producing its checksum and receipt. CI additionally exercises this same
 packager and gate in LARGE; this does not add a second native release artifact.
 See `tools/check_sdk_archive.sh` and `docs/validation.md` for inventory parity,
-profile checks and negative controls. No compiler or profile is inferred from
+profile checks and negative controls. Host extended attributes are not packaged;
+raw members are checked using Python's standard library because BSD tar hides
+AppleDouble metadata during both listing and extraction. No compiler or profile is inferred from
 objects left by another build.
 
 Every tarball ships with a `.sha256` sibling and a provenance attestation.
