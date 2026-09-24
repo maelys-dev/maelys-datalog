@@ -24,6 +24,7 @@ export interface Diagnostic {
   readonly comparison?: Readonly<{ result: number; expectedKind: number; lhsKind: number; rhsKind: number; op: number }>;
   readonly arity?: Readonly<{ expected: number; observed: number; termIndex: number }>;
   readonly rule?: Readonly<{ id: number }>;
+  readonly aggregate?: Readonly<{ operator: string; value: string; valueKind: number; termIndex: number; limit: number }>;
   readonly context?: Readonly<{ token: string; field: string; domain: string }>;
 }
 export const PredKind: Readonly<{ EDB: 1; IDB: 2; QUERY: 4; POLICY_FACT: 8 }>;

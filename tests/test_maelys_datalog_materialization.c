@@ -191,7 +191,7 @@ static void transaction_rollback(void) {
     facts[1].terms[0].as.symbol = "new-valid-symbol";
     OK(maelys_datalog_prepared_session_materialize_inputs(session, facts, 2));
     maelys_datalog_internal_solve_result_t *result;
-    OK(maelys_datalog_prepared_session_solve_materialized_ex(session, &result, NULL));
+    OK(maelys_datalog_prepared_session_solve_materialized_ex(session, &result, NULL, NULL));
     maelys_datalog_solve_result_free(result);
     free(snapshot);
     OK(maelys_datalog_prepared_session_destroy(session));

@@ -120,16 +120,49 @@ static void aggregate_without_allocator(unsigned op) {
         release_bounded(result);
     }
     if (op) {
-        maelys_datalog_result_t *result = NULL;
-        facts[0].terms[0] = symbol("wrong");
-        assert(maelys_datalog_session_solve(session,facts,1,&result,NULL) == MAELYS_DATALOG_STATUS_INVALID_FIELD && !result);
+        const maelys_datalog_value_t bad[] = {
+            {.kind=MAELYS_DATALOG_VALUE_INTEGER,.as.integer=-1},
+            {.kind=MAELYS_DATALOG_VALUE_INTEGER,.as.integer=INT64_MIN},
+            {.kind=MAELYS_DATALOG_VALUE_INTEGER,.as.integer=INT64_MAX},
+            {.kind=MAELYS_DATALOG_VALUE_INTEGER,.as.integer=INT64_C(2147483648)},
+            {.kind=MAELYS_DATALOG_VALUE_BOOLEAN,.as.boolean=1},
+            {.kind=MAELYS_DATALOG_VALUE_SYMBOL,.as.symbol="wrong"},
+        };
+        const char *tokens[] = {"-1","-9223372036854775808","9223372036854775807","2147483648","true","wrong"};
+        for (size_t i=0;i<sizeof(bad)/sizeof(bad[0]);++i) {
+            maelys_datalog_result_t *result = NULL;
+            maelys_datalog_diagnostic_t diag = MAELYS_DATALOG_DIAGNOSTIC_INIT;
+            facts[0].terms[0] = bad[i];
+            assert(maelys_datalog_session_solve(session,facts,1,&result,&diag) == MAELYS_DATALOG_STATUS_INVALID_FIELD && !result);
+            assert(diag.code == MAELYS_DATALOG_DIAG_SOLVE_AGGREGATE_DOMAIN_ERROR);
+            assert(!strcmp(maelys_datalog_diag_code_name(diag.code),"solve_aggregate_domain_error"));
+            assert(diag.present == (MAELYS_DATALOG_DIAGNOSTIC_AGGREGATE |
+                MAELYS_DATALOG_DIAGNOSTIC_PREDICATE | MAELYS_DATALOG_DIAGNOSTIC_CONTEXT));
+            assert(!strcmp(diag.predicate,"seed") && diag.arity == 1 && diag.term_index == 0);
+            assert(!strcmp(diag.token,tokens[i]) && !strcmp(diag.field,names[op]));
+            assert(diag.limit == INT32_MAX && diag.lhs_kind == (unsigned)bad[i].kind);
+            assert(diag.struct_size == sizeof(diag) && diag.abi_version == MAELYS_DATALOG_DIAGNOSTIC_ABI_VERSION);
+            /* A diagnostic snapshot survives subsequent success and vocabulary reset. */
+            assert(maelys_datalog_session_solve(session,NULL,0,&result,NULL) == 0);
+            release_bounded(result);
+            assert(!strcmp(diag.token,tokens[i]));
+        }
         if (op == 3) {
+            maelys_datalog_result_t *result = NULL;
+            maelys_datalog_diagnostic_t diag = MAELYS_DATALOG_DIAGNOSTIC_INIT;
             facts[0].terms[0].kind=MAELYS_DATALOG_VALUE_INTEGER;
             facts[0].terms[0].as.integer=INT32_MAX;
-            assert(maelys_datalog_session_solve(session,facts,2,&result,NULL) == MAELYS_DATALOG_STATUS_INVALID_FIELD && !result);
+            facts[1].terms[0].as.integer=1;
+            assert(maelys_datalog_session_solve(session,facts,2,&result,&diag) == MAELYS_DATALOG_STATUS_INVALID_FIELD && !result);
+            assert(diag.code == MAELYS_DATALOG_DIAG_SOLVE_SUM_OVERFLOW);
+            assert(!strcmp(maelys_datalog_diag_code_name(diag.code),"solve_sum_overflow"));
+            assert(!strcmp(diag.predicate,"seed") && !strcmp(diag.field,"sum"));
+            assert(!strcmp(diag.token,"2147483648") && diag.limit == INT32_MAX);
+            assert(!(diag.present & MAELYS_DATALOG_DIAGNOSTIC_CAPACITY));
+            assert(maelys_datalog_session_solve(session,NULL,0,&result,&diag) == 0);
+            assert(diag.present == 0 && diag.token[0] == 0);
+            release_bounded(result);
         }
-        assert(maelys_datalog_session_solve(session,NULL,0,&result,NULL) == 0);
-        release_bounded(result);
     }
     assert(attempts == 0 && hot_frees == 0);
     forbidden = 0;

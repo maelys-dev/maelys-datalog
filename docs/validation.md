@@ -426,3 +426,24 @@ Late rejection restores empty facts/scratch and the exact prepared symbol
 table, and a subsequent solve succeeds. Normal success only resets metadata and
 the scratch span needed to drop pointers and initialize the index; inactive facts
 are retained until overwritten, with no secure-erasure guarantee or new storage.
+
+## Aggregate rejection diagnostics
+
+The allocator-disabled aggregate test rejects negative and out-of-range int64
+values, booleans and symbols for min/max/sum. It checks the category, source
+predicate, argument index, exact numeric token and bound, and then reuses the
+session. A sum of valid operands 2147483647 and 1 has a separate overflow code
+and token 2147483648. The diagnostic is exported before rollback restores the
+symbol dictionary, so runtime symbols are copied while their IDs remain valid.
+Both failure classes return INVALID_FIELD without publishing a result.
+
+`DIAGNOSTIC_AGGREGATE` interprets existing fields: `field` is the operator,
+`token` is the value text, `lhs_kind` uses IR term kinds, `term_index` is the
+zero-based source projection and `limit` is 2147483647. Overflow reports the
+first partial sum crossing the bound, not a total computed after rejection.
+This is a numeric bound, not a CAPACITY section or a limit_get selector. Symbol
+text is bounded by token storage; integer decimal text is always exact.
+Public layout/version and backend ABI are unchanged. Private unions only reuse
+mutually exclusive error payloads, with size/alignment/offset assertions; public
+sections remain independently present. Python and Wasm test the same failures
+through installed SDKs, including the second/third argument projection.

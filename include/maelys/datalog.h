@@ -54,7 +54,9 @@ typedef enum {
     MAELYS_DATALOG_DIAG_SOLVE_MALFORMED_EDB,
     MAELYS_DATALOG_DIAG_SOLVE_INVALID_STATE,
     MAELYS_DATALOG_DIAG_SOLVE_INVALID_ARGUMENT,
-    MAELYS_DATALOG_DIAG_SOLVE_INTERNAL_ERROR
+    MAELYS_DATALOG_DIAG_SOLVE_INTERNAL_ERROR,
+    MAELYS_DATALOG_DIAG_SOLVE_AGGREGATE_DOMAIN_ERROR,
+    MAELYS_DATALOG_DIAG_SOLVE_SUM_OVERFLOW
 } maelys_datalog_diag_code_t;
 
 #if defined(_WIN32) && defined(MAELYS_DATALOG_SHARED)
@@ -179,6 +181,13 @@ typedef enum {
 #define MAELYS_DATALOG_DIAGNOSTIC_ARITY (UINT64_C(1) << 5)
 #define MAELYS_DATALOG_DIAGNOSTIC_RULE (UINT64_C(1) << 6)
 #define MAELYS_DATALOG_DIAGNOSTIC_CONTEXT (UINT64_C(1) << 7)
+/* Aggregate rejection: field names min/max/sum, token holds the offending value
+ * (or first overflowing partial sum), lhs_kind uses IR term kinds, term_index
+ * is the zero-based source argument, limit is the inclusive integer bound.
+ * Integer tokens are exact signed decimal, boolean tokens true/false; symbol
+ * tokens may be truncated to fit. CONTEXT and PREDICATE accompany this section.
+ * This numeric bound is not a storage CAPACITY or a limit_get selector. */
+#define MAELYS_DATALOG_DIAGNOSTIC_AGGREGATE (UINT64_C(1) << 8)
 typedef struct {
     size_t struct_size;
     uint32_t abi_version;

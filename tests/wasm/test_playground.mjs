@@ -222,3 +222,37 @@ test('OR expansion preserves canonical text, bounded Why-true and Why-false stay
   assert.match(absent.explainFalse('q',['x']),/status=truncated/);
   absent.close();
 });
+
+
+test('aggregate diagnostics distinguish operand domain from sum overflow, preserve int64', async () => {
+  for (const op of ['min','max','sum']) {
+    const pg = await create();
+    pg.registerDomain({name:'errors',predicates:[pred('e',2,P.EDB),pred('q',1,P.IDB|P.QUERY)]});
+    pg.loadPolicy('errors','main',`q(N) :- ${op}(V,e(_,V),N).`);
+    for (const value of [-1n, -(1n<<63n), (1n<<63n)-1n, 2147483648n, true, 'wrong']) {
+      pg.clearFacts().addFacts([f('e',1,value)]);
+      assert.throws(() => pg.solve(), error => {
+        const d=error.diagnostic;
+        assert.equal(error.status,S.INVALID_FIELD);
+        assert.equal(d.codeName,'solve_aggregate_domain_error');
+        assert.deepEqual(d.predicate,{name:'e',arity:2});
+        assert.equal(d.aggregate.operator,op); assert.equal(d.aggregate.value,String(value));
+        assert.equal(d.aggregate.termIndex,1); assert.equal(d.aggregate.limit,2147483647);
+        assert.equal(d.capacity,undefined); assert.ok(Object.isFrozen(d.aggregate));
+        return true;
+      });
+      pg.clearFacts().addFacts([f('e',1,7)]).solve();
+      assert.equal(pg.query('q',[7]),true); pg.freeResult();
+    }
+    if (op === 'sum') {
+      pg.clearFacts().addFacts([f('e',1,2147483647),f('e',2,1)]);
+      assert.throws(() => pg.solve(), error => {
+        assert.equal(error.diagnostic.codeName,'solve_sum_overflow');
+        assert.equal(error.diagnostic.aggregate.value,'2147483648');
+        assert.equal(error.diagnostic.aggregate.limit,2147483647);
+        return true;
+      });
+    }
+    pg.close();
+  }
+});

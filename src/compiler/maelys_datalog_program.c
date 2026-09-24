@@ -86,50 +86,6 @@ void maelys_datalog_copy_load_diagnostic(maelys_datalog_diagnostic_t *out,
         out->comparison_op = in->failed_op; out->term_index = in->term_index;
     }
 }
-void maelys_datalog_copy_solve_diagnostic(maelys_datalog_diagnostic_t *out,
-    const maelys_datalog_internal_solve_diagnostic_t *in,
-    const maelys_datalog_internal_ruleset_t *ruleset, maelys_result_t status) {
-    if (!out || !in || maelys_datalog_diagnostic_clear(out)) return;
-    out->source = MAELYS_DATALOG_DIAGNOSTIC_SOLVE;
-    out->status = (maelys_datalog_status_t)status;
-    static const maelys_datalog_diag_code_t codes[] = {
-        MAELYS_DATALOG_DIAG_OPERATION_REJECTED,
-        MAELYS_DATALOG_DIAG_SOLVE_MAX_DEPTH, MAELYS_DATALOG_DIAG_SOLVE_IDB_OVERFLOW,
-        MAELYS_DATALOG_DIAG_SOLVE_COMPARISON_TYPE_ERROR, MAELYS_DATALOG_DIAG_SOLVE_FILTER_ERROR,
-        MAELYS_DATALOG_DIAG_SOLVE_MALFORMED_FACT, MAELYS_DATALOG_DIAG_SOLVE_MALFORMED_EDB,
-        MAELYS_DATALOG_DIAG_SOLVE_INVALID_STATE, MAELYS_DATALOG_DIAG_SOLVE_INVALID_ARGUMENT,
-        MAELYS_DATALOG_DIAG_SOLVE_INTERNAL_ERROR
-    };
-    out->code = (unsigned)in->category < sizeof(codes)/sizeof(codes[0]) ? codes[in->category] : MAELYS_DATALOG_DIAG_SOLVE_INTERNAL_ERROR;
-    snprintf(out->phase, sizeof(out->phase), "solve");
-    snprintf(out->message, sizeof(out->message), "%s", maelys_datalog_solve_diagnostic_category_name(in->category));
-    const maelys_datalog_predicate_entry_t *pred = ruleset ? maelys_datalog_predicate_registry_get(&ruleset->registry, in->predicate_id) : NULL;
-    if (pred) {
-        out->present |= MAELYS_DATALOG_DIAGNOSTIC_PREDICATE;
-        snprintf(out->predicate, sizeof(out->predicate), "%s", pred->name); out->arity = pred->arity;
-    }
-    if (in->rule_id != UINT16_MAX && ruleset && in->rule_id < ruleset->rule_count) {
-        out->present |= MAELYS_DATALOG_DIAGNOSTIC_RULE; out->rule_id = in->rule_id;
-    }
-    if (in->depth_limit) {
-        out->present |= MAELYS_DATALOG_DIAGNOSTIC_DEPTH;
-        out->depth = in->depth; out->depth_limit = in->depth_limit;
-    }
-    if (in->capacity || in->count_observed) {
-        out->present |= MAELYS_DATALOG_DIAGNOSTIC_CAPACITY;
-        out->observed_count = in->count_observed; out->limit = in->capacity;
-        out->limit_kind = (maelys_datalog_limit_t)in->limit_kind;
-    }
-    if (in->category == MAELYS_DATALOG_SOLVE_DIAG_COMPARISON_TYPE_ERROR) {
-        out->present |= MAELYS_DATALOG_DIAGNOSTIC_COMPARISON;
-        out->lhs_kind = in->lhs_kind; out->rhs_kind = in->rhs_kind;
-        out->comparison_op = in->comparison_op; out->term_index = in->term_index;
-    }
-    if (in->category == MAELYS_DATALOG_SOLVE_DIAG_MALFORMED_FACT) {
-        out->present |= MAELYS_DATALOG_DIAGNOSTIC_ARITY;
-        out->expected_arity = in->arity_expected; out->observed_arity = in->arity_observed;
-    }
-}
 
 maelys_result_t maelys_datalog_export_ir_term(const maelys_datalog_internal_ruleset_t *r,
                                    const maelys_datalog_internal_term_t *in, maelys_datalog_ir_term_t *out) {

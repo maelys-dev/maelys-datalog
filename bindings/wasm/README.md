@@ -169,3 +169,10 @@ surface with the shipped declaration. Type check locally with:
 ```sh
 npm exec --yes --package=typescript@5.9.3 -- tsc --strict --noEmit --target ES2020 --module commonjs tests/wasm/types.ts
 ```
+
+Aggregate failures retain `INVALID_FIELD` with `solve_aggregate_domain_error`
+(operand outside the integer domain) or `solve_sum_overflow` (valid operands,
+overflowing sum). `diagnostic.aggregate` contains operator, value text, IR value
+kind, zero-based source argument index and inclusive numeric limit. Integer text
+is exact even outside JavaScript's safe-number range; symbol text is bounded.
+The numeric bound is separate from storage-capacity diagnostics.

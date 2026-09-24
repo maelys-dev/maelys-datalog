@@ -4,6 +4,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include "src/core/maelys_datalog_aggregate_error.h"
 
 #include "maelys/datalog.h"
 
@@ -25,7 +26,10 @@ typedef struct {
     size_t column;
     char predicate[96];
     size_t arity;
-    char token[96];
+    union {
+        char token[96];
+        maelys_datalog_aggregate_error_t aggregate; /* only aggregate solve errors */
+    };
     char field[96];
     char domain[96];
     size_t count;
