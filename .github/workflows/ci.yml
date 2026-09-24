@@ -135,13 +135,13 @@ jobs:
       - uses: mymindstorm/setup-emsdk@v14
         with:
           version: ${{ matrix.emsdk }}
+      - name: Verify the typed Wasm consumer
+        run: npm exec --yes --package=typescript@5.9.3 -- tsc --strict --noEmit --target ES2020 --module commonjs tests/wasm/types.ts
       - name: Build and run all Node tests sequentially in both profiles
         run: |
           for profile in small large; do
             make -f Makefile.wasm maelys_datalog_dynamic.js WASM_PROFILE="$profile" EM_CACHE="$PWD/build/emscripten-cache"
-            for test in tests/wasm/*.mjs; do
-              MAELYS_WASM_PROFILE="$profile" node "$test"
-            done
+            bash tools/check_wasm_binding.sh "$profile"
             EM_CACHE="$PWD/build/emscripten-cache" bash tools/check_wasm_extensions.sh "$profile"
           done
 

@@ -90,6 +90,10 @@ $(BUILD_DIR)/guard-obj/%.o: %.c $(ASAN_HEADERS) tests/fixtures/allocation_guard.
 	@mkdir -p $(dir $@)
 	$(CC) $(ASAN_CFLAGS) -include tests/fixtures/allocation_guard.h -c $< -o $@
 
+$(BUILD_DIR)/test_maelys_datalog_wasm_builder: tests/test_maelys_datalog_wasm_builder.c $(ASAN_GUARD_OBJS) $(ASAN_HEADERS) | $(BUILD_DIR)
+	$(CC) $(ASAN_CFLAGS) -UNDEBUG -DMAELYS_WASM_ALLOCATION_TEST -include tests/fixtures/allocation_guard.h $(ASAN_GUARD_OBJS) $< -o $@
+	$(if $(filter 1,$(ASAN_RUN_ON_BUILD)),$(ASAN_ENV) ./$@,@:)
+
 $(BUILD_DIR)/test_maelys_datalog_hot_path_alloc $(BUILD_DIR)/test_maelys_datalog_prepared_explanations: $(BUILD_DIR)/%: tests/%.c $(ASAN_GUARD_OBJS) $(ASAN_HEADERS) tests/fixtures/allocation_guard.h | $(BUILD_DIR)
 	$(CC) $(ASAN_CFLAGS) -UNDEBUG $(ASAN_GUARD_OBJS) $< -o $@
 	$(if $(filter 1,$(ASAN_RUN_ON_BUILD)),$(ASAN_ENV) ./$@,@:)

@@ -1,786 +1,261 @@
-/**
- * maelys_playground.js — Ergonomic wrapper over MaelysDatalogDynamic.
- * Lives beside its C boundary in bindings/wasm/.
- *
- * Paths: from bindings/wasm/ or tests/wasm/, generated artifacts live in
- *        ../../build/wasm/ (or ../../build/wasm-large/).
- *
- * Browser (example module in bindings/wasm/, factory loaded via script tag):
- *   const wasmUrl = new URL('../../build/wasm/maelys_datalog_dynamic.wasm', import.meta.url).href
- *   const pg = await MaelysPlayground.create(MaelysDatalogDynamic, wasmUrl)
- *
- * Node.js (from tests/wasm/test_playground.mjs):
- *   import MaelysDatalogDynamic from '../../build/wasm/maelys_datalog_dynamic.js'
- *   import { MaelysPlayground, PredKind } from '../../bindings/wasm/maelys_playground.js'
- *   const wasmUrl = new URL('../../build/wasm/maelys_datalog_dynamic.wasm', import.meta.url).href
- *   const pg = await MaelysPlayground.create(MaelysDatalogDynamic, wasmUrl)
- *
- * EDB design note:
- *   string helpers are ergonomic sugar over the WASM symbol-id path.
- *   Runtime EDB symbols are interned dynamically and are not required to be
- *   pre-declared as policy atoms.
- */
-
+/* SPDX-License-Identifier: MPL-2.0 */
 'use strict';
 
-/** @type {{ readonly EDB: 1; readonly IDB: 2; readonly QUERY: 4; readonly POLICY_FACT: 8 }} */
-const PredKind = Object.freeze({
-  EDB: 1,
-  IDB: 2,
-  QUERY: 4,
-  POLICY_FACT: 8,
-});
+const PredKind = Object.freeze({ EDB: 1, IDB: 2, QUERY: 4, POLICY_FACT: 8 });
+const Status = Object.freeze({ OK: 0, INVALID_ARGUMENT: -1, INVALID_FIELD: -2,
+  NOT_FOUND: -3, NOT_IMPLEMENTED: -4, UNSUPPORTED: -5, TIMEOUT: -6, IO: -7,
+  INTERNAL: -8, UNAUTHORIZED: -9, FORBIDDEN: -10, RATE_LIMITED: -11,
+  PAYLOAD_TOO_LARGE: -12, INVALID_STATE: -13, STORAGE_TOO_SMALL: -14 });
+const claimedModules = new WeakSet();
+const encoder = new TextEncoder();
+const INT64_MIN = -(1n << 63n), INT64_MAX = (1n << 63n) - 1n;
+const UINT32_MAX = 0xffffffff, FACT_WORDS = 15;
+const LIMITS = ['maxSymbols', 'stringPoolBytes', 'maxPredicates', 'maxRules',
+  'maxArity', 'maxBodyLiterals', 'maxDepth', 'maxEdbFacts', 'maxIdbFacts',
+  'maxFactsPerPred', 'maxStringBytes', 'inputEdbTextBytes'];
 
-const MAELYS_OK = 0;
-const MAELYS_ERR_INVALID_ARGUMENT = -1;
-const MAELYS_ERR_INVALID_FIELD = -2;
-const MAELYS_ERR_PAYLOAD_TOO_LARGE = -12;
-const MAELYS_ERR_INVALID_STATE = -13;
-const MAELYS_DATALOG_WASM_PACKED_STRING_BYTES_MAX = 32768;
-const INT32_MAX = 0x7fffffff;
-const BUILD_LIMITS_COUNT = 10;
-
-/**
- * @typedef {{ kind: 'symbol', symbolId: number }} MaelysDatalogSymbolTerm
- * @typedef {{ kind: 'int', text: string, value: number | null }} MaelysDatalogIntTerm
- * @typedef {{ kind: 'bool', value: boolean }} MaelysDatalogBoolTerm
- * @typedef {{ kind: 'var', variable: number }} MaelysDatalogVarTerm
- * @typedef {MaelysDatalogSymbolTerm | MaelysDatalogIntTerm | MaelysDatalogBoolTerm | MaelysDatalogVarTerm} MaelysDatalogTerm
- */
-
-function makeError(name, rc, msg) {
-  return new Error(`${name} failed (rc=${rc})${msg ? ': ' + msg : ''}`);
+function utf8(value) {
+  if (typeof value !== 'string') throw new TypeError('Expected a string');
+  for (let i = 0; i < value.length; ++i) {
+    const c = value.charCodeAt(i);
+    if (c === 0) throw new TypeError('Embedded NUL is not supported');
+    if (c >= 0xd800 && c <= 0xdbff) {
+      const next = value.charCodeAt(++i);
+      if (!(next >= 0xdc00 && next <= 0xdfff)) throw new TypeError('Unpaired UTF-16 surrogate');
+    } else if (c >= 0xdc00 && c <= 0xdfff) throw new TypeError('Unpaired UTF-16 surrogate');
+  }
+  return encoder.encode(value);
+}
+function u32(value, name) {
+  if (!Number.isInteger(value) || value < 0 || value > UINT32_MAX) throw new RangeError(`${name}: expected uint32`);
+  return value;
+}
+function integer(value) {
+  if (typeof value === 'number') {
+    if (!Number.isSafeInteger(value)) throw new RangeError('Use bigint for integers outside the exact number range');
+    value = BigInt(value);
+  }
+  if (value < INT64_MIN || value > INT64_MAX) throw new RangeError('Integer outside signed int64 range');
+  const bits = BigInt.asUintN(64, value);
+  return [Number(bits & 0xffffffffn), Number(bits >> 32n)];
+}
+function strings() {
+  const index = new Map(), chunks = [];
+  let bytes = 0;
+  return {
+    add(value) {
+      if (index.has(value)) return index.get(value);
+      const encoded = utf8(value), entry = [bytes, encoded.length];
+      bytes = u32(bytes + encoded.length + 1, 'Text size');
+      index.set(value, entry); chunks.push(encoded);
+      return entry;
+    },
+    finish() {
+      const out = new Uint8Array(bytes); let offset = 0;
+      for (const chunk of chunks) { out.set(chunk, offset); offset += chunk.length + 1; }
+      return out;
+    },
+  };
 }
 
-function decodeInt64(lo, hi) {
-  const unsigned = (BigInt(hi >>> 0) << 32n) | BigInt(lo >>> 0);
-  return (hi & 0x80000000) ? unsigned - (1n << 64n) : unsigned;
-}
-
-function decodeEnumeratedTerm(kind, lo, hi) {
-  switch (kind) {
-    case 1:
-      return { kind: 'symbol', symbolId: lo >>> 0 };
-    case 2: {
-      const value = decodeInt64(lo, hi);
-      const text = value.toString();
-      const asNumber = Number(value);
-      const safe = Number.isSafeInteger(asNumber) && BigInt(asNumber) === value;
-      return { kind: 'int', text, value: safe ? asNumber : null };
-    }
-    case 3:
-      return { kind: 'bool', value: lo !== 0 };
-    case 4:
-      return { kind: 'var', variable: lo >>> 0 };
-    default:
-      throw new Error(`enumeratePredicateFacts: unknown term kind ${kind}`);
+class DatalogError extends Error {
+  constructor(operation, status, diagnostic) {
+    super(`${operation}: ${diagnostic.statusName}${diagnostic.message ? ': ' + diagnostic.message : ''}`);
+    this.name = 'DatalogError'; this.status = status; this.diagnostic = diagnostic;
   }
 }
 
 class MaelysPlayground {
-  /**
-   * @param {{ ccall: (fn: string, returnType: string|null, argTypes: string[], args: unknown[]) => unknown, _malloc: (bytes: number) => number, _free: (ptr: number) => void, getValue: (ptr: number, type: string) => number, UTF8ToString: (ptr: number) => string, lengthBytesUTF8: (str: string) => number, stringToUTF8: (str: string, ptr: number, maxBytes: number) => void, HEAP32: Int32Array }} mod
-   */
-  constructor(mod) {
-    /** @private */
-    this._mod = mod;
+  constructor(module) {
+    if (claimedModules.has(module)) throw new Error('A Wasm module belongs to exactly one wrapper');
+    this._mod = module; this._closed = false;
+    if (this._call('transport_version') !== 1) throw new Error('Incompatible Wasm binding transport');
+    if (this._call('diagnostic_scalar', [23]) !== 2) throw new Error('Incompatible engine consumer API');
+    this._check(this._call('open'), 'open');
+    claimedModules.add(module);
   }
-
-  /**
-   * @param {(opts: object) => Promise<{ ccall: (fn: string, returnType: string|null, argTypes: string[], args: unknown[]) => unknown, _malloc: (bytes: number) => number, _free: (ptr: number) => void, getValue: (ptr: number, type: string) => number, UTF8ToString: (ptr: number) => string, lengthBytesUTF8: (str: string) => number, stringToUTF8: (str: string, ptr: number, maxBytes: number) => void, HEAP32: Int32Array }>} factory
-   * @param {string=} wasmUrl
-   * @returns {Promise<MaelysPlayground>}
-   */
   static async create(factory, wasmUrl) {
-    const opts = wasmUrl
-      ? {
-          locateFile: (f) => (f.endsWith('.wasm') ? wasmUrl : f),
-        }
-      : {};
-    return new MaelysPlayground(await factory(opts));
+    return new MaelysPlayground(await factory(wasmUrl ? {
+      locateFile: file => file.endsWith('.wasm') ? wasmUrl : file,
+    } : {}));
   }
-
-  /**
-   * @internal
-   * @private
-   * @param {string} name
-   * @param {string|null} retType
-   * @param {string[]} argTypes
-   * @param {any[]} args
-   * @returns {any}
-   */
-  _call(name, retType, argTypes, args) {
-    return this._mod.ccall(name, retType, argTypes, args);
+  _call(name, args = [], type = 'number') {
+    return this._mod.ccall(`maelys_datalog_wasm_${name}`, type, args.map(() => 'number'), args);
   }
-
-  /**
-   * @internal
-   * @private
-   * @returns {string}
-   */
-  _diag() {
-    return this._call('maelys_datalog_wasm_last_diag_message', 'string', [], []);
+  _live() {
+    if (this._closed) throw new DatalogError('closed', Status.INVALID_STATE,
+      Object.freeze({ status: Status.INVALID_STATE, statusName: 'invalid_state', source: 0,
+        code: 0, codeName: 'none', present: 0n, phase: '', message: 'Wasm wrapper is closed.', hint: '' }));
   }
-
-  /**
-   * @internal
-   * @private
-   * @param {number} rc
-   * @param {string} name
-   * @returns {void}
-   */
-  _check(rc, name) {
-    if (rc !== MAELYS_OK) throw makeError(name, rc, this._diag());
+  _diagnostic() {
+    const n = id => this._call('diagnostic_scalar', [id]) >>> 0;
+    const text = id => this._call('diagnostic_text', [id], 'string');
+    const present = BigInt(n(3)) | (BigInt(n(4)) << 32n);
+    const d = { status: this._call('diagnostic_scalar', [0]), source: n(1), code: n(2),
+      present, phase: text(0), message: text(1), hint: text(2), codeName: text(8), statusName: text(9) };
+    if (present & 1n) d.location = Object.freeze({ line: n(5), column: n(6), file: text(3) });
+    if (present & 2n) d.predicate = Object.freeze({ name: text(4), arity: n(7) });
+    if (present & 4n) d.capacity = Object.freeze({ observed: n(8), limit: n(9), kind: n(18) });
+    if (present & 8n) d.depth = Object.freeze({ observed: n(10), limit: n(11) });
+    if (present & 16n) d.comparison = Object.freeze({ result: n(13), expectedKind: n(14), lhsKind: n(15), rhsKind: n(16), op: n(17) });
+    if (present & 32n) d.arity = Object.freeze({ expected: n(20), observed: n(21), termIndex: n(19) });
+    if (present & 64n) d.rule = Object.freeze({ id: n(12) });
+    if (present & 128n) d.context = Object.freeze({ token: text(5), field: text(6), domain: text(7) });
+    return Object.freeze(d);
   }
-
-  /**
-   * @returns {{ maxSymbols: number, stringPoolBytes: number, maxPredicates: number, maxRules: number, maxArity: number, maxBodyLiterals: number, maxDepth: number, maxEdbFacts: number, maxIdbFacts: number, maxFactsPerPred: number }}
-   */
+  _check(rc, operation) { if (rc !== 0) throw new DatalogError(operation, rc, this._diagnostic()); }
+  _memory(bytes, action) {
+    u32(bytes, 'Allocation size');
+    const ptr = this._mod._malloc(Math.max(bytes, 1));
+    if (!ptr) throw new Error('Wasm transport allocation failed');
+    try { return action(ptr); } finally { this._mod._free(ptr); }
+  }
+  _view() { return new DataView(this._mod.HEAPU8.buffer); }
+  _frame(words, text, action) {
+    const prefix = u32(words.length * 4, 'Frame size');
+    return this._memory(u32(prefix + text.length, 'Frame size'), ptr => {
+      const view = this._view();
+      words.forEach((word, i) => view.setUint32(ptr + i * 4, word, true));
+      this._mod.HEAPU8.set(text, ptr + prefix);
+      return action(ptr, words.length, ptr + prefix, text.length);
+    });
+  }
+  _facts(facts, action) {
+    if (!Array.isArray(facts)) throw new TypeError('Facts must be an array');
+    if (facts.length > this.buildLimits().maxEdbFacts) throw new RangeError('Batch exceeds maxEdbFacts');
+    const pool = strings(), words = [];
+    for (const fact of facts) {
+      if (!fact || !Array.isArray(fact.terms)) throw new TypeError('Expected {predicate, terms}');
+      if (fact.terms.length > 4) throw new RangeError('Arity exceeds four');
+      words.push(...pool.add(fact.predicate), fact.terms.length);
+      for (let j = 0; j < 4; ++j) {
+        if (j >= fact.terms.length) { words.push(0, 0, 0); continue; }
+        const v = fact.terms[j];
+        if (typeof v === 'string') words.push(1, ...pool.add(v));
+        else if (typeof v === 'number' || typeof v === 'bigint') words.push(2, ...integer(v));
+        else if (typeof v === 'boolean') words.push(3, v ? 1 : 0, 0);
+        else throw new TypeError('Terms must be string, bigint, exact integer number, or boolean');
+      }
+    }
+    return this._frame(words, pool.finish(), action);
+  }
   buildLimits() {
-    const ptr = this._mod._malloc(BUILD_LIMITS_COUNT * 4);
-    if (!ptr) {
-      throw new Error('Failed to allocate build limits buffer');
-    }
-    try {
-      this._call('maelys_datalog_wasm_get_build_limits', null, ['number'], [ptr]);
-      /* ABI: slot order must stay aligned with maelys_datalog_wasm_get_build_limits. */
-      const readU32 = (i) => this._mod.getValue(ptr + i * 4, 'i32') >>> 0;
-      return {
-        maxSymbols: readU32(0),
-        stringPoolBytes: readU32(1),
-        maxPredicates: readU32(2),
-        maxRules: readU32(3),
-        maxArity: readU32(4),
-        maxBodyLiterals: readU32(5),
-        maxDepth: readU32(6),
-        maxEdbFacts: readU32(7),
-        maxIdbFacts: readU32(8),
-        maxFactsPerPred: readU32(9),
-      };
-    } finally {
-      this._mod._free(ptr);
-    }
+    this._live();
+    if (!this._limits) this._limits = this._memory(4, ptr => {
+      const limits = {};
+      LIMITS.forEach((name, i) => {
+        this._check(this._call('limit', [i + 1, ptr]), 'buildLimits');
+        limits[name] = this._view().getUint32(ptr, true);
+      });
+      return Object.freeze(limits);
+    });
+    return this._limits;
   }
-
-  /**
-   * @param {string} name
-   * @returns {MaelysPlayground}
-   */
-  domainBegin(name) {
-    this._check(
-      this._call('maelys_datalog_wasm_domain_begin', 'number', ['string'], [name]),
-      'domainBegin',
-    );
+  registerDomain({ name, predicates, atoms = [] }) {
+    this._live();
+    if (!Array.isArray(predicates) || !Array.isArray(atoms)) throw new TypeError('Expected predicate and atom arrays');
+    if (predicates.length > this.buildLimits().maxPredicates) throw new RangeError('Too many predicates');
+    const pool = strings(), nameRef = pool.add(name), words = [];
+    for (const p of predicates) words.push(...pool.add(p.name), u32(p.arity, 'Arity'), u32(p.flags, 'Predicate flags'));
+    for (const atom of atoms) words.push(...pool.add(atom));
+    this._frame(words, pool.finish(), (w, n, text, bytes) => this._check(
+      this._call('register_domain', [text + nameRef[0], w, n, predicates.length, atoms.length, text, bytes]), 'registerDomain'));
     return this;
   }
-
-  /**
-   * @param {string} name
-   * @param {number} arity
-   * @param {number} kindFlags
-   * @returns {MaelysPlayground}
-   */
-  domainAddPredicate(name, arity, kindFlags) {
-    this._check(
-      this._call('maelys_datalog_wasm_domain_add_predicate',
-                 'number',
-                 ['string', 'number', 'number'],
-                 [name, arity, kindFlags]),
-      'domainAddPredicate',
-    );
+  loadPolicy(domain, id, source) {
+    this._live();
+    const pool = strings(), d = pool.add(domain), i = pool.add(id), s = pool.add(source);
+    this._frame([], pool.finish(), (_w, _n, text) => this._check(
+      this._call('load_policy', [text + d[0], text + i[0], text + s[0], s[1]]), 'loadPolicy'));
     return this;
   }
-
-  /**
-   * @returns {MaelysPlayground}
-   */
-  domainCommit() {
-    this._check(this._call('maelys_datalog_wasm_domain_commit', 'number', [], []), 'domainCommit');
+  clearFacts() { this._live(); this._check(this._call('clear_facts'), 'clearFacts'); return this; }
+  addFacts(facts) {
+    this._live();
+    this._facts(facts, (w, n, text, bytes) => this._check(
+      this._call('add_facts', [w, n, facts.length, text, bytes]), 'addFacts'));
     return this;
   }
-
-  /**
-   * @returns {MaelysPlayground}
-   */
-  domainAbort() {
-    this._call('maelys_datalog_wasm_domain_abort', null, [], []);
-    return this;
+  inputUsage() {
+    this._live();
+    return this._memory(12, ptr => {
+      this._check(this._call('input_usage', [ptr]), 'inputUsage');
+      const v = this._view();
+      return { facts: v.getUint32(ptr, true), textBytes: v.getUint32(ptr + 4, true), textCapacity: v.getUint32(ptr + 8, true) };
+    });
   }
-
-  /**
-   * @param {string} domainName
-   * @param {string} rulesetId
-   * @param {string} src
-   * @returns {MaelysPlayground}
-   */
-  loadRuleset(domainName, rulesetId, src) {
-    const srcLen = this._mod.lengthBytesUTF8(src);
-    this._check(
-      this._call('maelys_datalog_wasm_load_ruleset',
-                 'number',
-                 ['string', 'string', 'string', 'number'],
-                 [domainName, rulesetId, src, srcLen]),
-      'loadRuleset',
-    );
-    return this;
+  solve() { this._live(); this._check(this._call('solve'), 'solve'); return this; }
+  freeResult() { this._live(); this._check(this._call('free_result'), 'freeResult'); return this; }
+  query(predicate, terms) {
+    this._live();
+    return this._facts([{ predicate, terms }], (w, n, text, bytes) => this._memory(4, out => {
+      this._check(this._call('query', [w, n, text, bytes, out]), 'query');
+      return this._view().getUint32(out, true) !== 0;
+    }));
   }
-
-  /**
-   * @returns {MaelysPlayground}
-   */
-  edbBegin() {
-    this._check(this._call('maelys_datalog_wasm_edb_begin', 'number', [], []), 'edbBegin');
-    return this;
+  enumerate(predicate, arity) {
+    this._live(); u32(arity, 'Arity');
+    if (arity > 4) throw new RangeError('Arity exceeds four');
+    const pool = strings(), name = pool.add(predicate);
+    return this._frame([], pool.finish(), (_w, _n, text) => this._memory(4, countPtr => {
+      const call = (out, capacity) => this._call('enumerate', [text + name[0], arity, out, capacity, countPtr]);
+      this._check(call(0, 0), 'enumerate');
+      const count = this._view().getUint32(countPtr, true);
+      if (!count || !arity) return Array.from({ length: count }, () => []);
+      return this._memory(u32(count * arity * 12, 'Result size'), out => {
+        this._check(call(out, count), 'enumerate');
+        if (this._view().getUint32(countPtr, true) !== count) throw new Error('Enumeration count changed');
+        return Array.from({ length: count }, (_, i) => Array.from({ length: arity }, (_, j) => {
+          const v = this._view(), p = out + (i * arity + j) * 12;
+          const kind = v.getUint32(p, true), lo = v.getUint32(p + 4, true), hi = v.getUint32(p + 8, true);
+          if (kind === 1) {
+            const ptr = this._call('symbol_text', [lo]);
+            if (!ptr) this._check(this._call('diagnostic_scalar', [0]), 'enumerate symbol');
+            if (!ptr) throw new Error('Missing symbol text');
+            return this._mod.UTF8ToString(ptr);
+          }
+          if (kind === 2) return BigInt.asIntN(64, BigInt(lo) | (BigInt(hi) << 32n));
+          if (kind === 3) return lo !== 0;
+          throw new Error(`Invalid output term kind ${kind}`);
+        }));
+      });
+    }));
   }
-
-  /**
-   * @param {string} pred
-   * @param {string} arg0
-   * @returns {MaelysPlayground}
-   */
-  addFact(pred, arg0) {
-    this._check(
-      this._call('maelys_datalog_wasm_edb_add_symbol', 'number', ['string', 'string'], [pred, arg0]),
-      'addFact',
-    );
-    return this;
+  _explain(kind, predicate, terms) {
+    this._live();
+    return this._facts([{ predicate, terms }], (w, n, text, bytes) => this._memory(4, size => {
+      const call = (out, cap) => this._call('explain', [kind, w, n, text, bytes, out, cap, size]);
+      this._check(call(0, 0), 'explain');
+      const needed = this._view().getUint32(size, true);
+      return this._memory(u32(needed + 1, 'Explanation size'), out => {
+        this._check(call(out, needed + 1), 'explain');
+        if (this._view().getUint32(size, true) !== needed) throw new Error('Explanation size changed');
+        const value = this._mod.UTF8ToString(out);
+        if (encoder.encode(value).length !== needed) throw new Error('Explanation length mismatch');
+        return value;
+      });
+    }));
   }
-
-  /**
-   * @param {string} text
-   * @returns {number}
-   */
-  internRuntimeSymbol(text) {
-    const ptr = this._mod._malloc(4);
-    if (!ptr) throw new Error('internRuntimeSymbol failed: malloc returned 0');
-    try {
-      this._check(
-        this._call('maelys_datalog_wasm_edb_intern_runtime_symbol',
-                   'number',
-                   ['string', 'number'],
-                   [text, ptr]),
-        'internRuntimeSymbol',
-      );
-      return this._mod.getValue(ptr, 'i32');
-    } finally {
-      this._mod._free(ptr);
-    }
-  }
-
-  /**
-   * @param {string} pred
-   * @param {number} symbolId
-   * @returns {MaelysPlayground}
-   */
-  addSymbolIdFact(pred, symbolId) {
-    this._check(
-      this._call('maelys_datalog_wasm_edb_add_symbol_id_fact',
-                 'number',
-                 ['string', 'number'],
-                 [pred, symbolId]),
-      'addSymbolIdFact',
-    );
-    return this;
-  }
-
-  /**
-   * @param {string} pred
-   * @param {number} left
-   * @param {number} right
-   * @returns {MaelysPlayground}
-   */
-  addSymbolIdsFact(pred, left, right) {
-    this._check(
-      this._call('maelys_datalog_wasm_edb_add_symbol_ids_fact',
-                 'number',
-                 ['string', 'number', 'number'],
-                 [pred, left, right]),
-      'addSymbolIdsFact',
-    );
-    return this;
-  }
-
-  /**
-   * @internal
-   * @private
-   * @param {string} name
-   * @param {string} pred
-   * @param {number[]} values
-   * @param {number} factCount
-   * @returns {MaelysPlayground}
-   */
-  _callInt32Array(name, pred, values, factCount) {
-    if (!Array.isArray(values)) {
-      throw new TypeError(`${name} expects an array of symbol IDs`);
-    }
-    if (values.length === 0) {
-      this._check(
-        this._call(name, 'number', ['string', 'number', 'number'], [pred, 0, 0]),
-        name,
-      );
-      return this;
-    }
-
-    const bytes = values.length * 4;
-    const ptr = this._mod._malloc(bytes);
-    if (!ptr) throw new Error(`${name} failed: malloc returned 0`);
-    try {
-      this._mod.HEAP32.set(Int32Array.from(values), ptr >> 2);
-      this._check(
-        this._call(name, 'number', ['string', 'number', 'number'], [pred, ptr, factCount]),
-        name,
-      );
-      return this;
-    } finally {
-      this._mod._free(ptr);
-    }
-  }
-
-  /**
-   * @internal
-   * @private
-   * @param {string} name
-   * @param {string} pred
-   * @param {string[]} values
-   * @param {number} factCount
-   * @returns {MaelysPlayground}
-   */
-  _callPackedStrings(name, pred, values, factCount) {
-    if (!Array.isArray(values)) {
-      throw new TypeError(`${name} expects an array of strings`);
-    }
-    for (const value of values) {
-      if (typeof value !== 'string') {
-        throw new TypeError(`${name} expects every element to be a string`);
-      }
-    }
-    if (values.length === 0) {
-      this._check(
-        this._call(name, 'number', ['string', 'number', 'number', 'number'], [pred, 0, 0, 0]),
-        name,
-      );
-      return this;
-    }
-
-    let byteLen = 0;
-    for (const value of values) {
-      byteLen += this._mod.lengthBytesUTF8(value) + 1;
-      if (byteLen > INT32_MAX) {
-        throw new RangeError(`${name} packed string buffer exceeds int32 byte length`);
-      }
-      if (byteLen > MAELYS_DATALOG_WASM_PACKED_STRING_BYTES_MAX) {
-        throw new RangeError(`${name} packed string buffer exceeds WASM boundary limit`);
-      }
-    }
-
-    const ptr = this._mod._malloc(byteLen);
-    if (!ptr) throw new Error(`${name} failed: malloc returned 0`);
-    try {
-      let offset = 0;
-      for (const value of values) {
-        const segmentBytes = this._mod.lengthBytesUTF8(value) + 1;
-        this._mod.stringToUTF8(value, ptr + offset, segmentBytes);
-        offset += segmentBytes;
-      }
-      this._check(
-        this._call(name,
-                   'number',
-                   ['string', 'number', 'number', 'number'],
-                   [pred, ptr, byteLen, factCount]),
-        name,
-      );
-      return this;
-    } finally {
-      this._mod._free(ptr);
-    }
-  }
-
-  /**
-   * @param {string} pred
-   * @param {number[]} ids
-   * @returns {MaelysPlayground}
-   */
-  addSymbolIdFacts(pred, ids) {
-    if (!Array.isArray(ids)) {
-      throw new TypeError('addSymbolIdFacts expects an array of symbol IDs');
-    }
-    return this._callInt32Array('maelys_datalog_wasm_edb_add_symbol_id_facts',
-                                pred,
-                                ids,
-                                ids.length);
-  }
-
-  /**
-   * @param {string} pred
-   * @param {number[]} pairs
-   * @returns {MaelysPlayground}
-   */
-  addSymbolIdsFacts(pred, pairs) {
-    if (!Array.isArray(pairs)) {
-      throw new TypeError('addSymbolIdsFacts expects an array of symbol IDs');
-    }
-    if (pairs.length % 2 !== 0) {
-      throw new TypeError('addSymbolIdsFacts expects a flat array with even length');
-    }
-    return this._callInt32Array('maelys_datalog_wasm_edb_add_symbol_ids_facts',
-                                pred,
-                                pairs,
-                                pairs.length / 2);
-  }
-
-  /**
-   * @param {string} pred
-   * @param {string[]} values
-   * @returns {MaelysPlayground}
-   */
-  addRuntimeSymbolFacts(pred, values) {
-    if (!Array.isArray(values)) {
-      throw new TypeError('addRuntimeSymbolFacts expects an array of strings');
-    }
-    return this._callPackedStrings('maelys_datalog_wasm_edb_add_runtime_symbol_facts',
-                                   pred,
-                                   values,
-                                   values.length);
-  }
-
-  /**
-   * @param {string} pred
-   * @param {string[]} flatPairs
-   * @returns {MaelysPlayground}
-   */
-  addRuntimeSymbolPairFacts(pred, flatPairs) {
-    if (!Array.isArray(flatPairs)) {
-      throw new TypeError('addRuntimeSymbolPairFacts expects an array of strings');
-    }
-    if (flatPairs.length % 2 !== 0) {
-      throw new TypeError('addRuntimeSymbolPairFacts expects a flat array with even length');
-    }
-    return this._callPackedStrings('maelys_datalog_wasm_edb_add_runtime_symbol_pair_facts',
-                                   pred,
-                                   flatPairs,
-                                   flatPairs.length / 2);
-  }
-
-  /**
-   * @param {string} pred
-   * @param {string} arg0
-   * @param {string} arg1
-   * @returns {MaelysPlayground}
-   */
-  addFact2(pred, arg0, arg1) {
-    this._check(
-      this._call('maelys_datalog_wasm_edb_add_symbol2',
-                 'number',
-                 ['string', 'string', 'string'],
-                 [pred, arg0, arg1]),
-      'addFact2',
-    );
-    return this;
-  }
-
-  /**
-   * @returns {MaelysPlayground}
-   */
-  solve() {
-    this._check(this._call('maelys_datalog_wasm_solve', 'number', [], []), 'solve');
-    return this;
-  }
-
-  /**
-   * @param {string} pred
-   * @param {string} arg0
-   * @returns {boolean}
-   */
-  querySymbol(pred, arg0) {
-    const rc = this._call('maelys_datalog_wasm_query_symbol', 'number', ['string', 'string'], [pred, arg0]);
-    if (rc === -1) throw makeError('querySymbol', -1, this._diag());
-    return rc === 1;
-  }
-
-  /**
-   * @param {string} pred
-   * @param {string} arg0
-   * @param {string} arg1
-   * @returns {boolean}
-   */
-  querySymbol2(pred, arg0, arg1) {
-    const rc = this._call('maelys_datalog_wasm_query_symbol2',
-                          'number',
-                          ['string', 'string', 'string'],
-                          [pred, arg0, arg1]);
-    if (rc === -1) throw makeError('querySymbol2', -1, this._diag());
-    return rc === 1;
-  }
-
-  /**
-   * Canonical Why-true text of a derived IDB fact, exactly as produced by the
-   * C formatter and returned byte-for-byte.
-   *
-   * The public query surface is deliberately limited to symbolic terms of
-   * arity 1 or 2, like querySymbol/querySymbol2. This method is strictly
-   * opt-in: nothing else calls it, and the text is never logged, cached,
-   * reported in a diagnostic or otherwise persisted, because it can carry
-   * business predicates and symbols.
-   *
-   * Returns null only when there is no explainable derived fact: absent fact,
-   * unknown symbolic term, or a fact present only as a policy/EDB atom. A
-   * bounded incomplete provenance is NOT null: it is a regular string whose
-   * canonical state line says so. Every other situation throws: local type
-   * errors as TypeError (without calling the module), and invalid state,
-   * invalid or non-QUERY predicate, wrong arity, core error, impossible
-   * allocation or any count/write disagreement as an Error.
-   *
-   * @param {string} predicate
-   * @param {string[]} terms one or two symbolic terms
-   * @returns {string | null}
-   */
-  explainFactText(predicate, terms) {
-    if (typeof predicate !== 'string') {
-      throw new TypeError('explainFactText: predicate must be a string');
-    }
-    if (!Array.isArray(terms)) {
-      throw new TypeError('explainFactText: terms must be an array');
-    }
-    if (terms.length !== 1 && terms.length !== 2) {
-      throw new TypeError('explainFactText: terms must hold exactly 1 or 2 terms');
-    }
-    for (const term of terms) {
-      if (typeof term !== 'string') {
-        throw new TypeError('explainFactText: every term must be a string');
-      }
-    }
-
-    const fn = terms.length === 1
-      ? 'maelys_datalog_wasm_explain_symbol_fact_text'
-      : 'maelys_datalog_wasm_explain_symbol2_fact_text';
-    const argTypes = terms.length === 1
-      ? ['string', 'string', 'number', 'number', 'number', 'number']
-      : ['string', 'string', 'string', 'number', 'number', 'number', 'number'];
-
-    /* One block for the two int32 outputs: required then found. */
-    const scalars = this._mod._malloc(8);
-    if (!scalars) throw new Error('explainFactText failed: malloc returned 0');
-    const requiredPtr = scalars;
-    const foundPtr = scalars + 4;
-    let textPtr = 0;
-    try {
-      const zeroScalars = () => {
-        this._mod.HEAP32[requiredPtr >> 2] = 0;
-        this._mod.HEAP32[foundPtr >> 2] = 0;
-      };
-      const call = (ptr, capacity) => this._call(
-        fn,
-        'number',
-        argTypes,
-        [predicate, ...terms, ptr, capacity, requiredPtr, foundPtr],
-      );
-      const readRequired = () => this._mod.getValue(requiredPtr, 'i32');
-      const readFound = () => this._mod.getValue(foundPtr, 'i32');
-
-      zeroScalars();
-      const countRc = call(0, 0);
-      if (countRc !== MAELYS_OK) throw makeError('explainFactText', countRc, this._diag());
-      const found = readFound();
-      const required = readRequired();
-      if (found === 0) {
-        if (required !== 0) {
-          throw new Error(
-            `explainFactText: absent explanation reported ${required} bytes`,
-          );
-        }
-        return null;
-      }
-      if (found !== 1) {
-        throw new Error(`explainFactText: unexpected found flag ${found}`);
-      }
-      if (!Number.isSafeInteger(required) || required <= 0 || required >= INT32_MAX) {
-        throw new Error(`explainFactText: invalid text size ${required}`);
-      }
-
-      textPtr = this._mod._malloc(required + 1);
-      if (!textPtr) throw new Error('explainFactText failed: malloc returned 0');
-      zeroScalars();
-      const writeRc = call(textPtr, required + 1);
-      if (writeRc !== MAELYS_OK) throw makeError('explainFactText', writeRc, this._diag());
-      const writeFound = readFound();
-      const writeRequired = readRequired();
-      if (writeFound !== 1 || writeRequired !== required) {
-        throw new Error(
-          `explainFactText: count/write divergence (found ${writeFound}, ` +
-          `size ${writeRequired}, expected found 1 and size ${required})`,
-        );
-      }
-      const text = this._mod.UTF8ToString(textPtr);
-      if (this._mod.lengthBytesUTF8(text) !== required) {
-        throw new Error(
-          `explainFactText: decoded ${this._mod.lengthBytesUTF8(text)} bytes, ` +
-          `expected ${required}`,
-        );
-      }
-      return text;
-    } finally {
-      if (textPtr) this._mod._free(textPtr);
-      this._mod._free(scalars);
-    }
-  }
-
-  /**
-   * Enumerate every already-derived IDB fact of a QUERY-authorized predicate
-   * from the current solve result. This does not include EDB or POLICY_FACT
-   * facts and does not perform pattern filtering or symbol resolution.
-   * @param {string} predicate
-   * @param {number} arity
-   * @returns {MaelysDatalogTerm[][]}
-   */
-  enumeratePredicateFacts(predicate, arity) {
-    if (typeof predicate !== 'string') {
-      throw new TypeError('enumeratePredicateFacts: predicate must be a string');
-    }
-    if (!Number.isInteger(arity) || arity < 0) {
-      throw new TypeError('enumeratePredicateFacts: arity must be a non-negative integer');
-    }
-    const call = (ptr, capacity) => this._call(
-      'maelys_datalog_wasm_enumerate_predicate_facts',
-      'number',
-      ['string', 'number', 'number', 'number'],
-      [predicate, arity, ptr, capacity],
-    );
-    const total = call(0, 0);
-    if (total === -1) {
-      throw makeError('enumeratePredicateFacts', -1, this._diag());
-    }
-    if (total === 0 || arity === 0) {
-      return Array.from({ length: total }, () => []);
-    }
-
-    const wordsPerTerm = 3;
-    const wordsPerFact = arity * wordsPerTerm;
-    const ptr = this._mod._malloc(total * wordsPerFact * 4);
-    if (!ptr) throw new Error('Failed to allocate enumerate buffer');
-    try {
-      const count = call(ptr, total);
-      if (count === -1) {
-        throw makeError('enumeratePredicateFacts', -1, this._diag());
-      }
-      if (count !== total) {
-        throw new Error(
-          `enumeratePredicateFacts: inconsistent count ${count}, expected ${total}`,
-        );
-      }
-      const facts = [];
-      for (let factIndex = 0; factIndex < count; factIndex++) {
-        const terms = [];
-        for (let termIndex = 0; termIndex < arity; termIndex++) {
-          const base =
-            ptr + (factIndex * wordsPerFact + termIndex * wordsPerTerm) * 4;
-          terms.push(
-            decodeEnumeratedTerm(
-              this._mod.getValue(base, 'i32'),
-              this._mod.getValue(base + 4, 'i32'),
-              this._mod.getValue(base + 8, 'i32'),
-            ),
-          );
-        }
-        facts.push(terms);
-      }
-      return facts;
-    } finally {
-      this._mod._free(ptr);
-    }
-  }
-
-  /**
-   * Resolve a symbol id through the current mono-policy symbol table.
-   * Works before or after solve once the EDB is open.
-   * @param {number} symbolId
-   * @returns {string | null}
-   */
-  symbolText(symbolId) {
-    if (!Number.isInteger(symbolId)) {
-      throw new TypeError('symbolText: symbolId must be an integer');
-    }
-    const ptr = this._call(
-      'maelys_datalog_wasm_symbol_text_by_id',
-      'number',
-      ['number'],
-      [symbolId],
-    );
-    return ptr === 0 ? null : this._mod.UTF8ToString(ptr);
-  }
-
-  /**
-   * @returns {number}
-   */
+  explainTrue(predicate, terms) { return this._explain(1, predicate, terms); }
+  explainFalse(predicate, terms) { return this._explain(2, predicate, terms); }
   derivedFactCount() {
-    const rc = this._call('maelys_datalog_wasm_derived_fact_count', 'number', [], []);
-    if (rc === -1) throw makeError('derivedFactCount', -1, this._diag());
-    return rc;
+    this._live(); return this._memory(4, ptr => {
+      this._check(this._call('derived_count', [ptr]), 'derivedFactCount');
+      return this._view().getUint32(ptr, true);
+    });
   }
-
-  /**
-   * @returns {MaelysPlayground}
-   */
-  freeResult() {
-    this._call('maelys_datalog_wasm_solve_result_free', null, [], []);
-    return this;
+  fingerprints() {
+    this._live(); return this._memory(65, ptr => {
+      const result = {};
+      ['policy', 'session', 'execution'].forEach((name, i) => {
+        this._check(this._call('fingerprint', [i + 1, ptr, 65]), 'fingerprints');
+        result[name] = this._mod.UTF8ToString(ptr);
+      });
+      return result;
+    });
   }
-
-  /**
-   * @returns {string}
-   */
-  get diagMessage() {
-    return this._diag();
-  }
-
-  /**
-   * @returns {string}
-   */
-  get diagHint() {
-    return this._call('maelys_datalog_wasm_last_diag_hint', 'string', [], []);
-  }
-
-  /**
-   * @returns {number}
-   */
-  get diagCode() {
-    return this._call('maelys_datalog_wasm_last_diag_code', 'number', [], []);
-  }
+  close() { this._live(); this._check(this._call('close'), 'close'); this._closed = true; }
 }
-
-const api = {
-  PredKind,
-  MAELYS_OK,
-  MAELYS_ERR_INVALID_ARGUMENT,
-  MAELYS_ERR_INVALID_FIELD,
-  MAELYS_ERR_PAYLOAD_TOO_LARGE,
-  MAELYS_ERR_INVALID_STATE,
-  MAELYS_DATALOG_WASM_PACKED_STRING_BYTES_MAX,
-  MaelysPlayground,
-};
-
-if (typeof module !== 'undefined' && module.exports) {
-  module.exports = api;
-  // Keep explicit CommonJS property assignments: TypeScript's declaration
-  // emitter otherwise drops the value exports when this file also contains
-  // named JSDoc typedefs.
-  module.exports.PredKind = PredKind;
-  module.exports.MAELYS_OK = MAELYS_OK;
-  module.exports.MAELYS_ERR_INVALID_ARGUMENT = MAELYS_ERR_INVALID_ARGUMENT;
-  module.exports.MAELYS_ERR_INVALID_FIELD = MAELYS_ERR_INVALID_FIELD;
-  module.exports.MAELYS_ERR_PAYLOAD_TOO_LARGE = MAELYS_ERR_PAYLOAD_TOO_LARGE;
-  module.exports.MAELYS_ERR_INVALID_STATE = MAELYS_ERR_INVALID_STATE;
-  module.exports.MAELYS_DATALOG_WASM_PACKED_STRING_BYTES_MAX =
-    MAELYS_DATALOG_WASM_PACKED_STRING_BYTES_MAX;
-  module.exports.MaelysPlayground = MaelysPlayground;
-}
-
-if (typeof globalThis !== 'undefined') {
-  globalThis.PredKind = PredKind;
-  globalThis.MAELYS_OK = MAELYS_OK;
-  globalThis.MAELYS_ERR_INVALID_ARGUMENT = MAELYS_ERR_INVALID_ARGUMENT;
-  globalThis.MAELYS_ERR_INVALID_FIELD = MAELYS_ERR_INVALID_FIELD;
-  globalThis.MAELYS_ERR_PAYLOAD_TOO_LARGE = MAELYS_ERR_PAYLOAD_TOO_LARGE;
-  globalThis.MAELYS_ERR_INVALID_STATE = MAELYS_ERR_INVALID_STATE;
-  globalThis.MAELYS_DATALOG_WASM_PACKED_STRING_BYTES_MAX = MAELYS_DATALOG_WASM_PACKED_STRING_BYTES_MAX;
-  globalThis.MaelysPlayground = MaelysPlayground;
-}
+const api = { MaelysPlayground, PredKind, Status, DatalogError };
+if (typeof module !== 'undefined' && module.exports) module.exports = api;
+if (typeof globalThis !== 'undefined') Object.assign(globalThis, api);

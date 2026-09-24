@@ -23,6 +23,19 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ### Changed
 
+- Replace the Wasm native-object binding with an installed-public-SDK consumer.
+  A single typed API accepts atomic multi-predicate batches and arities 0–4,
+  transports signed int64 exactly (`bigint`, or safe integer `number` inputs),
+  and returns all integers as `bigint`. Add explicit source atoms, Why-false,
+  immutable structured diagnostics, three fingerprints and explicit `close`.
+  Remove input symbol IDs, raw engine exports and historical core/examples JS
+  targets without aliases. Types are supplied by the SDK and mandatory in the
+  release package. Unknown-symbol explanations now throw NOT_FOUND; absent
+  Why-true returns canonical not-derived text. See `bindings/wasm/README.md`
+  for the full migration and allocation/lifetime contracts. Native engine API,
+  backend ABI, algorithms and layouts are unchanged by this adapter migration.
+
+
 - Consolidate Python on one `maelys_datalog` package, using the former
   `python-next` implementation directly against the installed public SDK.
   Remove `maelys_datalog_next`, the native-object C shim, its CMake option/target,
@@ -33,7 +46,7 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
   require caller migration; see `bindings/python/README.md`. Python/CFFI still
   allocate. SMALL/LARGE tests compile outside the checkout against a fresh SDK;
   independent expected answers and migrated V1 contracts replace dual-binding
-  parity. Wasm migration and archive cleanup remain separate work.
+  parity. Archive cleanup remains separate work.
 
 
 - Reference solving classifies base-predicate presence once per rule application
