@@ -106,7 +106,8 @@ if [ "$target" != wasm32 ]; then
   # Do not silently switch release code generation as part of SDK cleanup.
   cmake -S "$root" -B "$build" -DBUILD_TESTING=OFF \
     -DCMAKE_C_COMPILER="${CC:-clang}" -DCMAKE_BUILD_TYPE=Debug \
-    -DCMAKE_C_FLAGS_DEBUG=-g -DCMAKE_INSTALL_LIBDIR=lib \
+    -DCMAKE_C_FLAGS_DEBUG=-g -DMAELYS_DATALOG_REPRODUCIBLE_PATHS=ON \
+    -DCMAKE_INSTALL_LIBDIR=lib \
     -DCMAKE_INSTALL_INCLUDEDIR=include -DMAELYS_DATALOG_PROFILE_LARGE=OFF
   cmake --build "$build" --target maelys_datalog --parallel 4
   native_name="maelys-datalog-${version}-${target}.tar.gz"
