@@ -28,13 +28,24 @@ on:
         required: false
         default: false
         type: boolean
+      report_proof_run:
+        description: Optional completed proof run to assemble reports without building or timing
+        required: false
+        default: ''
+        type: string
+      report_historic_run:
+        description: Original run whose raw passes must remain in the report
+        required: false
+        default: '35970341635'
+        type: string
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   compare:
-    name: Sequential A-A and A-B comparison
+    name: ${{ inputs.report_proof_run != '' && 'Assemble preserved benchmark reports' || 'Sequential A-A and A-B comparison' }}
     runs-on: ubuntu-latest
     timeout-minutes: 180
     steps:
@@ -45,13 +56,14 @@ jobs:
       - name: Check comparison tooling
         run: python3 -m unittest discover -s bench -p 'test_compare*.py'
       - name: Prepare optional diagnostic tool
-        if: inputs.diagnostic_original != '' || inputs.session_diagnostics
+        if: inputs.report_proof_run == '' && (inputs.diagnostic_original != '' || inputs.session_diagnostics)
         run: |
           if ! command -v valgrind >/dev/null; then
             sudo apt-get update
             sudo apt-get install -y valgrind
           fi
       - name: Compare immutable revisions
+        if: inputs.report_proof_run == ''
         env:
           SESSION_FULL_PROOF: '1'
           BASE_REF: ${{ inputs.base }}
@@ -59,7 +71,7 @@ jobs:
           SESSION_DIAGNOSTICS: ${{ inputs.session_diagnostics && '1' || '0' }}
         run: bash bench/compare_revisions.sh "$BASE_REF" "$HEAD_REF" "$RUNNER_TEMP/bench-comparison"
       - name: Diagnose instructions and binary layout
-        if: inputs.diagnostic_original != ''
+        if: inputs.report_proof_run == '' && inputs.diagnostic_original != ''
         env:
           BASE_REF: ${{ inputs.base }}
           ORIGINAL_REF: ${{ inputs.diagnostic_original }}
@@ -67,7 +79,7 @@ jobs:
           HEAD_REF: ${{ inputs.head }}
         run: bash bench/diagnose_solver_layout.sh "$BASE_REF" "$ORIGINAL_REF" "$HEAD_REF" "$RUNNER_TEMP/bench-diagnostic"
       - name: Upload measurements and report (including partial failed runs)
-        if: always()
+        if: always() && inputs.report_proof_run == ''
         uses: actions/upload-artifact@v4
         with:
           name: bench-comparison-${{ github.run_id }}-${{ github.run_attempt }}
@@ -75,4 +87,38 @@ jobs:
             ${{ runner.temp }}/bench-comparison/
             ${{ runner.temp }}/bench-diagnostic/
           if-no-files-found: warn
+          retention-days: 30
+      - name: Download completed proof
+        if: inputs.report_proof_run != ''
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.report_proof_run }}
+          name: bench-comparison-${{ inputs.report_proof_run }}-1
+          path: ${{ runner.temp }}/proof-source
+      - name: Download original measurements
+        if: inputs.report_proof_run != ''
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.report_historic_run }}
+          name: bench-comparison-${{ inputs.report_historic_run }}-1
+          path: ${{ runner.temp }}/historic-source
+      - name: Assemble reports without executing a benchmark
+        if: inputs.report_proof_run != ''
+        env:
+          PROOF_RUN: ${{ inputs.report_proof_run }}
+          HISTORIC_RUN: ${{ inputs.report_historic_run }}
+          BASE_REF: ${{ inputs.base }}
+          HEAD_REF: ${{ inputs.head }}
+        run: |
+          python3 bench/bundle_session_proof.py "$RUNNER_TEMP/proof-source/bench-comparison" "$RUNNER_TEMP/historic-source/bench-comparison" "$RUNNER_TEMP/bench-proof-report" "$PROOF_RUN" "$HISTORIC_RUN" "$BASE_REF" "$HEAD_REF"
+          cat "$RUNNER_TEMP/bench-proof-report/README.md" >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload consolidated proof report
+        if: inputs.report_proof_run != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: bench-proof-report-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/bench-proof-report/
+          if-no-files-found: error
           retention-days: 30
