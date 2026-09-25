@@ -1,77 +1,47 @@
-name: Benchmark comparison (manual)
-
+name: Backend ABI 5 instruction proof (manual)
 on:
   workflow_dispatch:
     inputs:
       base:
-        description: Baseline branch, tag or commit SHA
+        description: Immutable baseline commit
         required: true
         type: string
       head:
-        description: Candidate branch, tag or commit SHA
+        description: Immutable ABI 5 candidate commit
         required: true
         type: string
-
-      diagnostic_original:
-        description: Optional original candidate SHA for LARGE Callgrind and layout diagnosis
-        required: false
-        default: ''
-        type: string
-      diagnostic_size:
-        description: Predeclared solver_size_pure case for the optional diagnostic
-        required: false
-        default: '2048'
-        type: choice
-        options: ['1024', '2048']
-      session_diagnostics:
-        description: Count declared controls and residuals with cache/branch simulation
-        required: false
-        default: false
-        type: boolean
-
 permissions:
   contents: read
-
 jobs:
-  compare:
-    name: Sequential A-A and A-B comparison
+  counts:
     runs-on: ubuntu-latest
-    timeout-minutes: 180
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
           persist-credentials: false
-      - name: Check comparison tooling
-        run: python3 -m unittest discover -s bench -p 'test_compare*.py'
-      - name: Prepare optional diagnostic tool
-        if: inputs.diagnostic_original != '' || inputs.session_diagnostics
+      - name: Verify parser tooling
+        run: python3 -m unittest discover -s bench -p test_compare_session_proof.py
+      - name: Prepare Callgrind
         run: |
           if ! command -v valgrind >/dev/null; then
             sudo apt-get update
             sudo apt-get install -y valgrind
           fi
-      - name: Diagnose instructions and binary layout
-        if: inputs.diagnostic_original != ''
-        env:
-          BASE_REF: ${{ inputs.base }}
-          ORIGINAL_REF: ${{ inputs.diagnostic_original }}
-          DIAGNOSTIC_SIZE: ${{ inputs.diagnostic_size || '2048' }}
-          HEAD_REF: ${{ inputs.head }}
-        run: bash bench/diagnose_solver_layout.sh "$BASE_REF" "$ORIGINAL_REF" "$HEAD_REF" "$RUNNER_TEMP/bench-diagnostic"
-      - name: Compare immutable revisions
+      - name: Count all session cases sequentially
         env:
           BASE_REF: ${{ inputs.base }}
           HEAD_REF: ${{ inputs.head }}
-          SESSION_DIAGNOSTICS: ${{ inputs.session_diagnostics && '1' || '0' }}
-        run: bash bench/compare_revisions.sh "$BASE_REF" "$HEAD_REF" "$RUNNER_TEMP/bench-comparison"
-      - name: Upload measurements and report (including partial failed runs)
+        run: |
+          base=$(git rev-parse "$BASE_REF^{commit}")
+          head=$(git rev-parse "$HEAD_REF^{commit}")
+          python3 bench/abi5_counts.py "$PWD" "$RUNNER_TEMP/abi5-counts" "$RUNNER_TEMP/abi5-build" "$base" "$head"
+      - name: Preserve all raw counts and report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: bench-comparison-${{ github.run_id }}-${{ github.run_attempt }}
-          path: |
-            ${{ runner.temp }}/bench-comparison/
-            ${{ runner.temp }}/bench-diagnostic/
+          name: abi5-counts-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/abi5-counts
           if-no-files-found: warn
           retention-days: 30

@@ -1,0 +1,4 @@
+# Measurement tooling only: compile the entire predeclared sessions inventory.
+include $(DRIVER)/bench/Makefile.compare
+$(OUT)/abi5-counts: $(OBJECTS) $(DRIVER)/bench/bench_sessions_all_counts.c
+	$(CC) $(FLAGS) $(DEFS) -DMAELYS_BENCH_COUNT $(DRIVER)/bench/bench_sessions_all_counts.c $(OBJECTS) -o $@
