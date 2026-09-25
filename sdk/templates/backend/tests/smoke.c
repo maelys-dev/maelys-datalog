@@ -17,16 +17,20 @@ int main(void)
     void *state = &sentinel;
     void *result = &sentinel;
     CHECK(extension.backends[0].capabilities == 0);
-    CHECK(extension.backends[0].prepare(NULL, &state)
+    CHECK(extension.backends[0].prepare(NULL, NULL, &state)
           == MAELYS_DATALOG_STATUS_UNSUPPORTED);
     CHECK(state == NULL);
-    CHECK(extension.backends[0].prepare(NULL, NULL)
+    CHECK(extension.backends[0].prepare(NULL, NULL, NULL)
           == MAELYS_DATALOG_STATUS_INVALID_ARGUMENT);
     CHECK(extension.backends[0].solve(NULL, NULL, 0, NULL, &result, NULL)
           == MAELYS_DATALOG_STATUS_UNSUPPORTED);
     CHECK(result == NULL);
     CHECK(extension.backends[0].solve(NULL, NULL, 0, NULL, NULL, NULL)
           == MAELYS_DATALOG_STATUS_INVALID_ARGUMENT);
+    size_t bytes = 99, alignment = 0;
+    CHECK(extension.backends[0].storage_requirements(NULL, &bytes, &alignment) == MAELYS_DATALOG_STATUS_OK);
+    CHECK(bytes == 0 && alignment == 1);
+    extension.backends[0].commit(NULL, NULL);
     extension.backends[0].destroy_result(NULL, NULL);
     extension.backends[0].destroy(NULL);
 

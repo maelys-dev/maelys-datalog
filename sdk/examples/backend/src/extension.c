@@ -115,7 +115,18 @@ static maelys_datalog_status_t join(work_t *w, const maelys_datalog_ir_rule_t *r
     }
     return MAELYS_DATALOG_STATUS_OK;
 }
-static maelys_datalog_status_t prepare(const maelys_datalog_program_t *program, void **out) {
+static maelys_datalog_status_t storage_requirements(const maelys_datalog_program_t *program,
+    size_t *bytes, size_t *alignment) {
+    (void)program;
+    *bytes = 0; *alignment = 1;
+    return MAELYS_DATALOG_STATUS_OK;
+}
+static void commit(void *state, void *result) {
+    (void)state; (void)result;
+}
+static maelys_datalog_status_t prepare(const maelys_datalog_program_t *program,
+    const maelys_datalog_backend_storage_t *storage, void **out) {
+    (void)storage;
     naive_t *s = calloc(1u, sizeof(*s));
     if (!s)
         return MAELYS_DATALOG_STATUS_INTERNAL;
@@ -201,11 +212,13 @@ const maelys_datalog_backend_t *example_naive_backend(void) {
                                                      "example.naive.v1",
                                                      MAELYS_DATALOG_CAP_POSITIVE |
                                                          MAELYS_DATALOG_CAP_WORK_LIMIT,
+                                                     storage_requirements,
                                                      prepare,
                                                      solve,
                                                      NULL,
                                                      NULL,
                                                      NULL,
+                                                     commit,
                                                      destroy_result,
                                                      destroy};
     return &backend;

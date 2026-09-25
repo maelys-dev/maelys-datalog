@@ -213,7 +213,7 @@ static int capacity_failure_and_reuse(void) {
     OK(maelys_datalog_result_free(r)); OK(maelys_datalog_session_free(s)); free(f); return 0;
 }
 static int prepare_calls;
-static maelys_datalog_status_t forbidden_prepare(const maelys_datalog_program_t *p, void **state) { (void)p;(void)state;++prepare_calls;return MAELYS_DATALOG_STATUS_INTERNAL; }
+static maelys_datalog_status_t forbidden_prepare(const maelys_datalog_program_t *p, const maelys_datalog_backend_storage_t *storage, void **state) { (void)storage; (void)p;(void)state;++prepare_calls;return MAELYS_DATALOG_STATUS_INTERNAL; }
 static int backend_gate_and_ir(void) {
     maelys_datalog_policy_t *p = NULL; OK(load("summary(N) :- count(I,raw(I,_,_),N). ",&p));
     maelys_datalog_backend_t b = *maelys_datalog_backend_reference();

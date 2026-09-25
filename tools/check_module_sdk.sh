@@ -36,6 +36,7 @@ cp "$root/tests/test_maelys_datalog_modules.c" "$scratch/"
 cp "$root/tests/test_maelys_datalog_compiler.c" "$scratch/"
 cp "$root/tests/test_maelys_datalog_context.c" "$scratch/"
 cp "$root/tests/test_maelys_datalog_advanced.c" "$scratch/"
+cp "$root/tests/test_maelys_datalog_backend_transaction.c" "$scratch/"
 cp "$root/tests/test_maelys_datalog_window.c" "$scratch/"
 cp "$root/tests/test_maelys_datalog_group_window.c" "$scratch/"
 cp "$root/examples/multi_fact_window.c" "$scratch/"
@@ -128,6 +129,8 @@ for linkage in "${linkages[@]}"; do
   ./facade
   "$cc" "${flags[@]}" -UNDEBUG test_maelys_datalog_advanced.c "${libs[@]}" -o advanced
   ./advanced
+  "$cc" "${flags[@]}" test_maelys_datalog_backend_transaction.c "${libs[@]}" -o backend-transaction
+  ./backend-transaction
   "$cc" "${flags[@]}" -UNDEBUG -Wvla -pedantic-errors \
     test_maelys_datalog_predicate_builders.c "${libs[@]}" -o declarations
   ./declarations

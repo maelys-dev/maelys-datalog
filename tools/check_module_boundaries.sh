@@ -4,7 +4,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 # Providers and the public SDK must not include private engine headers.
 if grep -Enr '#[[:space:]]*include[[:space:]]*[<"](src/|common/|include/|\.\./)' \
-    include/maelys bindings/wasm modules/standard sdk/examples sdk/templates sdk/conformance src/runtime/maelys_datalog_window.c src/runtime/maelys_datalog_group_window.c; then
+    include/maelys bindings/wasm modules/standard sdk/examples sdk/templates sdk/conformance; then
   echo "error: module SDK boundary includes private headers" >&2
   exit 1
 fi
@@ -12,5 +12,14 @@ fi
 # public SDK never declares or includes it.
 if grep -Enr 'pipeline_counts|COUNT_PIPELINE|pipeline_testing|base_lookup_counts|solver_testing' include; then
   echo "error: test instrumentation leaks into the public SDK" >&2
+  exit 1
+fi
+
+# Built-in windows use only public handles and the private publication bridge.
+# They must not depend on solver, registry or runtime struct definitions.
+if grep -En '#[[:space:]]*include[[:space:]]*[<"](src/|common/|include/|\.\./)' \
+    src/runtime/maelys_datalog_window.c src/runtime/maelys_datalog_group_window.c | \
+    grep -v '#include "src/runtime/maelys_datalog_transaction_internal.h"$'; then
+  echo "error: window adapter includes private implementation headers" >&2
   exit 1
 fi

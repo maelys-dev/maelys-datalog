@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: MPL-2.0 */
 /* The adapter consumes only the installed public facade. */
 #include <maelys/datalog_group_window.h>
+#include "src/runtime/maelys_datalog_transaction_internal.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -112,12 +113,13 @@ maelys_datalog_status_t maelys_datalog_group_window_init(void *storage, size_t s
         if (rc) return rc;
     }
     maelys_datalog_result_t *probe = NULL;
-    rc = maelys_datalog_session_solve(b, NULL, 0, &probe, diag);
+    rc = maelys_datalog_session_solve_candidate(b, NULL, 0, &probe, diag);
     if (rc) return rc;
     rc = maelys_datalog_result_free(probe);
     if (rc) return rc;
-    rc = maelys_datalog_session_solve(a, NULL, 0, &w->result, diag);
+    rc = maelys_datalog_session_solve_candidate(a, NULL, 0, &w->result, diag);
     if (rc) return rc;
+    maelys_datalog_result_commit(w->result);
     *out = w;
     return MAELYS_DATALOG_STATUS_OK;
 }
@@ -203,7 +205,7 @@ maelys_datalog_status_t maelys_datalog_group_window_push(maelys_datalog_group_wi
         w->groups[candidate][groups] = (maelys_datalog_event_group_t){(uint32_t)w->next, retained, count};
     }
     maelys_datalog_result_t *result = NULL;
-    if (!rc) rc = maelys_datalog_session_solve(w->sessions[candidate], w->facts[candidate], unique, &result, diag);
+    if (!rc) rc = maelys_datalog_session_solve_candidate(w->sessions[candidate], w->facts[candidate], unique, &result, diag);
     if (!rc) {
         rc = maelys_datalog_result_free(w->result);
         if (rc) {
@@ -217,6 +219,7 @@ maelys_datalog_status_t maelys_datalog_group_window_push(maelys_datalog_group_wi
             w->unique_count = unique;
             if (id) *id = (uint32_t)w->next;
             ++w->next;
+            maelys_datalog_result_commit(result);
         }
     }
     w->busy = 0;

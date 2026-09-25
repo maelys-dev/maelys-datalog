@@ -50,6 +50,20 @@ MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_domain_builder_add(
  * Unsupported combinations fail before any session is returned. */
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_session_config_set_backend(
     maelys_datalog_session_config_t *, const maelys_datalog_backend_t *);
+/* Query without preparing a session; NULL backend selects the reference.
+ * Outputs are unchanged on failure. No allocation. Requirements are checked
+ * again once at session creation; a backend must return deterministic values. */
+MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_backend_storage_requirements(
+    const maelys_datalog_policy_t *, size_t policy_index, const maelys_datalog_backend_t *,
+    size_t *out_bytes, size_t *out_alignment);
+/* Copies the descriptor, borrows its buffer; NULL clears the selection.
+ * Backend/context selection does not reset this storage. Each live session
+ * needs disjoint storage, including the two sessions borrowed by a window.
+ * Size and alignment must satisfy the selected backend at creation, otherwise
+ * INVALID_ARGUMENT before prepare. No implicit allocation/fallback. Plain
+ * session_create_ex/context_session_create supply no backend storage. */
+MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_session_config_set_backend_storage(
+    maelys_datalog_session_config_t *, const maelys_datalog_backend_storage_t *);
 /* Select a registered backend, or NULL for the reference, in a sealed context.
  * The config retains
  * the context; the policy must have been compiled in that same context. Setting

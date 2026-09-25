@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: MPL-2.0 */
-/* This adapter intentionally consumes only the installed public facade. */
+/* Public value/handle API plus the runtime-only publication boundary. */
 #include <maelys/datalog_window.h>
+#include "src/runtime/maelys_datalog_transaction_internal.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -85,12 +86,13 @@ maelys_datalog_status_t maelys_datalog_window_init(
     /* Check both sessions while leaving no candidate result leased on failure.
      * No result has escaped, so candidate release cannot have an explanation. */
     maelys_datalog_result_t *probe = NULL;
-    rc = maelys_datalog_session_solve_edb(b, w->inputs[1], &probe, diag);
+    rc = maelys_datalog_session_solve_edb_candidate(b, w->inputs[1], &probe, diag);
     if (rc) return rc;
     rc = maelys_datalog_result_free(probe);
     if (rc) return rc;
-    rc = maelys_datalog_session_solve_edb(a, w->inputs[0], &w->result, diag);
+    rc = maelys_datalog_session_solve_edb_candidate(a, w->inputs[0], &w->result, diag);
     if (rc) return rc;
+    maelys_datalog_result_commit(w->result);
     *out = w;
     return MAELYS_DATALOG_STATUS_OK;
 }
@@ -120,7 +122,7 @@ maelys_datalog_status_t maelys_datalog_window_push(
     terms[0].as.integer = (int64_t)w->next;
     if (count) memcpy(terms + 1, values, count * sizeof(*values));
     if (!rc) rc = maelys_datalog_input_edb_add_fact(w->inputs[candidate], predicate, terms, count + 1u, diag);
-    if (!rc) rc = maelys_datalog_session_solve_edb(w->sessions[candidate], w->inputs[candidate], &result, diag);
+    if (!rc) rc = maelys_datalog_session_solve_edb_candidate(w->sessions[candidate], w->inputs[candidate], &result, diag);
     if (!rc) {
         rc = maelys_datalog_result_free(w->result);
         if (rc) {
@@ -132,6 +134,7 @@ maelys_datalog_status_t maelys_datalog_window_push(
             w->active = candidate;
             if (occurrence) *occurrence = (uint32_t)w->next;
             ++w->next;
+            maelys_datalog_result_commit(result);
         }
     }
     w->busy = 0;

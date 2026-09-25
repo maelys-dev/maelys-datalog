@@ -513,13 +513,15 @@ static int ir_roundtrip(void) {
 }
 
 static size_t destroys, result_destroys;
-static maelys_datalog_status_t fake_prepare(const maelys_datalog_program_t *p, void **out) {
+static maelys_datalog_status_t fake_prepare(const maelys_datalog_program_t *p, const maelys_datalog_backend_storage_t *storage, void **out) {
+    (void)storage;
     (void)p;
     *out = malloc(1);
     return *out ? MAELYS_DATALOG_STATUS_OK : MAELYS_DATALOG_STATUS_INTERNAL;
 }
-static maelys_datalog_status_t failed_prepare(const maelys_datalog_program_t *p, void **out) {
-    maelys_datalog_status_t rc = fake_prepare(p, out);
+static maelys_datalog_status_t failed_prepare(const maelys_datalog_program_t *p, const maelys_datalog_backend_storage_t *storage, void **out) {
+    (void)storage;
+    maelys_datalog_status_t rc = fake_prepare(p, storage, out);
     return rc ? rc : MAELYS_DATALOG_STATUS_UNSUPPORTED;
 }
 static void fake_destroy(void *state) {
@@ -589,17 +591,20 @@ static maelys_datalog_backend_t fake_backend(void) {
                                   "fake",
                                   "test.fake.v1",
                                   MAELYS_DATALOG_CAP_POSITIVE | MAELYS_DATALOG_CAP_WORK_LIMIT,
+                                  maelys_datalog_backend_reference()->storage_requirements,
                                   fake_prepare,
                                   bad_emit,
                                   NULL,
                                   NULL,
                                   NULL,
+                                  maelys_datalog_backend_reference()->commit,
                                   fake_destroy_result,
                                   fake_destroy};
     return b;
 }
 static int filter_mode;
-static maelys_datalog_status_t filter_prepare(const maelys_datalog_program_t *p, void **out) {
+static maelys_datalog_status_t filter_prepare(const maelys_datalog_program_t *p, const maelys_datalog_backend_storage_t *storage, void **out) {
+    (void)storage;
     maelys_datalog_ir_rule_t *r = calloc(1, sizeof(*r));
     *out = r;
     return r ? maelys_datalog_program_rule(p, 0, r) : MAELYS_DATALOG_STATUS_INTERNAL;

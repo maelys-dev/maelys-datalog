@@ -1,5 +1,10 @@
 # Compiler and solver extension contracts
 
+> 0.11.0 (unreleased) adds backend ABI 5 preparation storage and explicit
+> acceptance. This does not implement or freeze the proposed resource/delta
+> protocol below; its historical ABI-number proposals are superseded. See the
+> [ABI 5 migration addendum](../api-type-migration.md#0110--backend-abi-5-unreleased).
+
 > 0.10.0 migration note: the common diagnostic now uses consumer API 2,
 > frontend/program ABI 2 and backend ABI 4. Snapshot materialization is unchanged.
 > References below to the original ABI 3 constraints describe the snapshot
@@ -90,11 +95,13 @@ Avoid callbacks that change precedence or inject arbitrary grammar productions.
 
 ## Backend contract
 
-Include `maelys/datalog_backend.h`. Backend ABI **v3** replaces the two direct-text
-explanation callbacks with caller-owned preparation. ABI v1/v2 descriptors and
-session options are rejected; rebuild providers against the current header.
-Populate `prepare`, `solve`, `destroy_result`, `destroy`. If either EXPLAIN
-capability is advertised, also provide all three callbacks:
+Include `maelys/datalog_backend.h`. Backend ABI **5** (0.11.0, unreleased)
+requires preparation storage and explicit result acceptance; it retains the
+caller-owned explanation protocol. Older descriptors and session options are
+rejected before callbacks; rebuild providers against the current header.
+Populate `storage_requirements`, `prepare`, `solve`, `commit`, `destroy_result`
+and `destroy`. If either EXPLAIN capability is advertised, also provide all
+three explanation callbacks:
 
 | Callback | Responsibility |
 | --- | --- |
@@ -134,7 +141,10 @@ Datalog using full-scan fixed-point evaluation, with a cooperative work limit.
 It rejects negation, comparisons, arithmetic, filters and explanations. It is a
 conformance example, not an optimized product or a wrapper around the reference.
 
-`prepare` receives an immutable program view. Accessors expose predicates, ground
+`prepare` receives an immutable program view and validated caller-owned storage.
+The descriptor is borrowed for this call, its buffer through session destruction.
+Select that buffer through the opaque config; the direct options example above
+is for backends with zero requirements. Accessors expose predicates, ground
 policy facts and normalized rules using public types, plus profile-dependent
 input/output capacities. Borrowed strings/patterns remain valid through
 `destroy`. Sessions own snapshots: the caller may free the loaded policy first.
@@ -155,6 +165,9 @@ conformance is required before relying on a new algorithm, especially for
 authorization decisions. A query-directed solver cannot return a partial answer
 as success under this contract; incremental updates/streaming require another API.
 
+`commit` runs once after host acceptance, or after built-in window publication.
+It cannot fail, allocate or reenter. A rejected candidate is destroyed without
+commit; the backend must preserve previously committed state until acceptance.
 Failures discard all output and destroy any returned result state, even if the
 callback ignored a host error. Unknown callback statuses become INTERNAL.
 `destroy` also runs on failed preparation; both destructors must accept NULL and
@@ -186,25 +199,24 @@ maps `A`–`Z` to 0–25 and anonymous variables to 26 and above, so the text ne
 depends on a frontend's surface names. A present query reports `not-applicable`;
 an absent query reports `complete` or `truncated`. A bounded diagnostic is not an
 exhaustive proof of non-derivability. The bounds are fixed by the reference in
-backend ABI v3; letting the caller tune them means passing session options to
-`prepare`, which is a later ABI revision. Unknown query symbols return NOT_FOUND
+the current reference implementation. ABI 5 passes storage to `prepare`, not
+explanation quotas; configurable bounds remain future work. Unknown query symbols return NOT_FOUND
 without mutating vocabulary. No source grammar or existing Why-true text changes.
 
 Malformed frontend IR has a dedicated public load diagnostic code,
 `MAELYS_DATALOG_DIAG_MALFORMED_PROGRAM`. Existing diagnostic values are preserved;
 the code is appended. Parser syntax diagnostics keep their original codes.
 
-## Prochain ABI
+## Future resource/delta ABI (proposal)
 
-0.5.0 was released on 2026-09-20 with opt-in session explanation workspaces;
-consumer API v1 and backend ABI 3 remain unchanged.
+The 2026-09-20 proposal originally called this future contract ABI 4. That number
+was subsequently assigned to diagnostics; ABI 5 adds only preparation storage
+and acceptance. Neither version implements the following proposals or reserves
+the number of a future ABI. Validate them with the incremental prototype first.
 
-Backend ABI 4 ships as one break, together with the first non-reference backend
-(the incremental one), never alone. Its content, decided on 2026-09-20:
-
-- The descriptor becomes append-only starting at ABI 4: the registry accepts
-  known ABI 4 prefixes and reads absent trailing fields as `NULL`. Earlier ABI
-  layouts require explicit adapters or rejection, never a blind prefix copy.
+- Proposed prefix compatibility: accept explicitly supported descriptor prefixes
+  and read absent trailing fields as `NULL`. ABI 5 currently requires exact size;
+  older layouts are rejected, never blindly copied.
   Registration must define descriptor-array stride and normalize bounded reads
   into the host layout; `struct_size` alone does not make array traversal safe.
   After that, an optional callback never forces a renumbering; only a change of
@@ -216,15 +228,14 @@ Backend ABI 4 ships as one break, together with the first non-reference backend
   freezing the signature, specify initialization, duplicate/conflicting updates,
   atomic commit and failure recovery, including capacity and work exhaustion.
 - A `WORK_LIMIT` actually honoured by the reference. `AGGREGATES` is introduced independently with public count support
-  using the existing ABI 3 descriptor layout.
+  using the current snapshot descriptor layout.
 - A named backend registry reachable from the opaque facade, so Python-next and
   the WASM binding can select a backend by name. C context registration and
   selection already exist; the remaining work is coherent binding exposure.
 - A [session resource contract](session-resource-contract.md), agreed by the
   host and backend before initialization: effective capacities, checked storage
   planning, immutable session budgets/memory policy, transaction peaks and
-  observable bounded fallback. This is a design requirement, not an ABI 3 option
-  or a frozen ABI 4 layout. Smaller quotas and genuinely capacity-sized storage
+  observable bounded fallback. This is a design requirement, not implemented or frozen by ABI 5. Smaller quotas and genuinely capacity-sized storage
   are separate steps.
   The consumer selects a predefined capacity profile and an explicit memory mode,
   independently of solver choice where that combination is supported. Fixed
