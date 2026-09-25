@@ -310,7 +310,8 @@ static void context_storage(void) {
     OK(maelys_datalog_policy_free(p)); OK(maelys_datalog_session_free(s));
 }
 static void window_commit(int groups) {
-    pool_t pools[2] = {{0}, {0}};
+    pool_t pools[2];
+    memset(pools, 0, sizeof(pools));
     maelys_datalog_session_t *a = create(&pools[0]), *b = create(&pools[1]);
     size_t bytes, alignment;
     maelys_datalog_group_window_capacities_t caps = {1, 1, 1, 16};
