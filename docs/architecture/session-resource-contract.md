@@ -15,8 +15,8 @@
 Status: design requirements, 2026-09-22. This document specifies the target
 contract for session capacities and memory modes. It does **not** describe an
 implemented API, introduce new C declarations, raise current limits, or freeze
-backend ABI 4.
-The current consumer API and backend ABI 3 retain their behavior and identities.
+a future resource/delta ABI. Backend ABI 5 implements preparation storage and
+acceptance only; consumer API 2 and complete snapshot inputs retain their behavior.
 The [backend contract](compiler-backends.md) remains authoritative for that API.
 
 ## Delivery gates
@@ -551,7 +551,7 @@ allocator entry points it instruments, not certification of a strict artifact or
 its transitive libraries. Distinguish tests already present from this future
 conformance matrix; no new mode is certified by documenting its requirements.
 
-Freeze ABI 4 callbacks and compatibility rules only with the validated backend.
+Freeze future resource/delta callbacks and compatibility rules only with the validated backend.
 The opaque consumer configuration, context/binding selection, capability checks,
 storage planning and effective-limit introspection must agree across that boundary.
 Keep Wasm fuel and event counts separate from the agreed Datalog work model;

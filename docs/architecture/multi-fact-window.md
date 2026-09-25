@@ -3,7 +3,8 @@
 `<maelys/datalog_group_window.h>` adds a native C adapter to the public library.
 One accepted event is a group of zero or more complete typed facts. The adapter
 retains the last N groups in arrival order, builds their set union and solves the
-complete snapshot. Datalog syntax, backend ABI 3 and program ABI 1 are unchanged.
+complete snapshot. Datalog syntax is unchanged. The current contracts are
+backend ABI 5 (0.11.0, unreleased) and program ABI 2.
 This is a reference recomputation adapter, not an incremental solver. Bindings,
 new memory profiles, elastic storage and resource negotiation are separate work.
 
@@ -153,5 +154,11 @@ Consumers of this additional reference must pin a published SDK carrying the
 new header; a sibling checkout or copied engine implementation is not a substitute.
 A future persistent backend must preserve these observable transactions with its
 own commit/rollback protocol. Two alternating reference sessions do not prescribe
-its architecture. ABI 3 still incurs host input materialization; whole-transaction
+its architecture. ABI 5 still incurs host input materialization; whole-transaction
 and derivation costs must be reported separately.
+
+Backend ABI 5 defers acceptance through the built-in adapter's private runtime
+bridge: only a published result receives `commit`. The initialization probe and
+post-solve candidates rejected by a held explanation receive `destroy_result`
+without commit. Capacity and text checks remain before solve. This changes no
+public window signature; see the [migration addendum](../api-type-migration.md#0110--backend-abi-5-unreleased).
