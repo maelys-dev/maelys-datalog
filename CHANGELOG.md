@@ -7,6 +7,11 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## 0.11.0 — 2026-09-25
+
+Backend preparation storage and publication acceptance
+([#115](https://github.com/maelys-dev/maelys-datalog/pull/115)).
+
 ### Breaking
 
 - Backend ABI 5 adds `storage_requirements`, changes preparation to
@@ -18,7 +23,7 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
   A successful solve remains a candidate until host acceptance; built-in windows
   commit only at publication, and discard unpublished candidates without commit.
   Consumer API 2, program ABI 2 and diagnostic ABI 1 (1328 bytes) are unchanged.
-  See the [0.11.0 migration addendum](docs/api-type-migration.md#0110--backend-abi-5-unreleased).
+  See the [0.11.0 migration addendum](docs/api-type-migration.md#0110--backend-abi-5).
 
 ## 0.10.0 — 2026-09-24
 

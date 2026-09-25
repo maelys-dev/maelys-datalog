@@ -160,7 +160,7 @@ for the public values, facts and opaque handles. External consumers are built
 and run against both the installed prefix and an extracted archive before
 publication; C11/C++17 checks reject historical/private includes.
 
-## 0.11.0 — backend ABI 5 (unreleased)
+## 0.11.0 — backend ABI 5
 
 Backend authors must rebuild their descriptors. Consumer API 2, program ABI 2,
 diagnostic ABI 1 and the 1328-byte diagnostic layout stay unchanged. Python and
