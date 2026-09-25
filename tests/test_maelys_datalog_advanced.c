@@ -28,7 +28,8 @@ static maelys_datalog_status_t invalid_install(maelys_datalog_domain_builder_t *
 static maelys_datalog_status_t obsolete_lower(const char *s,size_t n,maelys_datalog_program_builder_t *b,maelys_datalog_diagnostic_t *d) {
     (void)s;(void)n;(void)b;(void)d;++calls;return MAELYS_DATALOG_STATUS_OK;
 }
-static maelys_datalog_status_t obsolete_prepare(const maelys_datalog_program_t *p,void **o) {
+static maelys_datalog_status_t obsolete_prepare(const maelys_datalog_program_t *p,const maelys_datalog_backend_storage_t *storage,void **o) {
+    (void)storage;
     (void)p;(void)o;++calls;return MAELYS_DATALOG_STATUS_OK;
 }
 static int diagnostics_and_callbacks(void) {

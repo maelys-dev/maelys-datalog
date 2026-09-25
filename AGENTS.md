@@ -124,7 +124,7 @@ when it has what they name.
   keep the one-live-result lease and forbid fallback allocation. Explanations
   prepared in caller-owned storage must not allocate, including Why-false search
   scratch. Only legacy direct-text convenience calls may allocate a workspace.
-  Keep backend ABI 4 storage/prepare/write callbacks coherent and compare new
+  Keep backend ABI 5 preparation/commit and explanation callbacks coherent and compare new
   workspace output with the legacy structured oracle, including truncation.
   A prepared explanation leases its result; never release/reuse that result
   until every explanation is released. Custom callbacks/backends
@@ -136,7 +136,7 @@ when it has what they name.
   Test measure-only close, short-output retry, invalidation, borrowed-range
   exclusivity and allocator failures. Python's configured path reuses storage
   but its conversions, text buffers and strings still allocate. The versioned
-  diagnostic contract uses backend ABI 4; new error statuses require callback
+  diagnostic contract introduced in backend ABI 4 is retained in ABI 5; new error statuses require callback
   validation, CFFI, docs and exhaustive-switch migration notes together.
 - Intern repeated input strings rather than reserving worst-case text for every
   occurrence. Defaults derive from native symbol/registry budgets, not arbitrary

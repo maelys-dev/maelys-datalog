@@ -368,7 +368,7 @@ MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_session_config_get_wor
  * session workspace ranges may not overlap (INVALID_STATE). Reusing a config
  * with borrowed storage cannot create a second live session using that range.
  * Config destruction does not release borrowed storage. No fallback allocation.
- * ABI 4 has no bound for custom backends: this mode supports only the canonical
+ * The backend ABI has no explanation bound for custom backends: this mode supports only the canonical
  * reference backend, not copied/wrapped descriptors. Other backends are not
  * configurable through session_create_configured. Custom filter callbacks keep
  * their own allocation contract. The mask/storage choice changes no fingerprint.
@@ -594,7 +594,7 @@ typedef enum {
 /* Reference backend only: a per-kind upper bound for every result of this
  * library's build profile, including the opaque handle and alignment padding.
  * Available before solving; independent of request facts. Other backends
- * (including copied/wrapped reference descriptors) return UNSUPPORTED: ABI 4
+ * (including copied/wrapped reference descriptors) return UNSUPPORTED: the backend ABI
  * provides only per-result requirements. This is caller-storage size, not a
  * bound on text length or total stack usage. Alignment <= alignof(max_align_t).
  * Errors leave outputs unchanged; NULL outputs/invalid kind -> INVALID_ARGUMENT,

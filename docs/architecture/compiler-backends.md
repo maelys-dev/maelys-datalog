@@ -1,5 +1,10 @@
 # Compiler and solver extension contracts
 
+> 0.11.0 (unreleased) adds backend ABI 5 preparation storage and explicit
+> acceptance. This does not implement or freeze the proposed resource/delta
+> protocol below; its historical ABI-number proposals are superseded. See the
+> [ABI 5 migration addendum](../api-type-migration.md#0110--backend-abi-5-unreleased).
+
 > 0.10.0 migration note: the common diagnostic now uses consumer API 2,
 > frontend/program ABI 2 and backend ABI 4. Snapshot materialization is unchanged.
 > References below to the original ABI 3 constraints describe the snapshot

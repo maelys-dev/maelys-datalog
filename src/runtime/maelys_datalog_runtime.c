@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: MPL-2.0 */
 #include "src/public/maelys_datalog_public_internal.h"
 #include "src/public/maelys_datalog_values_internal.h"
+#include "src/runtime/maelys_datalog_transaction_internal.h"
 #include "src/compiler/maelys_datalog_program_internal.h"
 #include "src/core/maelys_datalog_prepared_session_internal.h"
 #include "src/core/maelys_datalog_solver_internal.h"
@@ -24,11 +25,18 @@ struct maelys_datalog_session_config {
     int custom_backend;
     maelys_datalog_context_t *context;
     char context_backend_name[64];
+    maelys_datalog_backend_storage_t backend_storage;
 };
 
 static maelys_datalog_status_t configure_explanation_workspace(
     maelys_datalog_session_t *, const maelys_datalog_session_config_t *);
 static void destroy_explanation_workspace(maelys_datalog_session_t *);
+static maelys_datalog_status_t session_create_with_storage(
+    const maelys_datalog_policy_t *, size_t, const maelys_datalog_session_options_t *,
+    const maelys_datalog_backend_storage_t *, maelys_datalog_session_t **);
+static maelys_datalog_status_t context_session_create_with_storage(
+    maelys_datalog_context_t *, const maelys_datalog_policy_t *, size_t, const char *,
+    uint64_t, uint64_t, const maelys_datalog_backend_storage_t *, maelys_datalog_session_t **);
 
 maelys_datalog_status_t maelys_datalog_session_config_create(
     maelys_datalog_session_config_t **out) {
@@ -99,9 +107,13 @@ maelys_datalog_status_t maelys_datalog_session_create_configured(
         .required_capabilities = config->required_capabilities,
         .work_limit = config->work_limit,
     };
+    const maelys_datalog_backend_storage_t *storage = config->backend_storage.struct_size
+        ? &config->backend_storage : NULL;
     maelys_datalog_status_t rc = config->context
-        ? maelys_datalog_context_session_create(config->context, policy, index, config->context_backend_name[0] ? config->context_backend_name : NULL, config->required_capabilities, config->work_limit, out)
-        : maelys_datalog_session_create_ex(policy, index, &options, out);
+        ? context_session_create_with_storage(config->context, policy, index,
+            config->context_backend_name[0] ? config->context_backend_name : NULL,
+            config->required_capabilities, config->work_limit, storage, out)
+        : session_create_with_storage(policy, index, &options, storage, out);
     if (!rc) {
         rc = configure_explanation_workspace(*out, config);
         if (rc) {
@@ -146,6 +158,7 @@ struct maelys_datalog_session {
     struct {
         maelys_datalog_fact_t canonical[MAELYS_DATALOG_MAX_EDB_FACTS];
     } solve_scratch;
+    int pending_commit; /* Runtime-only candidate; no flag inserted into the retained payload. */
 };
 struct maelys_datalog_backend_output {
     maelys_datalog_result_t *result;
@@ -258,9 +271,10 @@ maelys_datalog_status_t maelys_datalog_backend_filter(maelys_datalog_backend_out
                            : output_fail(out, (maelys_datalog_status_t)rc);
 }
 
-maelys_datalog_status_t maelys_datalog_context_session_create(maelys_datalog_context_t *context,
+static maelys_datalog_status_t context_session_create_with_storage(maelys_datalog_context_t *context,
     const maelys_datalog_policy_t *policy, size_t index, const char *backend_name,
-    uint64_t required, uint64_t work_limit, maelys_datalog_session_t **out) {
+    uint64_t required, uint64_t work_limit, const maelys_datalog_backend_storage_t *storage,
+    maelys_datalog_session_t **out) {
     if (out) *out = NULL;
     if (!context || !policy || !out) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
     if (!maelys_datalog_context_is_sealed(context)) return MAELYS_DATALOG_STATUS_INVALID_STATE;
@@ -270,13 +284,57 @@ maelys_datalog_status_t maelys_datalog_context_session_create(maelys_datalog_con
     if (!backend) return MAELYS_DATALOG_STATUS_NOT_FOUND;
     maelys_datalog_session_options_t options = {MAELYS_DATALOG_BACKEND_ABI_VERSION,
         sizeof(options), backend, required, work_limit};
-    return maelys_datalog_session_create_ex(policy, index, &options, out);
+    return session_create_with_storage(policy, index, &options, storage, out);
 }
 
-maelys_datalog_status_t
-maelys_datalog_session_create_ex(const maelys_datalog_policy_t *policy, size_t index,
-                                 const maelys_datalog_session_options_t *options,
-                                 maelys_datalog_session_t **out) {
+maelys_datalog_status_t maelys_datalog_context_session_create(maelys_datalog_context_t *context,
+    const maelys_datalog_policy_t *policy, size_t index, const char *backend_name,
+    uint64_t required, uint64_t work_limit, maelys_datalog_session_t **out) {
+    return context_session_create_with_storage(context, policy, index, backend_name,
+        required, work_limit, NULL, out);
+}
+
+static int backend_alignment_valid(size_t alignment) {
+    return alignment && !(alignment & (alignment - 1u)) && alignment <= _Alignof(max_align_t);
+}
+static int backend_storage_valid(const maelys_datalog_backend_storage_t *storage) {
+    return storage->struct_size == sizeof(*storage) && backend_alignment_valid(storage->alignment) &&
+        ((!storage->bytes && !storage->size) || (storage->bytes &&
+         !((uintptr_t)storage->bytes % storage->alignment) &&
+         storage->size <= UINTPTR_MAX - (uintptr_t)storage->bytes));
+}
+static maelys_datalog_status_t query_backend_storage(const maelys_datalog_program_t *program,
+    const maelys_datalog_backend_t *backend, size_t *bytes, size_t *alignment) {
+    size_t n = 0, a = 0;
+    maelys_datalog_status_t rc = maelys_datalog_callback_status(
+        backend->storage_requirements(program, &n, &a));
+    if (rc) return rc;
+    if (!backend_alignment_valid(a)) return MAELYS_DATALOG_STATUS_INVALID_STATE;
+    *bytes = n; *alignment = a;
+    return MAELYS_DATALOG_STATUS_OK;
+}
+maelys_datalog_status_t maelys_datalog_backend_storage_requirements(
+    const maelys_datalog_policy_t *policy, size_t index, const maelys_datalog_backend_t *backend,
+    size_t *bytes, size_t *alignment) {
+    if (!policy || !bytes || !alignment) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
+    if (!backend) backend = maelys_datalog_backend_reference();
+    if (!maelys_datalog_backend_descriptor_valid(backend)) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
+    if (index >= policy->set.policy_count) return MAELYS_DATALOG_STATUS_NOT_FOUND;
+    const maelys_datalog_program_t view = {.ruleset = &policy->set.policies[index]};
+    return query_backend_storage(&view, backend, bytes, alignment);
+}
+maelys_datalog_status_t maelys_datalog_session_config_set_backend_storage(
+    maelys_datalog_session_config_t *config, const maelys_datalog_backend_storage_t *storage) {
+    if (!config || (storage && !backend_storage_valid(storage)))
+        return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
+    config->backend_storage = storage ? *storage : (maelys_datalog_backend_storage_t){0};
+    return MAELYS_DATALOG_STATUS_OK;
+}
+
+static maelys_datalog_status_t session_create_with_storage(
+    const maelys_datalog_policy_t *policy, size_t index,
+    const maelys_datalog_session_options_t *options,
+    const maelys_datalog_backend_storage_t *storage, maelys_datalog_session_t **out) {
     if (out)
         *out = NULL;
     if (!policy || !out)
@@ -299,6 +357,14 @@ maelys_datalog_session_create_ex(const maelys_datalog_policy_t *policy, size_t i
         required |= MAELYS_DATALOG_CAP_WORK_LIMIT;
     if (required & ~b->capabilities)
         return MAELYS_DATALOG_STATUS_UNSUPPORTED;
+    size_t bytes, alignment;
+    maelys_datalog_status_t requirement_status = query_backend_storage(&view, b, &bytes, &alignment);
+    if (requirement_status) return requirement_status;
+    const maelys_datalog_backend_storage_t empty = {sizeof(empty), NULL, 0, 1};
+    if (!storage) storage = &empty;
+    if (!backend_storage_valid(storage) || storage->size < bytes ||
+        (bytes && !storage->bytes) || (storage->bytes && storage->alignment < alignment))
+        return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
     maelys_datalog_session_t *s = calloc(1u, sizeof(*s));
     if (!s)
         return MAELYS_DATALOG_STATUS_INTERNAL;
@@ -337,7 +403,7 @@ maelys_datalog_session_create_ex(const maelys_datalog_policy_t *policy, size_t i
         return MAELYS_DATALOG_STATUS_INTERNAL;
     }
     maelys_datalog_status_t status =
-        maelys_datalog_callback_status(s->backend.prepare(&s->program, &s->state));
+        maelys_datalog_callback_status(s->backend.prepare(&s->program, storage, &s->state));
     if (status != MAELYS_DATALOG_STATUS_OK) {
         s->backend.destroy(s->state);
         maelys_datalog_prepared_session_destroy(s->inputs);
@@ -346,6 +412,11 @@ maelys_datalog_session_create_ex(const maelys_datalog_policy_t *policy, size_t i
     }
     *out = s;
     return MAELYS_DATALOG_STATUS_OK;
+}
+maelys_datalog_status_t maelys_datalog_session_create_ex(
+    const maelys_datalog_policy_t *policy, size_t index,
+    const maelys_datalog_session_options_t *options, maelys_datalog_session_t **out) {
+    return session_create_with_storage(policy, index, options, NULL, out);
 }
 maelys_datalog_status_t maelys_datalog_session_create(const maelys_datalog_policy_t *policy,
                                                       size_t index,
@@ -496,11 +567,40 @@ maelys_datalog_status_t maelys_datalog_session_solve(maelys_datalog_session_t *s
         }
         return status;
     }
-    s->busy = 0;
     ++s->result_generation; /* Cache is cleared on release, including at wrap. */
     s->active = result;
+    if (!s->pending_commit) s->backend.commit(s->state, result->state);
+    s->busy = 0;
     *out = result;
     return MAELYS_DATALOG_STATUS_OK;
+}
+maelys_datalog_status_t maelys_datalog_session_solve_candidate(maelys_datalog_session_t *s,
+    const maelys_datalog_fact_t *facts, size_t count, maelys_datalog_result_t **out,
+    maelys_datalog_diagnostic_t *diag) {
+    if (!s || s->busy || s->active)
+        return maelys_datalog_session_solve(s, facts, count, out, diag);
+    s->pending_commit = 1;
+    maelys_datalog_status_t rc = maelys_datalog_session_solve(s, facts, count, out, diag);
+    if (rc) s->pending_commit = 0;
+    return rc;
+}
+maelys_datalog_status_t maelys_datalog_session_solve_edb_candidate(maelys_datalog_session_t *s,
+    const maelys_datalog_input_edb_t *edb, maelys_datalog_result_t **out,
+    maelys_datalog_diagnostic_t *diag) {
+    const maelys_datalog_fact_t *facts = NULL;
+    size_t count = 0;
+    if (out) *out = NULL;
+    maelys_datalog_status_t rc = maelys_datalog_input_edb_view(edb, &facts, &count);
+    return rc ? rc : maelys_datalog_session_solve_candidate(s, facts, count, out, diag);
+}
+void maelys_datalog_result_commit(maelys_datalog_result_t *result) {
+    maelys_datalog_session_t *s = result->owner;
+    /* Only runtime adapters can hold an unpublished candidate. */
+    if (!s->pending_commit) return;
+    s->busy = 1;
+    s->pending_commit = 0;
+    s->backend.commit(s->state, result->state);
+    s->busy = 0;
 }
 static maelys_datalog_status_t query_predicate(const maelys_datalog_result_t *result,
                                                const char *predicate, size_t arity,
@@ -625,7 +725,7 @@ static maelys_datalog_status_t explanation_available(
     if (!result || !result->owner ||
         (kind != MAELYS_DATALOG_EXPLAIN_TRUE && kind != MAELYS_DATALOG_EXPLAIN_FALSE))
         return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
-    if (result->owner->busy || result->owner->active != result)
+    if (result->owner->busy || result->owner->pending_commit || result->owner->active != result)
         return MAELYS_DATALOG_STATUS_INVALID_STATE;
     uint64_t cap = kind == MAELYS_DATALOG_EXPLAIN_TRUE
         ? MAELYS_DATALOG_CAP_EXPLAIN_TRUE : MAELYS_DATALOG_CAP_EXPLAIN_FALSE;
@@ -923,6 +1023,7 @@ maelys_datalog_status_t maelys_datalog_result_free(maelys_datalog_result_t *resu
     s->busy = 1;
     s->backend.destroy_result(s->state, result->state);
     s->active = NULL;
+    s->pending_commit = 0;
     s->busy = 0;
     memset(result, 0, offsetof(maelys_datalog_result_t, facts));
     return MAELYS_DATALOG_STATUS_OK;

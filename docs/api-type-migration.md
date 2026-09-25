@@ -159,3 +159,99 @@ headers are no longer shipped. Native implementation types are not replacements
 for the public values, facts and opaque handles. External consumers are built
 and run against both the installed prefix and an extracted archive before
 publication; C11/C++17 checks reject historical/private includes.
+
+## 0.11.0 — backend ABI 5 (unreleased)
+
+Backend authors must rebuild their descriptors. Consumer API 2, program ABI 2,
+diagnostic ABI 1 and the 1328-byte diagnostic layout stay unchanged. Python and
+Wasm expose no backend descriptor and need no binding API migration. This is a
+preparation/publication contract, not a delta-input or resource-quota protocol.
+
+Before (ABI 4):
+
+```c
+maelys_datalog_status_t prepare(const maelys_datalog_program_t *, void **state);
+/* solve(...), explanation_*(...), destroy_result(...), destroy(...) */
+```
+
+After (ABI 5):
+
+```c
+maelys_datalog_status_t storage_requirements(const maelys_datalog_program_t *,
+    size_t *bytes, size_t *alignment);
+maelys_datalog_status_t prepare(const maelys_datalog_program_t *,
+    const maelys_datalog_backend_storage_t *, void **state);
+void commit(void *state, void *result_state);
+```
+
+All three are mandatory, including a no-op `commit` and zero-byte requirements
+for a backend that needs no caller-owned persistent storage. Existing solve,
+explanation and destruction signatures remain unchanged. The descriptor must
+have `abi_version == 5` and `struct_size == sizeof(maelys_datalog_backend_t)`;
+there is no prefix compatibility. The config setter, extension registration and
+`session_create_ex` reject ABI 4 before invoking callbacks. Session options use
+ABI 5 too. Opaque configured sessions select the version internally.
+
+Query and provide storage without constructing a session-options descriptor:
+
+```c
+size_t bytes, alignment;
+/* Check every returned status in application code. */
+maelys_datalog_backend_storage_requirements(policy, index, backend, &bytes, &alignment);
+/* Obtain an aligned buffer from the application's bounded pool. */
+maelys_datalog_backend_storage_t storage = {
+    sizeof(storage), buffer, buffer_bytes, buffer_alignment
+};
+maelys_datalog_session_config_set_backend(config, backend);
+maelys_datalog_session_config_set_backend_storage(config, &storage);
+maelys_datalog_session_create_configured(policy, index, config, &session);
+```
+
+The config copies the descriptor; `prepare` receives the exact `buffer` pointer,
+not a copied buffer. Its descriptor pointer is borrowed for that call only.
+The caller keeps the buffer immovable and disjoint from all other live storage,
+inputs and outputs through session destruction. Disjointness is a caller
+obligation, not a global ownership registry. A config may be reused only with
+separate buffers for overlapping session lifetimes. Backend/context selection
+preserves configured storage; setting storage to NULL clears it. The context
+selection path also forwards this storage. Direct `session_create_ex` and
+`context_session_create` provide no storage; use the opaque config for pools.
+
+The host queries requirements once per session creation, independently of any
+explicit sizing call. Requirements are read-only, allocation-free and
+deterministic for the program, not for the transient program-handle address.
+Alignment must be a nonzero power of two at most `alignof(max_align_t)`, even
+when zero bytes are requested. Invalid backend requirements return
+`INVALID_STATE`; invalid supplied size, alignment, range or descriptor returns
+`INVALID_ARGUMENT` before `prepare`. Size may exceed the requirement. NULL
+bytes requires size zero and a zero-byte requirement. With no supplied storage,
+prepare receives `{sizeof(storage), NULL, 0, 1}`. The host never reads, writes or
+frees the buffer. Failed prepare state is passed to `destroy` as before.
+
+`solve` proposes a candidate and must preserve previously committed persistent
+state until `commit`. The host validates, copies, deduplicates and sorts all
+emitted IDB, and checks sticky emit/filter/work errors before acceptance. A
+normal session installs the accepted result and calls `commit` exactly once
+before returning it. The one-live-result lease remains: an existing result
+must be released before another solve on that session. No second live result
+or replacement API is introduced.
+
+Built-in last-N and group windows defer commit through a private runtime bridge.
+They first solve in the inactive session, then release the previous result and
+publish the candidate. A held prepared explanation can reject that release:
+the candidate receives only `destroy_result`, while the previous publication
+remains intact. Window capacity/text checks still happen before solve. Initial
+validation probes are also abandoned without commit; only the installed initial
+result is committed. Public window functions and storage ownership are unchanged.
+
+Commit is infallible, allocation-free and cannot reenter the engine. It precedes
+all explanation callbacks. `destroy_result` without commit means abandonment;
+after commit it means ordinary release. Both callbacks still run with NULL
+result state when the backend returns NULL. Backends must not retain canonical
+input or emitted-symbol pointers beyond their documented borrowed lifetimes;
+acceptance does not turn snapshot symbol IDs into persistent identities.
+
+The reference backend requests zero bytes, ignores preparation storage and has
+a no-op commit. Its session/result allocator contract is unchanged. Backend ABI
+5 does not introduce delta inputs, quotas, new capabilities or custom explanation
+workspace bounds; the future resource/delta design remains provisional.

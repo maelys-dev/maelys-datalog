@@ -136,7 +136,9 @@ The memory cost deliberately includes two full sessions. This first adapter is
 the transactional reference for subsequent delta maintenance; it does not claim
 incremental performance or dimension sessions according to N. SMALL/LARGE remain
 whole-engine build profiles. Larger profiles, elastic storage, per-session
-resource negotiation and ABI 4 are separate work.
+delta/resource negotiation remains separate work. Backend ABI 5 (0.11.0,
+unreleased) adds preparation storage and acceptance at window publication;
+see the [migration addendum](../api-type-migration.md#0110--backend-abi-5-unreleased).
 
 ## Validation
 

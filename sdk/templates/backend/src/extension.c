@@ -1,10 +1,27 @@
 /* SPDX-License-Identifier: MIT */
 #include "extension.h"
 
-static maelys_datalog_status_t prepare_program(
-    const maelys_datalog_program_t *program, void **state)
+static maelys_datalog_status_t storage_requirements(
+    const maelys_datalog_program_t *program, size_t *bytes, size_t *alignment)
 {
     (void)program;
+    if (!bytes || !alignment) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
+    *bytes = 0; *alignment = 1;
+    /* TODO: declare the bounded caller-owned storage used by prepare. */
+    return MAELYS_DATALOG_STATUS_OK;
+}
+static void commit_result(void *state, void *result)
+{
+    (void)state; (void)result;
+    /* TODO: accept the candidate; no allocation, failure or engine reentry. */
+}
+
+static maelys_datalog_status_t prepare_program(
+    const maelys_datalog_program_t *program,
+    const maelys_datalog_backend_storage_t *storage, void **state)
+{
+    (void)program;
+    (void)storage;
     if (!state)
         return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
     *state = NULL;
@@ -51,8 +68,10 @@ maelys_datalog_extension_t starter_backend_declaration(void)
         .name = "starter_backend",
         .semantic_id = "starter.backend.unimplemented.v1",
         .capabilities = 0,
+        .storage_requirements = storage_requirements,
         .prepare = prepare_program,
         .solve = solve_program,
+        .commit = commit_result,
         .destroy_result = release_result,
         .destroy = release_program
     };

@@ -9,7 +9,18 @@
 #include <stdlib.h>
 #include <string.h>
 
-static maelys_datalog_status_t prepare(const maelys_datalog_program_t *program, void **out) {
+static maelys_datalog_status_t storage_requirements(const maelys_datalog_program_t *program,
+    size_t *bytes, size_t *alignment) {
+    (void)program;
+    *bytes = 0; *alignment = 1;
+    return MAELYS_DATALOG_STATUS_OK;
+}
+static void commit(void *state, void *result) {
+    (void)state; (void)result;
+}
+static maelys_datalog_status_t prepare(const maelys_datalog_program_t *program,
+    const maelys_datalog_backend_storage_t *storage, void **out) {
+    (void)storage;
     *out = program->prepared_inputs;
     return *out ? MAELYS_DATALOG_STATUS_OK : MAELYS_DATALOG_STATUS_INVALID_STATE;
 }
@@ -121,11 +132,13 @@ const maelys_datalog_backend_t *maelys_datalog_backend_reference(void) {
                                                          MAELYS_DATALOG_CAP_SUM |
                                                          MAELYS_DATALOG_CAP_EXPLAIN_TRUE |
                                                          MAELYS_DATALOG_CAP_EXPLAIN_FALSE,
+                                                     storage_requirements,
                                                      prepare,
                                                      solve,
                                                      explanation_storage_requirements,
                                                      explanation_prepare,
                                                      explanation_write_text,
+                                                     commit,
                                                      destroy_result,
                                                      destroy};
     return &backend;

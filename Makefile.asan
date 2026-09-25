@@ -60,7 +60,7 @@ $(BUILD_DIR)/test_maelys_datalog_context: sdk/examples/frontend/src/extension.c 
 $(BUILD_DIR)/test_maelys_datalog_pipeline: ASAN_EXTRA_SRCS = sdk/examples/frontend/src/extension.c
 $(BUILD_DIR)/test_maelys_datalog_pipeline: sdk/examples/frontend/src/extension.c
 
-ASAN_HEADERS = $(wildcard include/maelys/*.h src/core/*.h src/compiler/*.h src/public/*.h src/registry/*.h modules/standard/*.h bindings/wasm/*.h)
+ASAN_HEADERS = $(wildcard include/maelys/*.h src/core/*.h src/compiler/*.h src/public/*.h src/registry/*.h src/runtime/*.h modules/standard/*.h bindings/wasm/*.h)
 
 # The engine, fixtures and helpers are instrumented once into objects and
 # linked into every test: compiling them again per test binary made the

@@ -30,7 +30,7 @@ TEST_CFLAGS = $(CFLAGS) -DMAELYS_TESTING
 
 $(BUILD_DIR)/tests/test_maelys_datalog_materialization: TEST_CFLAGS += -UNDEBUG
 $(BUILD_DIR)/tests/test_maelys_datalog_window $(BUILD_DIR)/tests/test_maelys_datalog_group_window: TEST_CFLAGS += -UNDEBUG
-ENGINE_HEADERS = $(wildcard include/maelys/*.h src/core/*.h src/compiler/*.h src/public/*.h src/registry/*.h modules/standard/*.h)
+ENGINE_HEADERS = $(wildcard include/maelys/*.h src/core/*.h src/compiler/*.h src/public/*.h src/registry/*.h src/runtime/*.h modules/standard/*.h)
 
 $(OBJ_DIR)/%.o: %.c $(ENGINE_HEADERS)
 	@mkdir -p $(dir $@)

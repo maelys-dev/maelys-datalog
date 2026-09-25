@@ -177,7 +177,8 @@ int maelys_datalog_frontend_descriptor_valid(const maelys_datalog_frontend_t *d)
 }
 int maelys_datalog_backend_descriptor_valid(const maelys_datalog_backend_t *d) {
     return d && d->abi_version == MAELYS_DATALOG_BACKEND_ABI_VERSION &&
-           d->struct_size == sizeof(*d) && valid_identity(d->name, d->semantic_id) && d->prepare &&
+           d->struct_size == sizeof(*d) && valid_identity(d->name, d->semantic_id) &&
+           d->storage_requirements && d->prepare && d->commit &&
            d->solve && d->destroy && d->destroy_result &&
            !(d->capabilities & ~MAELYS_DATALOG_CAP_ALL) &&
            (!(d->capabilities & (MAELYS_DATALOG_CAP_EXPLAIN_TRUE | MAELYS_DATALOG_CAP_EXPLAIN_FALSE)) ||

@@ -6,8 +6,20 @@
 extern "C" {
 #endif
 
-#define MAELYS_DATALOG_BACKEND_ABI_VERSION 4u
+#define MAELYS_DATALOG_BACKEND_ABI_VERSION 5u
 typedef struct maelys_datalog_backend_output maelys_datalog_backend_output_t;
+
+/* Caller-owned, aligned, immovable storage, disjoint from other live storage,
+ * inputs and outputs. The buffer lives through session destruction. The host
+ * copies this descriptor, never the buffer, and never accesses or frees its
+ * contents. NULL bytes is allowed only with size == 0 and zero requirements.
+ * alignment is a nonzero power of two <= alignof(max_align_t). */
+typedef struct {
+    size_t struct_size;
+    void *bytes;
+    size_t size;
+    size_t alignment;
+} maelys_datalog_backend_storage_t;
 
 /* Emit the complete derived IDB, including non-query helpers. The core copies,
  * validates and deduplicates facts. Derived symbols must already belong to the
@@ -32,13 +44,23 @@ typedef struct {
     const char *name;
     const char *semantic_id;
     uint64_t capabilities;
-    maelys_datalog_status_t (*prepare)(const maelys_datalog_program_t *, void **out_state);
+    /* Read-only, deterministic for the program, without allocation or reentry.
+     * Called once per session creation before prepare (explicit public queries
+     * are separate calls). Zero bytes is valid; alignment must be a nonzero
+     * power of two <= alignof(max_align_t), even for zero bytes. */
+    maelys_datalog_status_t (*storage_requirements)(const maelys_datalog_program_t *,
+                                                   size_t *out_bytes, size_t *out_alignment);
+    /* storage is non-NULL and valid for this call only; storage->bytes is the
+     * caller's exact pointer. Retain the buffer, not the descriptor pointer.
+     * Absent storage is represented by {sizeof(...), NULL, 0, 1}. */
+    maelys_datalog_status_t (*prepare)(const maelys_datalog_program_t *,
+                                      const maelys_datalog_backend_storage_t *, void **out_state);
     maelys_datalog_status_t (*solve)(void *state,
                                      const maelys_datalog_fact_t *canonical_inputs,
                                      size_t input_count, maelys_datalog_backend_output_t *,
                                      void **out_result_state, maelys_datalog_diagnostic_t *);
-    /* Caller-owned explanation storage introduced in ABI 3 is retained in ABI 4.
-     * ABI 4 additionally requires the versioned common diagnostic protocol.
+    /* Caller-owned explanation storage introduced in ABI 3 is retained in ABI 5.
+     * The versioned common diagnostic protocol introduced in ABI 4 also remains.
      * All three are required if either EXPLAIN capability is advertised; the
      * host calls only supported kinds. No allocator calls, acquired resources,
      * engine reentry or retained query-string pointers. Result state stays alive
@@ -63,6 +85,14 @@ typedef struct {
     maelys_datalog_status_t (*explanation_write_text)(
         void *state, void *result_state, maelys_datalog_explanation_kind_t,
         const void *storage, char *text, size_t capacity);
+    /* Exactly once per accepted result, after host validation/copy/deduplication
+     * and installation; for windows, only after publication is irrevocable.
+     * Never called for an abandoned candidate (including window init probes).
+     * Infallible, no allocation or reentry; precedes every explanation callback.
+     * solve must keep previously committed backend state intact until commit.
+     * destroy_result without commit means abort; after commit it means release.
+     * A NULL result_state is valid and does not suppress either callback. */
+    void (*commit)(void *state, void *result_state);
     void (*destroy_result)(void *state, void *result_state);
     void (*destroy)(void *state);
 } maelys_datalog_backend_t;

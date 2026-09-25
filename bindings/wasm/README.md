@@ -1,9 +1,12 @@
 # JavaScript / WebAssembly SDK
 
+Backend ABI 5 preparation/acceptance ships in 0.11.0 (unreleased). This binding
+exposes no backend descriptors; its API and implementation are unchanged.
+
 One module instance owns one `MaelysPlayground`. The C adapter includes only
 `maelys/datalog.h` and links an installed Emscripten SDK. It never exposes native
 engine objects, symbols for input, or internal solver exports. This breaking
-migration ships with 0.10.0; the consumer C API remains 2 and backend ABI 4.
+migration ships with 0.10.0; the consumer C API remains 2 (that release used backend ABI 4).
 
 ```js
 const pg = await MaelysPlayground.create(MaelysDatalogDynamic, wasmUrl);

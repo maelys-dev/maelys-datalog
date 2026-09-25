@@ -110,8 +110,8 @@ Only selected kinds use the convenience path; unselected kinds return
 `UNSUPPORTED`. A result release discards its cache even if only the size was
 requested. Caller-owned prepared handles must still be released first. Session
 use remains single-threaded; the option changes neither fingerprint nor proof text.
-ABI 4 has no custom-backend upper-bound callback: only the canonical reference
-backend supports this mode, not a copied descriptor.
+The backend ABI has no custom-backend explanation upper-bound callback: only
+the canonical reference backend supports this mode, not a copied descriptor.
 
 ### Explicit caller-owned prepared handles
 
@@ -154,9 +154,10 @@ uses a fixed aligned arena and output buffer, checks their sizes and demonstrate
 the result lease. It is compiled and run against the installed C11/C++17 SDK.
 The existing `result_explain_true_text` / `result_explain_false_text` calls remain
 allocating convenience wrappers when no session workspace is configured. Backend authors must migrate to
-**backend ABI 4** and frontend/program ABI 2 for the common diagnostic protocol.
+**backend ABI 5 (0.11.0, unreleased)** and frontend/program ABI 2. ABI 5 adds
+caller-owned preparation storage and explicit result acceptance; the common diagnostic protocol remains ABI 1.
 The consumer API is version 2; Datalog syntax is unchanged. See the
-[0.10.0 migration contract](docs/api-type-migration.md) for advanced operations
+[migration contract and ABI 5 addendum](docs/api-type-migration.md) for advanced operations
 and required diagnostic initialization.
 
 ## Build and test
