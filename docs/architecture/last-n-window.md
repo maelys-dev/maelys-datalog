@@ -5,7 +5,7 @@ API. For groups of complete facts without implicit ID terms, see the separate
 [multi-fact window](multi-fact-window.md). This original API retains the last **N successfully accepted events**, in arrival order,
 and recomputes the whole snapshot on every push. It neither changes Datalog
 syntax nor adds an incremental backend. The current contracts are backend ABI 5
-(0.11.0, unreleased) and program ABI 2. Python and JavaScript bindings do not yet
+(0.11.0) and program ABI 2. Python and JavaScript bindings do not yet
 expose this adapter.
 
 ## Event model
@@ -137,9 +137,9 @@ The memory cost deliberately includes two full sessions. This first adapter is
 the transactional reference for subsequent delta maintenance; it does not claim
 incremental performance or dimension sessions according to N. SMALL/LARGE remain
 whole-engine build profiles. Larger profiles, elastic storage, per-session
-delta/resource negotiation remains separate work. Backend ABI 5 (0.11.0,
-unreleased) adds preparation storage and acceptance at window publication;
-see the [migration addendum](../api-type-migration.md#0110--backend-abi-5-unreleased).
+delta/resource negotiation remains separate work. Backend ABI 5 (0.11.0) adds
+preparation storage and acceptance at window publication;
+see the [migration addendum](../api-type-migration.md#0110--backend-abi-5).
 
 ## Validation
 

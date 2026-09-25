@@ -1,6 +1,6 @@
 # Maelys Datalog Python binding
 
-Backend ABI 5 preparation/acceptance ships in 0.11.0 (unreleased). This binding
+Backend ABI 5 preparation/acceptance ships in 0.11.0. This binding
 exposes no backend descriptors; its API and implementation are unchanged.
 
 `maelys_datalog` is the single Python binding. From the 0.10.0 migration onward,
