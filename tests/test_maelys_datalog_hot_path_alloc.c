@@ -6,6 +6,7 @@
 #undef free
 #undef memset
 #include "maelys/datalog.h"
+#include "maelys/datalog_advanced.h"
 #include "src/core/maelys_datalog_solver.h"
 #include "src/core/maelys_datalog_domain_registry.h"
 #include "src/core/maelys_datalog_ruleset.h"
@@ -16,7 +17,7 @@
 
 static int forbidden;
 static size_t attempts, hot_frees, live, total, fault_after = SIZE_MAX;
-static size_t memset_bytes, max_release_bytes;
+static size_t memset_bytes, max_release_bytes, allocated_bytes;
 void *maelys_test_memset(void *p, int value, size_t n) {
     memset_bytes += n;
     return memset(p, value, n);
@@ -54,11 +55,18 @@ static int refuse(void) {
 }
 void *maelys_test_malloc(size_t n) {
     if (refuse()) return NULL;
-    void *p = malloc(n); if (p) ++live; return p;
+    void *p = malloc(n);
+    if (p) {
+        /* In particular, the native result workspace must initialize every
+         * live payload entry without relying on fresh allocator zeroes. */
+        memset(p, 0xa5, n);
+        ++live; allocated_bytes += n;
+    }
+    return p;
 }
 void *maelys_test_calloc(size_t n, size_t width) {
     if (refuse()) return NULL;
-    void *p = calloc(n, width); if (p) ++live; return p;
+    void *p = calloc(n, width); if (p) { ++live; allocated_bytes += n * width; } return p;
 }
 void *maelys_test_realloc(void *p, size_t n) {
     if (refuse()) return NULL;
@@ -76,6 +84,38 @@ void maelys_test_free(void *p) {
 static maelys_datalog_value_t symbol(const char *s) {
     maelys_datalog_value_t v = {.kind=MAELYS_DATALOG_VALUE_SYMBOL};
     v.as.symbol = s; return v;
+}
+static void caller_owned_policy_snapshot(void) {
+    size_t bytes, alignment;
+    assert(maelys_datalog_policy_storage_requirements(&bytes, &alignment) == 0);
+    void *storage = malloc(bytes); assert(storage && (uintptr_t)storage % alignment == 0);
+    maelys_datalog_policy_t *policy = NULL;
+    const char source[] = "allow(X) :- seed(X).";
+    assert(maelys_datalog_policy_load_frontend_in(storage, bytes, "hot_path", "copied",
+        source, sizeof(source) - 1, NULL, &policy, NULL) == 0);
+    const size_t before = total, bytes_before = allocated_bytes, baseline = live;
+    maelys_datalog_session_t *session = NULL;
+    assert(maelys_datalog_session_create(policy, 0, &session) == 0);
+    const size_t reservation = allocated_bytes - bytes_before;
+    assert(total - before == 3u);
+#ifdef MAELYS_DATALOG_PROFILE_LARGE
+    assert(reservation <= 1300000u);
+#else
+    assert(reservation <= 900000u);
+#endif
+    assert(maelys_datalog_policy_free(policy) == 0);
+    memset(storage, 0xa5, bytes); free(storage);
+    forbidden = 1;
+    maelys_datalog_fact_t fact = {.predicate = "seed", .arity = 1};
+    fact.terms[0] = symbol("caller-storage-reused");
+    maelys_datalog_result_t *result = NULL;
+    assert(maelys_datalog_session_solve(session, &fact, 1, &result, NULL) == 0);
+    int present;
+    assert(maelys_datalog_result_query(result, "allow", fact.terms, 1, &present) == 0 && present);
+    release_bounded(result);
+    forbidden = 0;
+    assert(maelys_datalog_session_free(session) == 0 && live == baseline);
+    printf("copied session reservation: 3 allocations, %zu bytes\n", reservation);
 }
 static void aggregate_without_allocator(unsigned op) {
     const char *names[] = {"count", "min", "max", "sum"};
@@ -265,6 +305,7 @@ int main(void) {
     };
     const maelys_datalog_domain_t domain = {"hot_path", predicates, 3, NULL, 0};
     assert(maelys_datalog_domain_register(&domain) == 0);
+    caller_owned_policy_snapshot();
     const char *source = "allow(X) :- seed(X), not(blocked(X)).";
     maelys_datalog_diagnostic_t diag = MAELYS_DATALOG_DIAGNOSTIC_INIT;
     maelys_datalog_policy_t *policy = NULL;
@@ -272,11 +313,21 @@ int main(void) {
     owned_release_does_not_clear();
     for (unsigned op=0;op<4;++op) aggregate_without_allocator(op);
     maelys_datalog_session_t *session = NULL, *second = NULL, *filtered = NULL;
-    size_t before = total, baseline = live;
+    size_t before = total, baseline = live, bytes_before = allocated_bytes;
     assert(maelys_datalog_session_create(policy, 0, &session) == 0);
     size_t create_allocations = total - before;
-    assert(create_allocations > 0u);
+    size_t create_bytes = allocated_bytes - bytes_before;
+    assert(create_allocations == 3u);
+    /* Bound the total reservation, including both public/native result storage.
+     * A second full ruleset copy must not silently return. */
+#ifdef MAELYS_DATALOG_PROFILE_LARGE
+    assert(create_bytes <= 980000u);
+#else
+    assert(create_bytes <= 550000u);
+#endif
+    size_t reset_before = memset_bytes;
     assert(maelys_datalog_session_free(session) == 0);
+    assert(memset_bytes == reset_before);
     assert(live == baseline);
     for (size_t fail = 0; fail < create_allocations; ++fail) {
         fault_after = fail;
@@ -292,6 +343,18 @@ int main(void) {
     assert(maelys_datalog_policy_load_inline("hot_path", "filter", filter_source,
         strlen(filter_source), &filter_policy, &diag) == 0);
     assert(maelys_datalog_session_create(filter_policy, 0, &filtered) == 0);
+    /* Sessions own their compiled snapshot and dictionary, even when the
+     * original policy storage has already been released. */
+    assert(maelys_datalog_policy_free(filter_policy) == 0);
+    assert(maelys_datalog_policy_free(policy) == 0);
+    /* The retained allocation does not keep the released public handle open. */
+    size_t policies = 99u;
+    assert(maelys_datalog_policy_count(policy, &policies) == MAELYS_DATALOG_STATUS_INVALID_STATE);
+    assert(policies == 99u);
+    assert(maelys_datalog_policy_free(policy) == MAELYS_DATALOG_STATUS_INVALID_STATE);
+    maelys_datalog_session_t *rejected_session = (void *)(uintptr_t)1;
+    assert(maelys_datalog_session_create(policy, 0, &rejected_session) == MAELYS_DATALOG_STATUS_INVALID_STATE);
+    assert(!rejected_session);
     maelys_datalog_input_edb_t *edb = NULL;
     assert(maelys_datalog_input_edb_create_with_capacity(MAELYS_DATALOG_MAX_FACTS_PER_PRED + 1u, 4096u, &edb) == 0);
     maelys_datalog_result_t *result = NULL, *other = NULL;
@@ -383,10 +446,9 @@ int main(void) {
     assert(maelys_datalog_session_free(second) == 0);
     assert(maelys_datalog_session_free(session) == 0);
     assert(maelys_datalog_session_free(filtered) == 0);
-    assert(maelys_datalog_policy_free(filter_policy) == 0);
-    assert(maelys_datalog_policy_free(policy) == 0);
     predicate_declarations_without_allocator();
     printf("reference hot path: 40 repeated transactions, zero allocator calls; %zu constructor failure points checked\n", create_allocations);
+    printf("reference session reservation: %zu allocations, %zu bytes; destruction reset=0 bytes\n", create_allocations, create_bytes);
     printf("release reset: owned=0 bytes, reusable maximum=%zu bytes (budget=4096, both profiles)\n", max_release_bytes);
     return 0;
 }

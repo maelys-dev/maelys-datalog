@@ -46,7 +46,7 @@ static maelys_datalog_status_t solve(void *state, const maelys_datalog_fact_t *f
         maelys_datalog_fact_t view;
         rc = maelys_datalog_solve_result_idb_fact(result, i, &fact);
         if (rc == MAELYS_OK)
-            rc = maelys_datalog_export_fact(&session->working, &fact, &view);
+            rc = maelys_datalog_export_fact(session->prepared, &session->symbols, &fact, &view);
         if (rc == MAELYS_OK)
             rc = (maelys_result_t)maelys_datalog_backend_emit(output, &view);
     }
@@ -71,12 +71,12 @@ static maelys_datalog_status_t explanation_prepare(
     maelys_datalog_internal_solve_result_t *result = result_state;
     maelys_datalog_internal_fact_t fact = {0};
     fact.arity = (uint8_t)arity;
-    if (!maelys_datalog_predicate_registry_find(&session->working.registry, predicate, arity,
+    if (!maelys_datalog_predicate_registry_find(&session->prepared->registry, predicate, arity,
                                                 &fact.predicate_id))
         return MAELYS_DATALOG_STATUS_INVALID_FIELD;
     int found = 0;
     maelys_datalog_status_t status = maelys_datalog_resolve_public_terms(
-        &session->working.symbols, terms, arity, fact.terms, &found, 0);
+        &session->symbols, terms, arity, fact.terms, &found, 0);
     if (status)
         return status;
     if (!found)
@@ -88,7 +88,7 @@ static maelys_datalog_status_t explanation_prepare(
         const maelys_datalog_why_false_explanation_t *why;
         maelys_result_t rc = maelys_datalog_explain_absent_in_workspace(result, &fact, &limits, storage, bytes, &why);
         if (!rc)
-            rc = maelys_datalog_format_why_false_text(&session->working, why, NULL, 0,
+            rc = maelys_datalog_format_why_false_text_with_symbols(session->prepared, &session->symbols, why, NULL, 0,
                                                       required);
         return (maelys_datalog_status_t)rc;
     }
@@ -97,7 +97,7 @@ static maelys_datalog_status_t explanation_prepare(
     maelys_datalog_explanation_t *explanation = storage;
     maelys_result_t rc = maelys_datalog_explain_solved_fact(result, &fact, explanation);
     if (rc == MAELYS_OK)
-        rc = maelys_datalog_format_explanation_text(&session->working, explanation, NULL, 0,
+        rc = maelys_datalog_format_explanation_text_with_symbols(session->prepared, &session->symbols, explanation, NULL, 0,
                                                     required);
     return (maelys_datalog_status_t)rc;
 }
@@ -108,10 +108,10 @@ static maelys_datalog_status_t explanation_write_text(
     maelys_datalog_internal_prepared_session_t *session = state;
     size_t required;
     if (kind == MAELYS_DATALOG_EXPLAIN_FALSE)
-        return (maelys_datalog_status_t)maelys_datalog_format_why_false_text(
-            &session->working, maelys_datalog_why_false_workspace_view(storage), text, capacity, &required);
-    return (maelys_datalog_status_t)maelys_datalog_format_explanation_text(
-        &session->working, storage, text, capacity, &required);
+        return (maelys_datalog_status_t)maelys_datalog_format_why_false_text_with_symbols(
+            session->prepared, &session->symbols, maelys_datalog_why_false_workspace_view(storage), text, capacity, &required);
+    return (maelys_datalog_status_t)maelys_datalog_format_explanation_text_with_symbols(
+        session->prepared, &session->symbols, storage, text, capacity, &required);
 }
 static void destroy_result(void *state, void *result) {
     (void)state;

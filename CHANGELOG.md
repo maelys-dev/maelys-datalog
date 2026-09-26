@@ -7,6 +7,19 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Changed
+
+- Sessions share engine-owned immutable compiled policies and keep a separate
+  transaction dictionary, eliminating full ruleset copies on that path.
+  Caller-owned policy storage still receives an independent session snapshot.
+  Closing a policy releases its handle; shared storage survives until the last
+  session closes. No session cache, public API or backend ABI change.
+- Session destruction no longer clears storage immediately before freeing it.
+  Reserved native results initialize metadata only, using the same payload
+  validity rules for their first solve and subsequent reuse.
+  Default Python preparation uses the public session constructor without an
+  intermediate configuration handle. Explicit configuration remains supported.
+
 ## 0.11.0 — 2026-09-25
 
 Backend preparation storage and publication acceptance

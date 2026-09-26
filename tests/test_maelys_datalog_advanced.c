@@ -147,8 +147,20 @@ static int owned_policy_and_bundle(void) {
     CHECK(!p && !memcmp(arena,snapshot,bytes+32));
     OK(maelys_datalog_policy_load_frontend_in(arena,bytes,"advanced","one",source,strlen(source),NULL,&p,NULL));
     CHECK((void *)p==(void *)arena);
+    maelys_datalog_session_t *detached=NULL;
+    OK(maelys_datalog_session_create(p,0,&detached));
     OK(maelys_datalog_policy_free(p));
     CHECK(maelys_datalog_policy_free(p)==MAELYS_DATALOG_STATUS_INVALID_STATE);
+    memset(arena,0xa5,bytes); /* The caller may immediately reuse its storage. */
+    maelys_datalog_value_t text={MAELYS_DATALOG_VALUE_SYMBOL,{.symbol="after-policy-free"}};
+    maelys_datalog_fact_t input={"seed",1,{text}};
+    maelys_datalog_result_t *retained=NULL;
+    OK(maelys_datalog_session_solve(detached,&input,1,&retained,NULL));
+    int present=0;OK(maelys_datalog_result_query(retained,"allow",&text,1,&present));CHECK(present);
+    char explanation[4096];size_t required=0;
+    OK(maelys_datalog_result_explain_true_text(retained,"allow",&text,1,explanation,sizeof(explanation),&required));
+    CHECK(strstr(explanation,"after-policy-free"));
+    OK(maelys_datalog_result_free(retained));OK(maelys_datalog_session_free(detached));
     const char json[]="{\"policy_set_id\":\"advanced\",\"policy_set_version\":\"1\",\"manifest_version\":\"1\",\"policies\":[{\"policy_id\":\"p0\",\"domain\":\"advanced\",\"file\":\"ignored.dl\",\"sha256\":\"59b5e9ba254730e97e2498721cf5deca65f7a1b585051b2b58d7c6d9c2db7cb5\",\"mode\":\"enforce\",\"enabled\":true,\"description\":\"bounded\",\"queries\":[{\"name\":\"allow\",\"arity\":1}]},{\"policy_id\":\"p1\",\"domain\":\"advanced\",\"file\":\"ignored.dl\",\"sha256\":\"5cd989dbca2f32f8d8c87858bd2bfa145cb71d02100930e678c99eaf3a3cfa3e\",\"mode\":\"enforce\",\"enabled\":true,\"description\":\"bounded\",\"queries\":[{\"name\":\"allow\",\"arity\":1}]}],\"capabilities\":[],\"default_profile\":\"MAELYS-DATALOG-v2\",\"strict_loading\":true,\"fail_closed\":true,\"created_for\":\"test\"}";
     const char second[]="allow(X) :- blocked(X).";
     maelys_datalog_policy_bundle_entry_t bundle[]={{"p1",second,sizeof(second)-1},{"p0",source,sizeof(source)-1}};

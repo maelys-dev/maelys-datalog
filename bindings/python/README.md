@@ -282,6 +282,11 @@ lease, not the reserved workspace. Resetting the input cannot alter an existing
 result, but does not release that lease either. `ruleset.solve(edb)` remains a
 convenience that creates a new session per call; use `prepare()` for reuse.
 
+Default preparation calls the public native constructor directly. Sessions share
+the engine-owned immutable compiled policy; each owns its transaction dictionary
+and reserved results. Closing a convenience result frees its session immediately,
+without retaining an inactive session. Python/CFFI conversions still allocate.
+
 Python itself and CFFI still allocate objects and temporary conversion arrays.
 Policy/session initialization, custom backends and callbacks have separate
 allocation behavior. By default, explanations use a Python-owned CFFI workspace

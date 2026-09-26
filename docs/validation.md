@@ -226,6 +226,27 @@ manual comparison protocol above to changes in ordinary solve paths.
 
 ## Installed facade and SDK
 
+Session construction reserves a private transaction dictionary and public/native
+result workspaces. Engine-owned immutable policy storage is reference-counted;
+sessions share its compiled rules and fixed vocabulary. Releasing the public
+policy handle invalidates it immediately, but its allocation (including other
+policies in the same bundle) remains until the last session releases it. A policy
+in caller-owned storage is copied into the session allocation instead, so the
+caller may overwrite that storage immediately after policy release.
+
+The allocator guard checks three constructor allocations on both paths and caps
+their requested bytes at 550,000/980,000 (shared SMALL/LARGE) and
+900,000/1,300,000 (copied SMALL/LARGE). These exclude the separately owned policy
+allocation and optional explanation/backend storage. The guard also checks
+allocation-failure cleanup, shared-policy lifetime, caller-storage reuse, zero
+constructor-storage reset on ordinary session destruction, and the existing
+zero-allocation append/solve/query/result-release contract. New malloc storage is
+poisoned in that guard: native result workspaces initialize only metadata, and
+must write each live payload entry on first use just as on reuse. The prepared-session
+tests keep the immutable snapshot byte-identical while transaction symbols change;
+filter evaluation, diagnostic export and both explanation kinds use the result's
+transaction dictionary. No public layout, API version or backend ABI changes.
+
 ```sh
 cmake -S . -B build/cmake
 cmake --build build/cmake --parallel 3

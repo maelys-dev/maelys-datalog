@@ -176,7 +176,8 @@ maelys_datalog_status_t maelys_datalog_diagnostic_clear(maelys_datalog_diagnosti
 
 void maelys_datalog_copy_solve_diagnostic(maelys_datalog_diagnostic_t *out,
     const maelys_datalog_internal_solve_diagnostic_t *in,
-    const maelys_datalog_internal_ruleset_t *ruleset, maelys_result_t status) {
+    const maelys_datalog_internal_ruleset_t *ruleset,
+    const maelys_datalog_symbol_table_t *symbols, maelys_result_t status) {
     if (!out || !in || maelys_datalog_diagnostic_clear(out)) return;
     out->source = MAELYS_DATALOG_DIAGNOSTIC_SOLVE;
     out->status = (maelys_datalog_status_t)status;
@@ -215,8 +216,8 @@ void maelys_datalog_copy_solve_diagnostic(maelys_datalog_diagnostic_t *out,
             snprintf(out->token, sizeof(out->token), "%" PRId64, value);
         else if (a->kind == MAELYS_DATALOG_TERM_BOOL)
             snprintf(out->token, sizeof(out->token), "%s", value ? "true" : "false");
-        else if (a->kind == MAELYS_DATALOG_TERM_SYMBOL && ruleset) {
-            const char *text = maelys_datalog_symbol_text(&ruleset->symbols, (maelys_datalog_symbol_id_t)value);
+        else if (a->kind == MAELYS_DATALOG_TERM_SYMBOL && symbols) {
+            const char *text = maelys_datalog_symbol_text(symbols, (maelys_datalog_symbol_id_t)value);
             snprintf(out->token, sizeof(out->token), "%s", text ? text : "");
         }
         snprintf(out->hint, sizeof(out->hint), "%s", a->overflow

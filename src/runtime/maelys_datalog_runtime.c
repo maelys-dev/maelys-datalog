@@ -149,6 +149,7 @@ struct maelys_datalog_session {
     void *explanation_storage;
     size_t explanation_bytes;
     int owns_explanation_storage;
+    const maelys_datalog_policy_t *policy_owner;
     maelys_datalog_session_t *workspace_next;
     uint64_t result_generation, explanation_generation;
     maelys_datalog_prepared_explanation_t *explanation_cache;
@@ -201,7 +202,7 @@ maelys_datalog_status_t maelys_datalog_backend_emit(maelys_datalog_backend_outpu
         return out->error;
     maelys_datalog_result_t *result = out->result;
     maelys_datalog_session_t *s = result->owner;
-    const maelys_datalog_internal_ruleset_t *r = &s->inputs->working;
+    const maelys_datalog_internal_ruleset_t *r = s->inputs->prepared;
     maelys_datalog_internal_fact_t fact = {0};
     fact.arity = (uint8_t)in->arity;
     if (!maelys_datalog_predicate_registry_find(&r->registry, in->predicate, in->arity,
@@ -214,7 +215,7 @@ maelys_datalog_status_t maelys_datalog_backend_emit(maelys_datalog_backend_outpu
         return output_fail(out, MAELYS_DATALOG_STATUS_INVALID_FIELD);
     int found = 0;
     maelys_datalog_status_t rc = maelys_datalog_resolve_public_terms(
-        &s->inputs->working.symbols, in->terms, in->arity, fact.terms, &found, 1);
+        &s->inputs->symbols, in->terms, in->arity, fact.terms, &found, 1);
     if (rc != MAELYS_DATALOG_STATUS_OK)
         return output_fail(out, rc);
     if (!found)
@@ -278,6 +279,7 @@ static maelys_datalog_status_t context_session_create_with_storage(maelys_datalo
     if (out) *out = NULL;
     if (!context || !policy || !out) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
     if (!maelys_datalog_context_is_sealed(context)) return MAELYS_DATALOG_STATUS_INVALID_STATE;
+    if (policy->released) return MAELYS_DATALOG_STATUS_INVALID_STATE;
     if (index >= policy->set.policy_count) return MAELYS_DATALOG_STATUS_NOT_FOUND;
     if (policy->set.policies[index].modules != context) return MAELYS_DATALOG_STATUS_INVALID_FIELD;
     const maelys_datalog_backend_t *backend = maelys_datalog_context_backend(context, backend_name);
@@ -319,6 +321,7 @@ maelys_datalog_status_t maelys_datalog_backend_storage_requirements(
     if (!policy || !bytes || !alignment) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
     if (!backend) backend = maelys_datalog_backend_reference();
     if (!maelys_datalog_backend_descriptor_valid(backend)) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
+    if (policy->released) return MAELYS_DATALOG_STATUS_INVALID_STATE;
     if (index >= policy->set.policy_count) return MAELYS_DATALOG_STATUS_NOT_FOUND;
     const maelys_datalog_program_t view = {.ruleset = &policy->set.policies[index]};
     return query_backend_storage(&view, backend, bytes, alignment);
@@ -339,6 +342,7 @@ static maelys_datalog_status_t session_create_with_storage(
         *out = NULL;
     if (!policy || !out)
         return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
+    if (policy->released) return MAELYS_DATALOG_STATUS_INVALID_STATE;
     if (index >= policy->set.policy_count)
         return MAELYS_DATALOG_STATUS_NOT_FOUND;
     if (options && (options->abi_version != MAELYS_DATALOG_BACKEND_ABI_VERSION ||
@@ -368,12 +372,14 @@ static maelys_datalog_status_t session_create_with_storage(
     maelys_datalog_session_t *s = calloc(1u, sizeof(*s));
     if (!s)
         return MAELYS_DATALOG_STATUS_INTERNAL;
-    maelys_result_t rc = maelys_datalog_prepared_session_create(view.ruleset, &s->inputs);
+    maelys_result_t rc = policy->owns_storage
+        ? maelys_datalog_prepared_session_borrow(view.ruleset, &s->inputs)
+        : maelys_datalog_prepared_session_create(view.ruleset, &s->inputs);
     if (rc != MAELYS_OK) {
         free(s);
         return (maelys_datalog_status_t)rc;
     }
-    s->program.ruleset = &s->inputs->prepared;
+    s->program.ruleset = s->inputs->prepared;
     s->program.prepared_inputs = s->inputs;
     s->backend = *b;
     s->reference_backend = b == maelys_datalog_backend_reference();
@@ -410,6 +416,10 @@ static maelys_datalog_status_t session_create_with_storage(
         free(s);
         return status;
     }
+    if (policy->owns_storage) {
+        maelys_datalog_policy_retain_storage(policy);
+        s->policy_owner = policy;
+    }
     *out = s;
     return MAELYS_DATALOG_STATUS_OK;
 }
@@ -434,7 +444,7 @@ maelys_datalog_status_t maelys_datalog_session_fingerprint(const maelys_datalog_
                                                            char out[65]) {
     if (!s || !out)
         return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
-    memcpy(out, s->inputs->prepared.sha256, 65u);
+    memcpy(out, s->inputs->prepared->sha256, 65u);
     return MAELYS_DATALOG_STATUS_OK;
 }
 maelys_datalog_status_t
@@ -453,7 +463,7 @@ maelys_datalog_status_t maelys_datalog_session_free(maelys_datalog_session_t *s)
     s->backend.destroy(s->state);
     maelys_datalog_prepared_session_destroy(s->inputs);
     destroy_explanation_workspace(s);
-    memset(s, 0, sizeof(*s));
+    if (s->policy_owner) maelys_datalog_policy_release_storage(s->policy_owner);
     free(s);
     return MAELYS_DATALOG_STATUS_OK;
 }
@@ -535,7 +545,7 @@ maelys_datalog_status_t maelys_datalog_session_solve(maelys_datalog_session_t *s
     if (canonical_count) memset(canonical, 0, canonical_count * sizeof(*canonical));
     for (size_t i = 0; i < canonical_count; ++i) {
         status = (maelys_datalog_status_t)maelys_datalog_export_fact(
-            &s->inputs->working, &s->inputs->edb.fact_set.facts[i], &canonical[i]);
+            s->inputs->prepared, &s->inputs->symbols, &s->inputs->edb.fact_set.facts[i], &canonical[i]);
         if (status != MAELYS_DATALOG_STATUS_OK) {
             return status;
         }
@@ -626,7 +636,7 @@ maelys_datalog_status_t maelys_datalog_result_query(const maelys_datalog_result_
         return rc;
     fact.arity = (uint8_t)arity;
     int found;
-    rc = maelys_datalog_resolve_public_terms(&result->owner->inputs->working.symbols, terms, arity,
+    rc = maelys_datalog_resolve_public_terms(&result->owner->inputs->symbols, terms, arity,
                                              fact.terms, &found, 0);
     if (rc != MAELYS_DATALOG_STATUS_OK)
         return rc;
@@ -692,7 +702,7 @@ maelys_datalog_status_t maelys_datalog_result_symbol_text(const maelys_datalog_r
                                                           size_t *length) {
     if (!result || !result->owner || !text || !length)
         return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
-    const maelys_datalog_symbol_table_t *symbols = &result->owner->inputs->working.symbols;
+    const maelys_datalog_symbol_table_t *symbols = &result->owner->inputs->symbols;
     if (!maelys_datalog_symbol_id_is_valid(symbols, id))
         return MAELYS_DATALOG_STATUS_INVALID_STATE;
     *text = maelys_datalog_symbol_text(symbols, id);
@@ -832,7 +842,7 @@ maelys_datalog_status_t maelys_datalog_result_prepare_explanation(
     maelys_datalog_session_t *s = result->owner;
     maelys_datalog_internal_term_t checked[MAELYS_DATALOG_MAX_TERMS];
     int found;
-    rc = maelys_datalog_resolve_public_terms(&s->inputs->working.symbols, terms, arity, checked,
+    rc = maelys_datalog_resolve_public_terms(&s->inputs->symbols, terms, arity, checked,
                                              &found, 0);
     if (rc) return rc;
     if (!found) return MAELYS_DATALOG_STATUS_NOT_FOUND;
@@ -950,7 +960,7 @@ static maelys_datalog_status_t cached_explain_text(maelys_datalog_result_t *resu
     if (rc) return rc;
     query.arity = (uint8_t)arity;
     int found = 0;
-    rc = maelys_datalog_resolve_public_terms(&s->inputs->working.symbols,
+    rc = maelys_datalog_resolve_public_terms(&s->inputs->symbols,
         terms, arity, query.terms, &found, 0);
     if (rc) return rc;
     if (!found) return MAELYS_DATALOG_STATUS_NOT_FOUND;
@@ -1065,10 +1075,10 @@ static maelys_datalog_status_t structured_valid(const maelys_datalog_prepared_ex
 static const void *structured_payload(const maelys_datalog_prepared_explanation_t *p) {
     return (const unsigned char *)p + EXPLANATION_HEADER_BYTES;
 }
-static maelys_datalog_status_t export_value(const maelys_datalog_internal_ruleset_t *r,
+static maelys_datalog_status_t export_value(const maelys_datalog_symbol_table_t *symbols,
     const maelys_datalog_internal_term_t *v, maelys_datalog_value_t *out) {
     maelys_datalog_ir_term_t term;
-    maelys_result_t rc = maelys_datalog_export_ir_term(r, v, &term);
+    maelys_result_t rc = maelys_datalog_export_ir_term(symbols, v, &term);
     if (rc) return (maelys_datalog_status_t)rc;
     out->kind = (maelys_datalog_value_kind_t)term.kind;
     switch (term.kind) {
@@ -1095,7 +1105,7 @@ maelys_datalog_status_t maelys_datalog_prepared_explanation_info(
         out->diagnostic_count = e->diagnostic_count; out->filter_cost_units = e->filter_cost_units;
         out->truncated = e->status == MAELYS_DATALOG_WHY_FALSE_STATUS_TRUNCATED;
         out->found = e->status == MAELYS_DATALOG_WHY_FALSE_STATUS_NOT_APPLICABLE;
-        return (maelys_datalog_status_t)maelys_datalog_export_fact(&p->owner->owner->inputs->working, &e->query, &out->query);
+        return (maelys_datalog_status_t)maelys_datalog_export_fact(p->owner->owner->inputs->prepared, &p->owner->owner->inputs->symbols, &e->query, &out->query);
     }
     return MAELYS_DATALOG_STATUS_OK;
 }
@@ -1108,7 +1118,7 @@ maelys_datalog_status_t maelys_datalog_prepared_explanation_step(
     const maelys_datalog_explanation_step_t *v = &e->steps[index];
     memset(out, 0, sizeof(*out)); out->rule_id = v->rule_id;
     out->premise_begin = v->premise_begin; out->premise_count = v->premise_count;
-    return (maelys_datalog_status_t)maelys_datalog_export_fact(&p->owner->owner->inputs->working, &v->derived_fact, &out->fact);
+    return (maelys_datalog_status_t)maelys_datalog_export_fact(p->owner->owner->inputs->prepared, &p->owner->owner->inputs->symbols, &v->derived_fact, &out->fact);
 }
 maelys_datalog_status_t maelys_datalog_prepared_explanation_premise(
     const maelys_datalog_prepared_explanation_t *p, size_t index, maelys_datalog_explanation_premise_view_t *out) {
@@ -1117,25 +1127,26 @@ maelys_datalog_status_t maelys_datalog_prepared_explanation_premise(
     const maelys_datalog_explanation_t *e = structured_payload(p);
     if (index >= e->premise_count) return MAELYS_DATALOG_STATUS_NOT_FOUND;
     const maelys_datalog_explanation_premise_t *v = &e->premises[index];
-    const maelys_datalog_internal_ruleset_t *r = &p->owner->owner->inputs->working;
+    const maelys_datalog_internal_ruleset_t *r = p->owner->owner->inputs->prepared;
+    const maelys_datalog_symbol_table_t *symbols = &p->owner->owner->inputs->symbols;
     memset(out, 0, sizeof(*out)); out->kind = v->kind; out->origin = v->origin;
     out->body_index = v->body_index; out->parent_step = v->parent_step; out->op = (maelys_datalog_ir_comparison_t)v->op;
     if (maelys_datalog_premise_is_aggregate(v->kind)) {
         maelys_datalog_internal_fact_t fact = {0}; fact.predicate_id = v->as.count.predicate_id; fact.arity = v->as.count.arity;
         memcpy(fact.terms, v->as.count.terms, sizeof(fact.terms));
         out->projected_variable = v->as.count.projected_variable; out->aggregate_value = v->as.count.value;
-        return (maelys_datalog_status_t)maelys_datalog_export_ir_atom(r, &fact, &out->atom);
+        return (maelys_datalog_status_t)maelys_datalog_export_ir_atom(r, symbols, &fact, &out->atom);
     }
     switch (v->kind) {
     case MAELYS_DATALOG_EXPLANATION_PREMISE_POSITIVE_FACT:
     case MAELYS_DATALOG_EXPLANATION_PREMISE_NEGATED_ABSENCE:
-        return (maelys_datalog_status_t)maelys_datalog_export_ir_atom(r, &v->as.fact, &out->atom);
+        return (maelys_datalog_status_t)maelys_datalog_export_ir_atom(r, symbols, &v->as.fact, &out->atom);
     case MAELYS_DATALOG_EXPLANATION_PREMISE_COMPARISON_TRUE:
-        rc = export_value(r, &v->as.comparison.lhs, &out->lhs);
-        return rc ? rc : export_value(r, &v->as.comparison.rhs, &out->rhs);
+        rc = export_value(symbols, &v->as.comparison.lhs, &out->lhs);
+        return rc ? rc : export_value(symbols, &v->as.comparison.rhs, &out->rhs);
     case MAELYS_DATALOG_EXPLANATION_PREMISE_FILTER_TRUE:
         out->filter_program_index = v->as.filter.program_index; out->filter_kind = v->as.filter.filter_kind;
-        return export_value(r, &v->as.filter.value, &out->filter_value);
+        return export_value(symbols, &v->as.filter.value, &out->filter_value);
     default: return MAELYS_DATALOG_STATUS_INVALID_STATE;
     }
 }
@@ -1146,36 +1157,37 @@ maelys_datalog_status_t maelys_datalog_prepared_explanation_obstacle(
     const maelys_datalog_why_false_explanation_t *e = maelys_datalog_why_false_workspace_view(structured_payload(p));
     if (index >= e->diagnostic_count) return MAELYS_DATALOG_STATUS_NOT_FOUND;
     const maelys_datalog_why_false_diagnostic_t *v = &e->diagnostics[index];
-    const maelys_datalog_internal_ruleset_t *r = &p->owner->owner->inputs->working;
+    const maelys_datalog_internal_ruleset_t *r = p->owner->owner->inputs->prepared;
+    const maelys_datalog_symbol_table_t *symbols = &p->owner->owner->inputs->symbols;
     memset(out, 0, sizeof(*out)); out->rule_id = v->rule_id; out->depth = v->depth;
-    rc = (maelys_datalog_status_t)maelys_datalog_export_fact(r, &v->target_fact, &out->target);
+    rc = (maelys_datalog_status_t)maelys_datalog_export_fact(r, symbols, &v->target_fact, &out->target);
     if (rc) return rc;
     out->bound_variable_mask = v->bound_variable_mask;
     for (size_t i = 0; i < MAELYS_DATALOG_IR_MAX_VARIABLES; ++i)
-        if (v->bound_variable_mask & (UINT32_C(1) << i)) { rc = export_value(r, &v->substitution[i], &out->substitution[i]); if (rc) return rc; }
+        if (v->bound_variable_mask & (UINT32_C(1) << i)) { rc = export_value(symbols, &v->substitution[i], &out->substitution[i]); if (rc) return rc; }
     out->support_count = v->support_count;
     for (size_t i = 0; i < v->support_count; ++i) {
         out->supports[i].body_index = v->supports[i].body_index; out->supports[i].origin = v->supports[i].origin;
-        rc = (maelys_datalog_status_t)maelys_datalog_export_fact(r, &v->supports[i].fact, &out->supports[i].fact); if (rc) return rc;
+        rc = (maelys_datalog_status_t)maelys_datalog_export_fact(r, symbols, &v->supports[i].fact, &out->supports[i].fact); if (rc) return rc;
     }
     const maelys_datalog_why_false_obstacle_t *o = &v->obstacle;
     out->obstacle_kind = o->kind; out->obstacle_origin = o->origin; out->body_index = o->body_index;
     out->unbound_term_mask = o->pattern.unbound_term_mask; out->op = (maelys_datalog_ir_comparison_t)o->op;
     if (o->kind == MAELYS_DATALOG_WHY_FALSE_OBSTACLE_COMPARISON_FALSE) {
-        rc = export_value(r, &o->lhs, &out->lhs); return rc ? rc : export_value(r, &o->rhs, &out->rhs);
+        rc = export_value(symbols, &o->lhs, &out->lhs); return rc ? rc : export_value(symbols, &o->rhs, &out->rhs);
     }
     if (o->kind == MAELYS_DATALOG_WHY_FALSE_OBSTACLE_FILTER_FALSE) {
         out->filter_program_index = o->filter_program_index; out->filter_kind = o->filter_kind;
-        return export_value(r, &o->filter_value, &out->filter_value);
+        return export_value(symbols, &o->filter_value, &out->filter_value);
     }
     if (o->kind >= MAELYS_DATALOG_WHY_FALSE_OBSTACLE_COUNT_MISMATCH &&
         o->kind <= MAELYS_DATALOG_WHY_FALSE_OBSTACLE_SUM_MISMATCH) {
-        rc = export_value(r, &o->lhs, &out->lhs); if (rc) return rc;
-        rc = export_value(r, &o->rhs, &out->rhs); if (rc) return rc;
+        rc = export_value(symbols, &o->lhs, &out->lhs); if (rc) return rc;
+        rc = export_value(symbols, &o->rhs, &out->rhs); if (rc) return rc;
     }
     maelys_datalog_internal_fact_t fact = {0}; fact.predicate_id = o->pattern.predicate_id; fact.arity = o->pattern.arity;
     memcpy(fact.terms, o->pattern.terms, sizeof(fact.terms));
-    return (maelys_datalog_status_t)maelys_datalog_export_ir_atom(r, &fact, &out->pattern);
+    return (maelys_datalog_status_t)maelys_datalog_export_ir_atom(r, symbols, &fact, &out->pattern);
 }
 maelys_datalog_status_t maelys_datalog_result_filter_statistics(
     const maelys_datalog_result_t *result, maelys_datalog_filter_statistics_t *out) {

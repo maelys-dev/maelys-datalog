@@ -91,6 +91,24 @@ claims come from the native contracts, not timing or process RSS.
 
 ### Optional instruction and layout diagnosis
 
+`bench_session_lifecycle.c` is a separate public-API diagnostic for the document
+quickstart (argument `7`) and its 30-user variant (`93`). Compile the same driver
+against both revisions with the same compiler/profile/flags as the other probes.
+It prints raw nanosecond samples for creation, solve, result release and session
+destruction after measurement, including the first session after policy/input
+setup (`cold-0`) and 501 samples after 50 warmups. Input construction and checked
+queries are outside these timers; this does not replace end-to-end Python timing
+or the full solver/input/session matrix. A single cold observation is not a
+distribution: use fresh processes for repeated cold measurements.
+
+With `-DMAELYS_BENCH_COUNT`, pass a second argument `create`, `solve`, `release`
+or `destroy` and run under Callgrind with `--collect-atstart=no`. One named phase
+is counted after the same 50 warmups; clocks and answer checks are excluded.
+Repeat in separate processes and retain per-function counts and binary/harness
+hashes. These are software instruction counts, not hardware retired instructions.
+Run two A/A pairs before alternating A/B passes, finish all builds first, and
+retain every case and raw sample outside Git, as for the full comparison.
+
 Set the manual workflow's `diagnostic_original` input to an earlier candidate
 SHA to compare baseline A, that candidate B and revised head C before the full
 matrix. `diagnose_solver_layout.sh BASE ORIGINAL HEAD NEW_ABSOLUTE_OUTPUT`
