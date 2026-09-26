@@ -105,19 +105,19 @@ static maelys_result_t intern_input_symbols(
         if (previous && strcmp(previous, text) == 0) continue;
         maelys_datalog_symbol_id_t id = MAELYS_DATALOG_SYMBOL_ID_INVALID;
         maelys_result_t rc = maelys_datalog_symbol_intern(
-            &session->working.symbols, text, strlen(text), &id);
+            &session->symbols, text, strlen(text), &id);
         if (rc != MAELYS_OK) {
             /* Sorting makes IDs deterministic; locate the original occurrence
              * only on failure, without exposing symbol contents in diagnostics. */
             const char *reason = "symbol interning failed";
             size_t bound = 0u;
-            if (session->working.symbols.count >= MAELYS_DATALOG_MAX_SYMBOLS) {
+            if (session->symbols.count >= MAELYS_DATALOG_MAX_SYMBOLS) {
                 reason = "symbol count limit";
                 bound = MAELYS_DATALOG_MAX_SYMBOLS;
             } else if (strlen(text) + 1u >
-                       sizeof(session->working.symbols.storage) - session->working.symbols.used) {
+                       sizeof(session->symbols.storage) - session->symbols.used) {
                 reason = "symbol storage byte limit";
-                bound = sizeof(session->working.symbols.storage);
+                bound = sizeof(session->symbols.storage);
             }
             for (size_t f = 0u; f < fact_count; ++f) {
                 for (size_t t = 0u; t < facts[f].arity; ++t) {
@@ -154,7 +154,7 @@ static maelys_result_t materialize_input_fact(
                 int found = 0;
                 maelys_datalog_symbol_id_t id = MAELYS_DATALOG_SYMBOL_ID_INVALID;
                 maelys_result_t rc = maelys_datalog_symbol_lookup_readonly(
-                    &session->working.symbols,
+                    &session->symbols,
                     source->as.symbol,
                     strlen(source->as.symbol),
                     &id,
@@ -181,15 +181,15 @@ static maelys_result_t materialize_input_fact(
 static maelys_result_t reset_transaction_state(
     maelys_datalog_internal_prepared_session_t *session) {
     if (!session) return MAELYS_ERR_INVALID_ARGUMENT;
-    session->working.symbols = session->prepared.symbols;
+    session->symbols = session->prepared->symbols;
     /* Only fact_count entries are live. Insertion initializes each whole fact;
      * collecting symbols writes every pointer before the sort reads it. */
     return maelys_datalog_edb_init(
         &session->edb,
         session->fact_pool,
         MAELYS_DATALOG_MAX_EDB_FACTS,
-        &session->working.symbols,
-        &session->working.registry);
+        &session->symbols,
+        &session->prepared->registry);
 }
 
 static maelys_result_t reject_transaction(
@@ -203,29 +203,40 @@ static maelys_result_t reject_transaction(
     return reset == MAELYS_OK ? rejection : reset;
 }
 
-maelys_result_t maelys_datalog_prepared_session_create(
+static maelys_result_t create_session(
     const maelys_datalog_internal_ruleset_t *ruleset,
-    maelys_datalog_internal_prepared_session_t **out_session) {
+    maelys_datalog_internal_prepared_session_t **out_session, int borrow) {
     if (out_session) *out_session = NULL;
     if (!ruleset || !out_session) return MAELYS_ERR_INVALID_ARGUMENT;
     if (!ruleset->loaded || !maelys_sha256_hex_is_lowercase(ruleset->sha256)) {
         return MAELYS_ERR_INVALID_STATE;
     }
-    maelys_datalog_internal_prepared_session_t *session = calloc(1u, sizeof(*session));
+    /* A copied snapshot shares the session allocation; borrowing needs only
+     * transaction storage. Both paths reserve the result before publication. */
+    struct owned_session {
+        maelys_datalog_internal_prepared_session_t state;
+        maelys_datalog_internal_ruleset_t snapshot;
+    };
+    maelys_datalog_internal_prepared_session_t *session =
+        calloc(1u, borrow ? sizeof(*session) : sizeof(struct owned_session));
     if (!session) return MAELYS_ERR_INTERNAL;
     session->result_workspace = maelys_datalog_solve_workspace_create();
     if (!session->result_workspace) { free(session); return MAELYS_ERR_INTERNAL; }
-    session->prepared = *ruleset;
-    session->working = *ruleset;
+    if (borrow) session->prepared = ruleset;
+    else {
+        struct owned_session *owned = (struct owned_session *)session;
+        owned->snapshot = *ruleset;
+        session->prepared = &owned->snapshot;
+    }
+    session->symbols = ruleset->symbols;
     maelys_result_t rc = maelys_datalog_edb_init(
         &session->edb,
         session->fact_pool,
         MAELYS_DATALOG_MAX_EDB_FACTS,
-        &session->working.symbols,
-        &session->working.registry);
+        &session->symbols,
+        &session->prepared->registry);
     if (rc != MAELYS_OK) {
         maelys_datalog_solve_workspace_destroy(session->result_workspace);
-        memset(session, 0, sizeof(*session));
         free(session);
         return rc;
     }
@@ -235,13 +246,24 @@ maelys_result_t maelys_datalog_prepared_session_create(
     return MAELYS_OK;
 }
 
+maelys_result_t maelys_datalog_prepared_session_create(
+    const maelys_datalog_internal_ruleset_t *ruleset,
+    maelys_datalog_internal_prepared_session_t **out) {
+    return create_session(ruleset, out, 0);
+}
+
+maelys_result_t maelys_datalog_prepared_session_borrow(
+    const maelys_datalog_internal_ruleset_t *ruleset,
+    maelys_datalog_internal_prepared_session_t **out) {
+    return create_session(ruleset, out, 1);
+}
+
 maelys_result_t maelys_datalog_prepared_session_destroy(
     maelys_datalog_internal_prepared_session_t *session) {
     if (!session) return MAELYS_ERR_INVALID_ARGUMENT;
     if (session->active_result) return MAELYS_ERR_INVALID_STATE;
-    maelys_datalog_context_release(session->prepared.modules);
+    maelys_datalog_context_release(session->prepared->modules);
     maelys_datalog_solve_workspace_destroy(session->result_workspace);
-    memset(session, 0, sizeof(*session));
     free(session);
     return MAELYS_OK;
 }
@@ -260,7 +282,7 @@ static void explain_fact_rejection(
     const maelys_datalog_fact_t *fact, size_t index,
     char *message, size_t message_capacity) {
     maelys_datalog_predicate_id_t pid;
-    const maelys_datalog_predicate_registry_t *registry = &session->working.registry;
+    const maelys_datalog_predicate_registry_t *registry = &session->prepared->registry;
     if (!maelys_datalog_predicate_registry_find(registry, fact->predicate, fact->arity, &pid)) {
         for (size_t i = 0u; i < registry->count; ++i) {
             if (strcmp(registry->defs[i].name, fact->predicate) == 0) {
@@ -373,11 +395,11 @@ maelys_result_t maelys_datalog_prepared_session_solve_materialized_ex(
     if (!session || !out_result) return MAELYS_ERR_INVALID_ARGUMENT;
     if (session->active_result || !session->edb.immutable) return MAELYS_ERR_INVALID_STATE;
     maelys_result_t rc = maelys_datalog_solve_reusing_workspace(
-        &session->working, &session->edb, session->result_workspace, out_result, out_diag);
+        session->prepared, &session->edb, session->result_workspace, out_result, out_diag);
     if (rc != MAELYS_OK) {
         /* Resolve rejected symbol IDs while this transaction's vocabulary still
          * exists. The subsequent rollback restores the prepared dictionary. */
-        maelys_datalog_copy_solve_diagnostic(public_diag, out_diag, &session->working, rc);
+        maelys_datalog_copy_solve_diagnostic(public_diag, out_diag, session->prepared, &session->symbols, rc);
         return reject_transaction(session, rc);
     }
     maelys_datalog_solve_result_set_release(
@@ -390,7 +412,7 @@ maelys_result_t maelys_datalog_prepared_session_solve_materialized_ex(
 
 const char *maelys_datalog_prepared_session_fingerprint(
     const maelys_datalog_internal_prepared_session_t *session) {
-    return session ? session->prepared.sha256 : NULL;
+    return session ? session->prepared->sha256 : NULL;
 }
 
 maelys_result_t maelys_datalog_prepared_session_lookup_symbol(
@@ -403,7 +425,7 @@ maelys_result_t maelys_datalog_prepared_session_lookup_symbol(
     }
     if (!session->active_result) return MAELYS_ERR_INVALID_STATE;
     return maelys_datalog_symbol_lookup_readonly(
-        &session->working.symbols, text, strlen(text), out_id, out_found);
+        &session->symbols, text, strlen(text), out_id, out_found);
 }
 
 void maelys_datalog_prepared_session_result_released(

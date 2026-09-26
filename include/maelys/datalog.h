@@ -330,6 +330,11 @@ MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_policy_count(
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_policy_fingerprint(
     const maelys_datalog_policy_t *policy,
     char out_fingerprint[MAELYS_DATALOG_PUBLIC_FINGERPRINT_BYTES]);
+/* Release the policy handle; do not use it after this call. Sessions already
+ * created from it remain usable until their own release. Engine-owned policy
+ * storage is retained until the last borrowing session is freed. Caller-owned
+ * policy storage may be reused after this call: those sessions hold a snapshot.
+ * This preserves the lifetime guarantee of the former per-session copies. */
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_policy_free(
     maelys_datalog_policy_t *policy);
 

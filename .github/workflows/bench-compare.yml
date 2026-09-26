@@ -28,6 +28,16 @@ on:
         required: false
         default: false
         type: boolean
+      session_layout:
+        description: Diagnose eight declared session fixtures with live data addresses and 0/16-byte text controls
+        required: false
+        default: false
+        type: boolean
+      session_layout_original:
+        description: Optional original SHA for full three-revision matrices and layout comparison (head is revised)
+        required: false
+        default: ''
+        type: string
 
 permissions:
   contents: read
@@ -45,12 +55,19 @@ jobs:
       - name: Check comparison tooling
         run: python3 -m unittest discover -s bench -p 'test_compare*.py'
       - name: Prepare optional diagnostic tool
-        if: inputs.diagnostic_original != '' || inputs.session_diagnostics
+        if: inputs.diagnostic_original != '' || inputs.session_diagnostics || inputs.session_layout
         run: |
           if ! command -v valgrind >/dev/null; then
             sudo apt-get update
             sudo apt-get install -y valgrind
           fi
+      - name: Build every session layout variant before measurements
+        if: inputs.session_layout
+        env:
+          BASE_REF: ${{ inputs.base }}
+          HEAD_REF: ${{ inputs.head }}
+          ORIGINAL_REF: ${{ inputs.session_layout_original }}
+        run: python3 bench/diagnose_session_layout.py prepare "$BASE_REF" "$HEAD_REF" "$RUNNER_TEMP/session-layout" "$ORIGINAL_REF"
       - name: Diagnose instructions and binary layout
         if: inputs.diagnostic_original != ''
         env:
@@ -64,7 +81,11 @@ jobs:
           BASE_REF: ${{ inputs.base }}
           HEAD_REF: ${{ inputs.head }}
           SESSION_DIAGNOSTICS: ${{ inputs.session_diagnostics && '1' || '0' }}
+          COMPARISON_ORIGINAL: ${{ inputs.session_layout_original }}
         run: bash bench/compare_revisions.sh "$BASE_REF" "$HEAD_REF" "$RUNNER_TEMP/bench-comparison"
+      - name: Measure prepared-session data and code placement
+        if: inputs.session_layout
+        run: python3 bench/diagnose_session_layout.py run "$RUNNER_TEMP/session-layout"
       - name: Upload measurements and report (including partial failed runs)
         if: always()
         uses: actions/upload-artifact@v4
@@ -73,5 +94,6 @@ jobs:
           path: |
             ${{ runner.temp }}/bench-comparison/
             ${{ runner.temp }}/bench-diagnostic/
+            ${{ runner.temp }}/session-layout/
           if-no-files-found: warn
           retention-days: 30

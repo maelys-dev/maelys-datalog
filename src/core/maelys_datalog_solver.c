@@ -136,6 +136,9 @@ struct maelys_datalog_solve_result {
     uint16_t node_premise_count[MAELYS_DATALOG_MAX_PROOF_NODES];
     uint8_t node_has_premises[MAELYS_DATALOG_MAX_PROOF_NODES];
     maelys_datalog_explanation_premise_t witness_slots[MAELYS_DATALOG_MAX_BODY_LITERALS];
+    /* Set on every acquired solve before any dictionary access. Keep it out of
+     * the reset prefix to preserve the established fact/provenance offsets. */
+    const maelys_datalog_symbol_table_t *symbols;
 };
 
 _Static_assert(offsetof(struct maelys_datalog_solve_result, witness_filled_mask) ==
@@ -147,8 +150,13 @@ _Thread_local maelys_datalog_base_lookup_counts_t maelys_datalog_base_lookup_cou
 #endif
 
 maelys_datalog_internal_solve_result_t *maelys_datalog_solve_workspace_create(void) {
-    maelys_datalog_internal_solve_result_t *result = calloc(1u, sizeof(*result));
-    if (result) result->reusable = 1;
+    maelys_datalog_internal_solve_result_t *result = malloc(sizeof(*result));
+    if (result) {
+        /* The same payload validity rules apply on first use and reuse. Do not
+         * initialize inactive fact/provenance capacity just to overwrite it. */
+        memset(result, 0, offsetof(maelys_datalog_internal_solve_result_t, edb_facts));
+        result->reusable = 1;
+    }
     return result;
 }
 void maelys_datalog_solve_workspace_destroy(maelys_datalog_internal_solve_result_t *result) {
@@ -172,12 +180,12 @@ maelys_result_t maelys_datalog_solve_result_symbol_text(
     }
     if (!result->finalized || result->failed || !result->ruleset ||
         !result->ruleset->loaded ||
-        !maelys_datalog_symbol_id_is_valid(&result->ruleset->symbols, id)) {
+        !maelys_datalog_symbol_id_is_valid(result->symbols, id)) {
         return MAELYS_ERR_INVALID_STATE;
     }
-    const char *text = maelys_datalog_symbol_text(&result->ruleset->symbols, id);
+    const char *text = maelys_datalog_symbol_text(result->symbols, id);
     if (!text) return MAELYS_ERR_INVALID_STATE;
-    const size_t length = result->ruleset->symbols.entries[id - 1u].len;
+    const size_t length = result->symbols->entries[id - 1u].len;
     *out_text = text;
     *out_length = length;
     return MAELYS_OK;
@@ -1669,7 +1677,7 @@ static int solve_once_evaluate_filter_literal(
     }
     const unsigned char *value_bytes = NULL;
     size_t value_length = 0u;
-    if (!filter_symbol_bytes_resolve(&ruleset->symbols,
+    if (!filter_symbol_bytes_resolve(result->symbols,
                                      value.as.symbol,
                                      &value_bytes,
                                      &value_length)) {
@@ -2775,6 +2783,9 @@ static maelys_result_t solve_stratified_path(
         return MAELYS_ERR_INTERNAL;
     }
     result->ruleset = ruleset;
+    /* Prepared EDB dictionaries are leased with the result. Legacy direct
+     * solves keep their ruleset-scoped vocabulary contract. */
+    result->symbols = workspace ? edb->symbols : &ruleset->symbols;
     result->stratified = 1;
     result->failure_reason = MAELYS_DATALOG_DENY_NONE;
 #ifdef MAELYS_TESTING
@@ -3038,6 +3049,9 @@ static maelys_result_t maelys_datalog_solve_once_run(
         return MAELYS_ERR_INTERNAL;
     }
     result->ruleset = ruleset;
+    /* Prepared EDB dictionaries are leased with the result. Legacy direct
+     * solves keep their ruleset-scoped vocabulary contract. */
+    result->symbols = workspace ? edb->symbols : &ruleset->symbols;
     result->failure_reason = MAELYS_DATALOG_DENY_NONE;
 #ifdef MAELYS_TESTING
     result->edb_full_scan_reference = full_scan_reference;
@@ -3891,7 +3905,7 @@ const maelys_datalog_why_false_explanation_t *maelys_datalog_why_false_workspace
 static maelys_result_t why_false_build_symbol_ranks(
     why_false_context_t *context) {
     const maelys_datalog_symbol_table_t *symbols =
-        &context->result->ruleset->symbols;
+        context->result->symbols;
     if (symbols->count > MAELYS_DATALOG_MAX_SYMBOLS ||
         symbols->used > sizeof(symbols->storage)) {
         return MAELYS_ERR_INVALID_STATE;
@@ -3932,7 +3946,7 @@ static int why_false_term_symbol_resolves(
     if (term->kind != MAELYS_DATALOG_TERM_SYMBOL) return 1;
     const maelys_datalog_symbol_id_t id = term->as.symbol;
     return maelys_datalog_symbol_id_is_valid(
-               &context->result->ruleset->symbols, id) &&
+               context->result->symbols, id) &&
            context->symbol_rank[id] != 0u;
 }
 
@@ -4026,7 +4040,7 @@ static int why_false_term_cmp(
     switch (lhs->kind) {
         case MAELYS_DATALOG_TERM_SYMBOL: {
             const maelys_datalog_symbol_table_t *symbols =
-                &context->result->ruleset->symbols;
+                context->result->symbols;
             if (!maelys_datalog_symbol_id_is_valid(symbols, lhs->as.symbol) ||
                 !maelys_datalog_symbol_id_is_valid(symbols, rhs->as.symbol) ||
                 context->symbol_rank[lhs->as.symbol] == 0u ||
@@ -4544,7 +4558,7 @@ static int why_false_evaluate_filter_literal(
         value.kind != MAELYS_DATALOG_TERM_SYMBOL) return 0;
     const unsigned char *value_bytes = NULL;
     size_t value_length = 0u;
-    if (!filter_symbol_bytes_resolve(&ruleset->symbols,
+    if (!filter_symbol_bytes_resolve(context->result->symbols,
                                      value.as.symbol,
                                      &value_bytes,
                                      &value_length)) return 0;

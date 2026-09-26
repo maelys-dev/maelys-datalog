@@ -25,7 +25,7 @@ with open(os.environ["BENCH_TEST_TRACE"], "a") as trace:
 if kind == "solver":
     row = dict(benchmark="case", group="g", mode="m", size=1, selectivity=1,
                samples=1000, min_us=1, median_us=2, p95_us=3,
-               commit=meta["base" if role == "A" else "head"],
+               commit=(binary.parent / "revision.txt").read_text().strip(),
                compiler="synthetic", cflags="-O2", opt_level="-O2")
 elif kind == "input":
     row = dict(scenario="crossover", capacity=13, entries=13, distinct_strings=64,
@@ -35,7 +35,7 @@ elif kind == "input":
 elif kind == "sessions":
     row = dict(policy="inert", order="sorted", values="integer", size="8", entries=8, edb_limit=2048,
                samples=301, min_us=1, median_us=2, p95_us=3, result_digest="0123456789abcdef",
-               commit=meta["base" if role == "A" else "head"], profile=profile,
+               commit=(binary.parent / "revision.txt").read_text().strip(), profile=profile,
                compiler="synthetic", cflags="-O2", opt_level="-O2")
 else:
     row = dict(scenario="fresh-result", kind="true", mode=mode, samples=301,
@@ -62,13 +62,16 @@ class OrchestrationTest(unittest.TestCase):
             with self.subTest(explanations=enabled):
                 self.exercise(enabled)
 
-    def exercise(self, enabled):
+    def test_three_revisions_share_one_counterbalanced_campaign(self):
+        self.exercise(True, three_way=True)
+
+    def exercise(self, enabled, three_way=False):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             repo = root / "repo"
             (repo / "bench").mkdir(parents=True)
             for name in ("compare_revisions.sh", "compare_runs.py", "compare_explanations.py",
-                         "Makefile.compare", "bench_input_edb.c", "bench_explanations.c",
+                         "Makefile.compare", "compare_three_revisions.py", "bench_input_edb.c", "bench_explanations.c",
                          "bench_sessions.c", "compare_sessions.py", "diagnose_sessions.py", "report_solver_layout.py"):
                 shutil.copy2(ROOT / "bench" / name, repo / "bench" / name)
             (repo / "bench/bench_datalog.c").write_text("synthetic harness\n")
@@ -86,6 +89,12 @@ class OrchestrationTest(unittest.TestCase):
             git("add", ".")
             git("-c", "commit.gpgsign=false", "commit", "-qm", "baseline fixture")
             base = git("rev-parse", "HEAD")
+            original = base
+            if three_way:
+                source.write_text("original candidate fixture\n")
+                git("add", ".")
+                git("-c", "commit.gpgsign=false", "commit", "-qm", "original fixture")
+                original = git("rev-parse", "HEAD")
             source.write_text("indexed fixture\n")
             if enabled:
                 header.write_text("maelys_datalog_session_config_set_explanation_workspace(\n")
@@ -105,8 +114,9 @@ class OrchestrationTest(unittest.TestCase):
                 "make": '''#!/bin/sh
 set -eu
 printf 'make %s\n' "$*" >> "$BENCH_TEST_TRACE"
-for argument in "$@"; do case "$argument" in OUT=*) output=${argument#OUT=} ;; esac; done
+for argument in "$@"; do case "$argument" in OUT=*) output=${argument#OUT=} ;; REVISION=*) revision=${argument#REVISION=} ;; esac; done
 mkdir -p "$output"
+echo "$revision" > "$output/revision.txt"
 cp "$BENCH_TEST_PAYLOAD" "$output/solver"
 cp "$BENCH_TEST_PAYLOAD" "$output/input"
 cp "$BENCH_TEST_PAYLOAD" "$output/sessions"
@@ -122,12 +132,38 @@ done
             environment = dict(os.environ, PATH=str(bins) + os.pathsep + os.environ["PATH"],
                                TMPDIR=str(root), BENCH_TEST_TRACE=str(trace),
                                BENCH_TEST_PAYLOAD=str(payload))
+            if three_way:
+                environment["COMPARISON_ORIGINAL"] = original
             output = root / "output"
             result = subprocess.run(["bash", str(repo / "bench/compare_revisions.sh"),
                                      base, "candidate", str(output)],
                                     env=environment, text=True, capture_output=True)
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             lines = trace.read_text().splitlines()
+            if three_way:
+                self.assertEqual(sum(line.startswith("make ") for line in lines), 6)
+                self.assertTrue(all(line.startswith("make -j1 ") for line in lines[:6]))
+                self.assertEqual(len(lines), 130)
+                measurements = lines[6:]
+                self.assertTrue(all("-aa-" in line for line in measurements[:80]))
+                self.assertTrue(all("-ab-" in line for line in measurements[80:]))
+                for profile in ("SMALL", "LARGE"):
+                    for kind in ("solver", "input", "sessions"):
+                        actual = [line.split()[-1].split("-ab-")[-1] for line in measurements
+                                  if line.startswith(f"{kind} {profile} ") and "-ab-" in line]
+                        self.assertEqual(actual, ["A1", "B1", "C1", "C2", "B2", "A2"])
+                for name, a, b in (("base-original", base, original), ("base-revised", base, head),
+                                   ("original-revised", original, head)):
+                    pair = output / name
+                    meta = json.loads((pair / "metadata.json").read_text())
+                    self.assertEqual((meta["base"], meta["head"]), (a, b))
+                    self.assertIn("indéterminé", (pair / "sessions.md").read_text())
+                    self.assertIn("indéterminé", (pair / "comparison.md").read_text())
+                    self.assertIn("A B C / C B A", (pair / "sessions.md").read_text())
+                    self.assertIn("A B C / C B A", (pair / "comparison.md").read_text())
+                self.assertIn("workspace", (output / "base-revised/explanations.md").read_text())
+                self.assertTrue((output / "complete").exists())
+                return
             self.assertEqual(sum(line.startswith("make ") for line in lines), 4)
             self.assertTrue(all(line.startswith("make -j1 ") for line in lines[:4]))
             count = 68 if enabled else 52

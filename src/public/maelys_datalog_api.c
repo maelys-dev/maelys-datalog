@@ -138,6 +138,7 @@ static maelys_datalog_status_t allocate_policy(
     maelys_datalog_policy_t *policy = calloc(1u, sizeof(*policy));
     if (!policy) return MAELYS_DATALOG_STATUS_INTERNAL;
     policy->owns_storage = 1;
+    atomic_init(&policy->references, 1u);
     *out_allocated = policy;
     return MAELYS_DATALOG_STATUS_OK;
 }
@@ -154,6 +155,7 @@ static maelys_datalog_status_t policy_storage(void *storage, size_t bytes,
         return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
     if (bytes < sizeof(maelys_datalog_policy_t)) return MAELYS_DATALOG_STATUS_STORAGE_TOO_SMALL;
     memset(storage, 0, sizeof(maelys_datalog_policy_t)); *candidate = storage;
+    atomic_init(&(*candidate)->references, 1u);
     return MAELYS_DATALOG_STATUS_OK;
 }
 static void discard_policy(maelys_datalog_policy_t *p) {
@@ -262,6 +264,7 @@ maelys_datalog_status_t maelys_datalog_policy_count(
     const maelys_datalog_policy_t *policy,
     size_t *out_count) {
     if (!policy || !out_count) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
+    if (policy->released) return MAELYS_DATALOG_STATUS_INVALID_STATE;
     const size_t count = policy->set.policy_count;
     if (count == 0u) return MAELYS_DATALOG_STATUS_INVALID_STATE;
     *out_count = count;
@@ -272,6 +275,7 @@ maelys_datalog_status_t maelys_datalog_policy_fingerprint(
     const maelys_datalog_policy_t *policy,
     char out_fingerprint[MAELYS_DATALOG_PUBLIC_FINGERPRINT_BYTES]) {
     if (!policy || !out_fingerprint) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
+    if (policy->released) return MAELYS_DATALOG_STATUS_INVALID_STATE;
     char fingerprint[MAELYS_DATALOG_PUBLIC_FINGERPRINT_BYTES];
     maelys_result_t status = maelys_datalog_policy_set_fingerprint(
         &policy->set, fingerprint);
@@ -280,13 +284,23 @@ maelys_datalog_status_t maelys_datalog_policy_fingerprint(
     return MAELYS_DATALOG_STATUS_OK;
 }
 
-maelys_datalog_status_t maelys_datalog_policy_free(maelys_datalog_policy_t *policy) {
-    if (!policy) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
-    if (!policy->set.policy_count) return MAELYS_DATALOG_STATUS_INVALID_STATE;
+void maelys_datalog_policy_retain_storage(const maelys_datalog_policy_t *policy) {
+    atomic_fetch_add_explicit(&((maelys_datalog_policy_t *)policy)->references, 1u, memory_order_relaxed);
+}
+void maelys_datalog_policy_release_storage(const maelys_datalog_policy_t *retained) {
+    maelys_datalog_policy_t *policy = (maelys_datalog_policy_t *)retained;
+    if (atomic_fetch_sub_explicit(&policy->references, 1u, memory_order_acq_rel) != 1u) return;
     for (size_t i = 0; i < policy->set.policy_count; ++i)
         maelys_datalog_context_release(policy->set.policies[i].modules);
-    maelys_datalog_policy_set_clear(&policy->set);
+    /* Only caller-owned storage needs invalidation before returning it. */
+    if (!policy->owns_storage) maelys_datalog_policy_set_clear(&policy->set);
     discard_policy(policy);
+}
+maelys_datalog_status_t maelys_datalog_policy_free(maelys_datalog_policy_t *policy) {
+    if (!policy) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
+    if (!policy->set.policy_count || policy->released) return MAELYS_DATALOG_STATUS_INVALID_STATE;
+    policy->released = 1;
+    maelys_datalog_policy_release_storage(policy);
     return MAELYS_DATALOG_STATUS_OK;
 }
 

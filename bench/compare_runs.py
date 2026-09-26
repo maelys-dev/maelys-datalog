@@ -110,7 +110,8 @@ def report(directory):
     print("Clang -O2, SMALL/LARGE, complete solver and input matrices. No priority, "
           "affinity or case-selection adjustment. Each engine object compiled once "
           "per revision/profile, shared by both harnesses; no build during timing.\n")
-    print("Two A/A pairs precede A B A B. Per metric, the observed floor is "
+    print(metadata.get("comparison_protocol", "Two A/A pairs precede A B A B.") + "\n")
+    print("Per metric, the observed floor is "
           "max(max(A1/A2,A2/A1)-1, max(A3/A4,A4/A3)-1). It is NOT a confidence "
           "interval. Below 10 µs (median of A/A medians), use the minimum of pass "
           "minima. Otherwise report the median of pass medians AND the median of "

@@ -3,6 +3,9 @@
 set -euo pipefail
 test "$#" = 3 || { echo "usage: compare_revisions.sh BASE HEAD NEW_ABSOLUTE_OUTPUT" >&2; exit 2; }
 test "$(uname -s)" = Linux || { echo "Linux measurement required" >&2; exit 2; }
+if test -n "${COMPARISON_ORIGINAL:-}"; then
+  exec python3 "$(dirname "$0")/compare_three_revisions.py" "$1" "$COMPARISON_ORIGINAL" "$2" "$3"
+fi
 driver=$(cd "$(dirname "$0")/.." && pwd)
 repo=$(git -C "$driver" rev-parse --show-toplevel)
 resolve() {

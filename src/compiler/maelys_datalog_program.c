@@ -87,13 +87,13 @@ void maelys_datalog_copy_load_diagnostic(maelys_datalog_diagnostic_t *out,
     }
 }
 
-maelys_result_t maelys_datalog_export_ir_term(const maelys_datalog_internal_ruleset_t *r,
+maelys_result_t maelys_datalog_export_ir_term(const maelys_datalog_symbol_table_t *symbols,
                                    const maelys_datalog_internal_term_t *in, maelys_datalog_ir_term_t *out) {
     memset(out, 0, sizeof(*out));
     out->kind = (maelys_datalog_ir_term_kind_t)in->kind;
     switch (in->kind) {
     case MAELYS_DATALOG_TERM_SYMBOL:
-        out->as.symbol = maelys_datalog_symbol_text(&r->symbols, in->as.symbol);
+        out->as.symbol = maelys_datalog_symbol_text(symbols, in->as.symbol);
         return out->as.symbol ? MAELYS_OK : MAELYS_ERR_INVALID_STATE;
     case MAELYS_DATALOG_TERM_INT:
         out->as.integer = in->as.integer;
@@ -110,6 +110,7 @@ maelys_result_t maelys_datalog_export_ir_term(const maelys_datalog_internal_rule
     return MAELYS_OK;
 }
 maelys_result_t maelys_datalog_export_ir_atom(const maelys_datalog_internal_ruleset_t *r,
+    const maelys_datalog_symbol_table_t *symbols,
                                    const maelys_datalog_internal_fact_t *in, maelys_datalog_ir_atom_t *out) {
     memset(out, 0, sizeof(*out));
     const maelys_datalog_predicate_entry_t *d =
@@ -119,17 +120,18 @@ maelys_result_t maelys_datalog_export_ir_atom(const maelys_datalog_internal_rule
     out->predicate = d->name;
     out->arity = in->arity;
     for (size_t i = 0; i < in->arity; ++i) {
-        maelys_result_t rc = maelys_datalog_export_ir_term(r, &in->terms[i], &out->terms[i]);
+        maelys_result_t rc = maelys_datalog_export_ir_term(symbols, &in->terms[i], &out->terms[i]);
         if (rc != MAELYS_OK)
             return rc;
     }
     return MAELYS_OK;
 }
 maelys_result_t maelys_datalog_export_fact(const maelys_datalog_internal_ruleset_t *r,
+    const maelys_datalog_symbol_table_t *symbols,
                                            const maelys_datalog_internal_fact_t *in,
                                            maelys_datalog_fact_t *out) {
     maelys_datalog_ir_atom_t a;
-    maelys_result_t rc = maelys_datalog_export_ir_atom(r, in, &a);
+    maelys_result_t rc = maelys_datalog_export_ir_atom(r, symbols, in, &a);
     if (rc != MAELYS_OK)
         return rc;
     memset(out, 0, sizeof(*out));
@@ -347,7 +349,7 @@ maelys_datalog_status_t maelys_datalog_program_fact(const maelys_datalog_program
     if (index >= p->ruleset->fact_count)
         return MAELYS_DATALOG_STATUS_NOT_FOUND;
     maelys_datalog_ir_atom_t a;
-    maelys_result_t rc = maelys_datalog_export_ir_atom(p->ruleset, &p->ruleset->facts[index], &a);
+    maelys_result_t rc = maelys_datalog_export_ir_atom(p->ruleset, &p->ruleset->symbols, &p->ruleset->facts[index], &a);
     if (rc == MAELYS_OK)
         *out = a;
     return (maelys_datalog_status_t)rc;
@@ -361,7 +363,7 @@ maelys_datalog_status_t maelys_datalog_program_rule(const maelys_datalog_program
     const maelys_datalog_internal_ruleset_t *r = p->ruleset;
     const maelys_datalog_rule_t *in = &r->rules[index];
     maelys_datalog_ir_rule_t rule = {0};
-    maelys_result_t rc = maelys_datalog_export_ir_atom(r, &in->head, &rule.head);
+    maelys_result_t rc = maelys_datalog_export_ir_atom(r, &r->symbols, &in->head, &rule.head);
     if (rc != MAELYS_OK)
         return (maelys_datalog_status_t)rc;
     rule.body_count = in->body_count;
@@ -374,7 +376,7 @@ maelys_datalog_status_t maelys_datalog_program_rule(const maelys_datalog_program
         b->left = a->left == UINT8_MAX ? UINT32_MAX : a->left;
         b->right = a->right == UINT8_MAX ? UINT32_MAX : a->right;
         if (a->kind <= MAELYS_DATALOG_ARITH_EXPR_VAR) {
-            rc = maelys_datalog_export_ir_term(r, &a->term, &b->term);
+            rc = maelys_datalog_export_ir_term(&r->symbols, &a->term, &b->term);
             if (rc != MAELYS_OK)
                 return (maelys_datalog_status_t)rc;
         }
@@ -386,11 +388,11 @@ maelys_datalog_status_t maelys_datalog_program_rule(const maelys_datalog_program
         b->lhs_expression = b->rhs_expression = UINT32_MAX;
         if (a->kind == MAELYS_DATALOG_LITERAL_ATOM ||
             a->kind == MAELYS_DATALOG_LITERAL_NEGATED_ATOM)
-            rc = maelys_datalog_export_ir_atom(r, &a->atom, &b->atom);
+            rc = maelys_datalog_export_ir_atom(r, &r->symbols, &a->atom, &b->atom);
         else if (maelys_datalog_literal_is_aggregate(a->kind)) {
-            rc = maelys_datalog_export_ir_atom(r, &a->atom, &b->atom);
-            if (rc == MAELYS_OK) rc = maelys_datalog_export_ir_term(r, &a->lhs, &b->lhs);
-            if (rc == MAELYS_OK) rc = maelys_datalog_export_ir_term(r, &a->rhs, &b->rhs);
+            rc = maelys_datalog_export_ir_atom(r, &r->symbols, &a->atom, &b->atom);
+            if (rc == MAELYS_OK) rc = maelys_datalog_export_ir_term(&r->symbols, &a->lhs, &b->lhs);
+            if (rc == MAELYS_OK) rc = maelys_datalog_export_ir_term(&r->symbols, &a->rhs, &b->rhs);
         } else if (a->kind == MAELYS_DATALOG_LITERAL_COMPARISON) {
             b->comparison = (maelys_datalog_ir_comparison_t)a->op;
             b->has_arithmetic = a->has_arith_expr;
@@ -398,9 +400,9 @@ maelys_datalog_status_t maelys_datalog_program_rule(const maelys_datalog_program
                 b->lhs_expression = a->lhs_expr_root;
                 b->rhs_expression = a->rhs_expr_root;
             } else {
-                rc = maelys_datalog_export_ir_term(r, &a->lhs, &b->lhs);
+                rc = maelys_datalog_export_ir_term(&r->symbols, &a->lhs, &b->lhs);
                 if (rc == MAELYS_OK)
-                    rc = maelys_datalog_export_ir_term(r, &a->rhs, &b->rhs);
+                    rc = maelys_datalog_export_ir_term(&r->symbols, &a->rhs, &b->rhs);
             }
         } else if (a->kind == MAELYS_DATALOG_LITERAL_FILTER) {
             const maelys_datalog_filter_definition_t *d =
@@ -412,7 +414,7 @@ maelys_datalog_status_t maelys_datalog_program_rule(const maelys_datalog_program
             b->filter_semantic_id = d->semantic_id;
             b->pattern = r->filter_pattern_pool + f->pattern_offset;
             b->pattern_length = f->pattern_length;
-            rc = maelys_datalog_export_ir_term(r, &a->filter_value, &b->filter_value);
+            rc = maelys_datalog_export_ir_term(&r->symbols, &a->filter_value, &b->filter_value);
         } else
             rc = MAELYS_ERR_INVALID_STATE;
         if (rc != MAELYS_OK)

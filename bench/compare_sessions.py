@@ -43,7 +43,8 @@ def report(directory):
     print("# Public session solve comparison\n")
     print(f"Base: `{metadata['base']}`; head: `{metadata['head']}`.\n")
     print_host(metadata.get("host"))
-    print("Same public harness, Clang -O2, SMALL/LARGE. Two A/A pairs before A B A B, "
+    print(metadata.get("comparison_protocol", "Two A/A pairs precede A B A B.") + "\n")
+    print("Same public harness, Clang -O2, SMALL/LARGE. "
           "50 warmups + 301 samples per case/pass. Time only solve_edb, including clock overhead; "
           "exclude compilation, session creation, input append, queries and result release. "
           "EDB membership/boundary absence and enumerated IDB values are checked outside timing; digests include "

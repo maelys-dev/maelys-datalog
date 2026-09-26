@@ -342,6 +342,9 @@ static int test_order_independent_results_and_why_true(void) {
                           &oracle_result), "%d");
     TEST_ASSERT_TRUE(results_byte_identical(first_result, second_result));
     TEST_ASSERT_TRUE(results_byte_identical(first_result, oracle_result));
+    /* Runtime symbols must not mutate the compiled snapshot seen by backends. */
+    TEST_ASSERT_EQUAL(0, memcmp(first->prepared, &ruleset, sizeof(ruleset)), "%d");
+    TEST_ASSERT_EQUAL(0, memcmp(second->prepared, &ruleset, sizeof(ruleset)), "%d");
     TEST_ASSERT_TRUE(explanations_byte_identical(
         &oracle_ruleset, first_result, second_result));
     TEST_ASSERT_TRUE(explanations_byte_identical(
@@ -571,14 +574,14 @@ static int test_refused_input_leaves_session_retryable(void) {
     int found = 1;
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       maelys_datalog_symbol_lookup_readonly(
-                          &session->working.symbols,
+                          &session->symbols,
                           "orphan",
                           strlen("orphan"),
                           &id,
                           &found), "%d");
     TEST_ASSERT_FALSE(found);
-    TEST_ASSERT_EQUAL(session->prepared.symbols.count,
-                      session->working.symbols.count,
+    TEST_ASSERT_EQUAL(session->prepared->symbols.count,
+                      session->symbols.count,
                       "%zu");
     TEST_ASSERT_EQUAL((size_t)0u, session->edb.fact_count, "%zu");
     for (size_t i = 0u; i < sizeof(session->fact_pool); i++) {
@@ -1099,7 +1102,7 @@ static int test_result_symbol_text_read_only(void) {
                       maelys_datalog_prepared_session_lookup_symbol(
                           session, "alice", &id, &found), "%d");
     TEST_ASSERT_TRUE(found);
-    maelys_datalog_symbol_table_t before = session->working.symbols;
+    maelys_datalog_symbol_table_t before = session->symbols;
     const char *first = NULL;
     const char *second = NULL;
     size_t first_length = 0u;
@@ -1114,7 +1117,7 @@ static int test_result_symbol_text_read_only(void) {
     TEST_ASSERT_EQUAL(first_length, second_length, "%zu");
     TEST_ASSERT_EQUAL(0,
                       memcmp(&before,
-                             &session->working.symbols,
+                             &session->symbols,
                              sizeof(before)), "%d");
     maelys_datalog_solve_result_free(result);
     TEST_ASSERT_EQUAL(MAELYS_OK,
@@ -1231,7 +1234,7 @@ static int test_reuse_ignores_inactive_payload(void) {
     TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_FIELD, maelys_datalog_prepared_session_solve(session, facts, 2, &result), "%d");
     TEST_ASSERT_NULL(result);
     TEST_ASSERT_EQUAL(0, session->edb.fact_count, "%zu");
-    TEST_ASSERT_EQUAL(0, memcmp(&session->prepared.symbols, &session->working.symbols, sizeof(session->working.symbols)), "%d");
+    TEST_ASSERT_EQUAL(0, memcmp(&session->prepared->symbols, &session->symbols, sizeof(session->symbols)), "%d");
     for (size_t i = 0; i < sizeof(session->fact_pool); ++i)
         TEST_ASSERT_EQUAL(0, ((unsigned char *)session->fact_pool)[i], "%d");
     for (size_t i = 0; i < sizeof(session->symbol_inputs); ++i)

@@ -10,8 +10,10 @@
     (MAELYS_DATALOG_MAX_EDB_FACTS * MAELYS_DATALOG_MAX_TERMS)
 
 struct maelys_datalog_prepared_session {
-    maelys_datalog_internal_ruleset_t prepared;
-    maelys_datalog_internal_ruleset_t working;
+    const maelys_datalog_internal_ruleset_t *prepared;
+    /* Only the dictionary varies per transaction. The compiled snapshot stays
+     * immutable, including the vocabulary exposed to extension backends. */
+    maelys_datalog_symbol_table_t symbols;
     maelys_datalog_internal_fact_t fact_pool[MAELYS_DATALOG_MAX_EDB_FACTS];
     maelys_datalog_internal_edb_t edb;
     /* The pointer sort finishes before native facts are inserted. Reuse its
@@ -23,6 +25,10 @@ struct maelys_datalog_prepared_session {
     maelys_datalog_internal_solve_result_t *active_result;
     maelys_datalog_internal_solve_result_t *result_workspace;
 };
+
+/* The caller keeps this immutable snapshot alive until session destruction. */
+maelys_result_t maelys_datalog_prepared_session_borrow(
+    const maelys_datalog_internal_ruleset_t *, maelys_datalog_internal_prepared_session_t **);
 
 _Static_assert(sizeof(maelys_datalog_edb_insert_index_t) <=
                    sizeof(((maelys_datalog_internal_prepared_session_t *)0)->symbol_inputs),

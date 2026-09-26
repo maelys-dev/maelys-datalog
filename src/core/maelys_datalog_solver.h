@@ -60,7 +60,7 @@ typedef struct {
 
 void maelys_datalog_copy_solve_diagnostic(maelys_datalog_diagnostic_t *,
                                           const maelys_datalog_internal_solve_diagnostic_t *,
-    const maelys_datalog_internal_ruleset_t *, maelys_result_t);
+    const maelys_datalog_internal_ruleset_t *, const maelys_datalog_symbol_table_t *, maelys_result_t);
 
 const char *maelys_datalog_solve_diagnostic_category_name(
     maelys_datalog_solve_diag_category_t category);
