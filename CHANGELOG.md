@@ -19,6 +19,40 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
   validity rules for their first solve and subsequent reuse.
   Default Python preparation uses the public session constructor without an
   intermediate configuration handle. Explicit configuration remains supported.
+- Native result arrays retain their pre-change offsets; the transaction
+  dictionary pointer is stored after the payload and assigned before each solve.
+
+### Performance and measurement limits
+
+- A reference SMALL session sharing an engine-owned policy reserves 515,416
+  bytes instead of 1,178,352 (56.3% less), across the same three engine
+  allocations. This excludes the already-created policy and optional
+  explanation/backend storage; Python/CFFI still allocate their own objects.
+- On the original candidate before the final result-field relocation, a local
+  SMALL quickstart with Python 3.14.7 on macOS arm64 measured a total median of
+  39.708 instead of 68.958 microseconds versus 0.11.0 (42.4% less). It remained
+  2.03% above the 0.9.1 reference, above that reference's 0.43% A/A floor.
+  Local Linux arm64 Callgrind counts for SMALL/7 session creation fell from
+  176,058 to 28,370 software instructions. These setup measurements were not
+  repeated after the field relocation and are not general latency guarantees.
+- For the final engine layout, eight declared prepared-session fixtures on
+  hosted x86-64 retain an increase of 0.217% to 0.722% in scoped Callgrind Ir
+  versus 0.11.0. Per-function Ir/Dr/Dw repeat across processes and the two text
+  placements; materialization and string comparisons contribute to the extra
+  work. These are software counts, not hardware cycles or a bound for every
+  program. The [three-revision run](https://github.com/maelys-dev/maelys-datalog/actions/runs/36265486587)
+  retains the measurements and checked outputs.
+- The same run's complete session matrix retains 336 slower, 30 faster and
+  256 indeterminate metrics for revised/base; revised/original retains
+  146/27/449 respectively. Restoring the offsets did not remove the observed
+  regressions. Their attribution remains unresolved by this protocol: A/A
+  floors describe one binary's repeatability, and equal instruction counts on
+  the eight diagnostic fixtures establish neither equal cycle costs nor
+  equivalence of the full matrix. The setup and memory gains are an explicit
+  tradeoff with the quantified instruction cost and unresolved latency effects,
+  not a claim of regression-free prepared sessions. The
+  [earlier hosted run](https://github.com/maelys-dev/maelys-datalog/actions/runs/36257327159)
+  remains separate evidence from a different host.
 
 ## 0.11.0 — 2026-09-25
 
