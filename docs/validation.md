@@ -245,6 +245,13 @@ poisoned in that guard: public/native result workspaces initialize only metadata
 must write each live payload entry on first use just as on reuse. The session
 constructor also bounds calloc plus explicit memset requests to 200,000/350,000
 bytes on the shared SMALL/LARGE path; this counts requests, not physical writes.
+The transaction dictionary pointer sits after the native result payload, keeping
+all pre-existing result array offsets unchanged. Both solve entry paths assign
+it before use, including the first allocation and reuse; it is intentionally
+outside the metadata prefix reset on release. The three-revision layout probe
+compares every result array and the proof object against the base, and records
+actual addresses separately from offsets.
+
 The prepared-session tests keep the immutable snapshot byte-identical while transaction symbols change;
 filter evaluation, diagnostic export and both explanation kinds use the result's
 transaction dictionary. No public layout, API version or backend ABI changes.

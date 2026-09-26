@@ -87,7 +87,6 @@ struct maelys_datalog_solve_result {
      * below edb_facts are overwritten/validated by the next solve, not scrubbed. */
     int reusable;
     const maelys_datalog_internal_ruleset_t *ruleset;
-    const maelys_datalog_symbol_table_t *symbols;
     void *release_owner;
     maelys_datalog_solve_result_release_fn release;
     maelys_datalog_fact_set_t edb_snapshot;
@@ -137,6 +136,9 @@ struct maelys_datalog_solve_result {
     uint16_t node_premise_count[MAELYS_DATALOG_MAX_PROOF_NODES];
     uint8_t node_has_premises[MAELYS_DATALOG_MAX_PROOF_NODES];
     maelys_datalog_explanation_premise_t witness_slots[MAELYS_DATALOG_MAX_BODY_LITERALS];
+    /* Set on every acquired solve before any dictionary access. Keep it out of
+     * the reset prefix to preserve the established fact/provenance offsets. */
+    const maelys_datalog_symbol_table_t *symbols;
 };
 
 _Static_assert(offsetof(struct maelys_datalog_solve_result, witness_filled_mask) ==
