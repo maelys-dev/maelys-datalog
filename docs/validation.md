@@ -241,9 +241,11 @@ allocation and optional explanation/backend storage. The guard also checks
 allocation-failure cleanup, shared-policy lifetime, caller-storage reuse, zero
 constructor-storage reset on ordinary session destruction, and the existing
 zero-allocation append/solve/query/result-release contract. New malloc storage is
-poisoned in that guard: native result workspaces initialize only metadata, and
-must write each live payload entry on first use just as on reuse. The prepared-session
-tests keep the immutable snapshot byte-identical while transaction symbols change;
+poisoned in that guard: public/native result workspaces initialize only metadata, and
+must write each live payload entry on first use just as on reuse. The session
+constructor also bounds calloc plus explicit memset requests to 200,000/350,000
+bytes on the shared SMALL/LARGE path; this counts requests, not physical writes.
+The prepared-session tests keep the immutable snapshot byte-identical while transaction symbols change;
 filter evaluation, diagnostic export and both explanation kinds use the result's
 transaction dictionary. No public layout, API version or backend ABI changes.
 

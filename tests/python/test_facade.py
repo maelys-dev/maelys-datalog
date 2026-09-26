@@ -196,7 +196,7 @@ class FacadeTest(unittest.TestCase):
             "policy_load_inline": "Engine.load_inline_ruleset",
             "policy_load_manifest": "Engine.load_manifest",
             "policy_count": "Ruleset.policy_count", "policy_fingerprint": "Ruleset.fingerprint",
-            "policy_free": "Ruleset.close", "session_create": "Ruleset.prepare via configured",
+            "policy_free": "Ruleset.close", "session_create": "Ruleset.prepare defaults",
             "session_config_create": "Ruleset.prepare",
             "session_config_set_required_capabilities": "Ruleset.prepare",
             "session_config_get_required_capabilities": "CFFI configuration inspection",

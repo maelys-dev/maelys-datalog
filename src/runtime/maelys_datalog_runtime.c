@@ -369,9 +369,21 @@ static maelys_datalog_status_t session_create_with_storage(
     if (!backend_storage_valid(storage) || storage->size < bytes ||
         (bytes && !storage->bytes) || (storage->bytes && storage->alignment < alignment))
         return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
-    maelys_datalog_session_t *s = calloc(1u, sizeof(*s));
+    maelys_datalog_session_t *s = malloc(sizeof(*s));
     if (!s)
         return MAELYS_DATALOG_STATUS_INTERNAL;
+    /* Retained result facts and external-backend export scratch are populated
+     * before use, on the first solve as on reuse. Initialize only metadata;
+     * keep the existing layout and reserve every payload byte up front. */
+    memset(s, 0, offsetof(maelys_datalog_session_t, result_storage) +
+        offsetof(maelys_datalog_result_t, facts));
+    const size_t result_end = offsetof(maelys_datalog_session_t, result_storage) +
+        sizeof(s->result_storage);
+    memset((unsigned char *)s + result_end, 0,
+        offsetof(maelys_datalog_session_t, solve_scratch) - result_end);
+    const size_t scratch_end = offsetof(maelys_datalog_session_t, solve_scratch) +
+        sizeof(s->solve_scratch);
+    memset((unsigned char *)s + scratch_end, 0, sizeof(*s) - scratch_end);
     maelys_result_t rc = policy->owns_storage
         ? maelys_datalog_prepared_session_borrow(view.ruleset, &s->inputs)
         : maelys_datalog_prepared_session_create(view.ruleset, &s->inputs);

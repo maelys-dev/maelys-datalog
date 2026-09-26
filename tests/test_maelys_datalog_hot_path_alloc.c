@@ -17,7 +17,7 @@
 
 static int forbidden;
 static size_t attempts, hot_frees, live, total, fault_after = SIZE_MAX;
-static size_t memset_bytes, max_release_bytes, allocated_bytes;
+static size_t memset_bytes, max_release_bytes, allocated_bytes, calloc_bytes;
 void *maelys_test_memset(void *p, int value, size_t n) {
     memset_bytes += n;
     return memset(p, value, n);
@@ -66,7 +66,9 @@ void *maelys_test_malloc(size_t n) {
 }
 void *maelys_test_calloc(size_t n, size_t width) {
     if (refuse()) return NULL;
-    void *p = calloc(n, width); if (p) { ++live; allocated_bytes += n * width; } return p;
+    void *p = calloc(n, width);
+    if (p) { ++live; allocated_bytes += n * width; calloc_bytes += n * width; }
+    return p;
 }
 void *maelys_test_realloc(void *p, size_t n) {
     if (refuse()) return NULL;
@@ -314,16 +316,20 @@ int main(void) {
     for (unsigned op=0;op<4;++op) aggregate_without_allocator(op);
     maelys_datalog_session_t *session = NULL, *second = NULL, *filtered = NULL;
     size_t before = total, baseline = live, bytes_before = allocated_bytes;
+    size_t zero_before = memset_bytes + calloc_bytes;
     assert(maelys_datalog_session_create(policy, 0, &session) == 0);
     size_t create_allocations = total - before;
     size_t create_bytes = allocated_bytes - bytes_before;
+    size_t create_zero_bytes = memset_bytes + calloc_bytes - zero_before;
     assert(create_allocations == 3u);
     /* Bound the total reservation, including both public/native result storage.
      * A second full ruleset copy must not silently return. */
 #ifdef MAELYS_DATALOG_PROFILE_LARGE
     assert(create_bytes <= 980000u);
+    assert(create_zero_bytes <= 350000u);
 #else
     assert(create_bytes <= 550000u);
+    assert(create_zero_bytes <= 200000u);
 #endif
     size_t reset_before = memset_bytes;
     assert(maelys_datalog_session_free(session) == 0);
@@ -448,7 +454,7 @@ int main(void) {
     assert(maelys_datalog_session_free(filtered) == 0);
     predicate_declarations_without_allocator();
     printf("reference hot path: 40 repeated transactions, zero allocator calls; %zu constructor failure points checked\n", create_allocations);
-    printf("reference session reservation: %zu allocations, %zu bytes; destruction reset=0 bytes\n", create_allocations, create_bytes);
+    printf("reference session reservation: %zu allocations, %zu bytes; constructor zero requests=%zu bytes; destruction reset=0 bytes\n", create_allocations, create_bytes, create_zero_bytes);
     printf("release reset: owned=0 bytes, reusable maximum=%zu bytes (budget=4096, both profiles)\n", max_release_bytes);
     return 0;
 }
