@@ -94,6 +94,10 @@ claims come from the native contracts, not timing or process RSS.
 `bench_session_lifecycle.c` is a separate public-API diagnostic for the document
 quickstart (argument `7`) and its 30-user variant (`93`). Compile the same driver
 against both revisions with the same compiler/profile/flags as the other probes.
+Set `LIFECYCLE=1` when running `compare_revisions.sh` to build it alongside the
+full matrix before any timing. It requires the application value types of 0.10.0;
+leave the option unset when comparing older releases. Run the resulting
+`lifecycle` binaries separately for these lifecycle diagnostics.
 It prints raw nanosecond samples for creation, solve, result release and session
 destruction after measurement, including the first session after policy/input
 setup (`cold-0`) and 501 samples after 50 warmups. Input construction and checked
