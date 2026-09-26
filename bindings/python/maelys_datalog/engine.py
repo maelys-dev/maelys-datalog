@@ -418,6 +418,13 @@ class Ruleset:
             raise TypeError("explanations must be an ExplanationKind mask")
         if explanations < 0 or explanations & ~int(ExplanationKind.TRUE | ExplanationKind.FALSE):
             raise ValueError("explanations must contain only ExplanationKind.TRUE/FALSE")
+        if required_capabilities == 0 and work_limit == 0 and explanations == 0:
+            out = ffi.new("maelys_datalog_session_t **")
+            _check(lib.maelys_datalog_session_create(self._policy, policy_index, out),
+                   "create session")
+            session = Session(self, out[0])
+            self._sessions.append(session)
+            return session
         config = ffi.new("maelys_datalog_session_config_t **")
         _check(lib.maelys_datalog_session_config_create(config), "create session configuration")
         out = ffi.new("maelys_datalog_session_t **")

@@ -67,6 +67,15 @@ maelys_result_t maelys_datalog_format_why_false_text(
     const maelys_datalog_internal_ruleset_t *, const maelys_datalog_why_false_explanation_t *,
     char *, size_t, size_t *);
 
+/* Prepared results use a separate transaction dictionary. Both entry points
+ * preserve the legacy formatter's validation and atomic output contract. */
+maelys_result_t maelys_datalog_format_explanation_text_with_symbols(
+    const maelys_datalog_internal_ruleset_t *, const maelys_datalog_symbol_table_t *,
+    const maelys_datalog_explanation_t *, char *, size_t, size_t *);
+maelys_result_t maelys_datalog_format_why_false_text_with_symbols(
+    const maelys_datalog_internal_ruleset_t *, const maelys_datalog_symbol_table_t *,
+    const maelys_datalog_why_false_explanation_t *, char *, size_t, size_t *);
+
 #ifdef __cplusplus
 }
 #endif

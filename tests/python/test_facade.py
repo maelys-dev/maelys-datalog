@@ -196,7 +196,7 @@ class FacadeTest(unittest.TestCase):
             "policy_load_inline": "Engine.load_inline_ruleset",
             "policy_load_manifest": "Engine.load_manifest",
             "policy_count": "Ruleset.policy_count", "policy_fingerprint": "Ruleset.fingerprint",
-            "policy_free": "Ruleset.close", "session_create": "Ruleset.prepare via configured",
+            "policy_free": "Ruleset.close", "session_create": "Ruleset.prepare defaults",
             "session_config_create": "Ruleset.prepare",
             "session_config_set_required_capabilities": "Ruleset.prepare",
             "session_config_get_required_capabilities": "CFFI configuration inspection",
@@ -247,6 +247,33 @@ class FacadeTest(unittest.TestCase):
                          ["maelys/datalog.h"])
         self.assertNotIn("MAELYS_DATALOG_BACKEND_ABI_VERSION", source)
         self.assertNotIn("maelys_datalog_session_options_t", source)
+
+    def test_default_preparation_uses_public_constructor_without_configuration(self):
+        rules = self.policy()
+        native, calls = binding.lib, []
+
+        class DefaultConstructor:
+            def __getattr__(self, name):
+                if "session_config" in name or name == "maelys_datalog_session_create_configured":
+                    raise AssertionError("Default preparation needs no configuration handle")
+                operation = getattr(native, name)
+                if name != "maelys_datalog_session_create":
+                    return operation
+                def create(*args):
+                    calls.append(name)
+                    return operation(*args)
+                return create
+
+        edb = inputs(rules, ("seed", ["alice"]))
+        with patch.object(binding, "lib", DefaultConstructor()):
+            with rules.prepare() as session, session.solve(edb) as result:
+                self.assertTrue(result.contains_fact("allow", ["alice"]))
+            with rules.solve(edb) as result:
+                self.assertTrue(result.contains_fact("allow", ["alice"]))
+            for option in ("policy_index", "required_capabilities", "work_limit", "explanations"):
+                with self.subTest(option=option), self.assertRaises(TypeError):
+                    rules.prepare(**{option: False})
+        self.assertEqual(len(calls), 2)
 
     def test_reused_session_a_b_a_and_single_live_lease(self):
         rules = self.policy()

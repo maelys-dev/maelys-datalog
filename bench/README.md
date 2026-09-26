@@ -91,6 +91,28 @@ claims come from the native contracts, not timing or process RSS.
 
 ### Optional instruction and layout diagnosis
 
+`bench_session_lifecycle.c` is a separate public-API diagnostic for the document
+quickstart (argument `7`) and its 30-user variant (`93`). Compile the same driver
+against both revisions with the same compiler/profile/flags as the other probes.
+Set `LIFECYCLE=1` when running `compare_revisions.sh` to build it alongside the
+full matrix before any timing. It requires the application value types of 0.10.0;
+leave the option unset when comparing older releases. Run the resulting
+`lifecycle` binaries separately for these lifecycle diagnostics.
+It prints raw nanosecond samples for creation, solve, result release and session
+destruction after measurement, including the first session after policy/input
+setup (`cold-0`) and 501 samples after 50 warmups. Input construction and checked
+queries are outside these timers; this does not replace end-to-end Python timing
+or the full solver/input/session matrix. A single cold observation is not a
+distribution: use fresh processes for repeated cold measurements.
+
+With `-DMAELYS_BENCH_COUNT`, pass a second argument `create`, `solve`, `release`
+or `destroy` and run under Callgrind with `--collect-atstart=no`. One named phase
+is counted after the same 50 warmups; clocks and answer checks are excluded.
+Repeat in separate processes and retain per-function counts and binary/harness
+hashes. These are software instruction counts, not hardware retired instructions.
+Run two A/A pairs before alternating A/B passes, finish all builds first, and
+retain every case and raw sample outside Git, as for the full comparison.
+
 Set the manual workflow's `diagnostic_original` input to an earlier candidate
 SHA to compare baseline A, that candidate B and revised head C before the full
 matrix. `diagnose_solver_layout.sh BASE ORIGINAL HEAD NEW_ABSOLUTE_OUTPUT`
@@ -138,6 +160,56 @@ and LARGE/derive/sorted/symbol/maximum, declared before measuring base-membershi
 elimination. They remain counted even when timing improves; none replaces the
 full workload matrix. Test-only membership auditing is absent from all of these
 production engine objects.
+
+### Prepared-session data layout
+
+The manual `session_layout` input investigates the immutable-program/session
+split with eight predeclared fixtures: SMALL derive/permuted at 31 and maximum,
+LARGE derive/duplicate at 402 and derive/sorted at maximum, each with symbol and
+integer values. It is separate from the closed historical solver investigation.
+All diagnostic binaries are built before the full comparison starts. The full
+solver/input/session matrix still runs; this diagnostic never replaces it.
+
+Two unreachable text pads (0/16 bytes) reuse the same compiled C objects. Symbol
+displacement is verified for derivation, input materialization and public solve.
+Each unpadded revision receives two A/A pairs, then all pads/revisions/cases run
+in two counterbalanced rounds. Below 10 microseconds the report uses minima;
+otherwise it retains median and p95 and their respective baseline A/A floors.
+Candidate A/A floors are also shown without replacing the baseline verdict.
+
+Diagnostic-only translation units append accessors to the archived runtime and
+solver sources. After the last sample, before result release, they record
+`sizeof`, alignment, offsets, strides and actual addresses of that process's
+live program, transaction dictionary, input facts and native result snapshot.
+The analysis checks member addresses and that the solver resolves the recorded
+program/dictionary. These accessors are absent from SDK builds. Their presence
+changes binary placement, so their timings remain distinct from the full matrix.
+Modulo 64 is descriptive; it does not demonstrate cache-line sharing or causality.
+
+Two separate Callgrind processes per variant retain scoped Ir/Dr/Dw and exclusive
+function counts; simulated cache misses remain in the raw output, not hardware
+claims. Any difference between summary and attributed totals remains explicitly
+unattributed. Repeated counts and counts across text pads must match per function.
+All samples, addresses, hashes, disassembly and reports are run artifacts only.
+Local Docker execution validates tooling, not hosted performance acceptance.
+
+The first run compares base/head. Once a justified revised data layout exists,
+set `session_layout_original` to the original candidate: the same job then compares
+base/original/head, including the complete solver/input/session matrices.
+The full three-revision path builds all six revision/profile combinations once,
+performs two A/A pairs for each, then A B C / C B A. Its `base-original`,
+`base-revised` and `original-revised` reports reuse the same raw passes; each
+pair uses its baseline's own A/A floor. Explanation workspace measurements remain
+on the revised binary and are reported under `base-revised`. Optional residual
+counts also reuse these binaries without further compilation.
+
+The result-offset restoration experiment records every result array plus the
+proof object. In three-revision mode the diagnostic rejects missing fields or a
+revised array offset/size differing from the base. Actual addresses and object
+sizes remain visible: restoring offsets does not restore the complete memory
+layout. A two-revision run cannot establish the effect of a layout correction
+that has not been implemented. No new production layout or acceptance
+threshold follows from flat instructions or a timing-only hypothesis.
 
 ### Input index crossover and memory
 
