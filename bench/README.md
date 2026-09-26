@@ -195,8 +195,20 @@ Local Docker execution validates tooling, not hosted performance acceptance.
 
 The first run compares base/head. Once a justified revised data layout exists,
 set `session_layout_original` to the original candidate: the same job then compares
-base/original/head. A two-revision run cannot establish the effect of a layout
-correction that has not been implemented. No new production layout or acceptance
+base/original/head, including the complete solver/input/session matrices.
+The full three-revision path builds all six revision/profile combinations once,
+performs two A/A pairs for each, then A B C / C B A. Its `base-original`,
+`base-revised` and `original-revised` reports reuse the same raw passes; each
+pair uses its baseline's own A/A floor. Explanation workspace measurements remain
+on the revised binary and are reported under `base-revised`. Optional residual
+counts also reuse these binaries without further compilation.
+
+The result-offset restoration experiment records every result array plus the
+proof object. In three-revision mode the diagnostic rejects missing fields or a
+revised array offset/size differing from the base. Actual addresses and object
+sizes remain visible: restoring offsets does not restore the complete memory
+layout. A two-revision run cannot establish the effect of a layout correction
+that has not been implemented. No new production layout or acceptance
 threshold follows from flat instructions or a timing-only hypothesis.
 
 ### Input index crossover and memory

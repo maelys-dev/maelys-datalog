@@ -4,7 +4,7 @@ import csv
 from pathlib import Path
 import tempfile
 import unittest
-from diagnose_session_layout import CASES, layout, measurement, counts, prefix
+from diagnose_session_layout import CASES, layout, measurement, counts, prefix, RESULT_ARRAYS, restored_result_layout
 
 
 class SessionLayoutEvidenceTests(unittest.TestCase):
@@ -36,6 +36,19 @@ class SessionLayoutEvidenceTests(unittest.TestCase):
             writer = csv.writer(out)
             writer.writerow(('key', 'value'))
             writer.writerows(self.data.items())
+
+    def test_every_result_array_must_be_restored(self):
+        base = {f'{prefix}.result.{name}': i * 64 if prefix == 'offsetof' else 64
+                for i, name in enumerate(RESULT_ARRAYS) for prefix in ('offsetof', 'sizeof')}
+        original = {k: v + 8 if k.startswith('offsetof.') else v for k, v in base.items()}
+        self.assertEqual(len(restored_result_layout(base, original, dict(base))), len(RESULT_ARRAYS))
+        for name in RESULT_ARRAYS:
+            revised = dict(base)
+            revised[f'offsetof.result.{name}'] += 8
+            with self.subTest(member=name), self.assertRaisesRegex(ValueError, 'not restored'):
+                restored_result_layout(base, original, revised)
+        with self.assertRaisesRegex(ValueError, 'missing result layout'):
+            restored_result_layout(base, original, {})
 
     def test_real_member_address_required_not_just_modulo(self):
         self.assertEqual(layout(self.path), self.data)

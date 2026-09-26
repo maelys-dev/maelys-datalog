@@ -34,7 +34,7 @@ on:
         default: false
         type: boolean
       session_layout_original:
-        description: Optional original SHA for a three-revision session layout comparison (head is revised)
+        description: Optional original SHA for full three-revision matrices and layout comparison (head is revised)
         required: false
         default: ''
         type: string
@@ -81,6 +81,7 @@ jobs:
           BASE_REF: ${{ inputs.base }}
           HEAD_REF: ${{ inputs.head }}
           SESSION_DIAGNOSTICS: ${{ inputs.session_diagnostics && '1' || '0' }}
+          COMPARISON_ORIGINAL: ${{ inputs.session_layout_original }}
         run: bash bench/compare_revisions.sh "$BASE_REF" "$HEAD_REF" "$RUNNER_TEMP/bench-comparison"
       - name: Measure prepared-session data and code placement
         if: inputs.session_layout

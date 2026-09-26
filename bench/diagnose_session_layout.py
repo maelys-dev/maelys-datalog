@@ -24,6 +24,23 @@ CASES = [(profile, 'derive', order, value, size)
              ('LARGE', 'duplicate', '402'), ('LARGE', 'sorted', 'maximum'))
          for value in ('symbol', 'integer')]
 PADS = (0, 16)
+RESULT_ARRAYS = ('facts_per_pred', 'stratum_idb_end', 'edb_facts', 'idb_facts',
+                 'idb_proof_index', 'edb_ranges', 'proof', 'premise_pool',
+                 'node_premise_begin', 'node_premise_count', 'node_has_premises', 'witness_slots')
+
+
+def restored_result_layout(base, original, revised):
+    rows = []
+    for member in RESULT_ARRAYS:
+        key = f'offsetof.result.{member}'
+        size = f'sizeof.result.{member}'
+        if any(key not in d or size not in d for d in (base, original, revised)):
+            raise ValueError(f'missing result layout evidence: {member}')
+        if revised[key] != base[key] or revised[size] != base[size]:
+            raise ValueError(f'revised result layout is not restored: {member}')
+        rows.append((member, base[key], original[key], revised[key], base[size]))
+    return rows
+
 SYMBOLS = ('solve_once_derive_ordered', 'maelys_datalog_session_solve_edb',
            'maelys_datalog_prepared_session_materialize_inputs_diagnosed')
 DRIVER = Path(__file__).resolve().parent.parent
@@ -253,7 +270,7 @@ def report(root):
              'in the same three-revision run; these observations alone do not select a new layout.', '',
              '| Case | Revision/base | Pad | Metric | A | Candidate | Change | Base A/A floor | Candidate A/A floor | Classification |',
              '| --- | --- | ---: | --- | ---: | ---: | ---: | ---: | ---: | --- |']
-    layout_rows, function_rows, count_rows, count_lines = [], [], [], []
+    layout_rows, function_rows, count_rows, count_lines, restored = [], [], [], [], {}
     for case in CASES:
         identity, structural = None, {}
         def read(role, suffix, count=False):
@@ -271,6 +288,8 @@ def report(root):
             layout_rows.extend((prefix(case, role, suffix), k, v) for k, v in data.items())
             return row
         aa = {role: [read(role, f'aa{i}') for i in range(1, 5)] for role in roles}
+        if len(roles) == 3:
+            restored[case[0]] = restored_result_layout(*(structural[role] for role in roles))
         reference_counts = {}
         for pad in PADS:
             ab = {role: [read(role, f'pad{pad}-round{i}') for i in (1, 2)] for role in roles}
@@ -298,6 +317,14 @@ def report(root):
                 function_rows.extend(('/'.join(case), role, pad, name, *cost) for name, cost in sorted(funcs.items()))
         count_lines.extend(['', f"Counts {'/'.join(case)}: " + '; '.join(
             f'{role} Ir/Dr/Dw={reference_counts[role][0]}' for role in roles) + '. Both processes and pads agree.', ''])
+    if restored:
+        lines.extend(['', '## Result array offsets (bytes)', '',
+                      '| Profile | Member | Base | Original | Revised | Member size |',
+                      '| --- | --- | ---: | ---: | ---: | ---: |'])
+        for profile, rows in restored.items():
+            lines.extend(f'| {profile} | ' + ' | '.join(map(str, row)) + ' |' for row in rows)
+        lines.extend(['', 'All pre-existing result arrays and the proof object retain baseline offsets/sizes. '
+                      'This does not restore every object address or enclosing allocation, nor isolate a cache mechanism.', ''])
     lines.extend(count_lines)
     for filename, fields, rows in (
             ('layouts.csv', ('pass', 'key', 'value'), layout_rows),
