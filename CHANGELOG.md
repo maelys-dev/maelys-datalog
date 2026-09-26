@@ -7,6 +7,8 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## 0.11.1 — 2026-09-26
+
 ### Changed
 
 - Sessions share engine-owned immutable compiled policies and keep a separate
