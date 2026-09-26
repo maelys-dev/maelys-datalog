@@ -1,0 +1,30 @@
+# SPDX-License-Identifier: MPL-2.0
+include $(DRIVER)/bench/Makefile.compare
+PADS = 0 16
+LAYOUT_FLAGS = -DMAELYS_BENCH_LAYOUT
+ifneq ($(shell grep -c 'const maelys_datalog_internal_ruleset_t \*prepared;' src/core/maelys_datalog_prepared_session_internal.h),0)
+LAYOUT_FLAGS += -DMAELYS_BENCH_SPLIT_STATE
+endif
+session-layout: $(foreach pad,$(PADS),$(OUT)/layout-$(pad) $(OUT)/counts-$(pad))
+$(OUT)/obj/src/runtime/maelys_datalog_runtime.o: $(DRIVER)/bench/session_layout_runtime.c $(DRIVER)/bench/session_layout.h
+	@mkdir -p $(dir $@)
+	$(CC) $(FLAGS) $(LAYOUT_FLAGS) -c $< -o $@
+$(OUT)/obj/src/core/maelys_datalog_solver.o: $(DRIVER)/bench/session_layout_solver.c $(DRIVER)/bench/session_layout.h
+	@mkdir -p $(dir $@)
+	$(CC) $(FLAGS) $(LAYOUT_FLAGS) -c $< -o $@
+$(OUT)/layout.o: $(DRIVER)/bench/bench_sessions.c
+	@mkdir -p $(dir $@)
+	$(CC) $(FLAGS) $(DEFS) $(LAYOUT_FLAGS) -c $< -o $@
+$(OUT)/counts.o: $(DRIVER)/bench/bench_sessions.c
+	@mkdir -p $(dir $@)
+	$(CC) $(FLAGS) $(DEFS) $(LAYOUT_FLAGS) -DMAELYS_BENCH_COUNT -c $< -o $@
+# Unreachable ELF text; variants reuse every compiled C object. Not executed.
+$(OUT)/padding-%.o:
+	@mkdir -p $(dir $@)
+	printf '.text\n.balign 16\n.space %s, 0x90\n.section .note.GNU-stack,"",@progbits\n' '$*' | $(CC) -x assembler -c -o $@ -
+$(OUT)/layout-%: $(OUT)/layout.o $(OBJECTS) $(OUT)/padding-%.o
+	$(CC) $(FLAGS) $(OUT)/layout.o $(OUT)/padding-$*.o $(OBJECTS) -o $@
+$(OUT)/counts-%: $(OUT)/counts.o $(OBJECTS) $(OUT)/padding-%.o
+	$(CC) $(FLAGS) $(OUT)/counts.o $(OUT)/padding-$*.o $(OBJECTS) -o $@
+.SECONDARY:
+.PHONY: session-layout

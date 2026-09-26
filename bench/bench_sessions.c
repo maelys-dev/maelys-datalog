@@ -10,6 +10,11 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#ifdef MAELYS_BENCH_LAYOUT
+/* Diagnostic translation units inspect private layouts without SDK exports.
+ * Called only after all timed samples, before the final result is released. */
+void maelys_bench_session_layout(FILE *, const maelys_datalog_session_t *);
+#endif
 #ifdef MAELYS_BENCH_COUNT
 #include <valgrind/callgrind.h>
 #endif
@@ -87,7 +92,10 @@ static uint64_t verify(maelys_datalog_result_t *result, maelys_bench_fact_view_t
 }
 
 int main(int argc, char **argv) {
-#ifdef MAELYS_BENCH_COUNT
+#ifdef MAELYS_BENCH_LAYOUT
+    if (argc != 8) { fprintf(stderr, "usage: %s SUMMARY.csv SAMPLES.csv POLICY ORDER VALUES SIZE LAYOUT.csv\n", argv[0]); return 2; }
+    unsigned selected = 0;
+#elif defined(MAELYS_BENCH_COUNT)
     if (argc != 7) { fprintf(stderr, "usage: %s SUMMARY.csv SAMPLES.csv POLICY ORDER VALUES SIZE\n", argv[0]); return 2; }
     unsigned selected = 0;
 #else
@@ -123,7 +131,7 @@ int main(int argc, char **argv) {
     fprintf(raw, "policy,order,values,size,sample,elapsed_us\n");
     for (unsigned kind = 0; kind < 2; ++kind) for (unsigned order = 0; order < 5; ++order)
     for (unsigned size = 0; size < sizeof(sizes) / sizeof(sizes[0]); ++size) {
-#ifdef MAELYS_BENCH_COUNT
+#if defined(MAELYS_BENCH_COUNT) || defined(MAELYS_BENCH_LAYOUT)
         if (strcmp(argv[4], orders[order]) || strcmp(argv[5], kind ? "symbol" : "integer") ||
             strcmp(argv[6], sizes[size])) continue;
 #endif
@@ -148,7 +156,7 @@ int main(int argc, char **argv) {
         OK(maelys_datalog_input_edb_add_facts(edb, facts, entries, NULL));
         for (unsigned policy = 0; policy < 2; ++policy) {
             const char *policy_name = policy ? "derive" : "inert", *value_name = kind ? "symbol" : "integer";
-#ifdef MAELYS_BENCH_COUNT
+#if defined(MAELYS_BENCH_COUNT) || defined(MAELYS_BENCH_LAYOUT)
             if (strcmp(argv[3], policy_name)) continue;
             ++selected;
 #endif
@@ -170,6 +178,13 @@ int main(int argc, char **argv) {
                 if (status) { fprintf(stderr, "%s/%s/%s/%zu: %s\n", policy_name, orders[order], value_name, entries, diagnostic.message); abort(); }
                 uint64_t actual = verify(result, views, cap, entries, lanes, order, kind, policy, texts);
                 if (!sample) digest = actual; else assert(digest == actual);
+#ifdef MAELYS_BENCH_LAYOUT
+                if (sample == SAMPLES + WARMUP - 1) {
+                    FILE *layout = fopen(argv[7], "w"); assert(layout);
+                    maelys_bench_session_layout(layout, sessions[policy]);
+                    assert(!fclose(layout));
+                }
+#endif
                 OK(maelys_datalog_result_free(result));
                 if (sample >= WARMUP) {
                     samples[sample - WARMUP] = elapsed;
@@ -189,7 +204,7 @@ int main(int argc, char **argv) {
     OK(maelys_datalog_input_edb_free(edb));
     for (unsigned i = 0; i < 2; ++i) { OK(maelys_datalog_session_free(sessions[i])); OK(maelys_datalog_policy_free(policies[i])); }
     assert(!fclose(summary)); assert(!fclose(raw));
-#ifdef MAELYS_BENCH_COUNT
+#if defined(MAELYS_BENCH_COUNT) || defined(MAELYS_BENCH_LAYOUT)
     if (selected != 1) { fprintf(stderr, "expected one valid diagnostic case\n"); return 2; }
 #endif
     return 0;
