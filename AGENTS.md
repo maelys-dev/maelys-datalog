@@ -220,6 +220,22 @@ when it has what they name.
   present local smoke, flat instruction counts or indeterminate timings as a
   universal absence of regressions. Do not silently move references or widen
   budgets to make a candidate pass.
+- For a transient Python tail, use the bounded diagnostics documented in
+  `docs/python-performance.md`: preserve unchanged workload samples alongside
+  separate CPU/resource/GC observations and scoped software counts. Never pair
+  separate phase samples by index with total samples. A later quiet run does
+  not erase an earlier alert; equal CPU and wall inflation does not identify
+  an engine mechanism, and unchanged instruction counts do not prove equal
+  cycles. Keep a non-reproduced original event explicitly unattributed.
+- Schema-3 Python measurements capture same-transaction CPU/resource/GC events
+  and adjacent fixed-budget calibration. Preserve explicit loop/index identity,
+  unavailable CPU markers, all samples and bounded-buffer overflow failures.
+  Do not pair total/phase loops, filter or normalize latency with telemetry,
+  or infer SMT/frequency from equal wall/CPU inflation and a slower probe.
+  Review the separate growing/fixed-storage and observer controls. New observed
+  timings do not replace historical unobserved evidence. A self-hosted ARM run
+  needs a registered runner and writer-only dispatch; never substitute local
+  Docker smoke or hosted ARM and call it self-hosted evidence.
 
 ## Manual benchmark evidence
 

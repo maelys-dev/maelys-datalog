@@ -59,8 +59,8 @@ v0.11.1 binding and native binary. This variant shares the binary, not the
 normal anchor's samples. No injected code or option is added to the distributed
 binding, engine or SDK. Each repeated request performs input, solve, queries
 and release; every answer from all three requests is checked after timing.
-The ordinary transaction callable is unchanged. There is no sleep, busy-wait,
-timer-derived delay or calibration to the ongoing run.
+The ordinary transaction callable is unchanged. The injected control does not
+use sleep, a busy-wait, a timer-derived delay or calibration to the ongoing run.
 
 The fixed three-request choice adds two requests of real work (nominally 200%).
 It was declared before the new run: this is 2.46 times the largest A/A floor
@@ -126,6 +126,67 @@ established positive control for every Linux configuration. Schema 2 records
 each role's binary commit and request count in `variants`. Neither the candidate
 references nor its per-metric A/A algorithm changed.
 
+### Contemporaneous telemetry (schema 3)
+
+The complete benchmark now invokes `python_workload.py --telemetry` for **every**
+variant/pass/configuration, including cold requests, warmups and the injected
+control. The request's reported elapsed time and its `start_ns`/`end_ns` use
+the **same clock reads**. Thread CPU timestamps enclose that interval; CPU-id
+and `getrusage` snapshots enclose the CPU reads. Resource deltas include voluntary
+and involuntary switches and minor/major faults. Linux uses `RUSAGE_THREAD`;
+other systems explicitly report the process fallback. Linux CPU ids come from
+libc `sched_getcpu` when Python has no wrapper (including CPython 3.12); `-1`
+means unavailable/failed, never an inferred CPU id. Both endpoints can be equal
+despite an intervening migration. Guest counters do not expose every host event.
+
+GC callbacks record collection start/end timestamps, generation, collected and
+uncollectable counts on the same monotonic clock. A nearby UTC anchor permits
+approximate correlation with external logs; it does not turn the monotonic
+clock into UTC or certify exact synchronization. Only intervals overlapping the
+request can describe that request. Records name `cold`, `warmup`, `total` or
+`phases` and their own sample index: **total and phase loops remain separate**.
+This does not identify which phase caused a slow total request.
+
+A separate pure-Python throughput probe runs before each group of 32 total or
+phase samples and after the final sample, outside all measured requests. Its
+fixed wall budget is **20,000 ns**, checked between blocks of 32 integer-loop
+iterations. It retains iteration count, actual wall/thread duration, CPU ids and
+resource deltas; timer checks and loop overhead are part of the probe. It can
+overshoot or do zero work when descheduled. The budget is not tuned to noise or
+used to inject the positive control. A lower nearby throughput supports common
+pressure, but does not identify SMT/frequency or rule out in-process effects.
+A stable probe cannot exclude a disturbance between probes, in native code or
+in memory. No probe normalizes timings, removes samples or changes a floor.
+
+Latency lists and numeric request/GC/calibration buffers are reserved before
+the first request. GC-buffer overflow or incomplete/mislabelled telemetry makes
+the run invalid, rather than silently losing evidence. Python objects, clock
+reads, callbacks and recording still have costs. CPU time can slightly exceed
+request wall time because its interval is wider; retain that difference.
+The observer and between-request probes can change cache state, specialization
+and collection timing even though their bookkeeping is outside request clocks.
+
+After the complete matrix, a bounded observer/storage control uses the same
+installed base/head binaries, SMALL-Release, 7/93-integer-prepared, 50 warmups
+and 501 samples. Two A/A pairs precede two alternating rounds of three modes:
+original growing lists without telemetry, fixed lists without telemetry, and
+fixed lists with telemetry. All 72 process records remain in
+`telemetry-controls/`; report tables separately compare fixed/growing storage
+and telemetry/fixed storage. These observations neither change candidate status
+nor establish a universal observer overhead. They explicitly retain the list
+growth hypothesis and the observer's perturbation for review.
+
+Schema 3 retains the same cases, references, positive-control work and comparator
+as schema 2, but changes storage and adds observation. **Its latencies are not
+interchangeable with historical uninstrumented latencies.** Every reference gets
+the same new protocol and fresh A/A measurements. Historical artifacts and
+classifications remain unchanged; none can retrospectively acquire telemetry.
+CPU topology (`lscpu`), kernel, current affinity and runner environment are recorded
+without changing placement or priority. A controlled ARM64 execution requires
+an actually registered self-hosted runner and a writer-only dispatch; record its
+identity and compare revisions on that machine, never raw x86/ARM latencies.
+Self-hosting alone does not establish isolation or provide hardware counters.
+
 An A/A floor describes one binary's repeatability, not systematic differences
 between binaries. Timing observations alone do not identify an algorithm,
 cache or layout mechanism. Instruction counts remain a separate diagnostic;
@@ -134,6 +195,61 @@ establish equal cycles. Do not repeat the closed padding/layout investigations
 merely to obtain a green Python report.
 
 ## Before the cut: human release review
+
+### Bounded tail diagnostic
+
+The optional `tail_diagnostic` dispatch runs a separate investigation of the
+SMALL-Release / 7-integer-prepared p95 observation in run 36308020794. It compares
+fixed v0.11.1 (`0f247a7`) with the measured candidate (`f975be6`), building both
+before sampling. Four cases are declared in `bench/python_tail_diagnostic.py`:
+the observed case, its symbol and convenience counterparts, and 93 integer
+facts in a prepared session. Two A/A pairs precede twelve alternating comparisons
+with reversed revision order in every other pair. Case and mode order rotate;
+every process has 501 warm samples, 50 warmups and a checked first request.
+
+`plain` invokes the workload without schema-3 telemetry in a fresh interpreter. `observe`
+wraps its same transactions to collect elapsed and thread CPU time, getrusage
+context-switch/page-fault deltas and GC callback intervals. Numeric sample
+storage is preallocated. `gc-off` repeats the observer with cyclic collection
+disabled; ordinary reference counting and Python/CFFI allocation remain.
+Observer imports, calls and callbacks perturb execution and GC scheduling:
+their latencies are diagnostic, not replacements for `plain` or release timing.
+
+CPU clock reads surround the inner wall interval, so small negative wall-minus-CPU
+differences are retained. Resource snapshots surround both clocks and can include
+boundary work. A wall/CPU gap can support descheduling; equal increases cannot
+distinguish more executed work from frequency, cache or host effects. GC intervals
+are intersected with the same measured transaction; release phase samples remain
+separate transactions and must not be correlated by index with total samples.
+The fixed 200-microsecond tail listing is descriptive only: no samples are removed,
+no A/A floor changes, and no old observation is reclassified. The report always
+has `release_eligible: false` and uses a separate artifact name. This bounded run
+does not authorize a release or reopen the closed padding/layout investigation.
+
+The original schema-2 diagnostics retain their archived harness hashes. Later
+changes to the workload driver must not be described as byte-identical replays
+of those earlier runs. Concurrent CPU/wall inflation and a noisy or multimodal
+tail are compatible with host pressure, but neither prove it nor formally exclude
+the engine/binding. GC pauses need not have a fixed additive duration.
+
+Clock and event semantics follow the Python 3.12 documentation for
+[thread time](https://docs.python.org/3.12/library/time.html#time.thread_time),
+[resource usage](https://docs.python.org/3.12/library/resource.html#resource.getrusage)
+and [GC callbacks](https://docs.python.org/3.12/library/gc.html#gc.callbacks).
+
+The separate `instruction_diagnostic` dispatch follows up observed CPU-time
+bursts using the **original run 36308020794 SDK binaries**, verified against
+that report and its file hashes. It does not rebuild the measured libraries.
+Callgrind collection surrounds 16 predeclared complete transactions between
+indices 0 and 500 for 7/93-integer-prepared, with two processes per revision/case
+and opposite revision order on repetition. Raw profiles, per-function annotations,
+Ir/Dr/Dw totals and checked answers are retained. The small client-request helper
+is test instrumentation only; no native/binding API changes. These software
+instruction counts cannot explain original cycles retrospectively or establish
+hardware frequency/cache/host scheduling behavior. No Valgrind latency is reported.
+Choose only one diagnostic input per dispatch; neither can approve a release.
+
+### Release decision
 
 Before `maelys-release cut ... --apply`, read the complete report and record
 the following in the changelog pull request:

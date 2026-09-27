@@ -19,6 +19,7 @@ sys.path[:0] = [str(ROOT / "bench"), str(ROOT / "tools")]
 import python_perf as perf
 import python_workload as workload
 import check_python_performance as gate
+from test_python_perf_telemetry import synthetic
 
 
 def samples(value=20000):
@@ -120,14 +121,20 @@ class PositiveControlTests(unittest.TestCase):
                 candidate = 'candidate' in Path(kwargs['env']['PYTHONPATH']).parts
                 value = 60000 if injected and control_ok else 40000 if candidate and candidate_slow else 20000
                 count = args[args.index('--samples') + 1]
-                return json.dumps(dict(cold=value, samples={p: [value] * count for p in perf.PHASES},
-                                       output_sha256='checked', request_repetitions=3 if injected else 1))
+                observed = '--telemetry' in args
+                result = dict(cold=value, samples={p: [value] * count for p in perf.PHASES},
+                              sample_storage='fixed' if observed or '--fixed-storage' in args else 'growing',
+                              output_sha256='checked', request_repetitions=3 if injected else 1)
+                if observed:
+                    result['telemetry'] = synthetic(count, value)
+                return json.dumps(result)
             with self.subTest(status=status), tempfile.TemporaryDirectory() as directory:
                 output = Path(directory) / 'evidence'
                 args = SimpleNamespace(output=output, base='base', head='HEAD', smoke=True, compiler='clang')
                 with patch.object(perf, 'revision', side_effect=revision), \
                         patch.object(perf.subprocess, 'run', side_effect=archive), \
                         patch.object(perf, 'build', side_effect=build), \
+                        patch.object(perf, 'host_description', return_value={}), \
                         patch.object(perf, 'command', side_effect=command), \
                         patch.object(perf.platform, 'platform', return_value='test'), \
                         patch.object(perf.platform, 'machine', return_value='test'), \
@@ -136,12 +143,16 @@ class PositiveControlTests(unittest.TestCase):
                     self.assertEqual(perf.run(args), code)
                 report = json.loads((output / 'report.json').read_text())
                 self.assertEqual(report['status'], status)
+                self.assertEqual(report['schema'], 3)
+                self.assertTrue(report['telemetry']['contemporaneous'])
+                self.assertEqual(set(report['telemetry_controls']), {'base', 'head'})
                 self.assertEqual(report['positive_control']['detected'], control_ok)
                 self.assertTrue(report['historical_control']['informative_only'])
                 self.assertFalse(report['release_eligible'])
                 self.assertEqual(report['variants']['positive_control']['commit'], 'anchor')
                 self.assertEqual(report['variants']['positive_control']['request_repetitions'], 3)
                 self.assertEqual(len(list((output / 'raw').glob('*.json'))), 240)
+                self.assertEqual(len(list((output / 'telemetry-controls').glob('*.json'))), 72)
                 self.assertIn('Historical comparison (informative)', (output / 'report.md').read_text())
                 self.assertIn('positive_control', (output / 'samples.csv').read_text())
 
