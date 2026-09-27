@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#define OPTIONS(n) (&(maelys_datalog_window_options_t){sizeof(maelys_datalog_window_options_t),(n),0})
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%s:%d: %s\n", __FILE__, __LINE__, #c); exit(1); } } while (0)
 #define OK(c) CHECK((c) == MAELYS_DATALOG_STATUS_OK)
 #define INVALID MAELYS_DATALOG_STATUS_INVALID_ARGUMENT
@@ -503,13 +504,13 @@ static void window_commit(int groups) {
     memset(pools, 0, sizeof(pools));
     maelys_datalog_session_t *a = create(&pools[0]), *b = create(&pools[1]);
     size_t bytes, alignment;
-    maelys_datalog_group_window_capacities_t caps = {1, 1, 1, 16};
-    if (groups) OK(maelys_datalog_group_window_storage_requirements(&caps, &bytes, &alignment));
-    else OK(maelys_datalog_window_storage_requirements(1, 16, &bytes, &alignment));
+    maelys_datalog_group_window_capacities_t caps = {1, 1, 3, 16};
+    if (groups) OK(maelys_datalog_group_window_storage_requirements_configured(&caps, OPTIONS(2), &bytes, &alignment));
+    else OK(maelys_datalog_window_storage_requirements_configured(1, 16, OPTIONS(2), &bytes, &alignment));
     void *storage = malloc(bytes); CHECK(storage && (uintptr_t)storage % alignment == 0);
     maelys_datalog_window_t *w = NULL; maelys_datalog_group_window_t *g = NULL;
-    if (groups) OK(maelys_datalog_group_window_init(storage, bytes, &caps, 0, a, b, &g, NULL));
-    else OK(maelys_datalog_window_init(storage, bytes, 1, 16, 0, a, b, &w, NULL));
+    if (groups) OK(maelys_datalog_group_window_init_configured(storage, bytes, &caps, OPTIONS(2), 0, a, b, &g, NULL));
+    else OK(maelys_datalog_window_init_configured(storage, bytes, 1, 16, OPTIONS(2), 0, a, b, &w, NULL));
     CHECK(pools[0].state.commits == 1 && pools[1].state.commits == 0);
     CHECK(pools[1].state.solve == 1 && pools[1].state.aborts == 1); /* init probe is not published */
     maelys_datalog_result_t *old = NULL, *current = NULL;
@@ -550,9 +551,29 @@ static void window_commit(int groups) {
     CHECK(id == UINT32_MAX && pools[0].state.solve == solves && pools[0].state.commits == 1);
     if (groups) OK(maelys_datalog_group_window_result(g, &old)); else OK(maelys_datalog_window_result(w, &old));
     CHECK(old == current);
+    maelys_datalog_fact_t static_fact = {.predicate="other",.arity=2};
+    static_fact.terms[0]=static_fact.terms[1]=f.terms[0];
+    maelys_datalog_fact_t expected[] = {input, static_fact};
+    if (!groups) expected[0].terms[0].as.integer=0;
+    pools[0].state.inspect_inputs=1;pools[0].state.expected_inputs=expected;pools[0].state.expected_count=2;
+    pools[0].state.mode=CALLBACK_ERROR;
+    unsigned commits=pools[0].state.commits, aborts=pools[0].state.aborts;
+    rc=groups?maelys_datalog_group_window_replace_static(g,&static_fact,1,NULL):
+        maelys_datalog_window_replace_static(w,&static_fact,1,NULL);
+    CHECK(rc==MAELYS_DATALOG_STATUS_UNSUPPORTED && pools[0].state.commits==commits && pools[0].state.aborts==aborts+1);
+    if (groups) OK(maelys_datalog_group_window_result(g,&old));else OK(maelys_datalog_window_result(w,&old));CHECK(old==current);
+    pools[0].state.mode=GOOD;
+    if(groups) OK(maelys_datalog_group_window_replace_static(g,&static_fact,1,NULL));
+    else OK(maelys_datalog_window_replace_static(w,&static_fact,1,NULL));
+    CHECK(pools[0].state.commits==commits+1 && pools[1].state.releases==1);
+    /* Clear static input without inserting a group/event; external canonical
+       input is exactly the retained event and commit occurs only on acceptance. */
+    pools[1].state.inspect_inputs=1;pools[1].state.expected_inputs=expected;pools[1].state.expected_count=1;
+    if(groups) OK(maelys_datalog_group_window_replace_static(g,NULL,0,NULL));
+    else OK(maelys_datalog_window_replace_static(w,NULL,0,NULL));
     if (groups) OK(maelys_datalog_group_window_free(g)); else OK(maelys_datalog_window_free(w));
     OK(maelys_datalog_session_free(a)); OK(maelys_datalog_session_free(b)); free(storage);
-    CHECK(pools[1].state.releases == 1 && pools[0].state.destroy == 1 && pools[1].state.destroy == 1);
+    CHECK(pools[1].state.releases == 2 && pools[0].state.destroy == 1 && pools[1].state.destroy == 1);
 }
 int main(int argc, char **argv) {
     static const maelys_datalog_predicate_t predicates[] = {
