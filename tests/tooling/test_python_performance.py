@@ -6,6 +6,10 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
+from contextlib import redirect_stdout
+from io import StringIO
+from types import SimpleNamespace
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path[:0] = [str(ROOT / "bench"), str(ROOT / "tools")]
@@ -82,6 +86,21 @@ class ComparisonTests(unittest.TestCase):
 
 
 class EvidenceTests(unittest.TestCase):
+    def test_previous_reference_is_published_ancestor_not_api_order_or_candidate(self):
+        def release(tag, date, **extra):
+            return dict(tag_name=tag, published_at=date, draft=False, prerelease=False, **extra)
+        releases = [release("v1.0.0", "2026-01-01"), release("v1.0.2", "2026-03-01"),
+                    release("v1.0.1", "2026-02-01"), release("v9.0.0", "2026-04-01")]
+        def commit(ref):
+            return "candidate" if ref in ("HEAD", "v1.0.2") else ref
+        def ancestor(args, **kwargs):
+            return SimpleNamespace(returncode=int("v9.0.0" in args))
+        output = StringIO()
+        with patch.object(gate, "api", return_value=releases), patch.object(gate, "revision", side_effect=commit), \
+                patch.object(gate.subprocess, "run", side_effect=ancestor), redirect_stdout(output):
+            gate.previous_release()
+        self.assertEqual(output.getvalue().strip(), "v1.0.1")
+
     def run_record(self, **updates):
         run = dict(head_sha="a" * 40, path=gate.WORKFLOW,
                    repository=dict(full_name=gate.REPOSITORY),

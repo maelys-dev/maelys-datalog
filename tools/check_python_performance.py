@@ -80,6 +80,7 @@ def previous_release():
     # Releases, not arbitrary local tags. A replay after publication excludes its
     # own commit. Both references are rebuilt by the same harness/toolchain.
     head = revision("HEAD")
+    candidates = []
     for page in range(1, 11):
         releases = api(f"releases?per_page=100&page={page}")
         for release in releases:
@@ -90,10 +91,12 @@ def previous_release():
                 continue
             commit = revision(tag)
             if commit != head and subprocess.run(["git", "merge-base", "--is-ancestor", commit, head], cwd=ROOT).returncode == 0:
-                print(commit)
-                return
+                candidates.append((release["published_at"], commit))
         if len(releases) < 100:
             break
+    if candidates:
+        print(max(candidates)[1])
+        return
     raise ValueError("No previous published ancestor release found")
 
 
