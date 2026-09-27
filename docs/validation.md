@@ -226,8 +226,12 @@ manual comparison protocol above to changes in ordinary solve paths.
 
 ## Installed facade and SDK
 
-Session construction reserves a private transaction dictionary and public/native
-result workspaces. Engine-owned immutable policy storage is reference-counted;
+Session construction reserves a private transaction dictionary, native result
+workspace and public result metadata. Reference results borrow the finalized,
+sorted native derived facts without conversions, copying or further sorting;
+the native result lease retains that storage. External backends emit into a
+runtime-owned array reserved at creation, retaining validation, deduplication
+and canonical sorting. Engine-owned immutable policy storage is reference-counted;
 sessions share its compiled rules and fixed vocabulary. Releasing the public
 policy handle invalidates it immediately, but its allocation (including other
 policies in the same bundle) remains until the last session releases it. A policy
@@ -235,8 +239,8 @@ in caller-owned storage is copied into the session allocation instead, so the
 caller may overwrite that storage immediately after policy release.
 
 The allocator guard checks three constructor allocations on both paths and caps
-their requested bytes at 450,000/820,000 (shared SMALL/LARGE) and
-820,000/1,140,000 (copied SMALL/LARGE). These exclude the separately owned policy
+their requested bytes at 380,000/645,000 (shared SMALL/LARGE) and
+735,000/995,000 (copied SMALL/LARGE). These exclude the separately owned policy
 allocation and optional explanation/backend storage. The guard also checks
 allocation-failure cleanup, shared-policy lifetime, caller-storage reuse, zero
 constructor-storage reset on ordinary session destruction, and the existing
@@ -248,14 +252,18 @@ bytes on the shared SMALL/LARGE path; this counts requests, not physical writes.
 Canonical public input export storage is a creation-time tail in the session
 allocation, reserved only when the selected solve callback does not borrow the
 materialized inputs. The reference and copied/renamed reference descriptors
-reserve none; a wrapper that needs export reserves exactly
-`MAX_EDB_FACTS * sizeof(maelys_datalog_fact_t)` additional bytes, still in three
-engine allocations. The allocation guard checks both selections, every
+reserve none; an external wrapper reserves the canonical input array and
+runtime-owned derived array, still in three engine allocations. The allocation
+guard checks the exact additional bytes for both arrays, both selections, every
 constructor failure point, and repeated solve/query/release with allocation
 disabled. The backend transaction oracle checks canonical order, integer
 extremes, symbol contents, boolean normalization, duplicates, empty inputs,
 rejection and reuse, and the full export capacity in both profiles. Comparisons
 use semantic fields, not pointer values or struct padding.
+The reference-result differential fixture compares the native view with the
+external export/emission path over mixed values, duplicate derivations and
+input permutations. It verifies exact canonical symbol IDs, enumeration order,
+short-output retry, independent result leases, empty results and reuse.
 The transaction dictionary pointer sits after the native result payload, keeping
 all pre-existing result array offsets unchanged. Both solve entry paths assign
 it before use, including the first allocation and reuse; it is intentionally

@@ -6,6 +6,7 @@
 #include "src/core/maelys_datalog_solver_internal.h"
 #include "src/core/maelys_datalog_explanation_format.h"
 #include "src/public/maelys_datalog_values_internal.h"
+#include "src/runtime/maelys_datalog_result_internal.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -39,6 +40,9 @@ static maelys_datalog_status_t solve(void *state, const maelys_datalog_fact_t *f
         return (maelys_datalog_status_t)rc;
     }
     *out_result = result; /* The host cleans up even if emission fails. */
+    const maelys_datalog_fact_set_t *view = maelys_datalog_solve_result_derived_view(result);
+    if (!view) return MAELYS_DATALOG_STATUS_INTERNAL;
+    if (maelys_datalog_backend_borrow_derived(output, view)) return MAELYS_DATALOG_STATUS_OK;
     size_t derived = 0;
     rc = maelys_datalog_solve_result_derived_fact_count(result, &derived);
     for (size_t i = 0; rc == MAELYS_OK && i < derived; ++i) {

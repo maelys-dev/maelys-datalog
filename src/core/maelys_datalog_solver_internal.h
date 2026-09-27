@@ -38,5 +38,8 @@ void maelys_datalog_solve_result_set_release(
  * public result API. The host reapplies query restrictions after import. */
 maelys_result_t maelys_datalog_solve_result_idb_fact(
     const maelys_datalog_internal_solve_result_t *, size_t, maelys_datalog_internal_fact_t *);
+/* Read-only finalized facts. Valid until the native result lease is released. */
+const maelys_datalog_fact_set_t *maelys_datalog_solve_result_derived_view(
+    const maelys_datalog_internal_solve_result_t *);
 
 #endif

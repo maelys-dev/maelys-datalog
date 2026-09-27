@@ -406,6 +406,77 @@ static void canonical_capacity(void) {
     OK(maelys_datalog_policy_free(p));
     free(input); free(expected);
 }
+static maelys_datalog_status_t reference_through_emission(void *state,
+    const maelys_datalog_fact_t *facts, size_t count, maelys_datalog_backend_output_t *output,
+    void **result, maelys_datalog_diagnostic_t *diag) {
+    return maelys_datalog_backend_reference()->solve(state, facts, count, output, result, diag);
+}
+static void reference_result_view(void) {
+    maelys_datalog_backend_t emitted = *maelys_datalog_backend_reference();
+    emitted.solve = reference_through_emission;
+    const maelys_datalog_session_options_t options = {
+        .abi_version=MAELYS_DATALOG_BACKEND_ABI_VERSION, .struct_size=sizeof(options), .backend=&emitted};
+    maelys_datalog_session_t *sessions[2] = {NULL, NULL};
+    OK(maelys_datalog_session_create(policy, 0, &sessions[0]));
+    OK(maelys_datalog_session_create_ex(policy, 0, &options, &sessions[1]));
+    const maelys_datalog_value_t values[] = {
+        {.kind=MAELYS_DATALOG_VALUE_SYMBOL, .as.symbol="alpha"},
+        {.kind=MAELYS_DATALOG_VALUE_SYMBOL, .as.symbol="zeta"},
+        {.kind=MAELYS_DATALOG_VALUE_INTEGER, .as.integer=INT64_MIN},
+        {.kind=MAELYS_DATALOG_VALUE_INTEGER, .as.integer=INT64_MAX},
+        {.kind=MAELYS_DATALOG_VALUE_BOOLEAN, .as.boolean=0},
+        {.kind=MAELYS_DATALOG_VALUE_BOOLEAN, .as.boolean=1},
+    };
+    uint32_t ids[2] = {0};
+    for (unsigned pass = 0; pass < 3; ++pass) {
+        maelys_datalog_result_t *results[2] = {NULL, NULL};
+        for (size_t role = 0; role < 2; ++role) {
+            maelys_datalog_fact_t facts[12];
+            for (size_t i = 0; i < 12; ++i) {
+                size_t index = (role + pass) % 2 ? 11-i : (i*5)%12;
+                facts[i] = (maelys_datalog_fact_t){.predicate="event", .arity=2};
+                facts[i].terms[0] = (maelys_datalog_value_t){.kind=MAELYS_DATALOG_VALUE_INTEGER, .as.integer=(int64_t)index};
+                facts[i].terms[1] = values[index % 6];
+                if (index % 6 == 5) facts[i].terms[1].as.boolean = -7;
+            }
+            OK(maelys_datalog_session_solve(sessions[role], facts, 12, &results[role], NULL));
+            memset(facts, 0xa5, sizeof(facts)); /* result owns/borrows engine storage */
+            maelys_datalog_result_t *busy = NULL;
+            CHECK(maelys_datalog_session_solve(sessions[role], NULL, 0, &busy, NULL) == MAELYS_DATALOG_STATUS_INVALID_STATE);
+            CHECK(!busy);
+            size_t count = 0;
+            maelys_datalog_fact_view_t views[6];
+            OK(maelys_datalog_result_enumerate(results[role], "seen", 1, views, 1, &count));
+            CHECK(count == 6);
+            OK(maelys_datalog_result_enumerate(results[role], "seen", 1, views, 6, &count));
+            CHECK(count == 6);
+            for (size_t i = 0; i < 6; ++i) {
+                CHECK(views[i].arity == 1 && views[i].terms[0].kind == values[i].kind);
+                if (i < 2) {
+                    const char *text; size_t length;
+                    OK(maelys_datalog_result_symbol_text(results[role], views[i].terms[0].as.symbol_id, &text, &length));
+                    CHECK(length == strlen(values[i].as.symbol) && !strcmp(text, values[i].as.symbol));
+                    if (!role && !pass) ids[i] = views[i].terms[0].as.symbol_id;
+                    CHECK(ids[i] == views[i].terms[0].as.symbol_id);
+                } else if (i < 4) CHECK(views[i].terms[0].as.integer == values[i].as.integer);
+                else CHECK(views[i].terms[0].as.boolean == values[i].as.boolean);
+                int present = 0;
+                OK(maelys_datalog_result_query(results[role], "seen", &values[i], 1, &present));
+                CHECK(present);
+            }
+        }
+        /* Each lease remains independent when the other is released/reused. */
+        OK(maelys_datalog_result_free(results[0]));
+        OK(maelys_datalog_session_solve(sessions[0], NULL, 0, &results[0], NULL));
+        size_t n;
+        OK(maelys_datalog_result_derived_fact_count(results[0], &n)); CHECK(n == 0);
+        OK(maelys_datalog_result_derived_fact_count(results[1], &n)); CHECK(n == 6);
+        OK(maelys_datalog_result_free(results[0]));
+        OK(maelys_datalog_result_free(results[1]));
+    }
+    OK(maelys_datalog_session_free(sessions[0]));
+    OK(maelys_datalog_session_free(sessions[1]));
+}
 static void context_storage(void) {
     maelys_datalog_context_t *context = NULL;
     maelys_datalog_backend_t b = backend();
@@ -497,6 +568,7 @@ int main(int argc, char **argv) {
     RUN("session", session_commit()); RUN("context", context_storage());
     RUN("inputs", canonical_inputs());
     RUN("input_capacity", canonical_capacity());
+    RUN("result_view", reference_result_view());
     RUN("window", window_commit(0)); RUN("group", window_commit(1));
     OK(maelys_datalog_policy_free(policy));
     return 0;

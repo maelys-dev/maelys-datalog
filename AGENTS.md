@@ -146,6 +146,11 @@ when it has what they name.
   name or descriptor identity. Keep the external callback's semantic input
   oracle and full-capacity test, plus copied/wrapped-descriptor allocation and
   failure guards. Do not trade the saved reservation for solve-time allocation.
+- Reference public results borrow finalized native derived facts under the
+  existing result/explanation lease. Never modify or sort that borrowed view.
+  External backends retain runtime-owned emitted facts reserved at creation.
+  Compare both paths for canonical IDs, values, enumeration order and reuse;
+  retain emission validation, deduplication and capacity failures.
 - Do not use libc qsort on the hot path: it may allocate. Use the bounded
   in-place sort and maintain the all-engine allocation-guard test.
 - Never claim the whole engine is zero-malloc based on an input-buffer test.
