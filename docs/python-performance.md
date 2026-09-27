@@ -352,3 +352,17 @@ accepted tradeoff or the release gate. It does not reopen the closed native
 padding sweeps. Equal software counts can exclude added executed work within
 the counted samples; they cannot establish equal cycles or explain an earlier
 transient retroactively. A hardware/runner cause still requires direct evidence.
+
+The separate `release_process_control` dispatch uses those four fixtures and
+the same original binaries. `base` and `base_copy` are **the same installed
+consumer path and bytes**, executed in independent processes; `head` is the
+original candidate. Four A/A passes per label precede twelve rounds containing
+each of the six revision/label permutations twice. Each warm process keeps
+501 requests, 50 warmups and schema-3 telemetry. Each symbol case retains 31
+fresh-interpreter first requests per pass. All phase diagnostics, samples and
+outputs remain in artifacts. Counts and timings run in separate jobs; no
+Valgrind timing is used. The new diagnostic's A/A classifications and round
+signs are preserved for both the identical-binary control and candidate.
+They are not substituted for the published release matrix or used to widen
+its thresholds. A same-binary label difference measures process/environment
+variation in this run; it does not establish the cause of an earlier event.

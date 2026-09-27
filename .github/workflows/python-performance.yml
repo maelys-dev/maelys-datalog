@@ -21,6 +21,11 @@ on:
         type: boolean
         default: false
 
+      release_process_control:
+        description: 'Counterbalance original v0.13 binaries with an identical-binary label'
+        type: boolean
+        default: false
+
 permissions:
   contents: read
   actions: read
@@ -48,7 +53,7 @@ jobs:
           sudo apt-get install -y clang-18 cmake
           python -m pip install -r bench/python-perf-requirements.txt
       - name: Measure candidate, previous release and durable v0.11.1 reference
-        if: inputs.tail_diagnostic != true && inputs.instruction_diagnostic != true && inputs.release_diagnostic != true
+        if: inputs.tail_diagnostic != true && inputs.instruction_diagnostic != true && inputs.release_diagnostic != true && inputs.release_process_control != true
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -63,12 +68,12 @@ jobs:
             *) exit "$status" ;;
           esac
       - name: Diagnose the fixed Python tail observation
-        if: inputs.tail_diagnostic == true && inputs.instruction_diagnostic != true && inputs.release_diagnostic != true
+        if: inputs.tail_diagnostic == true && inputs.instruction_diagnostic != true && inputs.release_diagnostic != true && inputs.release_process_control != true
         run: |
           python -m unittest discover -s tests/tooling -p 'test_python_perf*.py' -v
           python bench/python_tail_diagnostic.py --compiler clang-18 --output evidence
       - name: Count original Python request instructions
-        if: inputs.instruction_diagnostic == true && inputs.tail_diagnostic != true && inputs.release_diagnostic != true
+        if: inputs.instruction_diagnostic == true && inputs.tail_diagnostic != true && inputs.release_diagnostic != true && inputs.release_process_control != true
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -77,7 +82,7 @@ jobs:
           python -m unittest discover -s tests/tooling -p 'test_python_perf*.py' -v
           python bench/python_tail_instructions.py --evidence original-evidence --output evidence
       - name: Count v0.13 release request instructions
-        if: inputs.release_diagnostic == true && inputs.tail_diagnostic != true && inputs.instruction_diagnostic != true
+        if: inputs.release_diagnostic == true && inputs.tail_diagnostic != true && inputs.instruction_diagnostic != true && inputs.release_process_control != true
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -85,14 +90,22 @@ jobs:
           gh run download 36331650860 --name python-performance-21ca6813936590410d3d774de078cd158d976fd5 --dir original-evidence
           python -m unittest discover -s tests/tooling -p 'test_python_perf*.py' -v
           python bench/python_release_instructions.py --evidence original-evidence --output evidence
+      - name: Counterbalance original v0.13 binaries and process labels
+        if: inputs.release_process_control == true && inputs.release_diagnostic != true && inputs.tail_diagnostic != true && inputs.instruction_diagnostic != true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh run download 36331650860 --name python-performance-21ca6813936590410d3d774de078cd158d976fd5 --dir original-evidence
+          python -m unittest discover -s tests/tooling -p 'test_python_perf*.py' -v
+          python bench/python_release_controls.py --evidence original-evidence --output evidence
       - name: Reject ambiguous diagnostic selection
-        if: (inputs.instruction_diagnostic == true && inputs.tail_diagnostic == true) || (inputs.release_diagnostic == true && (inputs.instruction_diagnostic == true || inputs.tail_diagnostic == true))
+        if: (inputs.instruction_diagnostic == true && inputs.tail_diagnostic == true) || (inputs.release_diagnostic == true && (inputs.instruction_diagnostic == true || inputs.tail_diagnostic == true)) || (inputs.release_process_control == true && (inputs.release_diagnostic == true || inputs.instruction_diagnostic == true || inputs.tail_diagnostic == true))
         run: exit 1
       - name: Preserve every measurement
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ inputs.release_diagnostic == true && 'python-release-instructions' || inputs.instruction_diagnostic == true && 'python-tail-instructions' || inputs.tail_diagnostic == true && 'python-tail-diagnostic' || 'python-performance' }}-${{ github.sha }}
+          name: ${{ inputs.release_process_control == true && 'python-release-process-control' || inputs.release_diagnostic == true && 'python-release-instructions' || inputs.instruction_diagnostic == true && 'python-tail-instructions' || inputs.tail_diagnostic == true && 'python-tail-diagnostic' || 'python-performance' }}-${{ github.sha }}
           path: evidence/
           if-no-files-found: error
           retention-days: 90

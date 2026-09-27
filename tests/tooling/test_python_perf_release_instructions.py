@@ -8,6 +8,7 @@ from unittest.mock import patch
 BENCH = Path(__file__).resolve().parents[2] / 'bench'
 sys.path.insert(0, str(BENCH))
 import python_release_instructions as subject
+import python_release_controls as controls
 
 
 class Function:
@@ -61,6 +62,29 @@ class ReleaseInstructionTests(unittest.TestCase):
                 subject.parse_profile(path)
             path.write_text('desc: Trigger: Program termination\nevents: Ir Dr Dw\nsummary: 10 2 3\n')
             self.assertIsNone(subject.parse_profile(path))
+
+    def test_process_control_balances_positions_and_retains_same_binary_alerts(self):
+        from collections import Counter
+        for role in controls.ROLES:
+            self.assertEqual(Counter(order.index(role) for order in controls.ORDERS),
+                             Counter({0: 4, 1: 4, 2: 4}))
+        self.assertEqual(len(controls.schedule()), 48)
+        samples = {role: {pas: {'case/total': [100000] * 31} for r, pas in controls.schedule() if r == role}
+                   for role in controls.ROLES}
+        for i in range(12):
+            samples['head'][f'ab{i}']['case/total'] = [110000] * 31
+            samples['base_copy'][f'ab{i}']['case/total'] = [103000 if i % 2 else 97000] * 31
+        rows = controls.comparisons(samples)
+        duplicate = next(r for r in rows if r['variant'] == 'base_copy' and r['metric'] == 'median')
+        self.assertEqual(duplicate['classification'].count('slower'), 6)
+        self.assertEqual(duplicate['classification'].count('faster'), 6)
+        head = next(r for r in rows if r['variant'] == 'head' and r['metric'] == 'median')
+        self.assertEqual(head['classification'], ['slower'] * 12)
+        for role in samples.values():
+            for data in role.values():
+                data['case/close'] = [2000] * 31
+        self.assertEqual({r['metric'] for r in controls.comparisons(samples)
+                          if r['scenario'] == 'case/close'}, {'min'})
 
     def test_reject_other_report_before_consuming_binaries(self):
         with tempfile.TemporaryDirectory() as directory:
