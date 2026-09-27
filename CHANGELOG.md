@@ -66,6 +66,29 @@ source migration.
   ASan/UBSan checks pass. These are functional and allocation guarantees, not
   a claim of faster solving or whole-application zero allocation.
 
+### Python performance and measurement limits
+
+- The [integrated candidate report](https://github.com/maelys-dev/maelys-datalog/actions/runs/36331650860)
+  on `21ca681` validates the injected three-request control in both rounds of all
+  32 case/configuration pairs. It remains `review_required`, not a general
+  absence of regressions. Against v0.12.0, SMALL-default / 7-integer-prepared
+  complete-request median is +2.14% / +0.68% (A/A floor 0.58%), and LARGE-default /
+  7-symbol-prepared cold median is +2.80% / +6.28% (floor 1.82%). Both classify
+  slower in both rounds. The warm medians are 82.874/83.045 microseconds versus
+  81.141/82.484; the cold medians are 249.375/248.313 versus 242.592/233.645.
+- Against the durable v0.11.1 anchor, 27 of 32 warm complete-request medians
+  classify faster in both rounds, but LARGE-Release / 7-symbol-prepared cold
+  p95 is +22.29% / +6.67% (floor 4.55%). Single-round alerts remain visible,
+  including LARGE-Release / 93-integer-prepared complete-request p95 at
+  +26.00% / +1.14% against v0.12.0 (floor 4.56%; slower/indeterminate).
+- The artifact retains every phase observation and separate observer/storage
+  control. These controls also show timing perturbations; they do not correct
+  the candidate measurements or explain their cause. Separate phase and total
+  loops cannot be paired by sample index. A/A floors describe within-binary
+  repeatability, not all placement or runner effects. No engine, binding or
+  runner cause is established by these timings; the concrete release decision
+  is recorded in the changelog pull request.
+
 ## 0.12.0 — 2026-09-27
 
 Session storage reductions and Python consumer performance review. Consumer
