@@ -5,6 +5,7 @@ import argparse
 import hashlib
 import json
 import time
+from contextlib import nullcontext
 
 
 CASES = [f"{n}-{kind}-{mode}" for n in (7, 93)
@@ -67,7 +68,7 @@ def repeat_transaction(transaction, repetitions):
     return repeated
 
 
-def measure(case, samples, warmup, positive_control=False):
+def measure(case, samples, warmup, positive_control=False, telemetry=False, fixed_storage=False):
     # Import and policy compilation are outside request latency; each invocation
     # is a fresh interpreter. Cold means its first request, not machine boot.
     import maelys_datalog as md
@@ -112,30 +113,64 @@ def measure(case, samples, warmup, positive_control=False):
             transaction = repeat_transaction(transaction, repetitions)
             expected = [q[2] for q in queries]
             expected_measured = expected * repetitions
-            def checked(phases=False):
+            def timed(phases=False):
                 start = time.perf_counter_ns()
                 answers, stamps = transaction(phases)
                 elapsed = time.perf_counter_ns() - start
+                return elapsed, answers, stamps
+
+            recorder = None
+            if telemetry:
+                from python_telemetry import Recorder, CALIBRATION_EVERY
+                recorder = Recorder(samples, warmup)
+                fixed_storage = True
+                def timed(phases=False):
+                    return recorder.measure(transaction, phases)
+
+            def checked(phases=False):
+                elapsed, answers, stamps = timed(phases)
                 if answers != expected_measured:
                     raise ValueError(f"wrong query answers: {case}: {answers} != {expected_measured}")
                 return elapsed, stamps
 
-            cold, _ = checked()
-            data = {phase: [] for phase in PHASES}
-            for _ in range(warmup if samples else 0):
-                checked()
-            for _ in range(samples):
-                total, _ = checked()  # No intermediate clocks in this sample.
-                data["total"].append(total)
-            for _ in range(samples):
-                _, stamps = checked(True)  # Separate diagnostic transaction.
-                for i, phase in enumerate(PHASES[:-1]):
-                    data[phase].append(stamps[i + 1] - stamps[i])
+            # Fixed storage is part of the new telemetry protocol. Keep the
+            # growing-list path available for explicit, separate controls.
+            data = {phase: [0] * samples if fixed_storage else [] for phase in PHASES}
+            with recorder if recorder else nullcontext():
+                cold, _ = checked()
+                for _ in range(warmup if samples else 0):
+                    checked()
+                for index in range(samples):
+                    if recorder and index % CALIBRATION_EVERY == 0:
+                        recorder.calibrate('total', index)
+                    total, _ = checked()  # No intermediate clocks in this sample.
+                    if fixed_storage:
+                        data["total"][index] = total
+                    else:
+                        data["total"].append(total)
+                if recorder and samples:
+                    recorder.calibrate('total', samples)
+                for index in range(samples):
+                    if recorder and index % CALIBRATION_EVERY == 0:
+                        recorder.calibrate('phases', index)
+                    _, stamps = checked(True)  # Separate diagnostic transaction.
+                    for i, phase in enumerate(PHASES[:-1]):
+                        duration = stamps[i + 1] - stamps[i]
+                        if fixed_storage:
+                            data[phase][index] = duration
+                        else:
+                            data[phase].append(duration)
+                if recorder and samples:
+                    recorder.calibrate('phases', samples)
             if session:
                 reused.close()
                 session.close()
-    return dict(case=case, cold=cold, samples=data, request_repetitions=repetitions,
-                output_sha256=hashlib.sha256(json.dumps(expected).encode()).hexdigest())
+    value = dict(case=case, cold=cold, samples=data, request_repetitions=repetitions,
+                 sample_storage='fixed' if fixed_storage else 'growing',
+                 output_sha256=hashlib.sha256(json.dumps(expected).encode()).hexdigest())
+    if recorder:
+        value['telemetry'] = recorder.export()
+    return value
 
 
 if __name__ == "__main__":
@@ -145,5 +180,10 @@ if __name__ == "__main__":
     parser.add_argument("--warmup", type=int, default=50)
     parser.add_argument("--positive-control", action="store_true",
                         help="benchmark only: execute three complete requests per sample")
+    parser.add_argument("--telemetry", action="store_true",
+                        help="record contemporaneous CPU/resource/GC events and adjacent calibration")
+    parser.add_argument("--fixed-storage", action="store_true",
+                        help="preallocate sample lists, also implied by --telemetry")
     args = parser.parse_args()
-    print(json.dumps(measure(args.case, args.samples, args.warmup, args.positive_control)))
+    print(json.dumps(measure(args.case, args.samples, args.warmup, args.positive_control,
+                             args.telemetry, args.fixed_storage)))

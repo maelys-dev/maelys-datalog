@@ -21,14 +21,61 @@ import sys
 import tarfile
 
 from python_workload import CASES, COLD_CASES, PHASES, POSITIVE_CONTROL_REQUESTS
+from python_telemetry import (CALIBRATION_EVERY, CALIBRATION_NS, VERSION as TELEMETRY_VERSION,
+                              validate as validate_telemetry)
 
 ROOT = Path(__file__).resolve().parents[1]
 ANCHOR = "0f247a7c81ec4a297f35ccee2bf007344f72ac7e"  # v0.11.1; not a moving tag.
 HISTORICAL = "e2c357eae1f441774f6c54b13ac20124da79686e"  # v0.11.0, informative.
 CONFIGS = [f"{profile}-{build}" for profile in ("SMALL", "LARGE")
            for build in ("default", "Release")]
-SCHEMA = 2
-HARNESS_FILES = ("bench/python_perf.py", "bench/python_workload.py", "bench/python-perf-requirements.txt")
+SCHEMA = 3
+HARNESS_FILES = ("bench/python_perf.py", "bench/python_workload.py", "bench/python_telemetry.py",
+                 "bench/python-perf-requirements.txt")
+
+
+def host_description():
+    result = dict(kernel=platform.release(), processor=platform.processor(),
+                  affinity=sorted(os.sched_getaffinity(0)) if hasattr(os, 'sched_getaffinity') else None,
+                  runner_environment=os.environ.get('RUNNER_ENVIRONMENT'))
+    if platform.system() == 'Linux':
+        result['lscpu'] = subprocess.check_output(['lscpu', '--json'], text=True)
+    return result
+
+
+def telemetry_controls(out, builds, commits, count):
+    """Bounded observer/storage controls; never replace the main comparisons."""
+    directory = out / 'telemetry-controls'
+    directory.mkdir()
+    comparisons = {}
+    for role in ('base', 'head'):
+        commit = commits[role]
+        samples = {mode: {name: {} for _, name in schedule([mode])}
+                   for mode in ('growing', 'fixed', 'telemetry')}
+        env = dict(os.environ, PYTHONPATH=str(builds[commit, 'SMALL-Release']),
+                   PYTHONHASHSEED='0', PYTHONDONTWRITEBYTECODE='1')
+        outputs = {}
+        for mode, name in schedule(samples):
+            flags = {'growing': [], 'fixed': ['--fixed-storage'], 'telemetry': ['--telemetry']}[mode]
+            for case in ('7-integer-prepared', '93-integer-prepared'):
+                value = json.loads(command([sys.executable, '-B', ROOT / 'bench/python_workload.py',
+                                            case, '--samples', count, '--warmup', 50] + flags,
+                                           cwd=out, env=env))
+                (directory / f'{role}-{mode}-{name}-{case}.json').write_text(json.dumps(value) + '\n')
+                if value['output_sha256'] != outputs.setdefault(case, value['output_sha256']):
+                    raise ValueError('observer control output mismatch')
+                if value['request_repetitions'] != 1:
+                    raise ValueError('observer control repeated the request')
+                if mode == 'telemetry':
+                    validate_telemetry(value, count, 50)
+                elif 'telemetry' in value:
+                    raise ValueError('instrumented plain control')
+                if value['sample_storage'] != ('growing' if mode == 'growing' else 'fixed'):
+                    raise ValueError('incorrect control storage')
+                samples[mode][name][f'SMALL-Release/{case}/total'] = value['samples']['total']
+        comparisons[role] = dict(commit=commit, observer=compare(samples, 'telemetry', ('fixed',)),
+                                 storage=compare(samples, 'fixed', ('growing',)))
+    return comparisons
 
 
 def sha256(path):
@@ -159,6 +206,7 @@ def run(args):
     commits = {"base": revision(args.base), "anchor": revision(ANCHOR),
                "head": revision(args.head), "historical": revision(HISTORICAL)}
     configs = ["SMALL-Release"] if args.smoke else CONFIGS
+    host = host_description()
     builds, hashes = {}, {}
     sources = {}
     # git archive, never a dirty checkout or a reused extension.
@@ -201,12 +249,13 @@ def run(args):
                     value = json.loads(command([
                         sys.executable, "-B", ROOT / "bench/python_workload.py", case,
                         "--samples", warm_samples if repeat == 0 else 0,
-                        "--warmup", 50] + (["--positive-control"] if repetitions > 1 else []),
+                        "--warmup", 50, "--telemetry"] + (["--positive-control"] if repetitions > 1 else []),
                         cwd=out, env=env))
                     if value["request_repetitions"] != repetitions:
                         raise ValueError("workload did not execute the requested control variant")
                     filename = f"{config}-{commit}-requests{repetitions}-{pass_name}-{case}-{repeat}.json"
                     (raw / filename).write_text(json.dumps(value) + "\n")
+                    validate_telemetry(value, warm_samples if repeat == 0 else 0, 50)
                     old = outputs.setdefault(case, value["output_sha256"])
                     if old != value["output_sha256"]:
                         raise ValueError(f"output mismatch {case}")
@@ -219,14 +268,19 @@ def run(args):
                     for role in roles:
                         samples[role][pass_name][f"{config}/{case}/cold"] = cold
     rows, positive, historical, control_ok, status = assess(samples, configs)
+    print('measure separate observer/storage controls', flush=True)
+    observation_controls = telemetry_controls(out, builds, commits, warm_samples)
     report = dict(schema=SCHEMA, status=status,
                   release_eligible=bool(not args.smoke and os.environ.get("GITHUB_ACTIONS") == "true"
                                         and os.environ.get("GITHUB_SHA") == commits["head"]),
-                  commits=commits, configs=configs,
+                  commits=commits, configs=configs, telemetry_controls=observation_controls,
+                  telemetry=dict(version=TELEMETRY_VERSION, sample_storage='fixed', contemporaneous=True,
+                                 calibration_every=CALIBRATION_EVERY, calibration_budget_ns=CALIBRATION_NS,
+                                 filters_samples=False, corrects_latencies=False),
                   variants={role: dict(commit=sha, request_repetitions=repetitions)
                             for role, (sha, repetitions) in variants.items()},
                   samples=dict(warm=warm_samples, cold=cold_samples),
-                  environment=dict(python=sys.version, platform=platform.platform(), machine=platform.machine(),
+                  environment=dict(python=sys.version, platform=platform.platform(), machine=platform.machine(), host=host,
                                    compiler=command([args.compiler, "--version"]),
                                    cmake=command(["cmake", "--version"]),
                                    packages={name: importlib.metadata.version(name) for name in ("cffi", "pycparser", "setuptools")},
@@ -257,10 +311,16 @@ def run(args):
                "A/A floors measure within-binary repeatability, not placement effects between binaries.",
                "Below-floor differences are indeterminate. Equal instructions would not establish equal cycles.",
                "An above-floor slowdown requires review; this is not algorithmic attribution.", "",
+               "Schema 3: all measured requests carry contemporaneous CPU/resource/GC telemetry.",
+               "Independent ~20 µs Python calibration every 32 samples is outside request timing.",
+               "Preallocated sample/event storage and observation perturb execution; see separate controls below.",
+               "No samples are filtered or corrected; separate phase and total loops cannot be paired by index.", "",
                "| Reference | Scenario | Metric | A/A % | Round 1 % | Round 2 % | Classes |",
                "|---|---|---|---:|---:|---:|---|"]
     for title, section in (("Candidate", rows), ("Injected positive control", positive),
-                           ("Historical comparison (informative)", historical)):
+                           ("Historical comparison (informative)", historical)) + tuple(
+            (f"{role}: {kind} control (separate, bounded diagnostic)", values[kind])
+            for role, values in observation_controls.items() for kind in ('observer', 'storage')):
         if title != "Candidate":
             summary.extend(["", f"## {title}", "",
                             "| Reference | Scenario | Metric | A/A % | Round 1 % | Round 2 % | Classes |",
