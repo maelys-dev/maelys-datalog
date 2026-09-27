@@ -51,6 +51,11 @@ API 2 and backend ABI 5 are unchanged.
   Timing observations remain visible without an automatic timing gate at the
   tag; they are not automatically attributed to the engine. See
   `docs/python-performance.md`.
+- Schema-3 Python measurements record contemporaneous wall/thread CPU clocks,
+  CPU IDs, resource counters and GC intervals, with fixed sample storage and
+  adjacent calibration probes. Separate observer/storage controls retain their
+  perturbation. Original uninstrumented reports remain unchanged; the two
+  protocols' absolute latencies are not interchangeable.
 
 ### Performance and measurement limits
 
@@ -70,6 +75,25 @@ API 2 and backend ABI 5 are unchanged.
   (+10.92% / +10.27%) and SMALL-default / 7-symbol-prepared input median
   (+0.89% / +0.82%) above their own floors in both rounds. Timings do not
   establish an engine, allocator or runner cause, or a general latency guarantee.
+- The [bounded instruction diagnostic](https://github.com/maelys-dev/maelys-datalog/actions/runs/36313532322)
+  reuses the original SDK binaries and checks 16 declared transaction positions
+  in 7/93-integer-prepared requests. All 128 profiles and repeated per-function
+  counts validate; complete-request Callgrind Ir decreases by 7.67--7.94%, and
+  native function counts stay constant across the positions within each case
+  and revision. These separate software counts neither measure hardware cycles
+  nor establish the cause of the original transient latency event.
+- The [instrumented full matrix](https://github.com/maelys-dev/maelys-datalog/actions/runs/36316284376)
+  on `b0c312b`, with unchanged runtime/binding code, validates the injected control
+  in all 32 case/configuration pairs and retains 814,464 request observations.
+  No warm total median or p95 exceeds its A/A floor in that run. It still reports
+  `review_required`: SMALL-default / 7-symbol-solve cold p95 is -1.48% / +4.65%
+  (floor 1.55%); phase alerts include LARGE-Release / 7-symbol-solve query p95
+  +2.92% / +3.92% (floor 1.46%). This does not reclassify earlier reports.
+- The maintainer accepted these documented uncertainties for 0.12.0 after
+  reviewing the reservation gains, functional checks and bounded diagnostics.
+  The original +147.79% event remains unattributed; publication is not a claim
+  of universally unchanged or improved Python latency. Self-hosted ARM64
+  measurements remain a separate follow-up when a runner is available.
 
 ## 0.11.1 — 2026-09-26
 
