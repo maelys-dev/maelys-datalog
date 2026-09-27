@@ -78,6 +78,37 @@ class TailTests(unittest.TestCase):
         with patch.object(probe.workload, 'measure', return_value={}), self.assertRaises(ValueError):
             probe.measure('7-integer-prepared', 'observe')
 
+class InstructionTests(unittest.TestCase):
+    def test_worker_counts_declared_total_samples_only(self):
+        import python_tail_instructions as count
+        calls = []
+        def begin(): calls.append('start')
+        def end(label): calls.append(label)
+        lib = SimpleNamespace(tail_begin=begin, tail_end=end)
+        def measure(case, samples, warmup):
+            wrapped = count.workload.repeat_transaction(lambda phases: ([True], None), 1)
+            for _ in range(1 + warmup + samples): wrapped(False)
+            for _ in range(samples): wrapped(True)
+            return dict(output_sha256='checked')
+        with patch.object(count.ctypes, 'CDLL', return_value=lib), \
+                patch.object(count.workload, 'measure', side_effect=measure):
+            result = count.worker('7-integer-prepared', Path('/unused'))
+        self.assertEqual(result['samples'], list(count.INDICES))
+        self.assertEqual(calls, [v for i in count.INDICES for v in ('start', f'sample_{i:03d}'.encode())])
+        self.assertNotIn('samples_ns', result)
+
+    def test_profile_requires_all_three_software_counters(self):
+        import python_tail_instructions as count
+        import tempfile
+        with tempfile.TemporaryDirectory() as directory:
+            p = Path(directory) / 'profile'
+            p.write_text('desc: Trigger: Client Request: sample_316\nevents: Ir Dr Dw I1mr\nsummary: 100 40 30 2\n')
+            self.assertEqual(count.parse_profile(p), dict(sample=316, counts=dict(Ir=100, Dr=40, Dw=30)))
+            p.write_text('desc: Trigger: Program termination\nevents: Ir Dr Dw\nsummary: 0 0 0\n')
+            self.assertIsNone(count.parse_profile(p))
+            p.write_text('desc: Trigger: Client Request: sample_316\nevents: Ir Dr Dw\nsummary: 100 40 0\n')
+            with self.assertRaises(ValueError): count.parse_profile(p)
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -170,6 +170,18 @@ Clock and event semantics follow the Python 3.12 documentation for
 [resource usage](https://docs.python.org/3.12/library/resource.html#resource.getrusage)
 and [GC callbacks](https://docs.python.org/3.12/library/gc.html#gc.callbacks).
 
+The separate `instruction_diagnostic` dispatch follows up observed CPU-time
+bursts using the **original run 36308020794 SDK binaries**, verified against
+that report and its file hashes. It does not rebuild the measured libraries.
+Callgrind collection surrounds 16 predeclared complete transactions between
+indices 0 and 500 for 7/93-integer-prepared, with two processes per revision/case
+and opposite revision order on repetition. Raw profiles, per-function annotations,
+Ir/Dr/Dw totals and checked answers are retained. The small client-request helper
+is test instrumentation only; no native/binding API changes. These software
+instruction counts cannot explain original cycles retrospectively or establish
+hardware frequency/cache/host scheduling behavior. No Valgrind latency is reported.
+Choose only one diagnostic input per dispatch; neither can approve a release.
+
 ### Release decision
 
 Before `maelys-release cut ... --apply`, read the complete report and record
