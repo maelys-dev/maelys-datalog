@@ -226,6 +226,14 @@ manual comparison protocol above to changes in ordinary solve paths.
 
 ## Installed facade and SDK
 
+The diagnostic `tools/session_storage_inventory.sh SMALL|LARGE` reports current
+private layout sizes/offsets and session allocation payload sums, without timing
+or solving. It is not part of the installed SDK. The
+[sized-session proposal](architecture/sized-reference-sessions.md) separates
+these observations from hypothetical payload projections and future contracts.
+Generated CSV stays outside git; the existing allocation guard independently
+checks shared-policy, copied-policy and exporting reservations.
+
 Session construction reserves a private transaction dictionary, native result
 workspace and public result metadata. Reference results borrow the finalized,
 sorted native derived facts without conversions, copying or further sorting;

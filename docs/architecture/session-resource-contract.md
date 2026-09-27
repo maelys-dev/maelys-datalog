@@ -19,6 +19,11 @@ a future resource/delta ABI. Backend ABI 5 implements preparation storage and
 acceptance only; consumer API 2 and complete snapshot inputs retain their behavior.
 The [backend contract](compiler-backends.md) remains authoritative for that API.
 
+The separate [sized-reference inventory and consumer proposal](sized-reference-sessions.md)
+records the 0.12.0 host reservations and a possible fixed, within-profile public
+reference path. It does not implement or freeze this backend resource/delta
+contract; external ABI 5 default paths and program/build bounds stay unchanged.
+
 ## Delivery gates
 
 Two gates have different deadlines. The first private incremental experiment

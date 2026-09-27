@@ -106,6 +106,20 @@ when it has what they name.
   modify `main` directly, or combine unrelated features on one branch. State the
   base explicitly when a feature depends on an unmerged change.
 
+## Downstream compatibility and the 0.13.0 batch
+
+- The 0.13.0 batch combines the retired window include removal with additive
+  transactional static EDB replacement and explicitly driven time expiry.
+  Header migration is a source break; it does not itself change backend ABI 5.
+- Before cutting 0.13.0, build the downstream consumer against a clean installed
+  candidate SDK and record the candidate/consumer revisions, profile, commands,
+  results and complete required migration list. A reported include review does
+  not replace this integration replay. Keep private implementation code out of
+  this repository; downstream requirements enter as written proposals only.
+- Session capacity work keeps `program_info` and its program/build limits
+  unchanged. Consumer quotas need a separate contract and explicit admission;
+  never silently reinterpret backend ABI 5 fields as per-session limits.
+
 ## Memory-allocation contract
 
 - Declare both window adapters in `maelys/datalog_window.h`. The retired
@@ -122,6 +136,11 @@ when it has what they name.
 
 - Prefer caller-owned, aligned storage and explicit bounded capacities for new
   runtime APIs. Opaque handles do not justify mandatory heap allocation.
+- For session sizing, follow `docs/architecture/sized-reference-sessions.md` as
+  a proposal, not an implemented API. Keep program/build bounds distinct from
+  effective session capacities; never pass smaller quotas through `program_info`
+  to an ABI 5 backend. Preserve default external-backend behavior and validate
+  supported combinations before claiming capacity-sized backend storage.
 - Do not add per-fact, per-term, or grow-on-demand allocations to input paths.
   Validate a whole batch before publishing facts or text; internal preflight
   bookkeeping must roll back byte-for-byte on rejection. Capacity exhaustion
