@@ -273,6 +273,15 @@ when it has what they name.
   needs a registered runner and writer-only dispatch; never substitute local
   Docker smoke or hosted ARM and call it self-hosted evidence.
 
+- The v0.13 attribution follow-up in `docs/python-performance.md` compares the
+  original hosted binaries, complete-request software counts and independently
+  measured identical-binary labels. It found matching native/CFFI-module work
+  in 72 scoped comparisons and timing alerts/bursts with unchanged v0.12.0.
+  Retain its tiny CPython/CFFI-cache and libc differences and its attribution
+  limits. Use identical-binary process controls for fine-grained attribution;
+  do not erase old signals, claim a specific hardware cause or infer a fix
+  solely from equal counts or a later quiet run.
+
 ## Manual benchmark evidence
 
 - Keep `bench-compare.yml` workflow_dispatch-only, with base/head inputs and

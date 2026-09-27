@@ -366,3 +366,58 @@ signs are preserved for both the identical-binary control and candidate.
 They are not substituted for the published release matrix or used to widen
 its thresholds. A same-binary label difference measures process/environment
 variation in this run; it does not establish the cause of an earlier event.
+
+#### Findings from the v0.13 attribution runs
+
+[Instruction run 36338645720](https://github.com/maelys-dev/maelys-datalog/actions/runs/36338645720)
+retains 18 processes and 162 scoped profiles. In the 72 base/candidate paired
+scopes, exclusive Ir/Dr/Dw match for every reported native-engine and generated
+CFFI-module function. Whole-process profiles match in 50/72 comparisons. All
+remaining differences are localized: cold calls have -137 Ir/-22 Dr in the
+unoptimized configurations or +122 Ir/+20 Dr in Release, solely in CPython
+`_Py_dict_lookup` and `insertdict`; the call graph traces them to CFFI's
+`get_or_insert_unique_type`. Warm differences are confined to libc
+`__strcmp_avx2` (+/-72 Ir, unchanged Dr/Dw). These are scoped software counts,
+not a cycle bound or a claim about every input.
+
+[CFFI 2.0.0's type cache](https://github.com/python-cffi/cffi/blob/v2.0.0/src/c/_cffi_backend.c#L4730)
+uses byte-string keys made from native addresses. Fixing `PYTHONHASHSEED` does
+not fix those addresses or their dictionary probe paths. This identifies the
+small executed-work difference at cold entry; it does not attribute the
+original percentage latency gaps to that difference. All five separate loader
+traces report RTLD_NOW and no symbol binding between the first-request markers:
+lazy dynamic linking is not the cold-entry cause in those traces.
+
+The original linked CFFI modules have the same 162 function bodies and relative
+addresses in every configuration. The native library's PLT grows by three net
+16-byte entries in default builds and one in Release: configured window
+initializers add entries, while the windows' old call to input_edb_add_fact
+vanishes. Native hot text therefore moves by 48 or 16 bytes. Data sections also
+move. This establishes a layout change, not its hardware performance effect;
+object-file equivalence alone misses it.
+
+[Process-control run 36338922896](https://github.com/maelys-dev/maelys-datalog/actions/runs/36338922896)
+keeps all twelve rounds. For SMALL-default/7-integer-prepared, the median of
+round median deltas is +0.27% for head/base and +0.28% for base_copy/base. The
+identical-binary control is classified slower in 6/12 LARGE-Release cold median
+comparisons; its LARGE-default cold median gap reaches +9.10% in one round.
+Head/base's median cold delta in LARGE-default is +0.19% across rounds. These
+statistics describe this diagnostic, not a replacement release verdict.
+
+The unchanged v0.12.0 binary also produces warm bursts: SMALL-default base aa3
+has median 82.545 microseconds and p95 159.529 microseconds; base_copy aa0 has
+median 81.783 and p95 160.671. Adjacent calibration drops from 480 to 320
+iterations during those bursts. Requests above 1.5 times their own process
+median (a descriptive listing, never an exclusion rule) show no overlapping GC,
+page faults or recorded context switches in these two processes. Thus a v0.13
+change is not necessary for this symptom; reduced nearby Python throughput
+supports common execution pressure. It does not distinguish SMT, frequency,
+interrupts, hypervisor behavior or in-process/cache effects.
+
+Preserve the original accepted observations. This investigation found no added
+engine work in its declared cases and demonstrated above-floor alerts without
+any binary change. It does not establish an exact retrospective hardware cause
+or authorize a timing-only engine fix. Future attribution at this scale should
+include an independently measured identical-binary control and multiple
+counterbalanced processes, alongside instruction evidence. Neither the control
+nor a quiet later pass may erase a historical signal or widen its A/A floor.
