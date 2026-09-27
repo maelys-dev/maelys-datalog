@@ -40,7 +40,8 @@ N is shared across all event predicates. At N=3, `[A,B,C] + D` proposes
 window is empty but already has a solved result, including any policy facts.
 Static context can be expressed with policy facts or the optional
 [transactional static EDB](window-transactions.md). Multi-fact events use the
-group adapter; clocks and explicit time expiry are separate additions.
+group adapter; [explicit expiry](window-transactions.md#explicit-expiration-without-insertion)
+adds caller-supplied deadlines without changing FIFO admission.
 
 IDs advance only on success. After committing ID `INT32_MAX`, pushes fail with
 `PAYLOAD_TOO_LARGE`; the reported next ID is `INT32_MAX+1`. IDs never wrap or

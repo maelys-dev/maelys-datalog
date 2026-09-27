@@ -6,9 +6,12 @@
 extern "C" {
 #endif
 
+/* Reserve per-event/group deadline metadata in both caller-owned banks. */
+#define MAELYS_DATALOG_WINDOW_EXPIRATION 1u
+
 /* Extension options shared by both adapters. Initialize every member.
- * struct_size must equal sizeof(maelys_datalog_window_options_t); flags is
- * reserved and must be zero. NULL options select the legacy defaults. */
+ * struct_size must equal sizeof(maelys_datalog_window_options_t). flags accepts
+ * only MAELYS_DATALOG_WINDOW_EXPIRATION. NULL options select legacy defaults. */
 typedef struct {
     size_t struct_size;
     size_t static_fact_capacity; /* Raw static slots in addition to event slots. */
@@ -146,6 +149,38 @@ MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_window_static_facts(
     const maelys_datalog_window_t *window,
     const maelys_datalog_fact_t **out_facts, size_t *out_count);
 
+/* Explicit time expiry, enabled at creation with WINDOW_EXPIRATION. Time is
+ * caller-defined uint64 units, without reading a clock or computing a duration.
+ * push_until is push with an absolute deadline; ordinary push has no deadline.
+ * No insertion implicitly advances time or expires other events. FIFO capacity
+ * still applies. Deadlines may arrive out of order and UINT64_MAX is valid.
+ * Once expire has committed a watermark, a deadline <= it is INVALID_ARGUMENT.
+ *
+ * expire removes ALL timed events with deadline <= now, retaining order and
+ * static input, then recomputes/publishes without consuming an ID. now may equal
+ * the last committed watermark but cannot decrease. Failure preserves the
+ * watermark, facts, cursor, views and result, including on late lease rejection.
+ * out_expired is optional, counts events and remains unchanged on failure.
+ *
+ * If no event is due, only the watermark advances: no solve/callback/result
+ * replacement, borrowed views remain valid and live explanations do not block.
+ * Otherwise successful expiry invalidates views just like a push/replacement.
+ * Recompute may fail even on removal (e.g. aggregate overflow or derivation
+ * growth after negation). Retry or change context; no event is silently removed.
+ * Unsupported when deadline storage was not enabled. No allocation or fallback.
+ * After ID exhaustion, expire and replace_static remain usable. */
+MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_window_push_until(
+    maelys_datalog_window_t *window, const char *predicate,
+    const maelys_datalog_value_t *values, size_t value_count, uint64_t expires_at,
+    uint32_t *out_occurrence, maelys_datalog_diagnostic_t *out_diagnostic);
+MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_window_expire(
+    maelys_datalog_window_t *window, uint64_t now, size_t *out_expired,
+    maelys_datalog_diagnostic_t *out_diagnostic);
+/* O(1); returns (0,false) before the first successful expire; outputs required
+ * and unchanged on failure. Only available with expiration enabled. */
+MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_window_expiry_watermark(
+    const maelys_datalog_window_t *window, uint64_t *out_now, int *out_has_now);
+
 /* Groups of complete facts, with IDs kept as adapter metadata. */
 typedef struct maelys_datalog_group_window maelys_datalog_group_window_t;
 
@@ -279,6 +314,20 @@ MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_group_window_replace_s
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_group_window_static_facts(
     const maelys_datalog_group_window_t *window,
     const maelys_datalog_fact_t **out_facts, size_t *out_count);
+
+/* Same explicit-time contract as the single-fact adapter. One deadline belongs
+ * to one group, including an empty group; out_expired counts groups, not facts.
+ * Expiry preserves arrival order, IDs and event-relative contribution slices.
+ * Duplicate facts survive while a retained group or static EDB supplies them. */
+MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_group_window_push_until(
+    maelys_datalog_group_window_t *window, const maelys_datalog_fact_t *facts,
+    size_t fact_count, uint64_t expires_at, uint32_t *out_group_id,
+    maelys_datalog_diagnostic_t *out_diagnostic);
+MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_group_window_expire(
+    maelys_datalog_group_window_t *window, uint64_t now, size_t *out_expired,
+    maelys_datalog_diagnostic_t *out_diagnostic);
+MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_group_window_expiry_watermark(
+    const maelys_datalog_group_window_t *window, uint64_t *out_now, int *out_has_now);
 
 /* Close releases the result and returns both sessions; it never frees/erases
  * the caller arena. A result-release failure leaves the window usable. Success

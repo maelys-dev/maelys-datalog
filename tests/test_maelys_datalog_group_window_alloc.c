@@ -7,7 +7,7 @@
 #undef memset
 #include <maelys/datalog_window.h>
 #include <assert.h>
-#define OPTIONS(n) (&(maelys_datalog_window_options_t){sizeof(maelys_datalog_window_options_t),(n),0})
+#define OPTIONS(n) (&(maelys_datalog_window_options_t){sizeof(maelys_datalog_window_options_t),(n),MAELYS_DATALOG_WINDOW_EXPIRATION})
 #include <stdio.h>
 #include <string.h>
 
@@ -58,7 +58,7 @@ static maelys_datalog_fact_t reading(int64_t id,int64_t x) {
 }
 static void rejected_unchanged(maelys_datalog_group_window_t *w,
     const maelys_datalog_fact_t *facts,size_t n,int expected) {
-    group_layout layout; assert(!group_storage_layout(&w->capacities,w->static_capacity,&layout));
+    group_layout layout; assert(!group_storage_layout(&w->capacities,w->static_capacity,w->deadlines[0]!=NULL,&layout));
     unsigned char *bank=malloc(layout.stride); assert(bank);
     unsigned char header[sizeof(*w)]; memcpy(header,w,sizeof(*w));
     unsigned char *committed=(unsigned char *)w+layout.start+w->active*layout.stride;
@@ -69,11 +69,19 @@ static void rejected_unchanged(maelys_datalog_group_window_t *w,
     free(bank);
 }
 static void rejected_static(maelys_datalog_group_window_t *w, const maelys_datalog_fact_t *f,size_t n,int expected) {
-    group_layout l; assert(!group_storage_layout(&w->capacities,w->static_capacity,&l));
+    group_layout l; assert(!group_storage_layout(&w->capacities,w->static_capacity,w->deadlines[0]!=NULL,&l));
     size_t bytes=l.stride; unsigned char *committed=(unsigned char *)w+l.start+w->active*l.stride;
     unsigned char *bank=malloc(bytes);assert(bank);memcpy(bank,committed,bytes);
     unsigned char header[sizeof(*w)];memcpy(header,w,sizeof(*w));
     assert(maelys_datalog_group_window_replace_static(w,f,n,NULL)==expected);
+    assert(!memcmp(header,w,sizeof(*w))&&!memcmp(bank,committed,bytes));free(bank);
+}
+static void rejected_expiry(maelys_datalog_group_window_t *w,uint64_t now,int expected) {
+    group_layout l; assert(!group_storage_layout(&w->capacities,w->static_capacity,w->deadlines[0]!=NULL,&l));
+    size_t bytes=l.stride; unsigned char *committed=(unsigned char *)w+l.start+w->active*l.stride;
+    unsigned char *bank=malloc(bytes);assert(bank);memcpy(bank,committed,bytes);
+    unsigned char header[sizeof(*w)];memcpy(header,w,sizeof(*w));size_t expired=123;
+    assert(maelys_datalog_group_window_expire(w,now,&expired,NULL)==expected&&expired==123);
     assert(!memcmp(header,w,sizeof(*w))&&!memcmp(bank,committed,bytes));free(bank);
 }
 int main(void) {
@@ -125,6 +133,16 @@ int main(void) {
         rejected_static(w,NULL,0,MAELYS_DATALOG_STATUS_INVALID_STATE);
         assert(!maelys_datalog_prepared_explanation_release(e));
     }
+    maelys_datalog_fact_t timed=reading(999,1);
+    assert(!maelys_datalog_group_window_push_until(w,&timed,1,10,NULL,NULL));
+    size_t expired=123;assert(!maelys_datalog_group_window_expire(w,9,&expired,NULL)&&expired==0);
+    release_failure_target=w->result;rejected_expiry(w,10,MAELYS_DATALOG_STATUS_INVALID_ARGUMENT);release_failure_target=NULL;
+    maelys_datalog_value_t missing=integer(42);maelys_datalog_prepared_explanation_t *held=NULL;
+    assert(!maelys_datalog_result_prepare_explanation(w->result,MAELYS_DATALOG_EXPLAIN_FALSE,"total",&missing,1,workspace,explain_bytes,&held));
+    rejected_expiry(w,10,MAELYS_DATALOG_STATUS_INVALID_STATE);
+    assert(!maelys_datalog_prepared_explanation_release(held));
+    assert(!maelys_datalog_group_window_expire(w,10,&expired,NULL)&&expired==1);
+    rejected_expiry(w,9,MAELYS_DATALOG_STATUS_INVALID_ARGUMENT);
     maelys_datalog_fact_t static_fact=reading(99,1);
     assert(!maelys_datalog_group_window_replace_static(w,&static_fact,1,NULL));
     rejected_static(w,&static_fact,3,MAELYS_DATALOG_STATUS_PAYLOAD_TOO_LARGE);

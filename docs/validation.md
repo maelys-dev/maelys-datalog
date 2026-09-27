@@ -555,3 +555,10 @@ window adapters with independent snapshots across static EDB replacement,
 rights revocation without insertion, leases, duplicates, normalization, canonical
 IDs, capacity/overflow rejection and close. Both allocation guards and the
 ABI 5 recording provider exercise replacement, rollback and reuse.
+
+The same window consumer covers opt-in deadlines and explicit expiry with no
+insertion: independent sequences, unordered deadlines, equality/MAX boundaries,
+no-op watermark progress, static suppliers, group slices, leases, backend failure,
+negation-induced overflow, exhausted IDs and reuse. Deadline arrays are absent
+without the creation flag; allocation guards include both arrays in rollback
+snapshots and reject expiry/clock changes byte-for-byte on failure.
