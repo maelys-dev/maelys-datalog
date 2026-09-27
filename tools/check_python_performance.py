@@ -47,7 +47,7 @@ def select_run(runs, commit):
     if not candidates:
         raise ValueError(f"No Python performance run on {commit}. Wait for the main push run or dispatch it.")
     # A failed/newer attempt must not be masked by a previously green run.
-    latest = max(candidates, key=lambda run: (run.get("run_started_at", run["created_at"]), run["id"]))
+    latest = max(candidates, key=lambda run: (run.get("run_started_at") or run["created_at"], run["id"]))
     if latest.get("status") != "completed" or latest.get("conclusion") != "success":
         raise ValueError(f"Python performance evidence is not accepted: {latest['html_url']} "
                          f"({latest.get('status')}/{latest.get('conclusion')})")

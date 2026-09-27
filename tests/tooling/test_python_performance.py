@@ -126,6 +126,8 @@ class EvidenceTests(unittest.TestCase):
         rerun = self.run_record(id=9, run_started_at="2026-09-28T00:00:00Z", conclusion="failure")
         with self.assertRaises(ValueError):
             gate.select_run([self.run_record(), rerun], "a" * 40)
+        unstarted = self.run_record(id=9, run_started_at=None, status="completed", conclusion="cancelled")
+        self.assertEqual(gate.select_run([unstarted, self.run_record()], "a" * 40)["id"], 10)
 
     def test_missing_expired_or_ambiguous_artifact_is_refused(self):
         artifact = dict(name=gate.ARTIFACT_PREFIX + "a" * 40, expired=False)
