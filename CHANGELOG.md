@@ -7,6 +7,15 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Changed
+
+- Both native window adapters are declared in `<maelys/datalog_window.h>`.
+  `<maelys/datalog_group_window.h>` is removed, without a forwarding header.
+  Consumers of the group adapter must replace their include and rebuild against
+  a clean SDK installation. Function names, types, layouts and runtime behavior
+  are unchanged; consumer API 2, program ABI 2 and backend ABI 5 are retained.
+  This is a source include migration, not a new window or backend capability.
+
 ## 0.12.0 — 2026-09-27
 
 Session storage reductions and Python consumer performance review. Consumer

@@ -1,4 +1,6 @@
-# Application type migration for 0.10.0
+# Application and extension migrations
+
+## 0.10.0 — shared application types
 
 Application and extension interfaces share a single declaration for each kind
 of input data. This is a coordinated source migration; obsolete type names are
@@ -255,3 +257,33 @@ The reference backend requests zero bytes, ignores preparation storage and has
 a no-op commit. Its session/result allocator contract is unchanged. Backend ABI
 5 does not introduce delta inputs, quotas, new capabilities or custom explanation
 workspace bounds; the future resource/delta design remains provisional.
+
+## Unreleased — unified window header
+
+Both adapters now use one public include:
+
+```c
+#include <maelys/datalog_window.h>
+```
+
+Replace `#include <maelys/datalog_group_window.h>` with that include. If both
+headers were included, keep only `datalog_window.h`. The group-only header is
+removed from the source tree, SDK installation and native archives; there is
+no forwarding header. Install into a clean prefix, or explicitly remove the
+obsolete file when updating an existing prefix: CMake installation does not
+uninstall files shipped by older versions.
+
+This deliberately breaks the old include path. It does not rename either
+adapter's functions or opaque handles, alter public record layouts, or change
+window retention, canonical inputs, result leases or publication callbacks.
+Consumer API 2, program ABI 2 and backend ABI 5 remain unchanged. Program build
+bounds, including `program_info.max_facts_per_predicate`, retain their meaning
+and values; no session capacity is introduced by this regrouping.
+
+Downstream consumers, including backends that use the windows as snapshot
+oracles, must rebuild after the include replacement. The public SDK checks
+exercise both adapters and an external transactional backend from an installed
+prefix and extracted archive, and reject the removed include in C11/C++17.
+Those checks do not establish compatibility of an untested downstream backend.
+Future static-input replacement, time expiry or session-capacity changes need
+their own semantic and backend compatibility review.
