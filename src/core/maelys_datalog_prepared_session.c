@@ -220,7 +220,7 @@ static maelys_result_t create_session(
     maelys_datalog_internal_prepared_session_t *session =
         calloc(1u, borrow ? sizeof(*session) : sizeof(struct owned_session));
     if (!session) return MAELYS_ERR_INTERNAL;
-    session->result_workspace = maelys_datalog_solve_workspace_create();
+    session->result_workspace = maelys_datalog_solve_workspace_create_borrowing_inputs();
     if (!session->result_workspace) { free(session); return MAELYS_ERR_INTERNAL; }
     if (borrow) session->prepared = ruleset;
     else {

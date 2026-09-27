@@ -239,8 +239,8 @@ in caller-owned storage is copied into the session allocation instead, so the
 caller may overwrite that storage immediately after policy release.
 
 The allocator guard checks three constructor allocations on both paths and caps
-their requested bytes at 380,000/645,000 (shared SMALL/LARGE) and
-735,000/995,000 (copied SMALL/LARGE). These exclude the separately owned policy
+their requested bytes at 305,000/495,000 (shared SMALL/LARGE) and
+660,000/845,000 (copied SMALL/LARGE). These exclude the separately owned policy
 allocation and optional explanation/backend storage. The guard also checks
 allocation-failure cleanup, shared-policy lifetime, caller-storage reuse, zero
 constructor-storage reset on ordinary session destruction, and the existing
@@ -264,12 +264,19 @@ The reference-result differential fixture compares the native view with the
 external export/emission path over mixed values, duplicate derivations and
 input permutations. It verifies exact canonical symbol IDs, enumeration order,
 short-output retry, independent result leases, empty results and reuse.
-The transaction dictionary pointer sits after the native result payload, keeping
-all pre-existing result array offsets unchanged. Both solve entry paths assign
-it before use, including the first allocation and reuse; it is intentionally
-outside the metadata prefix reset on release. The three-revision layout probe
-compares every result array and the proof object against the base, and records
-actual addresses separately from offsets.
+Prepared native results also borrow the session's materialized EDB, never the
+caller's input buffer. The result and every prepared explanation lease prevent
+session reuse. Legacy direct solves and ordinary copying workspaces reserve an
+EDB snapshot in an optional native-result tail. Both solver paths retain that
+copy contract. Tests overwrite legacy source facts, clear caller input EDBs
+before explaining, and prepare a fresh explanation after a window push is
+rejected by a live explanation lease; premises remain exact and reuse succeeds
+after the last lease closes. Release resets only metadata and preserves the
+workspace's borrowing mode across reuse and failures.
+The dictionary pointer remains outside the reset prefix and is assigned before
+use on both solve paths. The layout probe records the optional EDB reservation,
+resolved EDB address, array offsets and actual addresses. Removing the fixed EDB
+array changes later member offsets; no unchanged-layout or cache claim follows.
 
 The prepared-session tests keep the immutable snapshot byte-identical while transaction symbols change;
 filter evaluation, diagnostic export and both explanation kinds use the result's

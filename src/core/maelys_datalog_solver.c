@@ -84,8 +84,10 @@ typedef enum {
 
 struct maelys_datalog_solve_result {
     /* Only this metadata prefix is reset on workspace release. Payload arrays
-     * below edb_facts are overwritten/validated by the next solve, not scrubbed. */
+     * starting at idb_facts are overwritten/validated by the next solve,
+     * not scrubbed. */
     int reusable;
+    int borrows_edb; /* Prepared-session input storage shares the result lease. */
     const maelys_datalog_internal_ruleset_t *ruleset;
     void *release_owner;
     maelys_datalog_solve_result_release_fn release;
@@ -113,7 +115,6 @@ struct maelys_datalog_solve_result {
 #ifdef MAELYS_TESTING
     int edb_full_scan_reference;
 #endif
-    maelys_datalog_internal_fact_t edb_facts[MAELYS_DATALOG_MAX_EDB_FACTS];
     maelys_datalog_internal_fact_t idb_facts[MAELYS_DATALOG_MAX_IDB_FACTS];
     uint16_t idb_proof_index[MAELYS_DATALOG_MAX_IDB_FACTS];
     maelys_datalog_pred_range_t edb_ranges[MAELYS_DATALOG_MAX_PREDICATES];
@@ -136,9 +137,11 @@ struct maelys_datalog_solve_result {
     uint16_t node_premise_count[MAELYS_DATALOG_MAX_PROOF_NODES];
     uint8_t node_has_premises[MAELYS_DATALOG_MAX_PROOF_NODES];
     maelys_datalog_explanation_premise_t witness_slots[MAELYS_DATALOG_MAX_BODY_LITERALS];
-    /* Set on every acquired solve before any dictionary access. Keep it out of
-     * the reset prefix to preserve the established fact/provenance offsets. */
+    /* Set on every acquired solve before any dictionary access; deliberately
+     * outside the metadata reset prefix. */
     const maelys_datalog_symbol_table_t *symbols;
+    /* Only legacy/copying workspaces reserve this tail. */
+    maelys_datalog_internal_fact_t edb_facts[];
 };
 
 _Static_assert(offsetof(struct maelys_datalog_solve_result, witness_filled_mask) ==
@@ -149,15 +152,27 @@ _Static_assert(offsetof(struct maelys_datalog_solve_result, witness_filled_mask)
 _Thread_local maelys_datalog_base_lookup_counts_t maelys_datalog_base_lookup_counts;
 #endif
 
-maelys_datalog_internal_solve_result_t *maelys_datalog_solve_workspace_create(void) {
-    maelys_datalog_internal_solve_result_t *result = malloc(sizeof(*result));
+static size_t solve_result_bytes(int borrows_edb) {
+    return sizeof(maelys_datalog_internal_solve_result_t) + (borrows_edb ? 0 :
+        MAELYS_DATALOG_MAX_EDB_FACTS * sizeof(maelys_datalog_internal_fact_t));
+}
+
+static maelys_datalog_internal_solve_result_t *solve_workspace_create(int borrows_edb) {
+    maelys_datalog_internal_solve_result_t *result = malloc(solve_result_bytes(borrows_edb));
     if (result) {
         /* The same payload validity rules apply on first use and reuse. Do not
          * initialize inactive fact/provenance capacity just to overwrite it. */
-        memset(result, 0, offsetof(maelys_datalog_internal_solve_result_t, edb_facts));
+        memset(result, 0, offsetof(maelys_datalog_internal_solve_result_t, idb_facts));
         result->reusable = 1;
+        result->borrows_edb = borrows_edb;
     }
     return result;
+}
+maelys_datalog_internal_solve_result_t *maelys_datalog_solve_workspace_create(void) {
+    return solve_workspace_create(0);
+}
+maelys_datalog_internal_solve_result_t *maelys_datalog_solve_workspace_create_borrowing_inputs(void) {
+    return solve_workspace_create(1);
 }
 void maelys_datalog_solve_workspace_destroy(maelys_datalog_internal_solve_result_t *result) {
     if (!result) return;
@@ -165,7 +180,7 @@ void maelys_datalog_solve_workspace_destroy(maelys_datalog_internal_solve_result
     free(result);
 }
 static maelys_datalog_internal_solve_result_t *solve_result_acquire(maelys_datalog_internal_solve_result_t *workspace) {
-    if (!workspace) return calloc(1u, sizeof(maelys_datalog_internal_solve_result_t));
+    if (!workspace) return calloc(1u, solve_result_bytes(0));
     assert(workspace->reusable && !workspace->release && !workspace->ruleset);
     return workspace;
 }
@@ -2794,15 +2809,18 @@ static maelys_result_t solve_stratified_path(
     (void)full_scan_reference;
 #endif
     solve_once_init_proof_indices(result);
-    maelys_datalog_fact_set_init(&result->edb_snapshot, result->edb_facts, MAELYS_DATALOG_MAX_EDB_FACTS);
-    maelys_datalog_fact_set_init(&result->idb_final, result->idb_facts, MAELYS_DATALOG_MAX_IDB_FACTS);
-    if (edb->fact_set.count > 0) {
-        memcpy(result->edb_facts,
-               edb->fact_set.facts,
-               edb->fact_set.count * sizeof(result->edb_facts[0]));
+    if (result->borrows_edb) {
+        result->edb_snapshot = edb->fact_set;
+    } else {
+        maelys_datalog_fact_set_init(&result->edb_snapshot, result->edb_facts, MAELYS_DATALOG_MAX_EDB_FACTS);
+        if (edb->fact_set.count > 0) {
+            memcpy(result->edb_facts, edb->fact_set.facts,
+                   edb->fact_set.count * sizeof(result->edb_facts[0]));
+        }
+        result->edb_snapshot.count = edb->fact_set.count;
+        result->edb_snapshot.sorted = edb->fact_set.sorted;
     }
-    result->edb_snapshot.count = edb->fact_set.count;
-    result->edb_snapshot.sorted = edb->fact_set.sorted;
+    maelys_datalog_fact_set_init(&result->idb_final, result->idb_facts, MAELYS_DATALOG_MAX_IDB_FACTS);
     if (!datalog_fact_set_structurally_valid(&ruleset->registry, &result->edb_snapshot)) {
         result->failed = 1;
         solve_once_diag_malformed_edb(out_diag, &ruleset->registry, &result->edb_snapshot);
@@ -3059,15 +3077,18 @@ static maelys_result_t maelys_datalog_solve_once_run(
     (void)full_scan_reference;
 #endif
     solve_once_init_proof_indices(result);
-    maelys_datalog_fact_set_init(&result->edb_snapshot, result->edb_facts, MAELYS_DATALOG_MAX_EDB_FACTS);
-    maelys_datalog_fact_set_init(&result->idb_final, result->idb_facts, MAELYS_DATALOG_MAX_IDB_FACTS);
-    if (edb->fact_set.count > 0) {
-        memcpy(result->edb_facts,
-               edb->fact_set.facts,
-               edb->fact_set.count * sizeof(result->edb_facts[0]));
+    if (result->borrows_edb) {
+        result->edb_snapshot = edb->fact_set;
+    } else {
+        maelys_datalog_fact_set_init(&result->edb_snapshot, result->edb_facts, MAELYS_DATALOG_MAX_EDB_FACTS);
+        if (edb->fact_set.count > 0) {
+            memcpy(result->edb_facts, edb->fact_set.facts,
+                   edb->fact_set.count * sizeof(result->edb_facts[0]));
+        }
+        result->edb_snapshot.count = edb->fact_set.count;
+        result->edb_snapshot.sorted = edb->fact_set.sorted;
     }
-    result->edb_snapshot.count = edb->fact_set.count;
-    result->edb_snapshot.sorted = edb->fact_set.sorted;
+    maelys_datalog_fact_set_init(&result->idb_final, result->idb_facts, MAELYS_DATALOG_MAX_IDB_FACTS);
     if (!datalog_fact_set_structurally_valid(&ruleset->registry, &result->edb_snapshot)) {
         result->failed = 1;
         solve_once_diag_malformed_edb(out_diag, &ruleset->registry, &result->edb_snapshot);
@@ -3740,6 +3761,7 @@ maelys_result_t maelys_datalog_solve_result_enumerate_predicate_facts(
 void maelys_datalog_solve_result_free(maelys_datalog_internal_solve_result_t *result) {
     if (!result) return;
     int reusable = result->reusable;
+    int borrows_edb = result->borrows_edb;
     if (result->release) {
         result->release(result->release_owner, result);
     }
@@ -3752,8 +3774,9 @@ void maelys_datalog_solve_result_free(maelys_datalog_internal_solve_result_t *re
      * observable on BOTH paths. Reset only metadata for the reusable case.
      * Proof init, EDB range construction and IDB-index init run at next solve;
      * witness_commit_range invalidates each new provenance slot before use. */
-    memset(result, 0, offsetof(maelys_datalog_internal_solve_result_t, edb_facts));
+    memset(result, 0, offsetof(maelys_datalog_internal_solve_result_t, idb_facts));
     result->reusable = 1;
+    result->borrows_edb = borrows_edb;
 }
 
 void maelys_datalog_solve_result_set_release(

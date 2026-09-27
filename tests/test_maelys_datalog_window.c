@@ -191,12 +191,12 @@ static void directed_limits(void) {
 }
 static void explanations(void) {
     fixture f; sessions(&f,source); init(&f,1,64,0); push(&f,"event",0,5,2,0);
-    maelys_datalog_value_t q[]={integer(0),integer(5)};
+    maelys_datalog_value_t q[]={integer(0),integer(0),integer(5)};
     size_t bytes,alignment,required;
     OK(maelys_datalog_result_explanation_storage_requirements(result(&f),MAELYS_DATALOG_EXPLAIN_TRUE,&bytes,&alignment));
     void *workspace=malloc(bytes); assert(workspace && (uintptr_t)workspace%alignment==0);
     maelys_datalog_prepared_explanation_t *e=NULL;
-    OK(maelys_datalog_result_prepare_explanation(result(&f),MAELYS_DATALOG_EXPLAIN_TRUE,"summed",q,2,workspace,bytes,&e));
+    OK(maelys_datalog_result_prepare_explanation(result(&f),MAELYS_DATALOG_EXPLAIN_TRUE,"copy",q,3,workspace,bytes,&e));
     OK(maelys_datalog_prepared_explanation_text_size(e,&required));
     char *text=malloc(required+1), *again=malloc(required+1); assert(text && again);
     OK(maelys_datalog_prepared_explanation_write_text(e,text,required+1));
@@ -204,7 +204,17 @@ static void explanations(void) {
     rejected(&f,"event",v,2,MAELYS_DATALOG_STATUS_INVALID_STATE);
     assert(maelys_datalog_window_free(f.w)==MAELYS_DATALOG_STATUS_INVALID_STATE);
     OK(maelys_datalog_prepared_explanation_write_text(e,again,required+1)); assert(!strcmp(text,again));
+    assert(strstr(text, "origin=edb fact=\"event\"(0,0,5)"));
+    /* Build a fresh explanation after rejection: replaying the old prepared
+     * text alone would not check the native result's current EDB view. */
+    void *fresh=malloc(bytes); assert(fresh && (uintptr_t)fresh%alignment==0);
+    maelys_datalog_prepared_explanation_t *next=NULL;
+    OK(maelys_datalog_result_prepare_explanation(result(&f),MAELYS_DATALOG_EXPLAIN_TRUE,"copy",q,3,fresh,bytes,&next));
+    OK(maelys_datalog_prepared_explanation_write_text(next,again,required+1));
+    assert(!strcmp(text,again));
     OK(maelys_datalog_prepared_explanation_release(e));
+    rejected(&f,"event",v,2,MAELYS_DATALOG_STATUS_INVALID_STATE);
+    OK(maelys_datalog_prepared_explanation_release(next)); free(fresh);
     push(&f,"event",0,7,2,1); query(&f,"summed",2,0,7,1);
     free(text); free(again); free(workspace); close_fixture(&f);
 }
