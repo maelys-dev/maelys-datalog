@@ -241,7 +241,10 @@ Before `cut --apply`, maintainers read the Python performance report and record
 its measured commit, run URL, SHA-256 and release decision in the changelog PR.
 The separate read-only `python-performance.yml` workflow measures main commits
 against the previous published release and a durable v0.11.1 reference,
-retaining v0.11.0 as a detection control. A reproducible complete-Python slowdown
+retaining v0.11.0 as an informative historical comparison. A benchmark-only
+positive control triples complete requests on the same v0.11.1 binary and must
+be detected in every case/configuration; it does not validate sensitivity to
+smaller costs. A reproducible complete-Python slowdown
 requires human review; phase timings inform diagnosis. Workflow success is not
 performance approval. There is no Python timing or artifact hook in
 `verify-release.sh`, packaging or tag replay. The contract and operator commands
