@@ -108,6 +108,8 @@ dependency on an unmerged branch explicitly.
 ## Python performance
 
 Follow `AGENTS.md` and `docs/python-performance.md` for the Python lifecycle
-budgets, automatic main-commit measurements and exact-commit release gate.
+budgets, automatic main-commit measurements and human review before `cut --apply`.
+Record the measured commit, run, report digest and decision in the changelog PR.
+Never add a Python timing/artifact hook to `verify-release.sh` or tag replay.
 Do not accept a timing exception without the user's decision on the named
 report; do not substitute the native prepared-solve benchmark for Python.

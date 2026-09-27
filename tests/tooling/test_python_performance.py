@@ -1,9 +1,10 @@
 # SPDX-License-Identifier: MPL-2.0
 """Tooling tests and injected regressions, not hosted performance evidence."""
-import copy
-import json
 from pathlib import Path
 import sys
+import os
+import subprocess
+import textwrap
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -136,36 +137,37 @@ class EvidenceTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 gate.require_artifact(artifacts, "a" * 40)
 
-    def test_review_is_bound_to_report_commit_harness_and_control(self):
-        scenarios = {f"{config}/{case}/{phase}" for config in perf.CONFIGS
-                     for case in perf.CASES for phase in perf.PHASES}
-        scenarios |= {f"{config}/{case}/cold" for config in perf.CONFIGS for case in perf.COLD_CASES}
-        rows = [dict(reference=ref, scenario=case, metric=metric, aa_floor=.01,
-                     delta=[.5, .5], classification=["slower", "slower"], review_required=True)
-                for ref in ("base", "anchor") for case in scenarios for metric in ("median", "p95")]
-        report = dict(schema=perf.SCHEMA, status="review_required", release_eligible=True,
-                      configs=perf.CONFIGS, commits=dict(head="a" * 40, anchor=perf.ANCHOR, historical=perf.HISTORICAL),
-                      environment=dict(run_id="10"), samples=dict(warm=501, cold=31),
-                      rows=rows, historical_control=dict(detected=True, rows=[r for r in rows if r["reference"] == "anchor"]),
-                      harness={name: perf.sha256(ROOT / name) for name in (
-                          "bench/python_perf.py", "bench/python_workload.py", "bench/python-perf-requirements.txt")})
+    def test_locator_names_measured_commit_without_approving_performance(self):
+        output = StringIO()
+        responses = [dict(workflow_runs=[self.run_record()]),
+                     dict(artifacts=[dict(name=gate.ARTIFACT_PREFIX + "a" * 40, expired=False)]),
+                     dict(jobs=[dict(name="Python performance evidence", conclusion="success")])]
+        with patch.object(gate, "revision", return_value="a" * 40) as revision, \
+                patch.object(gate, "api", side_effect=responses), redirect_stdout(output):
+            gate.check("measured-before-changelog")
+        revision.assert_called_once_with("measured-before-changelog")
+        self.assertIn("report available for " + "a" * 40, output.getvalue())
+        self.assertIn("not performance approval", output.getvalue())
+        self.assertIn("changelog PR", output.getvalue())
+
+    def test_workflow_keeps_review_advisory_but_propagates_tooling_failures(self):
+        workflow = (ROOT / ".github/workflows/python-performance.yml").read_text()
+        step = workflow.split("      - name: Measure candidate,", 1)[1].split("      - name:", 1)[0]
+        command = textwrap.dedent(step.split("        run: |\n", 1)[1])
         with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / "report.json"
-            path.write_text(json.dumps(report))
-            digest = perf.sha256(path)
-            gate.validate_review(report, "a" * 40, "10", digest, path)
-            with self.assertRaises(ValueError):
-                gate.validate_review(report, "a" * 40, "10", "0" * 64, path)
-            for field, value in (("release_eligible", False), ("status", "inconclusive_control"),
-                                 ("configs", ["SMALL-Release"]), ("historical_control", {"detected": False}),
-                                 ("commits", {"head": "b" * 40, "anchor": perf.ANCHOR}),
-                                 ("environment", {"run_id": "11"}), ("harness", {}),
-                                 ("rows", rows[:-1]), ("rows", rows + rows[:1])):
-                invalid = copy.deepcopy(report)
-                invalid[field] = value
-                path.write_text(json.dumps(invalid))
-                with self.subTest(field=field), self.assertRaises(ValueError):
-                    gate.validate_review(invalid, "a" * 40, "10", perf.sha256(path), path)
+            python = Path(directory) / "python"
+            python.write_text('#!/bin/sh\ncase "$1" in\n'
+                              'tools/check_python_performance.py) echo reference ;;\n'
+                              'bench/python_perf.py) exit "$TEST_BENCH_STATUS" ;;\n'
+                              '*) exit 99 ;;\nesac\n')
+            python.chmod(0o755)
+            for status in (0, 1, 2, 3):
+                with self.subTest(status=status):
+                    result = subprocess.run(["bash", "--noprofile", "--norc", "-eo", "pipefail", "-c", command],
+                                            env=dict(os.environ, PATH=directory + os.pathsep + os.environ["PATH"],
+                                                     TEST_BENCH_STATUS=str(status)), text=True, capture_output=True)
+                    self.assertEqual(result.returncode, 0 if status in (0, 2) else status, result.stderr)
+                    self.assertEqual("::warning::" in result.stdout, status == 2)
 
 
 if __name__ == "__main__":

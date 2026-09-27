@@ -190,17 +190,23 @@ when it has what they name.
   the manual native benchmark. Build every reference before timing. Keep the
   previous published release, immutable v0.11.1 anchor and v0.11.0 detection
   control, all declared cases, both CMake build modes and both size profiles.
-- Before a release, run `python3 tools/check_python_performance.py check` on
-  the exact final commit. `scripts/verify-release.sh` also enforces it. A bump,
-  merge or source edit invalidates earlier evidence; missing, expired, failed
-  or incomplete evidence is not a pass. Never bypass this hook to cut a tag.
-- Above-floor timings require review, not automatic algorithmic attribution.
-  An explicit timing acceptance must bind the original run and report SHA-256
-  to the same commit with a written rationale, through the documented dispatch.
-  Agents must obtain the user's decision on the concrete report before accepting
-  a tradeoff; authorization to implement a performance gate is not authorization
-  to waive its findings. Preserve classifications and the original report.
-- Keep generated measurements in run artifacts, not git. Run comparator/receipt
+- Before `maelys-release cut ... --apply`, read the Python report and record the
+  measured commit, run URL, report SHA-256, findings and maintainer decision in
+  the changelog pull request. Review any later runtime, binding, build or harness
+  changes with new measurements; a version/documentation-only change does not
+  by itself require another benchmark. Missing or incomplete evidence is not a
+  pass: obtain a usable report before making the release decision.
+- Keep this human review in the release ceremony. Never add a Python timing or
+  Actions-artifact hook to `scripts/verify-release.sh`, packaging or tag replay.
+  Timing observations must not fail the workflow and thereby become an indirect
+  tag gate. Tooling failures remain failures; workflow success is not approval
+  of the measured performance.
+- Preserve above-floor observations, without automatic algorithmic attribution.
+  A reproducible complete-Python slowdown requires a maintainer decision before
+  release; phase timings inform diagnosis. Agents must obtain the user's
+  decision on the concrete report before accepting a tradeoff, and record it
+  in the changelog PR. Preserve classifications and the original report.
+- Keep generated measurements in run artifacts, not git. Run comparator/evidence
   tests and replay the historical regression when changing the harness. Never
   present local smoke, flat instruction counts or indeterminate timings as a
   universal absence of regressions. Do not silently move references or widen

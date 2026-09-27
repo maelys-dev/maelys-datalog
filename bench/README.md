@@ -422,5 +422,5 @@ Baseline refresh procedure:
 The automatic Python release evidence is separate from this manual native
 benchmark. See [the Python performance contract](../docs/python-performance.md)
 for `python_perf.py`, its installed-SDK builds, complete input/solve/query/close
-timings, fixed references and report-bound release gate. Native prepared-solve
+timings, fixed references and report-bound human release review. Native prepared-solve
 measurements alone do not protect the Python convenience API.

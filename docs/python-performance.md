@@ -77,7 +77,14 @@ their own A/A floor, the maximum relative difference of the two pairs in both
 revisions. Raw nanoseconds and every round remain available.
 
 An above-floor slowdown in **either** A/B round of any phase, total or cold
-metric against either reference produces `review_required` and a failed check.
+metric against either reference produces `review_required` (harness exit 2).
+The workflow preserves that status, report and classifications, and emits a
+warning without failing the job. This prevents a timing observation from
+becoming an indirect tag gate through the socle's check inspection. Tooling
+errors and an inconclusive historical control still fail: they did not produce
+usable evidence. A green workflow means the measurement completed, not that a
+maintainer approved the performance. Reproducible complete-request slowdowns
+require a release decision; phase timings inform diagnosis.
 Below-floor differences remain `indeterminate`, never “no overhead”. A fully
 quiet report says `no_slowdown_observed`, a statement limited to these cases
 and this run. The known 0.11.0 warm quickstart total-median regression must be
@@ -92,57 +99,53 @@ Callgrind Ir is not hardware retired instructions, and equal counts do not
 establish equal cycles. Do not repeat the closed padding/layout investigations
 merely to obtain a green Python report.
 
-## Publication: evidence on the exact commit
+## Before the cut: human release review
 
-`scripts/verify-release.sh` calls
-`python3 tools/check_python_performance.py check` **before** `make check`.
-The same hook runs before `cut` creates the version branch and on every release
-build target before packaging. It requires a successful evidence job on the
-exact clean HEAD, from this repository's Python workflow, plus its unexpired
-artifact. Missing/pending/failed/skipped evidence and API failures stop the
-gate. A more recent failed run cannot fall back to an older green run.
+Before `maelys-release cut ... --apply`, read the complete report and record
+the following in the changelog pull request:
 
-The release bump and merge change the SHA: a report on the feature branch or
-pre-bump main cannot authorize publication. Wait for the automatic main run
-on the **final merge commit** before `cut --tag`; the tag's build gate checks
-it again. Evidence expires after 90 days; replaying a much older release that
-carries this gate requires new evidence. No tag is moved.
+- measured commit and any subsequent changes included in the release;
+- measurement run URL and the report's SHA-256;
+- complete-request findings, both rounds, phase diagnostics and control status;
+- deterministic allocation/call-budget results and instruction evidence when relevant;
+- the maintainer's decision and rationale, including unresolved observations
+  and any accepted user-facing cost.
 
-To measure again, dispatch on the branch/tag that names the commit:
+Fix a demonstrated regression or obtain the maintainer's explicit decision on
+the concrete tradeoff before release. Missing or incomplete evidence is not a
+pass: obtain a usable report before making that decision. Do not change
+thresholds, remove cases or move references to obtain a quiet report. Preserve
+the original report and classifications even when a tradeoff is accepted.
+Document user-facing costs in the changelog when appropriate. Agents must not
+infer acceptance of a finding from authorization to implement the benchmark.
+
+The report identifies exactly what was measured. New runtime, binding, build
+or harness changes require fresh measurements and an updated decision.
+Version/documentation-only changes do not by themselves require another run;
+record that scope in the changelog PR instead of demanding the final merge SHA
+for every report. Artifacts are retained for 90 days: record the review while
+they are available. Their later expiry must not prevent replay of an already
+published tag.
+
+There is no Python timing or Actions-artifact hook in `verify-release.sh`,
+packaging or tag replay. The release verification script runs `make check`.
+The generated release workflow and release-environment approval are unchanged.
+
+To measure again, dispatch on the branch/tag that names the candidate. The
+optional metadata check locates an available report on a named commit; it does
+not read the timing findings or approve a release:
 
 ```sh
 gh workflow run python-performance.yml --ref main
-python3 tools/check_python_performance.py check
+python3 tools/check_python_performance.py check --ref MEASURED_COMMIT
 ```
-
-If a report says `review_required`, inspect its full matrix and raw samples,
-the deterministic CI contracts, and the practical tradeoff. Fix a demonstrated
-regression before release. A maintainer may instead explicitly accept a
-measured tradeoff or an unresolved timing observation; document the user-facing
-cost in the changelog when appropriate. Review is a new dispatch **on the same
-commit**, naming the original run, its report's exact digest, and a rationale:
-
-```sh
-gh workflow run python-performance.yml --ref main \
-  -f source_run=RUN_ID -f report_sha256=REPORT_SHA256 \
-  -f reason='Concrete decision, affected scenarios, evidence and accepted limits'
-```
-
-This path downloads the existing artifact and validates its commit, harness,
-complete measurement mode and historical control. It adds `acceptance.json`
-with the actor, source run, report digest and rationale. It does not rerun the
-timings, edit their classifications, raise a threshold or move the baseline.
-Malformed, incomplete or local smoke reports cannot be accepted. A reviewed
-timing result does not waive functional, allocation or other required CI checks.
-Writer access authorizes the dispatch; the existing release-environment
-review remains the final publication approval.
 
 Artifacts include `report.json`, `report.md`, `samples.csv`, raw process outputs,
 binaries/headers and build logs. They stay in Actions (or local scratch), never
-in git, and generate no automatic PR comments. The release gate reads public
+in git, and generate no automatic PR comments. The optional locator reads public
 [Actions run metadata](https://docs.github.com/en/rest/actions/workflow-runs)
-without a write token; the review job uses Actions read permission to download
-the artifact. No new release workflow generation or protection change is needed.
+without a write token. The release decision belongs in the changelog PR, not in
+an acceptance dispatch. Do not make the timing workflow a required check.
 
 ## Local validation and maintaining the harness
 

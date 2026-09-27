@@ -37,10 +37,11 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 - Python lifecycle performance now has deterministic call budgets in SDK CI and
   an automatic main-commit benchmark against the previous release and v0.11.1,
-  with v0.11.0 as a regression-detection control. The release verification hook
-  requires accepted evidence on the exact commit before packaging. Above-floor
-  timing observations require a recorded, report-bound decision; they are not
-  automatically attributed to the engine. See `docs/python-performance.md`.
+  with v0.11.0 as a regression-detection control. Before cutting a release,
+  maintainers review the report and record their decision in the changelog PR.
+  Timing observations remain visible without an automatic timing gate at the
+  tag; they are not automatically attributed to the engine. See
+  `docs/python-performance.md`.
 
 ## 0.11.1 — 2026-09-26
 
