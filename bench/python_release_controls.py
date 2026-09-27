@@ -65,6 +65,7 @@ def run(evidence, output, smoke=False):
                   source_report_sha256=REPORT_SHA, commits=commits, fixtures=FIXTURES,
                   schedule=schedule(), smoke=smoke, environment=perf.host_description(),
                   harness_sha256=perf.sha256(Path(__file__)), samples=samples,
+                  shared_harness_sha256=perf.sha256(perf.ROOT / 'bench/python_perf.py'),
                   interpretation='Independent same-binary control; never replaces the original report')
     # No preparation/build runs after the first measurement starts.
     for config, case in FIXTURES:

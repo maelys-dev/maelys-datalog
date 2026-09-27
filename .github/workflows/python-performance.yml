@@ -38,7 +38,7 @@ jobs:
   evidence:
     name: Python performance evidence
     runs-on: ubuntu-24.04
-    timeout-minutes: 40
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
         with:
@@ -57,6 +57,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          # Schema 4 includes independent same-binary null controls for both
+          # references, plus the fixed three-request positive control.
           base="$(python tools/check_python_performance.py previous-release)"
           set +e
           python bench/python_perf.py --base "$base" --compiler clang-18 --output evidence

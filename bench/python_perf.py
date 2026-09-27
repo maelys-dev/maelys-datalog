@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MPL-2.0
 """Build installed Python consumers, then compare full request lifecycles.
 
-Exit 0: no above-floor slowdown observed; 2: review required; 1: invalid run.
+Exit 0: no review trigger; 2: review required; 1: invalid run.
 Local smoke evidence is never release evidence. Raw results stay in --output.
 """
 import argparse
@@ -29,7 +29,7 @@ ANCHOR = "0f247a7c81ec4a297f35ccee2bf007344f72ac7e"  # v0.11.1; not a moving tag
 HISTORICAL = "e2c357eae1f441774f6c54b13ac20124da79686e"  # v0.11.0, informative.
 CONFIGS = [f"{profile}-{build}" for profile in ("SMALL", "LARGE")
            for build in ("default", "Release")]
-SCHEMA = 3
+SCHEMA = 4
 HARNESS_FILES = ("bench/python_perf.py", "bench/python_workload.py", "bench/python_telemetry.py",
                  "bench/python-perf-requirements.txt")
 
@@ -90,10 +90,11 @@ def revision(ref):
     return command(["git", "rev-parse", "--verify", f"{ref}^{{commit}}"], cwd=ROOT)
 
 
-def schedule(roles):
+def schedule(roles, *, counterbalanced=False):
     # Two A/A pairs per binary before timing the alternating comparisons.
     return [(role, f"aa{i}") for role in roles for i in range(4)] + [
-        (role, f"ab{i}") for i in range(2) for role in roles]
+        (role, f"ab{i}") for i in range(2)
+        for role in (list(reversed(roles)) if counterbalanced and i == 1 else roles)]
 
 
 def statistic(values, metric):
@@ -155,22 +156,52 @@ def positive_detected(rows, configs):
 
 
 def measurement_variants(commits):
-    # Equal ordinary references may share samples; the same binary with an
-    # injected request count must never alias the anchor's normal samples.
-    variants = {role: (commit, 1) for role, commit in commits.items()}
-    variants["positive_control"] = (commits["anchor"], POSITIVE_CONTROL_REQUESTS)
+    # Build identity and sampling identity are separate. Equal references can
+    # share observations; neither head nor null may alias those observations.
+    variants = {role: (commit, 1, 'head' if role == 'head' else 'reference')
+                for role, commit in commits.items()}
+    variants["positive_control"] = (commits["anchor"], POSITIVE_CONTROL_REQUESTS, 'positive')
+    for role in ('base', 'anchor'):
+        variants[f'{role}_null'] = (commits[role], 1, 'null')
     return variants
 
 
+def screen_with_null(rows, null_rows):
+    """Add a release-review layer without changing raw A/A classifications.
+
+    The per-row envelope is empirical, not a confidence bound or attribution.
+    Cold first requests remain visible but cannot trigger review automatically.
+    """
+    key = lambda row: (row['reference'], row['scenario'], row['metric'])
+    controls = {key(row): row for row in null_rows}
+    if len(controls) != len(null_rows) or set(controls) != {key(row) for row in rows}:
+        raise ValueError('incomplete or duplicate null-control matrix')
+    screened = []
+    for row in rows:
+        control = controls[key(row)]
+        band = max(control['aa_floor'], *(abs(delta) for delta in control['delta']))
+        cold = row['scenario'].endswith('/cold')
+        decisions = ['informative_cold' if cold else
+                     'no_aa_slowdown' if classification != 'slower' else
+                     'beyond_null' if delta > band else 'not_distinguished_from_null'
+                     for delta, classification in zip(row['delta'], row['classification'])]
+        screened.append(dict(row, aa_review_required=row['review_required'],
+                             null_band=band, screening=decisions,
+                             review_required='beyond_null' in decisions))
+    return screened
+
+
 def assess(samples, configs):
-    rows = compare(samples)
+    null_rows = [row for reference in ('base', 'anchor')
+                 for row in compare(samples, f'{reference}_null', (reference,))]
+    rows = screen_with_null(compare(samples), null_rows)
     positive = compare(samples, "positive_control", ("anchor",))
     historical = compare(samples, "historical", ("anchor",))
     detected = positive_detected(positive, configs)
     status = ("inconclusive_control" if not detected else
               "review_required" if any(row["review_required"] for row in rows)
-              else "no_slowdown_observed")
-    return rows, positive, historical, detected, status
+              else "no_review_required")
+    return rows, positive, historical, null_rows, detected, status
 
 
 def build(source, dest, config, compiler, log):
@@ -234,12 +265,13 @@ def run(args):
     raw.mkdir()
     outputs = {}
     unique = list(dict.fromkeys(commits.values()))
-    plan = schedule(list(dict.fromkeys(variants.values())))
+    plan = schedule(list(dict.fromkeys(variants.values())), counterbalanced=True)
     warm_samples, cold_samples = (31, 2) if args.smoke else (501, 31)
     for config in configs:
-        for (commit, repetitions), pass_name in plan:
-            print(f"measure {config} {commit[:12]} requests={repetitions} {pass_name}", flush=True)
-            roles = [role for role, variant in variants.items() if variant == (commit, repetitions)]
+        for (commit, repetitions, identity), pass_name in plan:
+            print(f"measure {config} {commit[:12]} {identity} requests={repetitions} {pass_name}", flush=True)
+            roles = [role for role, variant in variants.items()
+                     if variant == (commit, repetitions, identity)]
             env = dict(os.environ, PYTHONPATH=str(builds[commit, config]),
                        PYTHONHASHSEED="0", PYTHONDONTWRITEBYTECODE="1")
             for case in CASES:
@@ -253,7 +285,7 @@ def run(args):
                         cwd=out, env=env))
                     if value["request_repetitions"] != repetitions:
                         raise ValueError("workload did not execute the requested control variant")
-                    filename = f"{config}-{commit}-requests{repetitions}-{pass_name}-{case}-{repeat}.json"
+                    filename = f"{config}-{commit}-{identity}-requests{repetitions}-{pass_name}-{case}-{repeat}.json"
                     (raw / filename).write_text(json.dumps(value) + "\n")
                     validate_telemetry(value, warm_samples if repeat == 0 else 0, 50)
                     old = outputs.setdefault(case, value["output_sha256"])
@@ -267,7 +299,7 @@ def run(args):
                 if case in COLD_CASES:
                     for role in roles:
                         samples[role][pass_name][f"{config}/{case}/cold"] = cold
-    rows, positive, historical, control_ok, status = assess(samples, configs)
+    rows, positive, historical, null_rows, control_ok, status = assess(samples, configs)
     print('measure separate observer/storage controls', flush=True)
     observation_controls = telemetry_controls(out, builds, commits, warm_samples)
     report = dict(schema=SCHEMA, status=status,
@@ -277,8 +309,12 @@ def run(args):
                   telemetry=dict(version=TELEMETRY_VERSION, sample_storage='fixed', contemporaneous=True,
                                  calibration_every=CALIBRATION_EVERY, calibration_budget_ns=CALIBRATION_NS,
                                  filters_samples=False, corrects_latencies=False),
-                  variants={role: dict(commit=sha, request_repetitions=repetitions)
-                            for role, (sha, repetitions) in variants.items()},
+                  variants={role: dict(commit=sha, request_repetitions=repetitions,
+                                       sampling_identity=identity)
+                            for role, (sha, repetitions, identity) in variants.items()},
+                  measurement_schedule=[dict(commit=sha, request_repetitions=repetitions,
+                                             sampling_identity=identity, pass_name=name)
+                                        for (sha, repetitions, identity), name in plan],
                   samples=dict(warm=warm_samples, cold=cold_samples),
                   environment=dict(python=sys.version, platform=platform.platform(), machine=platform.machine(), host=host,
                                    compiler=command([args.compiler, "--version"]),
@@ -289,6 +325,11 @@ def run(args):
                                    run_attempt=os.environ.get("GITHUB_RUN_ATTEMPT")),
                   harness={name: sha256(ROOT / name) for name in HARNESS_FILES},
                   binaries=hashes, outputs=outputs, rows=rows,
+                  null_control=dict(rows=null_rows, references=['base', 'anchor'],
+                                    same_binary_path=True, independent_samples=True,
+                                    band='max(null aa_floor, abs(null delta round 1), abs(null delta round 2))',
+                                    scope='per reference/scenario/metric; observed run only'),
+                  cold_informative_only=True,
                   positive_control=dict(detected=control_ok, rows=positive,
                                         reference="anchor", request_repetitions=POSITIVE_CONTROL_REQUESTS),
                   historical_control=dict(detected=historical_detected(historical, configs),
@@ -310,25 +351,35 @@ def run(args):
                f"Historical v0.11.0 quickstart slowdown detected everywhere (informative): **{report['historical_control']['detected']}**.", "",
                "A/A floors measure within-binary repeatability, not placement effects between binaries.",
                "Below-floor differences are indeterminate. Equal instructions would not establish equal cycles.",
-               "An above-floor slowdown requires review; this is not algorithmic attribution.", "",
-               "Schema 3: all measured requests carry contemporaneous CPU/resource/GC telemetry.",
+               "Schema 4: warm above-floor slowdowns beyond their matched null envelope require review.",
+               "The envelope is max(null A/A floor, absolute null gaps in both rounds), per reference/scenario/metric.",
+               "It is an observed range, not a confidence bound, tolerance or proof of no regression.",
+               "Cold first-request measurements are informative only; every raw classification is retained.",
+               "A no_review_required status is not performance approval or causal attribution.", "",
+               f"Candidate rows requiring review: **{sum(r['review_required'] for r in rows)}**; "
+               f"warm rows not distinguished from null in at least one round: **{sum('not_distinguished_from_null' in r['screening'] for r in rows)}**.",
+               f"Cold rows above their original A/A floor (informative): **{sum(r['aa_review_required'] and r['scenario'].endswith('/cold') for r in rows)}**.", "",
+               "All measured requests carry contemporaneous CPU/resource/GC telemetry.",
                "Independent ~20 µs Python calibration every 32 samples is outside request timing.",
                "Preallocated sample/event storage and observation perturb execution; see separate controls below.",
                "No samples are filtered or corrected; separate phase and total loops cannot be paired by index.", "",
-               "| Reference | Scenario | Metric | A/A % | Round 1 % | Round 2 % | Classes |",
-               "|---|---|---|---:|---:|---:|---|"]
-    for title, section in (("Candidate", rows), ("Injected positive control", positive),
+               "| Reference | Scenario | Metric | A/A % | Round 1 % | Round 2 % | Raw classes | Null band % | Review screening |",
+               "|---|---|---|---:|---:|---:|---|---:|---|"]
+    for title, section in (("Candidate", rows), ("Identical-binary null controls", null_rows),
+                           ("Injected positive control", positive),
                            ("Historical comparison (informative)", historical)) + tuple(
             (f"{role}: {kind} control (separate, bounded diagnostic)", values[kind])
             for role, values in observation_controls.items() for kind in ('observer', 'storage')):
         if title != "Candidate":
             summary.extend(["", f"## {title}", "",
-                            "| Reference | Scenario | Metric | A/A % | Round 1 % | Round 2 % | Classes |",
-                            "|---|---|---|---:|---:|---:|---|"])
+                            "| Reference | Scenario | Metric | A/A % | Round 1 % | Round 2 % | Raw classes | Null band % | Review screening |",
+                            "|---|---|---|---:|---:|---:|---|---:|---|"])
         for row in section:
+            band = f"{100*row['null_band']:.2f}" if 'null_band' in row else ''
             summary.append(f"| {row['reference']} | {row['scenario']} | {row['metric']} | "
                            f"{100*row['aa_floor']:.2f} | {100*row['delta'][0]:+.2f} | "
-                           f"{100*row['delta'][1]:+.2f} | {', '.join(row['classification'])} |")
+                           f"{100*row['delta'][1]:+.2f} | {', '.join(row['classification'])} | "
+                           f"{band} | {', '.join(row.get('screening', []))} |")
     (out / "report.md").write_text("\n".join(summary) + "\n")
     # Preserve binaries, headers and build logs, not intermediate object trees.
     for commit in unique:
@@ -336,7 +387,7 @@ def run(args):
         for config in configs:
             shutil.rmtree(out / commit / config / "build")
     print(f"{report['status']}: {report_path}; sha256={sha256(report_path)}", flush=True)
-    return {"inconclusive_control": 1, "review_required": 2, "no_slowdown_observed": 0}[status]
+    return {"inconclusive_control": 1, "review_required": 2, "no_review_required": 0}[status]
 
 
 if __name__ == "__main__":

@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: MPL-2.0
 from pathlib import Path
+import hashlib
 import sys
 import tempfile
 import unittest
@@ -92,6 +93,21 @@ class ReleaseInstructionTests(unittest.TestCase):
             (root / 'report.json').write_text('{}')
             with self.assertRaisesRegex(ValueError, 'wrong original report'):
                 subject.original_report(root)
+
+    def test_archived_producer_and_current_executed_workload_are_both_verified(self):
+        producer = 'bench/python_perf.py'
+        hashes = {name: 'unchanged' for name in subject.perf.HARNESS_FILES}
+        hashes[producer] = hashlib.sha256(b'archived producer').hexdigest()
+        with patch.object(subject.subprocess, 'check_output', return_value=b'archived producer') as git, \
+                patch.object(subject.perf, 'sha256', return_value='unchanged') as current:
+            subject.validate_original_harness(hashes)
+            git.assert_called_once_with(['git', 'show', f'{subject.HEAD}:{producer}'], cwd=subject.perf.ROOT)
+            self.assertNotIn(subject.perf.ROOT / producer, [call.args[0] for call in current.call_args_list])
+            for name in hashes:
+                with self.subTest(name=name), self.assertRaises(ValueError):
+                    subject.validate_original_harness(dict(hashes, **{name: 'wrong'}))
+            with self.assertRaises(ValueError):
+                subject.validate_original_harness({producer: hashes[producer]})
 
 
 if __name__ == '__main__':

@@ -32,7 +32,8 @@ def controlled_samples():
                          for config in perf.CONFIGS for case in perf.CASES}
                    for _, name in perf.schedule([role])}
             for role, value in (("base", 20000), ("anchor", 20000), ("head", 20000),
-                                ("historical", 20000), ("positive_control", 60000))}
+                                ("historical", 20000), ("positive_control", 60000),
+                                ("base_null", 20000), ("anchor_null", 20000))}
 
 
 class ComparisonTests(unittest.TestCase):
@@ -96,6 +97,10 @@ class ComparisonTests(unittest.TestCase):
         plan = perf.schedule(["a", "b", "c"])
         self.assertEqual(plan[:4], [("a", f"aa{i}") for i in range(4)])
         self.assertEqual(plan[-6:], [(role, f"ab{i}") for i in range(2) for role in "abc"])
+        balanced = perf.schedule(['a', 'b', 'c'], counterbalanced=True)
+        self.assertEqual(balanced[:-6], plan[:-6])
+        self.assertEqual(balanced[-6:], [(role, name) for name, order in
+                                        (('ab0', 'abc'), ('ab1', 'cba')) for role in order])
 
 
 class PositiveControlTests(unittest.TestCase):
@@ -111,7 +116,7 @@ class PositiveControlTests(unittest.TestCase):
             return {perf.ANCHOR: 'anchor', perf.HISTORICAL: 'history',
                     'HEAD': 'candidate', 'base': 'anchor'}[ref]
         for control_ok, candidate_slow, status, code in (
-                (True, False, 'no_slowdown_observed', 0),
+                (True, False, 'no_review_required', 0),
                 (True, True, 'review_required', 2),
                 (False, False, 'inconclusive_control', 1)):
             def command(args, **kwargs):
@@ -143,7 +148,7 @@ class PositiveControlTests(unittest.TestCase):
                     self.assertEqual(perf.run(args), code)
                 report = json.loads((output / 'report.json').read_text())
                 self.assertEqual(report['status'], status)
-                self.assertEqual(report['schema'], 3)
+                self.assertEqual(report['schema'], 4)
                 self.assertTrue(report['telemetry']['contemporaneous'])
                 self.assertEqual(set(report['telemetry_controls']), {'base', 'head'})
                 self.assertEqual(report['positive_control']['detected'], control_ok)
@@ -151,18 +156,29 @@ class PositiveControlTests(unittest.TestCase):
                 self.assertFalse(report['release_eligible'])
                 self.assertEqual(report['variants']['positive_control']['commit'], 'anchor')
                 self.assertEqual(report['variants']['positive_control']['request_repetitions'], 3)
-                self.assertEqual(len(list((output / 'raw').glob('*.json'))), 240)
+                self.assertTrue(report['cold_informative_only'])
+                self.assertEqual(report['variants']['base_null'], report['variants']['anchor_null'])
+                self.assertNotEqual(report['variants']['base_null'], report['variants']['base'])
+                self.assertEqual(len(report['null_control']['rows']), len(report['rows']))
+                self.assertEqual(len(list((output / 'raw').glob('*.json'))), 300)
+                # The same binary is invoked again, with separate raw files.
+                normal = output / 'raw' / 'SMALL-Release-anchor-reference-requests1-ab0-7-symbol-solve-0.json'
+                null = output / 'raw' / 'SMALL-Release-anchor-null-requests1-ab0-7-symbol-solve-0.json'
+                self.assertTrue(normal.exists())
+                self.assertTrue(null.exists())
+                self.assertEqual(normal.read_bytes(), null.read_bytes())
                 self.assertEqual(len(list((output / 'telemetry-controls').glob('*.json'))), 72)
                 self.assertIn('Historical comparison (informative)', (output / 'report.md').read_text())
                 self.assertIn('positive_control', (output / 'samples.csv').read_text())
 
     def test_informative_history_cannot_approve_or_invalidate_positive_control(self):
         data = controlled_samples()
-        rows, positive, historical, detected, status = perf.assess(data, perf.CONFIGS)
+        rows, positive, historical, null_rows, detected, status = perf.assess(data, perf.CONFIGS)
         self.assertTrue(detected)
         self.assertFalse(perf.historical_detected(historical, perf.CONFIGS))
-        self.assertEqual(status, "no_slowdown_observed")
-        self.assertEqual(rows, perf.compare(data))
+        self.assertEqual(status, "no_review_required")
+        self.assertEqual([{k: r[k] for k in ('reference', 'scenario', 'metric', 'aa_floor', 'delta', 'classification')} for r in rows],
+                         [{k: r[k] for k in ('reference', 'scenario', 'metric', 'aa_floor', 'delta', 'classification')} for r in perf.compare(data)])
         self.assertEqual(len([r for r in positive if r['metric'] == 'median']), 32)
         # A historical slowdown cannot rescue a removed injection.
         data['historical'], data['positive_control'] = data['positive_control'], data['historical']
@@ -185,7 +201,7 @@ class PositiveControlTests(unittest.TestCase):
         data = controlled_samples()
         key = 'SMALL-Release/7-symbol-solve/total'
         data['head']['ab1'][key][-6:] = [40000] * 6
-        rows, _, _, detected, status = perf.assess(data, perf.CONFIGS)
+        rows, _, _, _, detected, status = perf.assess(data, perf.CONFIGS)
         self.assertTrue(detected)
         self.assertEqual(status, 'review_required')
         self.assertTrue(any(r['scenario'] == key and r['metric'] == 'p95' and
@@ -206,13 +222,18 @@ class PositiveControlTests(unittest.TestCase):
     def test_control_uses_anchor_binary_without_aliasing_normal_samples(self):
         variants = perf.measurement_variants(dict(base='a', anchor='a', head='b', historical='c'))
         self.assertEqual(variants['base'], variants['anchor'])
-        self.assertEqual(variants['positive_control'], ('a', 3))
+        self.assertEqual(variants['base_null'], variants['anchor_null'])
+        self.assertNotEqual(variants['base_null'], variants['base'])
+        self.assertEqual(variants['positive_control'], ('a', 3, 'positive'))
         unique = list(dict.fromkeys(variants.values()))
-        self.assertEqual(len(unique), 4)
+        self.assertEqual(len(unique), 5)
         plan = perf.schedule(unique)
         for variant in unique:
             self.assertEqual([name for item, name in plan if item == variant],
                              ['aa0', 'aa1', 'aa2', 'aa3', 'ab0', 'ab1'])
+        equal = perf.measurement_variants(dict(base='a', anchor='a', head='a', historical='a'))
+        self.assertEqual(len(set(equal.values())), 4)
+        self.assertNotEqual(equal['head'], equal['base'])
 
     def test_injection_repeats_real_lifecycle_and_keeps_every_answer(self):
         events = []
@@ -233,6 +254,98 @@ class PositiveControlTests(unittest.TestCase):
         for invalid in (0, 2, 4):
             with self.assertRaises(ValueError):
                 workload.repeat_transaction(transaction, invalid)
+
+
+class NullControlTests(unittest.TestCase):
+    key = 'SMALL-Release/7-symbol-solve/total'
+
+    def test_null_band_preserves_raw_alert_and_only_screens_matching_reference(self):
+        data = controlled_samples()
+        data['head']['ab0'][self.key] = [21000] * 100
+        data['base_null']['ab1'][self.key] = [22000] * 100
+        rows, _, _, null_rows, _, status = perf.assess(data, perf.CONFIGS)
+        base = next(r for r in rows if r['scenario'] == self.key and
+                    r['metric'] == 'median' and r['reference'] == 'base')
+        self.assertEqual(base['classification'], ['slower', 'indeterminate'])
+        self.assertTrue(base['aa_review_required'])
+        self.assertFalse(base['review_required'])
+        self.assertEqual(base['screening'], ['not_distinguished_from_null', 'no_aa_slowdown'])
+        self.assertAlmostEqual(base['null_band'], .1)
+        anchor = next(r for r in rows if r['scenario'] == self.key and
+                      r['metric'] == 'median' and r['reference'] == 'anchor')
+        self.assertTrue(anchor['review_required'])
+        self.assertEqual(status, 'review_required')
+        self.assertTrue(any(r['review_required'] for r in null_rows))
+
+    def test_beyond_band_in_either_round_still_requires_review(self):
+        for round_name in ('ab0', 'ab1'):
+            data = controlled_samples()
+            for ref in ('base', 'anchor'):
+                data[ref + '_null']['ab0'][self.key] = [22000] * 100
+            data['head'][round_name][self.key] = [24000] * 100
+            with self.subTest(round=round_name):
+                self.assertEqual(perf.assess(data, perf.CONFIGS)[-1], 'review_required')
+
+    def test_band_includes_both_signs_and_aa_without_changing_candidate_floor(self):
+        for null_pass, value in (('ab0', 18000), ('ab1', 22000), ('aa1', 22000)):
+            data = controlled_samples()
+            data['head']['ab0'][self.key] = [21000] * 100
+            for ref in ('base', 'anchor'):
+                data[ref + '_null'][null_pass][self.key] = [value] * 100
+            rows, _, _, _, _, status = perf.assess(data, perf.CONFIGS)
+            with self.subTest(null_pass=null_pass):
+                self.assertEqual(status, 'no_review_required')
+                self.assertTrue(all(r['aa_floor'] == 0 for r in rows))
+                self.assertTrue(any(r['aa_review_required'] for r in rows))
+        # Equal magnitude is within the envelope, not beyond it.
+        data['head']['ab0'][self.key] = [22000] * 100
+        self.assertEqual(perf.assess(data, perf.CONFIGS)[-1], 'no_review_required')
+
+    def test_no_pooling_across_cases_metrics_or_references(self):
+        data = controlled_samples()
+        data['head']['ab0'][self.key] = [21000] * 100
+        for ref in ('base', 'anchor'):
+            data[ref + '_null']['ab0'][self.key][-6:] = [40000] * 6
+            other = 'LARGE-default/93-integer-prepared/total'
+            data[ref + '_null']['ab0'][other] = [90000] * 100
+        rows = perf.assess(data, perf.CONFIGS)[0]
+        target = [r for r in rows if r['scenario'] == self.key]
+        self.assertTrue(all(r['review_required'] for r in target if r['metric'] == 'median'))
+        self.assertFalse(any(r['review_required'] for r in target if r['metric'] == 'p95'))
+
+    def test_cold_is_informative_even_far_beyond_quiet_null(self):
+        data = controlled_samples()
+        key = self.key.replace('/total', '/cold')
+        for role, passes in data.items():
+            for name, values in passes.items():
+                values[key] = [100000 if role == 'head' and name == 'ab1' else 20000] * 31
+        rows, _, _, _, detected, status = perf.assess(data, perf.CONFIGS)
+        self.assertTrue(detected)
+        self.assertEqual(status, 'no_review_required')
+        cold = [r for r in rows if r['scenario'] == key]
+        self.assertTrue(all(r['aa_review_required'] and not r['review_required'] for r in cold))
+        self.assertTrue(all(r['screening'] == ['informative_cold'] * 2 for r in cold))
+
+    def test_missing_or_invalid_null_evidence_cannot_pass(self):
+        for role in ('base_null', 'anchor_null'):
+            for mutation in ('role', 'pass', 'case', 'nan'):
+                data = controlled_samples()
+                if mutation == 'role':
+                    del data[role]
+                elif mutation == 'pass':
+                    del data[role]['ab1']
+                elif mutation == 'case':
+                    del data[role]['ab1'][self.key]
+                else:
+                    data[role]['ab1'][self.key] = [float('nan')]
+                with self.subTest(role=role, mutation=mutation), self.assertRaises((KeyError, ValueError)):
+                    perf.assess(data, perf.CONFIGS)
+        data = controlled_samples()
+        rows = perf.compare(data)
+        null_rows = [r for ref in ('base', 'anchor') for r in perf.compare(data, ref + '_null', (ref,))]
+        for broken in (null_rows[:-1], null_rows + null_rows[:1]):
+            with self.assertRaises(ValueError):
+                perf.screen_with_null(rows, broken)
 
 
 class EvidenceTests(unittest.TestCase):

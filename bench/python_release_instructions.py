@@ -6,6 +6,7 @@ This is instruction evidence, not another timing vote or release gate.
 """
 import argparse
 import ctypes
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -31,15 +32,29 @@ INDICES = (0, 100, 421, 422, 436, 448, 449, 500)
 LABELS = ('cold',) + tuple(f'total_{i:03d}' for i in INDICES)
 
 
+def validate_original_harness(harness):
+    if set(harness) != set(perf.HARNESS_FILES):
+        raise ValueError('incomplete original harness hashes')
+    for name, digest in harness.items():
+        # The schema-3 report producer is not the request callable. Verify its
+        # archived source; schema 4 may change reporting without changing the
+        # workload, telemetry or dependencies that these fixed replays execute.
+        if name == 'bench/python_perf.py':
+            source = subprocess.check_output(['git', 'show', f'{HEAD}:{name}'], cwd=perf.ROOT)
+            actual = hashlib.sha256(source).hexdigest()
+        else:
+            actual = perf.sha256(perf.ROOT / name)
+        if actual != digest:
+            raise ValueError(f'changed original workload/producer: {name}')
+
+
 def original_report(evidence):
     if perf.sha256(evidence / 'report.json') != REPORT_SHA:
         raise ValueError('wrong original report')
     report = json.loads((evidence / 'report.json').read_text())
     if report['commits']['head'] != HEAD or report['commits']['base'] != BASE:
         raise ValueError('wrong revisions')
-    for name, digest in report['harness'].items():
-        if perf.sha256(perf.ROOT / name) != digest:
-            raise ValueError(f'changed original workload: {name}')
+    validate_original_harness(report['harness'])
     for config, _, roles in FIXTURES:
         for role in roles:
             commit = report['commits'][role]
@@ -120,6 +135,7 @@ def run(evidence, output):
     report = dict(schema=1, release_eligible=False, original_run=36331650860,
                   source_report_sha256=REPORT_SHA, fixtures=FIXTURES, scopes=LABELS,
                   harness_sha256=perf.sha256(Path(__file__)), helper_sha256=perf.sha256(helper),
+                  shared_harness_sha256=perf.sha256(perf.ROOT / 'bench/python_perf.py'),
                   environment=dict(python=sys.version, valgrind=perf.command(['valgrind', '--version']),
                                    host=perf.host_description()), results=[], loader=[])
     # Preserve the actual linked layouts, not just four compiler objects.

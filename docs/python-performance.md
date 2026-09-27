@@ -53,6 +53,16 @@ reference prevents a succession of individually accepted changes from hiding
 their accumulated cost. Equal reference commits reuse the same binary and
 samples; they are not presented as independent repetitions.
 
+Schema 4 adds a permanent **identical-binary null control for each reference**
+(`base_null`, `anchor_null`). Each loads the very same installed files, at the
+same path, as its reference: no rebuild, copy-induced path difference or relink.
+Fresh processes collect independent A/A and comparison samples with identical
+workload and telemetry. Null roles may share samples with each other only when
+their reference commits coincide; they never reuse ordinary reference samples.
+The candidate is independently sampled even when its commit equals a reference.
+`variants` records the commit, request count and sampling identity; raw filenames
+include that identity, and `measurement_schedule` records the exact pass order.
+
 Sensitivity is checked independently of that history: a benchmark-only wrapper
 executes **three complete requests instead of one**, with the same installed
 v0.11.1 binding and native binary. This variant shares the binary, not the
@@ -94,28 +104,61 @@ three cold starts. Its phase diagnostics sum the three per-request durations,
 while its total includes the wrapper and all three complete requests.
 
 Two A/A pairs per distinct binary/variant precede two interleaved rounds of all
-variants, including the injected variant with its own A/A samples. Below
+variants, including the injected and null variants with their own A/A samples.
+Schema 4 reverses the complete variant order in the second comparison round,
+balancing each variant's position across the two rounds. Below
 10 microseconds (determined from reference A/A medians), the
 comparator uses minima. Otherwise median and nearest-rank p95 each retain
 their own A/A floor, the maximum relative difference of the two pairs in both
 revisions. Raw nanoseconds and every round remain available.
 
-An above-floor slowdown in **either** A/B round of any phase, total or cold
-metric against either reference produces `review_required` (harness exit 2).
+### Null controls and release-review screening (schema 4)
+
+The raw comparator is unchanged: `aa_floor`, both `delta` values and both
+`classification` values retain the original A/A interpretation for every row.
+`aa_review_required` preserves the old candidate trigger, including cold rows.
+No samples, signs or classifications are removed or recalculated with a wider
+A/A floor. Schema-2/3 reports retain their original statuses and interpretation.
+
+For each **reference / configuration / case / phase / statistic** separately,
+the observed null envelope is declared as
+`max(null A/A floor, abs(null round 1 delta), abs(null round 2 delta))`.
+Both signs count because the two labels execute the same binary. The rule is
+fixed before measuring; it never pools noise from unrelated cases, references
+or statistics. This is a descriptive envelope of this run, **not a confidence
+bound, universal tolerance or causal test**. Two rounds do not estimate a tail
+bound on future process variation, and a noisy control can leave a real small
+regression unresolved. A quiet null also cannot establish a software cause.
+
+A **warm** raw `slower` classification beyond that row's null envelope in
+**either** round produces `review_required` (harness exit 2). A raw slowdown
+within the envelope stays visible as `not_distinguished_from_null`; it is not
+reported as a candidate effect, nor as proof of equivalence. A larger candidate
+gap still triggers review even when the null itself alerts. First-request
+(`cold`) measurements are **informative only**, including their raw A/A alerts:
+they do not trigger this automatic review status, but remain available for a
+maintainer's investigation. Cold performance can still regress; this policy
+change does not establish that every cold slowdown is environmental.
+
 The workflow preserves that status, report and classifications, and emits a
 warning without failing the job. This prevents a timing observation from
 becoming an indirect tag gate through the socle's check inspection. Tooling
-errors and an inconclusive injected control still fail: they did not produce
-usable evidence. A green workflow means the measurement completed, not that a
+errors, missing/incomplete null samples and an inconclusive injected control
+still fail: they did not produce usable evidence. A green workflow means the
+measurement completed, not that a
 maintainer approved the performance. Reproducible complete-request slowdowns
 require a release decision; phase timings inform diagnosis.
-Below-floor differences remain `indeterminate`, never “no overhead”. A fully
-quiet report says `no_slowdown_observed`, a statement limited to these cases
-and this run. Every injected warm total's primary metric (median, or minimum
+Below-floor differences remain `indeterminate`, never “no overhead”. A report
+without a warm trigger says `no_review_required`, **not** `no_slowdown_observed`:
+it may contain unresolved warm observations and cold alerts. Review screening
+does not approve the release. Every injected warm total's primary metric (median, or minimum
 below 10 microseconds) must classify slower in both rounds of **all eight cases
 in all four configurations**. Missing samples or a missing injection fail;
 the historical comparison cannot rescue them. If detection is incomplete, the instrument
 returns `inconclusive_control`, which cannot be accepted as a timing exception.
+Positive-control validity uses its raw A/A classifications, never null screening.
+The three-request positive control validates coarse sensitivity; the independent
+null measures variation without a software change. Neither certifies the other.
 
 The historical v0.11.0 comparison remains complete and informative. The first
 hosted run did not detect its quickstart slowdown in SMALL-Release and only
@@ -256,7 +299,9 @@ the following in the changelog pull request:
 
 - measured commit and any subsequent changes included in the release;
 - measurement run URL and the report's SHA-256;
-- complete-request findings, both rounds, phase diagnostics and control status;
+- complete-request findings, both rounds, phase diagnostics and positive-control status;
+- matched null envelopes, remaining warm triggers, unresolved warm observations
+  and informative cold findings (schema 4);
 - deterministic allocation/call-budget results and instruction evidence when relevant;
 - the maintainer's decision and rationale, including unresolved observations
   and any accepted user-facing cost.
@@ -310,10 +355,11 @@ python3 -m unittest discover -s tests/tooling -p 'test_python_perf*.py' -v
 ```
 
 The injected variant must be detected even when the historical pair is quiet.
-Historical candidate slowdowns still require review (exit 2) wherever observed;
+Historical candidate warm slowdowns beyond their matched null envelope still
+require review (exit 2);
 they are not assumed on every platform. A missing or inconclusive injected
-control refuses the run (exit 1). Exit 0 means
-no above-floor slowdown was observed, not proof of equivalence. `--smoke`
+control refuses the run (exit 1). Exit 0 means no warm review trigger remains
+under this protocol, not proof of equivalence or absence of raw alerts. `--smoke`
 reduces sampling and configurations; local runs always have
 `release_eligible: false`. Their success validates tooling only.
 

@@ -235,6 +235,20 @@ when it has what they name.
   smaller regressions. Never adapt the injection to an ongoing run's noise.
   Preserve the first hosted report (run 36305554306): its historical control
   was inconclusive in SMALL; do not retroactively label that run validated.
+- Schema 4 adds independently sampled, same-path identical-binary controls for
+  both previous-release and anchor references. Equal references may share a
+  null run, never their ordinary samples; head is independently sampled even
+  at the same commit. Keep two A/A pairs and reverse variant order in the second
+  comparison round. Preserve raw A/A floors/classes and `aa_review_required`.
+  Screen warm alerts using only the matching reference/scenario/statistic's
+  `max(null A/A floor, absolute null gaps in both rounds)`. A raw slowdown beyond
+  that envelope in either round is `review_required`; within it is unresolved,
+  not an established candidate effect or evidence of no regression. This
+  empirical envelope is not a confidence bound or universal tolerance. Cold
+  first requests are informative only, with every raw alert retained. Missing
+  null evidence fails; positive-control validity is never screened by the null.
+  `no_review_required` does not approve a release. This prospective protocol
+  change must not rewrite historical reports or their original decisions.
 - Before `maelys-release cut ... --apply`, read the Python report and record the
   measured commit, run URL, report SHA-256, findings and maintainer decision in
   the changelog pull request. Review any later runtime, binding, build or harness
