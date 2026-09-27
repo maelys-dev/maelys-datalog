@@ -416,3 +416,11 @@ Baseline refresh procedure:
   compiler and OS labels remain comparable;
 - inspect `make -f Makefile.bench check` after refresh before committing the
   baseline.
+
+## Python consumer lifecycle
+
+The automatic Python release evidence is separate from this manual native
+benchmark. See [the Python performance contract](../docs/python-performance.md)
+for `python_perf.py`, its installed-SDK builds, complete input/solve/query/close
+timings, fixed references and report-bound release gate. Native prepared-solve
+measurements alone do not protect the Python convenience API.

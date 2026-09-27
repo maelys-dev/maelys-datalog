@@ -1,0 +1,87 @@
+name: Python performance
+
+# Separate from the native, manual bench-compare.yml. PRs run deterministic
+# contracts in CI; trusted main commits produce exact-commit release evidence.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      source_run:
+        description: 'Review only: completed measurement run ID (blank runs a new measurement)'
+        type: string
+      report_sha256:
+        description: 'Review only: SHA-256 printed in that measurement report'
+        type: string
+      reason:
+        description: 'Review only: explicit acceptance rationale for the reported timing changes'
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: python-performance-${{ github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  evidence:
+    name: Python performance evidence
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12.12'
+      - name: Validate review inputs
+        env:
+          SOURCE_RUN: ${{ inputs.source_run }}
+          REPORT_SHA: ${{ inputs.report_sha256 }}
+          REASON: ${{ inputs.reason }}
+        run: |
+          python - <<'PY'
+          import os
+          fields = [os.environ[k].strip() for k in ('SOURCE_RUN', 'REPORT_SHA', 'REASON')]
+          if any(fields) and not all(fields):
+              raise SystemExit('Supply all three review fields, or leave all blank for measurement')
+          PY
+      - name: Install fixed measurement dependencies
+        if: inputs.source_run == ''
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang-18 cmake
+          python -m pip install -r bench/python-perf-requirements.txt
+      - name: Measure candidate, previous release and durable v0.11.1 reference
+        if: inputs.source_run == ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          base="$(python tools/check_python_performance.py previous-release)"
+          python bench/python_perf.py --base "$base" --compiler clang-18 --output evidence
+      - name: Record explicit acceptance of an existing report
+        if: inputs.source_run != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_RUN: ${{ inputs.source_run }}
+          REPORT_SHA: ${{ inputs.report_sha256 }}
+          REASON: ${{ inputs.reason }}
+        run: |
+          python tools/check_python_performance.py review --source-run "$SOURCE_RUN" \
+            --report-sha256 "$REPORT_SHA" --reason "$REASON" --output evidence
+      - name: Preserve every measurement and the decision
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-performance-${{ github.sha }}
+          path: evidence/
+          if-no-files-found: error
+          retention-days: 90
+      - name: Report
+        if: always()
+        run: |
+          if test -f evidence/report.md; then cat evidence/report.md >> "$GITHUB_STEP_SUMMARY"; fi

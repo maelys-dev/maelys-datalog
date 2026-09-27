@@ -9,5 +9,7 @@
 set -eu
 cd "$(dirname "$0")/.."
 target="${1:?usage: scripts/verify-release.sh TARGET}"
+echo "==> exact-commit Python performance evidence ($target)"
+python3 tools/check_python_performance.py check
 echo "==> make check ($target)"
 make check

@@ -234,3 +234,14 @@ or `gh attestation verify` to function. The chain is locally testable without
 a tag: `package-release.sh TARGET`, `release-gates.sh`, `maelys-release
 rehearse . linux-arm64` (the socle's build job replayed in Docker) and the
 plan-only stops of `maelys-release cut`.
+
+## Python consumer performance
+
+The product verification hook also requires accepted Python performance
+evidence on the exact commit being released, before packaging. The separate
+read-only `python-performance.yml` workflow measures main commits against the
+previous published release and a durable v0.11.1 reference, retaining v0.11.0
+as a detection control. Missing evidence blocks release; measured slowdowns
+require an explicit, report-bound decision. The contract and operator commands
+are in [Python performance](python-performance.md). This does not change the
+generated release workflow or the release environment's final approval.

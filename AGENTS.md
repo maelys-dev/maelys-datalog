@@ -178,6 +178,34 @@ when it has what they name.
   claim secure erasure from ordinary memset; an explicit erasure contract would
   require a non-elidable primitive and its own measurements.
 
+## Python performance and release evidence
+
+- Follow `docs/python-performance.md`. Protect the complete Python input /
+  solve / query / close lifecycle, both convenience and reused sessions; native
+  prepared-solve timing alone cannot establish Python performance.
+- Preserve the native allocation/reservation/reset budgets and the installed-SDK
+  Python lifecycle call budgets in SMALL and LARGE. Python/CFFI still allocate;
+  native call counts do not establish zero allocation or speed.
+- `python-performance.yml` automatically measures main commits, separately from
+  the manual native benchmark. Build every reference before timing. Keep the
+  previous published release, immutable v0.11.1 anchor and v0.11.0 detection
+  control, all declared cases, both CMake build modes and both size profiles.
+- Before a release, run `python3 tools/check_python_performance.py check` on
+  the exact final commit. `scripts/verify-release.sh` also enforces it. A bump,
+  merge or source edit invalidates earlier evidence; missing, expired, failed
+  or incomplete evidence is not a pass. Never bypass this hook to cut a tag.
+- Above-floor timings require review, not automatic algorithmic attribution.
+  An explicit timing acceptance must bind the original run and report SHA-256
+  to the same commit with a written rationale, through the documented dispatch.
+  Agents must obtain the user's decision on the concrete report before accepting
+  a tradeoff; authorization to implement a performance gate is not authorization
+  to waive its findings. Preserve classifications and the original report.
+- Keep generated measurements in run artifacts, not git. Run comparator/receipt
+  tests and replay the historical regression when changing the harness. Never
+  present local smoke, flat instruction counts or indeterminate timings as a
+  universal absence of regressions. Do not silently move references or widen
+  budgets to make a candidate pass.
+
 ## Manual benchmark evidence
 
 - Keep `bench-compare.yml` workflow_dispatch-only, with base/head inputs and

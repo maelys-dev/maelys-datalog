@@ -23,13 +23,20 @@ extracted-archive consumers in both SMALL and LARGE. Native packaging itself
 runs the extracted-archive gate before producing a checksum or receipt; no
 release may bypass a missing-header or private-header failure.
 
+The automatic **Python performance** run on that exact main commit must first
+be accepted. `scripts/verify-release.sh` refuses missing, expired, unresolved
+or stale evidence. Review the report and any measured tradeoff using
+[`docs/python-performance.md`](docs/python-performance.md); do not waive a
+timing finding by changing its threshold or deleting a case.
+
 Then run the two local gates on the tree that will be released:
 
 ```bash
 scripts/release-gates.sh
 ```
 
-Gate 1 is `scripts/verify-release.sh` on this machine (clang); `cut` runs it
+Gate 1 is `scripts/verify-release.sh` on this machine (Python performance
+evidence, then `make check` with clang); `cut` runs it
 again itself, so gate 1 is the fast answer before gate 2. Gate 2 is `make
 check CC=gcc` in a pinned `ubuntu:24.04` container on a disposable copy of
 the tree — the second compiler, which no runner of the release matrix uses,
@@ -52,7 +59,7 @@ environment armed with a reviewer (`[gate] reviewer`). It then writes
 commit to exist and to finish.
 
 Before writing anything, `cut` also runs `scripts/verify-release.sh` with
-this machine's target — `make check`, so the first stop lasts as long as it
+this machine's target — Python evidence followed by `make check`, so the first stop lasts as long as it
 does — and, after writing `VERSION`, the `[cut] after-version` command of
 `maelys-release.conf`: `scripts/generate-version-header.sh`, whose regenerated
 `include/maelys_datalog_version.h` joins the bump commit. A failure of either
@@ -62,6 +69,10 @@ restores `VERSION` and creates nothing.
 
 Merge the release pull request when its checks are green. `cut` never merges
 its own pull request.
+
+Wait for the automatic Python performance run on the **merge commit** as well.
+The pre-bump report has a different SHA and cannot authorize the tag. Resolve
+any timing review on that exact commit before proceeding.
 
 ## 4. Second stop: the tag
 
@@ -82,7 +93,7 @@ changelog entry) and pushes. The push triggers `release.yml`.
    `linux-arm64`, `macos-arm64`, and `wasm32` on an Ubuntu runner — each
    with `contents: read` only: installs the packages of
    `dependencies/packages` (`clang`, `jq` on Linux), runs
-   `scripts/verify-release.sh TARGET` (`make check`), then
+   `scripts/verify-release.sh TARGET` (exact-commit Python evidence and `make check`), then
    `scripts/package-release.sh TARGET` writing `dist/`, then attests the
    provenance of `dist/*`.
 3. Stops at the `release` environment: a required reviewer approves in the
