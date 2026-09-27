@@ -110,6 +110,11 @@ when it has what they name.
 
 - Prefer caller-owned, aligned storage and explicit bounded capacities for new
   runtime APIs. Opaque handles do not justify mandatory heap allocation.
+- For session sizing, follow `docs/architecture/sized-reference-sessions.md` as
+  a proposal, not an implemented API. Keep program/build bounds distinct from
+  effective session capacities; never pass smaller quotas through `program_info`
+  to an ABI 5 backend. Preserve default external-backend behavior and validate
+  supported combinations before claiming capacity-sized backend storage.
 - Do not add per-fact, per-term, or grow-on-demand allocations to input paths.
   Validate a whole batch before publishing facts or text; internal preflight
   bookkeeping must roll back byte-for-byte on rejection. Capacity exhaustion
