@@ -135,6 +135,43 @@ merely to obtain a green Python report.
 
 ## Before the cut: human release review
 
+### Bounded tail diagnostic
+
+The optional `tail_diagnostic` dispatch runs a separate investigation of the
+SMALL-Release / 7-integer-prepared p95 observation in run 36308020794. It compares
+fixed v0.11.1 (`0f247a7`) with the measured candidate (`f975be6`), building both
+before sampling. Four cases are declared in `bench/python_tail_diagnostic.py`:
+the observed case, its symbol and convenience counterparts, and 93 integer
+facts in a prepared session. Two A/A pairs precede twelve alternating comparisons
+with reversed revision order in every other pair. Case and mode order rotate;
+every process has 501 warm samples, 50 warmups and a checked first request.
+
+`plain` invokes the original release workload in a fresh interpreter. `observe`
+wraps its same transactions to collect elapsed and thread CPU time, getrusage
+context-switch/page-fault deltas and GC callback intervals. Numeric sample
+storage is preallocated. `gc-off` repeats the observer with cyclic collection
+disabled; ordinary reference counting and Python/CFFI allocation remain.
+Observer imports, calls and callbacks perturb execution and GC scheduling:
+their latencies are diagnostic, not replacements for `plain` or release timing.
+
+CPU clock reads surround the inner wall interval, so small negative wall-minus-CPU
+differences are retained. Resource snapshots surround both clocks and can include
+boundary work. A wall/CPU gap can support descheduling; equal increases cannot
+distinguish more executed work from frequency, cache or host effects. GC intervals
+are intersected with the same measured transaction; release phase samples remain
+separate transactions and must not be correlated by index with total samples.
+The fixed 200-microsecond tail listing is descriptive only: no samples are removed,
+no A/A floor changes, and no old observation is reclassified. The report always
+has `release_eligible: false` and uses a separate artifact name. This bounded run
+does not authorize a release or reopen the closed padding/layout investigation.
+
+Clock and event semantics follow the Python 3.12 documentation for
+[thread time](https://docs.python.org/3.12/library/time.html#time.thread_time),
+[resource usage](https://docs.python.org/3.12/library/resource.html#resource.getrusage)
+and [GC callbacks](https://docs.python.org/3.12/library/gc.html#gc.callbacks).
+
+### Release decision
+
 Before `maelys-release cut ... --apply`, read the complete report and record
 the following in the changelog pull request:
 

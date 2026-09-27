@@ -6,6 +6,11 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      tail_diagnostic:
+        description: 'Run the fixed SMALL-Release tail investigation (not release evidence)'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -34,6 +39,7 @@ jobs:
           sudo apt-get install -y clang-18 cmake
           python -m pip install -r bench/python-perf-requirements.txt
       - name: Measure candidate, previous release and durable v0.11.1 reference
+        if: inputs.tail_diagnostic != true
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -47,11 +53,16 @@ jobs:
             2) echo '::warning::Python timing observations require human review before cut --apply. Record the report and decision in the changelog PR; this job is not performance approval.' ;;
             *) exit "$status" ;;
           esac
+      - name: Diagnose the fixed Python tail observation
+        if: inputs.tail_diagnostic == true
+        run: |
+          python -m unittest discover -s tests/tooling -p 'test_python_perf*.py' -v
+          python bench/python_tail_diagnostic.py --compiler clang-18 --output evidence
       - name: Preserve every measurement
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: python-performance-${{ github.sha }}
+          name: ${{ inputs.tail_diagnostic == true && 'python-tail-diagnostic' || 'python-performance' }}-${{ github.sha }}
           path: evidence/
           if-no-files-found: error
           retention-days: 90
