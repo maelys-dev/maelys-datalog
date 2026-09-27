@@ -106,6 +106,20 @@ when it has what they name.
   modify `main` directly, or combine unrelated features on one branch. State the
   base explicitly when a feature depends on an unmerged change.
 
+## Downstream compatibility and the 0.13.0 batch
+
+- The 0.13.0 batch combines the retired window include removal with additive
+  transactional static EDB replacement and explicitly driven time expiry.
+  Header migration is a source break; it does not itself change backend ABI 5.
+- Before cutting 0.13.0, build the downstream consumer against a clean installed
+  candidate SDK and record the candidate/consumer revisions, profile, commands,
+  results and complete required migration list. A reported include review does
+  not replace this integration replay. Keep private implementation code out of
+  this repository; downstream requirements enter as written proposals only.
+- Session capacity work keeps `program_info` and its program/build limits
+  unchanged. Consumer quotas need a separate contract and explicit admission;
+  never silently reinterpret backend ABI 5 fields as per-session limits.
+
 ## Memory-allocation contract
 
 - Prefer caller-owned, aligned storage and explicit bounded capacities for new

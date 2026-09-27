@@ -235,7 +235,14 @@ The installed-SDK external backend tests must pass unchanged on default paths.
 Downstream integration suites still need replay against the candidate SDK;
 public tests cannot certify an untested backend. New static-input/expiry window
 operations need their own transactional oracle tests with such backends, even
-if the descriptor ABI remains unchanged. This proposal changes no backend code.
+if the descriptor ABI remains unchanged. This proposal changes no backend code. Requirements from a downstream
+implementation enter this review as written proposals, never copied code.
+
+Before the 0.13.0 release cut, install the integrated candidate SDK into a clean
+prefix and build/replay the downstream consumer against that prefix. Record the
+SDK and consumer revisions, profile, commands, results and exact source changes
+required. The maintainer's include-only review of the header consolidation is
+separate evidence and does not replace that final integration build.
 
 ## Implementation and acceptance sequence
 
