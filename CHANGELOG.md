@@ -7,6 +7,11 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## 0.12.0 — 2026-09-27
+
+Session storage reductions and Python consumer performance review. Consumer
+API 2 and backend ABI 5 are unchanged.
+
 ### Changed
 
 - Reserve canonical input export storage only for sessions whose backend solve
