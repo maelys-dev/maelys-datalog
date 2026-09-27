@@ -437,6 +437,86 @@ static int test_matches_fresh_full_solve_oracle(void) {
     TEST_END();
 }
 
+/* Deliberately exercise both the indexed lookup path and a chain wrapping at
+ * the last bucket. The two literal keys also collide on all 32 FNV bits. */
+static uint32_t reset_test_hash(const char *s) {
+    uint32_t h = 2166136261u;
+    for (; *s; ++s) { h ^= (unsigned char)*s; h *= 16777619u; }
+    return h;
+}
+static int test_live_dictionary_reset_collisions_and_rejection(void) {
+    TEST_BEGIN();
+    maelys_datalog_internal_ruleset_t source;
+    TEST_ASSERT_EQUAL(MAELYS_OK, make_symbol_ruleset(&source), "%d");
+    const char *left = "u6rr76a9mjhk", *right = "d4jxglq7h9se";
+    TEST_ASSERT_EQUAL(reset_test_hash(left), reset_test_hash(right), "%u");
+    char wraps[3][32]; size_t count = 0;
+    for (size_t n = 0; n < 200000 && count < 3; ++n) {
+        char key[32]; snprintf(key, sizeof(key), "wrap-%zu", n);
+        if ((reset_test_hash(key) & (MAELYS_DATALOG_SYMBOL_INDEX_BUCKETS - 1u)) ==
+            MAELYS_DATALOG_SYMBOL_INDEX_BUCKETS - 1u) strcpy(wraps[count++], key);
+    }
+    TEST_ASSERT_EQUAL((size_t)3, count, "%zu");
+    maelys_datalog_symbol_id_t left_id, empty_id, wrap_ids[2], ignored;
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_symbol_intern(&source.symbols, left, strlen(left), &left_id), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_symbol_intern(&source.symbols, "", 0, &empty_id), "%d");
+    for (size_t n = 0; n < 2; ++n)
+        TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_symbol_intern(&source.symbols, wraps[n], strlen(wraps[n]), &wrap_ids[n]), "%d");
+    for (size_t n = 0; n < 32; ++n) {
+        char key[32]; snprintf(key, sizeof(key), "seed-%zu", n);
+        TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_symbol_intern(&source.symbols, key, strlen(key), &ignored), "%d");
+    }
+    maelys_datalog_internal_prepared_session_t *session = NULL;
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_prepared_session_create(&source, &session), "%d");
+    const char *keys[] = {left, "", wraps[0], wraps[1], right, wraps[2]};
+    const maelys_datalog_symbol_id_t ids[] = {left_id, empty_id, wrap_ids[0], wrap_ids[1]};
+    for (unsigned repeat = 0; repeat < 3; ++repeat) {
+        /* No successful reset may read unused storage, entries or old buckets. */
+        memset(&session->symbols, 0xa5, sizeof(session->symbols));
+        TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_prepared_session_materialize_inputs(session, NULL, 0), "%d");
+        for (maelys_datalog_symbol_id_t id = 1; id <= source.symbols.count; ++id) {
+            const char *text = maelys_datalog_symbol_text(&session->symbols, id);
+            TEST_ASSERT_NOT_NULL(text);
+            TEST_ASSERT_EQUAL(0, strcmp(maelys_datalog_symbol_text(&source.symbols, id), text), "%d");
+        }
+        for (size_t n = 0; n < 6; ++n) {
+            int found = -1; maelys_datalog_symbol_id_t id = 99;
+            TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_symbol_lookup_readonly(&session->symbols,
+                keys[n], strlen(keys[n]), &id, &found), "%d");
+            TEST_ASSERT_EQUAL(n < 4, found, "%d");
+            if (n < 4) TEST_ASSERT_EQUAL(ids[n], id, "%u");
+        }
+        maelys_datalog_fact_t facts[] = {
+            binary_fact("member", right, "policy-team"),
+            binary_fact("member", wraps[2], "policy-team"),
+            binary_fact("member", "", "policy-team"),
+            binary_fact("member", left, "policy-team")
+        };
+        if (repeat & 1u) { maelys_datalog_fact_t f = facts[0]; facts[0] = facts[3]; facts[3] = f; }
+        maelys_datalog_internal_solve_result_t *result = NULL;
+        TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_prepared_session_solve(session, facts, 4, &result), "%d");
+        for (size_t n = 0; n < 6; ++n) {
+            int found = 0; maelys_datalog_symbol_id_t id;
+            TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_prepared_session_lookup_symbol(session, keys[n], &id, &found), "%d");
+            TEST_ASSERT_TRUE(found);
+            if (n < 4) { TEST_ASSERT_EQUAL(ids[n], id, "%u"); }
+            else { TEST_ASSERT_TRUE(id > source.symbols.count); }
+        }
+        maelys_datalog_solve_result_free(result);
+        /* A late materialization rejection must erase the previous and newly
+         * interned transaction text, even though normal resets skip tails. */
+        facts[3] = unary_fact("unknown", "rejected-orphan");
+        TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_FIELD, maelys_datalog_prepared_session_solve(session, facts, 4, &result), "%d");
+        TEST_ASSERT_NULL(result);
+        TEST_ASSERT_EQUAL(0, memcmp(&source.symbols, &session->symbols, sizeof(source.symbols)), "%d");
+        TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_prepared_session_solve(session, NULL, 0, &result), "%d");
+        maelys_datalog_solve_result_free(result);
+    }
+    TEST_ASSERT_EQUAL(0, memcmp(&source, session->prepared, sizeof(source)), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_prepared_session_destroy(session), "%d");
+    TEST_END();
+}
+
 static int test_reset_discards_prior_runtime_symbols(void) {
     TEST_BEGIN();
     maelys_datalog_internal_ruleset_t ruleset;
@@ -1297,6 +1377,8 @@ int main(int argc, char **argv) {
          TEST_MODE_NON_BLOCKING, test_order_independent_results_and_why_true},
         {"prepared_session/matches_fresh_full_solve_oracle",
          TEST_MODE_NON_BLOCKING, test_matches_fresh_full_solve_oracle},
+        {"prepared_session/live_dictionary_reset_collisions_and_rejection",
+         TEST_MODE_NON_BLOCKING, test_live_dictionary_reset_collisions_and_rejection},
         {"prepared_session/reset_discards_prior_runtime_symbols",
          TEST_MODE_NON_BLOCKING, test_reset_discards_prior_runtime_symbols},
         {"prepared_session/legacy_workspaces_keep_input_snapshots",

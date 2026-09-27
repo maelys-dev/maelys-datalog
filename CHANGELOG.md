@@ -23,6 +23,10 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
   same result/explanation lease. Legacy direct solves and copying workspaces
   retain independent EDB snapshots. Caller input buffers may still be cleared
   after solve. No allocation is deferred to solve or explanation preparation.
+- Normal transaction resets copy only live policy symbol text and entries plus
+  the full hash index, avoiding the unused dictionary capacity. Rejections keep
+  the full byte-for-byte dictionary restoration. Session reservation is unchanged
+  by this reset optimization.
 - On the checked 64-bit SMALL/LARGE builds, a reference session sharing an
   engine-owned policy reserves 286,040/476,504 bytes instead of 515,416/935,256,
   saving 224/448 KiB across the same three engine allocations. Policy creation

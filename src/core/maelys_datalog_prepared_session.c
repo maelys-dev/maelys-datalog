@@ -179,9 +179,24 @@ static maelys_result_t materialize_input_fact(
 }
 
 static maelys_result_t reset_transaction_state(
-    maelys_datalog_internal_prepared_session_t *session) {
+    maelys_datalog_internal_prepared_session_t *session, int rejected) {
     if (!session) return MAELYS_ERR_INVALID_ARGUMENT;
-    session->symbols = session->prepared->symbols;
+    const maelys_datalog_symbol_table_t *base = &session->prepared->symbols;
+    if (rejected || (base->used == sizeof(base->storage) &&
+                     base->count == MAELYS_DATALOG_MAX_SYMBOLS)) {
+        /* Rejection restores inactive tails too. When every entry/text byte
+         * is live, one copy avoids splitting the same full payload in three. */
+        session->symbols = *base;
+    } else {
+        /* Only these prefixes are live. Copy the whole index: buckets beyond
+         * count are meaningful, including empty slots and wrapped collisions. */
+        memcpy(session->symbols.storage, base->storage, base->used);
+        memcpy(session->symbols.entries, base->entries,
+               base->count * sizeof(base->entries[0]));
+        memcpy(session->symbols.index, base->index, sizeof(base->index));
+        session->symbols.used = base->used;
+        session->symbols.count = base->count;
+    }
     /* Only fact_count entries are live. Insertion initializes each whole fact;
      * collecting symbols writes every pointer before the sort reads it. */
     return maelys_datalog_edb_init(
@@ -199,7 +214,7 @@ static maelys_result_t reject_transaction(
      * borrowed pointers. Full payload clearing is confined to failure paths. */
     memset(session->fact_pool, 0, sizeof(session->fact_pool));
     memset(session->symbol_inputs, 0, sizeof(session->symbol_inputs));
-    maelys_result_t reset = reset_transaction_state(session);
+    maelys_result_t reset = reset_transaction_state(session, 1);
     return reset == MAELYS_OK ? rejection : reset;
 }
 
@@ -346,7 +361,7 @@ maelys_result_t maelys_datalog_prepared_session_materialize_inputs_diagnosed(
     MAELYS_DATALOG_COUNT_PIPELINE(materializations);
     /* Reset only mutable transaction state. The parsed rules, registry,
      * strata and prepared identity are reused without another ruleset copy. */
-    maelys_result_t rc = reset_transaction_state(session);
+    maelys_result_t rc = reset_transaction_state(session, 0);
     if (rc != MAELYS_OK) return rc;
 
     size_t symbol_count = 0u;
