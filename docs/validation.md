@@ -235,8 +235,8 @@ in caller-owned storage is copied into the session allocation instead, so the
 caller may overwrite that storage immediately after policy release.
 
 The allocator guard checks three constructor allocations on both paths and caps
-their requested bytes at 550,000/980,000 (shared SMALL/LARGE) and
-900,000/1,300,000 (copied SMALL/LARGE). These exclude the separately owned policy
+their requested bytes at 450,000/820,000 (shared SMALL/LARGE) and
+820,000/1,140,000 (copied SMALL/LARGE). These exclude the separately owned policy
 allocation and optional explanation/backend storage. The guard also checks
 allocation-failure cleanup, shared-policy lifetime, caller-storage reuse, zero
 constructor-storage reset on ordinary session destruction, and the existing
@@ -245,6 +245,17 @@ poisoned in that guard: public/native result workspaces initialize only metadata
 must write each live payload entry on first use just as on reuse. The session
 constructor also bounds calloc plus explicit memset requests to 200,000/350,000
 bytes on the shared SMALL/LARGE path; this counts requests, not physical writes.
+Canonical public input export storage is a creation-time tail in the session
+allocation, reserved only when the selected solve callback does not borrow the
+materialized inputs. The reference and copied/renamed reference descriptors
+reserve none; a wrapper that needs export reserves exactly
+`MAX_EDB_FACTS * sizeof(maelys_datalog_fact_t)` additional bytes, still in three
+engine allocations. The allocation guard checks both selections, every
+constructor failure point, and repeated solve/query/release with allocation
+disabled. The backend transaction oracle checks canonical order, integer
+extremes, symbol contents, boolean normalization, duplicates, empty inputs,
+rejection and reuse, and the full export capacity in both profiles. Comparisons
+use semantic fields, not pointer values or struct padding.
 The transaction dictionary pointer sits after the native result payload, keeping
 all pre-existing result array offsets unchanged. Both solve entry paths assign
 it before use, including the first allocation and reuse; it is intentionally

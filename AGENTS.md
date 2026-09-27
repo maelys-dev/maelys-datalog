@@ -141,6 +141,11 @@ when it has what they name.
 - Intern repeated input strings rather than reserving worst-case text for every
   occurrence. Defaults derive from native symbol/registry budgets, not arbitrary
   MiB multipliers. Preserve canonical result IDs regardless of insertion order.
+- Reserve canonical input export storage at session creation only when the
+  selected solve callback needs it (`borrows_inputs`), not based on backend
+  name or descriptor identity. Keep the external callback's semantic input
+  oracle and full-capacity test, plus copied/wrapped-descriptor allocation and
+  failure guards. Do not trade the saved reservation for solve-time allocation.
 - Do not use libc qsort on the hot path: it may allocate. Use the bounded
   in-place sort and maintain the all-engine allocation-guard test.
 - Never claim the whole engine is zero-malloc based on an input-buffer test.

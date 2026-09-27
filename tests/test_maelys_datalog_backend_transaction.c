@@ -24,6 +24,9 @@ typedef struct {
     size_t order_size;
     void *received;
     maelys_datalog_session_t *session;
+    int inspect_inputs;
+    const maelys_datalog_fact_t *expected_inputs;
+    size_t expected_count;
 } recording_t;
 typedef union { max_align_t alignment; recording_t state; } pool_t;
 static size_t queries, prepares, required_bytes = sizeof(recording_t);
@@ -64,10 +67,29 @@ static maelys_datalog_fact_t output_fact(int64_t value) {
 static maelys_datalog_status_t solve(void *state, const maelys_datalog_fact_t *facts,
     size_t count, maelys_datalog_backend_output_t *out, void **result,
     maelys_datalog_diagnostic_t *diag) {
-    (void)facts; (void)count; (void)diag;
+    (void)diag;
     recording_t *r = state;
     if (!r) { *result = NULL; return MAELYS_DATALOG_STATUS_OK; }
     CHECK(r->received == state && !r->live);
+    if (r->inspect_inputs) {
+        CHECK(count == r->expected_count);
+        CHECK((facts == NULL) == (count == 0));
+        for (size_t i = 0; i < count; ++i) {
+            const maelys_datalog_fact_t *expected = &r->expected_inputs[i];
+            CHECK(!strcmp(facts[i].predicate, expected->predicate));
+            CHECK(facts[i].arity == expected->arity);
+            for (size_t j = 0; j < expected->arity; ++j) {
+                const maelys_datalog_value_t *got = &facts[i].terms[j], *want = &expected->terms[j];
+                CHECK(got->kind == want->kind);
+                switch (want->kind) {
+                    case MAELYS_DATALOG_VALUE_SYMBOL: CHECK(!strcmp(got->as.symbol, want->as.symbol)); break;
+                    case MAELYS_DATALOG_VALUE_INTEGER: CHECK(got->as.integer == want->as.integer); break;
+                    case MAELYS_DATALOG_VALUE_BOOLEAN: CHECK(got->as.boolean == want->as.boolean); break;
+                    default: CHECK(0);
+                }
+            }
+        }
+    }
     ++r->solve; ++r->serial; r->live = 1; r->accepted = 0;
     record(r, 'S');
     *result = r->mode == NULL_RESULT ? NULL : r;
@@ -158,7 +180,7 @@ static maelys_datalog_backend_storage_t storage_for(pool_t *pool) {
     return (maelys_datalog_backend_storage_t){sizeof(maelys_datalog_backend_storage_t),
         pool, sizeof(*pool), _Alignof(pool_t)};
 }
-static maelys_datalog_session_t *create(pool_t *pool) {
+static maelys_datalog_session_t *create_for_policy(pool_t *pool, const maelys_datalog_policy_t *p) {
     maelys_datalog_session_config_t *config = NULL;
     maelys_datalog_backend_t b = backend();
     maelys_datalog_backend_storage_t storage = storage_for(pool);
@@ -168,11 +190,14 @@ static maelys_datalog_session_t *create(pool_t *pool) {
     OK(maelys_datalog_session_config_set_backend(config, &b));
     storage.bytes = NULL; storage.size = 0; /* config owns the descriptor copy */
     size_t before = queries;
-    OK(maelys_datalog_session_create_configured(policy, 0, config, &session));
+    OK(maelys_datalog_session_create_configured(p, 0, config, &session));
     CHECK(queries == before + 1 && pool->state.received == pool && pool->state.prepare == 1);
     pool->state.session = session;
     OK(maelys_datalog_session_config_free(config));
     return session;
+}
+static maelys_datalog_session_t *create(pool_t *pool) {
+    return create_for_policy(pool, policy);
 }
 static void abi_rejection(void) {
     maelys_datalog_session_config_t *config = NULL;
@@ -287,6 +312,100 @@ static void session_commit(void) {
     OK(maelys_datalog_result_free(r)); OK(maelys_datalog_session_free(s));
     CHECK(pool.state.releases == 3 && pool.state.aborts == 4 && pool.state.destroy == 1);
 }
+static void canonical_inputs(void) {
+#define S(s) {.kind = MAELYS_DATALOG_VALUE_SYMBOL, .as.symbol = (s)}
+#define I(i) {.kind = MAELYS_DATALOG_VALUE_INTEGER, .as.integer = (i)}
+#define B(b) {.kind = MAELYS_DATALOG_VALUE_BOOLEAN, .as.boolean = (b)}
+    /* Literal semantic oracle: no pointer/padding comparison or reuse of the
+     * production sorter. Checked against the pre-optimization runtime too. */
+    const maelys_datalog_fact_t expected[] = {
+        {.predicate="event", .arity=2, .terms={S("alpha"), I(INT64_MIN)}},
+        {.predicate="event", .arity=2, .terms={S("alpha"), I(INT64_MAX)}},
+        {.predicate="event", .arity=2, .terms={S("zeta"), B(1)}},
+        {.predicate="event", .arity=2, .terms={I(-3), B(0)}},
+        {.predicate="event", .arity=2, .terms={I(3), S("alpha")}},
+        {.predicate="event", .arity=2, .terms={B(0), I(5)}},
+        {.predicate="event", .arity=2, .terms={B(1), I(-5)}},
+        {.predicate="other", .arity=2, .terms={S("alpha"), S("")}},
+    };
+#undef S
+#undef I
+#undef B
+    pool_t pool = {0};
+    maelys_datalog_session_t *s = create(&pool);
+    pool.state.inspect_inputs = 1;
+    pool.state.expected_inputs = expected;
+    pool.state.expected_count = sizeof(expected) / sizeof(expected[0]);
+    maelys_datalog_fact_t input[10];
+    for (size_t pass = 0; pass < 3; ++pass) {
+        for (size_t i = 0; i < 8; ++i) {
+            size_t at = pass == 0 ? i : pass == 1 ? 7 - i : (i * 5) % 8;
+            input[i] = expected[at];
+        }
+        input[8] = expected[2]; input[8].terms[1].as.boolean = -7;
+        input[9] = expected[6]; input[9].terms[0].as.boolean = 42;
+        maelys_datalog_result_t *r = NULL;
+        OK(maelys_datalog_session_solve(s, input, 10, &r, NULL));
+        CHECK(input[8].terms[1].as.boolean == -7 && input[9].terms[0].as.boolean == 42);
+        OK(maelys_datalog_result_free(r));
+    }
+    unsigned calls = pool.state.solve;
+    input[9].predicate = "missing";
+    maelys_datalog_result_t *r = NULL;
+    CHECK(maelys_datalog_session_solve(s, input, 10, &r, NULL) != MAELYS_DATALOG_STATUS_OK);
+    CHECK(!r && pool.state.solve == calls);
+    pool.state.expected_count = 0;
+    OK(maelys_datalog_session_solve(s, NULL, 0, &r, NULL));
+    OK(maelys_datalog_result_free(r));
+    pool.state.expected_count = 8;
+    OK(maelys_datalog_session_solve(s, expected, 8, &r, NULL));
+    OK(maelys_datalog_result_free(r));
+    OK(maelys_datalog_session_free(s));
+}
+static void canonical_capacity(void) {
+    size_t limit, per_predicate;
+    OK(maelys_datalog_limit_get(MAELYS_DATALOG_LIMIT_MAX_EDB_FACTS, &limit));
+    OK(maelys_datalog_limit_get(MAELYS_DATALOG_LIMIT_MAX_FACTS_PER_PRED, &per_predicate));
+    size_t groups = (limit + per_predicate - 1) / per_predicate;
+    CHECK(groups <= 32);
+    char names[32][16];
+    maelys_datalog_predicate_t predicates[33];
+    for (size_t i = 0; i < groups; ++i) {
+        snprintf(names[i], sizeof(names[i]), "export%02zu", i);
+        predicates[i] = (maelys_datalog_predicate_t)MAELYS_DATALOG_EDB(names[i], 1);
+    }
+    predicates[groups] = (maelys_datalog_predicate_t)MAELYS_DATALOG_IDB_QUERY("seen", 1);
+    const maelys_datalog_domain_t domain = {"export_capacity", predicates, groups + 1, NULL, 0};
+    OK(maelys_datalog_domain_register(&domain));
+    const char source[] = "seen(V) :- export00(V).";
+    maelys_datalog_policy_t *p = NULL;
+    OK(maelys_datalog_policy_load_inline(domain.name, "p", source, sizeof(source) - 1, &p, NULL));
+    maelys_datalog_fact_t *expected = calloc(limit, sizeof(*expected));
+    maelys_datalog_fact_t *input = calloc(limit + 1, sizeof(*input));
+    CHECK(expected && input);
+    for (size_t i = 0; i < limit; ++i) {
+        expected[i] = (maelys_datalog_fact_t){.predicate=names[i / per_predicate], .arity=1};
+        expected[i].terms[0] = (maelys_datalog_value_t){.kind=MAELYS_DATALOG_VALUE_INTEGER,
+            .as.integer=(int64_t)(i % per_predicate)};
+        input[limit - 1 - i] = expected[i];
+    }
+    pool_t pool = {0};
+    maelys_datalog_session_t *s = create_for_policy(&pool, p);
+    pool.state.inspect_inputs = 1;
+    pool.state.expected_inputs = expected;
+    pool.state.expected_count = limit;
+    maelys_datalog_result_t *r = NULL;
+    OK(maelys_datalog_session_solve(s, input, limit, &r, NULL));
+    OK(maelys_datalog_result_free(r));
+    input[limit] = input[0];
+    CHECK(maelys_datalog_session_solve(s, input, limit + 1, &r, NULL) == MAELYS_DATALOG_STATUS_PAYLOAD_TOO_LARGE);
+    CHECK(!r && pool.state.solve == 1);
+    OK(maelys_datalog_session_solve(s, expected, limit, &r, NULL));
+    OK(maelys_datalog_result_free(r));
+    OK(maelys_datalog_session_free(s));
+    OK(maelys_datalog_policy_free(p));
+    free(input); free(expected);
+}
 static void context_storage(void) {
     maelys_datalog_context_t *context = NULL;
     maelys_datalog_backend_t b = backend();
@@ -367,8 +486,8 @@ static void window_commit(int groups) {
 }
 int main(int argc, char **argv) {
     static const maelys_datalog_predicate_t predicates[] = {
-        MAELYS_DATALOG_EDB("event", 2), MAELYS_DATALOG_IDB_QUERY("seen", 1)};
-    const maelys_datalog_domain_t domain = {"transaction", predicates, 2, NULL, 0};
+        MAELYS_DATALOG_EDB("event", 2), MAELYS_DATALOG_EDB("other", 2), MAELYS_DATALOG_IDB_QUERY("seen", 1)};
+    const maelys_datalog_domain_t domain = {"transaction", predicates, 3, NULL, 0};
     OK(maelys_datalog_domain_register(&domain));
     const char source[] = "seen(V) :- event(_,V).";
     OK(maelys_datalog_policy_load_inline(domain.name, "p", source, strlen(source), &policy, NULL));
@@ -376,6 +495,8 @@ int main(int argc, char **argv) {
 #define RUN(name, expression) do { if (!strcmp(which, "all") || !strcmp(which, name)) { queries = prepares = 0; expression; puts(name " PASS"); } } while (0)
     RUN("abi", abi_rejection()); RUN("storage", storage_contract());
     RUN("session", session_commit()); RUN("context", context_storage());
+    RUN("inputs", canonical_inputs());
+    RUN("input_capacity", canonical_capacity());
     RUN("window", window_commit(0)); RUN("group", window_commit(1));
     OK(maelys_datalog_policy_free(policy));
     return 0;

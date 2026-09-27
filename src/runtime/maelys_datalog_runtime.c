@@ -154,12 +154,10 @@ struct maelys_datalog_session {
     uint64_t result_generation, explanation_generation;
     maelys_datalog_prepared_explanation_t *explanation_cache;
     maelys_datalog_internal_fact_t explanation_query; /* Result-scoped canonical values. */
-    /* Canonical export is reserved for external backends. Input facts are
-     * borrowed directly; materialization never retains their pointers. */
-    struct {
-        maelys_datalog_fact_t canonical[MAELYS_DATALOG_MAX_EDB_FACTS];
-    } solve_scratch;
     int pending_commit; /* Runtime-only candidate; no flag inserted into the retained payload. */
+    /* Same allocation as the session, reserved only when !borrows_inputs.
+     * Every live entry is initialized before an external solve callback. */
+    maelys_datalog_fact_t solve_scratch[];
 };
 struct maelys_datalog_backend_output {
     maelys_datalog_result_t *result;
@@ -369,21 +367,21 @@ static maelys_datalog_status_t session_create_with_storage(
     if (!backend_storage_valid(storage) || storage->size < bytes ||
         (bytes && !storage->bytes) || (storage->bytes && storage->alignment < alignment))
         return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
-    maelys_datalog_session_t *s = malloc(sizeof(*s));
+    const int borrows_inputs = b->solve == maelys_datalog_backend_reference()->solve;
+    const size_t export_bytes = borrows_inputs ? 0 :
+        MAELYS_DATALOG_MAX_EDB_FACTS * sizeof(maelys_datalog_fact_t);
+    maelys_datalog_session_t *s = malloc(sizeof(*s) + export_bytes);
     if (!s)
         return MAELYS_DATALOG_STATUS_INTERNAL;
     /* Retained result facts and external-backend export scratch are populated
      * before use, on the first solve as on reuse. Initialize only metadata;
-     * keep the existing layout and reserve every payload byte up front. */
+     * reserve every required payload byte up front. */
     memset(s, 0, offsetof(maelys_datalog_session_t, result_storage) +
         offsetof(maelys_datalog_result_t, facts));
     const size_t result_end = offsetof(maelys_datalog_session_t, result_storage) +
         sizeof(s->result_storage);
     memset((unsigned char *)s + result_end, 0,
-        offsetof(maelys_datalog_session_t, solve_scratch) - result_end);
-    const size_t scratch_end = offsetof(maelys_datalog_session_t, solve_scratch) +
-        sizeof(s->solve_scratch);
-    memset((unsigned char *)s + scratch_end, 0, sizeof(*s) - scratch_end);
+        sizeof(*s) - result_end);
     maelys_result_t rc = policy->owns_storage
         ? maelys_datalog_prepared_session_borrow(view.ruleset, &s->inputs)
         : maelys_datalog_prepared_session_create(view.ruleset, &s->inputs);
@@ -395,7 +393,7 @@ static maelys_datalog_status_t session_create_with_storage(
     s->program.prepared_inputs = s->inputs;
     s->backend = *b;
     s->reference_backend = b == maelys_datalog_backend_reference();
-    s->borrows_inputs = b->solve == maelys_datalog_backend_reference()->solve;
+    s->borrows_inputs = borrows_inputs;
     memcpy(s->name, b->name, strlen(b->name) + 1u);
     memcpy(s->semantic_id, b->semantic_id, strlen(b->semantic_id) + 1u);
     s->backend.name = s->name;
@@ -553,7 +551,7 @@ maelys_datalog_status_t maelys_datalog_session_solve(maelys_datalog_session_t *s
     /* Canonical public facts exist for external backends only. */
     size_t canonical_count = s->borrows_inputs ? 0 : s->inputs->edb.fact_set.count;
     maelys_datalog_fact_t *canonical =
-        canonical_count ? s->solve_scratch.canonical : NULL;
+        canonical_count ? s->solve_scratch : NULL;
     if (canonical_count) memset(canonical, 0, canonical_count * sizeof(*canonical));
     for (size_t i = 0; i < canonical_count; ++i) {
         status = (maelys_datalog_status_t)maelys_datalog_export_fact(
