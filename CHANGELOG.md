@@ -7,14 +7,64 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## 0.13.0 — 2026-09-27
+
+Transactional window context and explicit expiration. Consumer API 2, program
+ABI 2 and backend ABI 5 are unchanged; the retired header path is an intentional
+source migration.
+
 ### Changed
 
-- Both native window adapters are declared in `<maelys/datalog_window.h>`.
-  `<maelys/datalog_group_window.h>` is removed, without a forwarding header.
-  Consumers of the group adapter must replace their include and rebuild against
-  a clean SDK installation. Function names, types, layouts and runtime behavior
-  are unchanged; consumer API 2, program ABI 2 and backend ABI 5 are retained.
-  This is a source include migration, not a new window or backend capability.
+- Both window adapters are declared in `<maelys/datalog_window.h>`.
+  `<maelys/datalog_group_window.h>` is removed from the source and installed SDK,
+  without a forwarding header. Replace that include and rebuild consumers
+  against a clean SDK prefix; an in-place installation can leave obsolete files.
+  Existing handles, signatures and public record layouts are retained.
+
+### Added
+
+- Configured window storage/init functions accept a bounded static-fact capacity
+  in `maelys_datalog_window_options_t`. `replace_static` replaces the complete
+  mutable static EDB and recomputes it with retained events immediately, without
+  inserting an event or consuming an occurrence/group ID. NULL/0 clears it.
+  Static input survives FIFO eviction and participates in normal set semantics;
+  group facts survive while any retained group or static input supplies them.
+- Opt-in expiration storage supports `push_until` with an absolute caller-defined
+  uint64 deadline and `expire(now)` without insertion. Expiry removes every timed
+  event/group whose deadline is <= now, retains survivor order and static input,
+  and consumes no ID. The watermark advances only on success and cannot move
+  backwards; new deadlines at/before it are rejected. Ordinary pushes remain
+  untimed. No clock is read and no insertion implicitly advances time.
+- An expiry with nothing due updates only the watermark: no solve, backend call
+  or result invalidation occurs. Other mutations publish only after candidate
+  solving and release of the old result lease. Failures preserve committed facts,
+  text, result, cursor and watermark, including live explanation leases, backend
+  errors and derivation/aggregate failures after removal through negation.
+- Caller-owned storage queries include both candidate/committed banks and all
+  adapter scratch. Static and event slots have separate raw bounds and share a
+  per-bank text budget; no runtime allocation, growth or heap fallback is added.
+  Deadline arrays are reserved only when enabled. Their payload on the checked
+  64-bit layout is 32 bytes per event/group slot across both banks, plus queried
+  alignment padding. Sessions, results and explanation storage remain additional.
+- A session-capacity design and reproducible native storage inventory document
+  the current 286,040/476,504-byte reference reservation and explicitly separate
+  arithmetic payload projections from implemented storage requirements. No sized
+  session API is introduced. Program/build limits exposed through `program_info`
+  remain distinct from proposed per-session quotas.
+
+### Validation
+
+- Both adapters are checked against independent snapshots for static replacement,
+  revocation without insertion, canonical IDs, duplicates, normalization, FIFO
+  retention and rejection. Expiry checks cover unordered/equal/maximal deadlines,
+  mixed untimed events, empty and multi-fact groups, survivor slices, exhausted
+  IDs, no-op result stability and rollback after negation-induced overflow.
+- Allocation guards include input and deadline banks in byte-exact rollback
+  comparisons and exercise success/reuse with engine allocators disabled.
+  Installed static/shared SDK consumers check exact canonical inputs and the
+  backend ABI 5 commit/abort boundary. SMALL/LARGE, memory scribbling and
+  ASan/UBSan checks pass. These are functional and allocation guarantees, not
+  a claim of faster solving or whole-application zero allocation.
 
 ## 0.12.0 — 2026-09-27
 
