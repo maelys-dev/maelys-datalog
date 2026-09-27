@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: MPL-2.0 */
 /* The adapter consumes only the installed public facade. */
-#include <maelys/datalog_group_window.h>
+#include <maelys/datalog_window.h>
 #include "src/runtime/maelys_datalog_transaction_internal.h"
 #include <stdio.h>
 #include <string.h>

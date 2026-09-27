@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: MPL-2.0 */
 /* Native installed-SDK example; allocation occurs during setup, not push. */
-#include <maelys/datalog_group_window.h>
+#include <maelys/datalog_window.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

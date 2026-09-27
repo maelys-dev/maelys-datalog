@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: MPL-2.0 */
 /* Also compiled outside the tree against the installed static/shared SDK. */
-#include <maelys/datalog_group_window.h>
+#include <maelys/datalog_window.h>
 #include <maelys/datalog_backend.h>
 #include <assert.h>
 #include <stdio.h>

@@ -55,16 +55,16 @@ for header_path in "$prefix/include/maelys/"*.h; do
   "$cxx" -x c++ -std=c++17 -Wall -Wextra -Werror -I"$prefix/include" \
     -DSDK_HEADER="\"maelys/$header\"" -fsyntax-only sdk_header.c
 done
-# The old aggregation surface and representative private includes must be absent,
+# Retired public headers and representative private includes must be absent,
 # not just unused by successful consumers. Inventory equality above also catches
 # a copied private file whose own dependencies would prevent it from compiling.
-for header in maelys_datalog.h maelys_datalog_version.h src/core/maelys_datalog_types.h src/manifest/maelys_datalog_manifest.h common/maelys_errors.h; do
+for header in maelys/datalog_group_window.h maelys_datalog.h maelys_datalog_version.h src/core/maelys_datalog_types.h src/manifest/maelys_datalog_manifest.h common/maelys_errors.h; do
   for language in c c++; do
     compiler="$cc"; standard=c11
     if [[ "$language" == c++ ]]; then compiler="$cxx"; standard=c++17; fi
     if "$compiler" -x "$language" -std="$standard" -I"$prefix/include" \
         -DSDK_HEADER="\"$header\"" -fsyntax-only sdk_header.c > private.log 2>&1; then
-      echo "FAIL: private header accepted: $header ($language)" >&2; exit 1
+      echo "FAIL: retired/private header accepted: $header ($language)" >&2; exit 1
     fi
     if ! grep -Eq 'file not found|No such file' private.log; then
       cat private.log >&2; exit 1

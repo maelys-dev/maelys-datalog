@@ -49,7 +49,7 @@ binding, capability negotiation and explanation semantics.
 
 ## Retain multi-fact events (0.9.0)
 
-The native [`datalog_group_window.h` adapter](docs/architecture/multi-fact-window.md)
+The native group adapter in [`datalog_window.h`](docs/architecture/multi-fact-window.md)
 retains N groups of complete typed facts and recomputes their union. A shared fact
 survives until its last contributing group expires; empty groups still advance
 retention. Group IDs are metadata, with no implicit term injection. Caller-owned

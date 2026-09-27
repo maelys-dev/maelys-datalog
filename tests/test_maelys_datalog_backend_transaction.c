@@ -1,7 +1,6 @@
 /* SPDX-License-Identifier: MPL-2.0 */
 #include <maelys/datalog_advanced.h>
 #include <maelys/datalog_window.h>
-#include <maelys/datalog_group_window.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

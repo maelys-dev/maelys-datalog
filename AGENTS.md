@@ -108,6 +108,12 @@ when it has what they name.
 
 ## Memory-allocation contract
 
+- Declare both window adapters in `maelys/datalog_window.h`. The retired
+  `datalog_group_window.h` must not return as a forwarding or installed header.
+  Keep source include migration distinct from backend ABI compatibility: test
+  installed-SDK external consumers, and do not infer downstream backend support
+  for new window operations from unchanged descriptor signatures alone.
+
 - Prefer caller-owned, aligned storage and explicit bounded capacities for new
   runtime APIs. Opaque handles do not justify mandatory heap allocation.
 - Do not add per-fact, per-term, or grow-on-demand allocations to input paths.

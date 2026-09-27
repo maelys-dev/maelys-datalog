@@ -1,6 +1,7 @@
 # Last-N multi-fact event window
 
-`<maelys/datalog_group_window.h>` adds a native C adapter to the public library.
+`<maelys/datalog_window.h>` declares the group adapter alongside the single-fact
+window adapter.
 One accepted event is a group of zero or more complete typed facts. The adapter
 retains the last N groups in arrival order, builds their set union and solves the
 complete snapshot. Datalog syntax is unchanged. The current contracts are
@@ -8,9 +9,10 @@ backend ABI 5 (0.11.0) and program ABI 2.
 This is a reference recomputation adapter, not an incremental solver. Bindings,
 new memory profiles, elastic storage and resource negotiation are separate work.
 
-The existing `<maelys/datalog_window.h>` API remains unchanged: it still accepts
-one fact per event and prepends an occurrence term. Its handles are not accepted
-by this new API.
+The single-fact `maelys_datalog_window_*` functions still accept one fact per
+event and prepend an occurrence term. Their handles are distinct from the
+`maelys_datalog_group_window_*` handles. The former group-only header is removed;
+see the [include migration](../api-type-migration.md#unreleased--unified-window-header).
 
 ## Contributions, facts and identities
 

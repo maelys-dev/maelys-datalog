@@ -5,7 +5,7 @@
 #undef realloc
 #undef free
 #undef memset
-#include <maelys/datalog_group_window.h>
+#include <maelys/datalog_window.h>
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
