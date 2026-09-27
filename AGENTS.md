@@ -235,6 +235,20 @@ when it has what they name.
   smaller regressions. Never adapt the injection to an ongoing run's noise.
   Preserve the first hosted report (run 36305554306): its historical control
   was inconclusive in SMALL; do not retroactively label that run validated.
+- Schema 4 adds independently sampled, same-path identical-binary controls for
+  both previous-release and anchor references. Equal references may share a
+  null run, never their ordinary samples; head is independently sampled even
+  at the same commit. Keep two A/A pairs and reverse variant order in the second
+  comparison round. Preserve raw A/A floors/classes and `aa_review_required`.
+  Screen warm alerts using only the matching reference/scenario/statistic's
+  `max(null A/A floor, absolute null gaps in both rounds)`. A raw slowdown beyond
+  that envelope in either round is `review_required`; within it is unresolved,
+  not an established candidate effect or evidence of no regression. This
+  empirical envelope is not a confidence bound or universal tolerance. Cold
+  first requests are informative only, with every raw alert retained. Missing
+  null evidence fails; positive-control validity is never screened by the null.
+  `no_review_required` does not approve a release. This prospective protocol
+  change must not rewrite historical reports or their original decisions.
 - Before `maelys-release cut ... --apply`, read the Python report and record the
   measured commit, run URL, report SHA-256, findings and maintainer decision in
   the changelog pull request. Review any later runtime, binding, build or harness
@@ -272,6 +286,15 @@ when it has what they name.
   timings do not replace historical unobserved evidence. A self-hosted ARM run
   needs a registered runner and writer-only dispatch; never substitute local
   Docker smoke or hosted ARM and call it self-hosted evidence.
+
+- The v0.13 attribution follow-up in `docs/python-performance.md` compares the
+  original hosted binaries, complete-request software counts and independently
+  measured identical-binary labels. It found matching native/CFFI-module work
+  in 72 scoped comparisons and timing alerts/bursts with unchanged v0.12.0.
+  Retain its tiny CPython/CFFI-cache and libc differences and its attribution
+  limits. Use identical-binary process controls for fine-grained attribution;
+  do not erase old signals, claim a specific hardware cause or infer a fix
+  solely from equal counts or a later quiet run.
 
 ## Manual benchmark evidence
 

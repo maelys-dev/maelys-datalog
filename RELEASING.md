@@ -32,6 +32,12 @@ measurements if runtime, binding, build or harness changes have landed since
 the reviewed commit. Version/documentation-only changes do not by themselves
 require a repeat. This is a human review before the cut; there is no Python
 timing or Actions-artifact hook in `scripts/verify-release.sh` or at the tag.
+For schema-4 reports, verify the positive control in all configurations and
+inspect the matched null controls alongside every warm alert beyond their
+observed envelope. Retain unresolved warm observations and informative cold
+measurements in the decision; `no_review_required` is not approval or proof of
+equivalence. Missing null evidence or an inconclusive positive control cannot
+be accepted as a timing exception. Historical reports keep their own protocol.
 
 Then run the two local gates on the tree that will be released:
 

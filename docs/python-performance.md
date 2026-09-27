@@ -53,6 +53,16 @@ reference prevents a succession of individually accepted changes from hiding
 their accumulated cost. Equal reference commits reuse the same binary and
 samples; they are not presented as independent repetitions.
 
+Schema 4 adds a permanent **identical-binary null control for each reference**
+(`base_null`, `anchor_null`). Each loads the very same installed files, at the
+same path, as its reference: no rebuild, copy-induced path difference or relink.
+Fresh processes collect independent A/A and comparison samples with identical
+workload and telemetry. Null roles may share samples with each other only when
+their reference commits coincide; they never reuse ordinary reference samples.
+The candidate is independently sampled even when its commit equals a reference.
+`variants` records the commit, request count and sampling identity; raw filenames
+include that identity, and `measurement_schedule` records the exact pass order.
+
 Sensitivity is checked independently of that history: a benchmark-only wrapper
 executes **three complete requests instead of one**, with the same installed
 v0.11.1 binding and native binary. This variant shares the binary, not the
@@ -94,28 +104,61 @@ three cold starts. Its phase diagnostics sum the three per-request durations,
 while its total includes the wrapper and all three complete requests.
 
 Two A/A pairs per distinct binary/variant precede two interleaved rounds of all
-variants, including the injected variant with its own A/A samples. Below
+variants, including the injected and null variants with their own A/A samples.
+Schema 4 reverses the complete variant order in the second comparison round,
+balancing each variant's position across the two rounds. Below
 10 microseconds (determined from reference A/A medians), the
 comparator uses minima. Otherwise median and nearest-rank p95 each retain
 their own A/A floor, the maximum relative difference of the two pairs in both
 revisions. Raw nanoseconds and every round remain available.
 
-An above-floor slowdown in **either** A/B round of any phase, total or cold
-metric against either reference produces `review_required` (harness exit 2).
+### Null controls and release-review screening (schema 4)
+
+The raw comparator is unchanged: `aa_floor`, both `delta` values and both
+`classification` values retain the original A/A interpretation for every row.
+`aa_review_required` preserves the old candidate trigger, including cold rows.
+No samples, signs or classifications are removed or recalculated with a wider
+A/A floor. Schema-2/3 reports retain their original statuses and interpretation.
+
+For each **reference / configuration / case / phase / statistic** separately,
+the observed null envelope is declared as
+`max(null A/A floor, abs(null round 1 delta), abs(null round 2 delta))`.
+Both signs count because the two labels execute the same binary. The rule is
+fixed before measuring; it never pools noise from unrelated cases, references
+or statistics. This is a descriptive envelope of this run, **not a confidence
+bound, universal tolerance or causal test**. Two rounds do not estimate a tail
+bound on future process variation, and a noisy control can leave a real small
+regression unresolved. A quiet null also cannot establish a software cause.
+
+A **warm** raw `slower` classification beyond that row's null envelope in
+**either** round produces `review_required` (harness exit 2). A raw slowdown
+within the envelope stays visible as `not_distinguished_from_null`; it is not
+reported as a candidate effect, nor as proof of equivalence. A larger candidate
+gap still triggers review even when the null itself alerts. First-request
+(`cold`) measurements are **informative only**, including their raw A/A alerts:
+they do not trigger this automatic review status, but remain available for a
+maintainer's investigation. Cold performance can still regress; this policy
+change does not establish that every cold slowdown is environmental.
+
 The workflow preserves that status, report and classifications, and emits a
 warning without failing the job. This prevents a timing observation from
 becoming an indirect tag gate through the socle's check inspection. Tooling
-errors and an inconclusive injected control still fail: they did not produce
-usable evidence. A green workflow means the measurement completed, not that a
+errors, missing/incomplete null samples and an inconclusive injected control
+still fail: they did not produce usable evidence. A green workflow means the
+measurement completed, not that a
 maintainer approved the performance. Reproducible complete-request slowdowns
 require a release decision; phase timings inform diagnosis.
-Below-floor differences remain `indeterminate`, never “no overhead”. A fully
-quiet report says `no_slowdown_observed`, a statement limited to these cases
-and this run. Every injected warm total's primary metric (median, or minimum
+Below-floor differences remain `indeterminate`, never “no overhead”. A report
+without a warm trigger says `no_review_required`, **not** `no_slowdown_observed`:
+it may contain unresolved warm observations and cold alerts. Review screening
+does not approve the release. Every injected warm total's primary metric (median, or minimum
 below 10 microseconds) must classify slower in both rounds of **all eight cases
 in all four configurations**. Missing samples or a missing injection fail;
 the historical comparison cannot rescue them. If detection is incomplete, the instrument
 returns `inconclusive_control`, which cannot be accepted as a timing exception.
+Positive-control validity uses its raw A/A classifications, never null screening.
+The three-request positive control validates coarse sensitivity; the independent
+null measures variation without a software change. Neither certifies the other.
 
 The historical v0.11.0 comparison remains complete and informative. The first
 hosted run did not detect its quickstart slowdown in SMALL-Release and only
@@ -256,7 +299,9 @@ the following in the changelog pull request:
 
 - measured commit and any subsequent changes included in the release;
 - measurement run URL and the report's SHA-256;
-- complete-request findings, both rounds, phase diagnostics and control status;
+- complete-request findings, both rounds, phase diagnostics and positive-control status;
+- matched null envelopes, remaining warm triggers, unresolved warm observations
+  and informative cold findings (schema 4);
 - deterministic allocation/call-budget results and instruction evidence when relevant;
 - the maintainer's decision and rationale, including unresolved observations
   and any accepted user-facing cost.
@@ -310,10 +355,11 @@ python3 -m unittest discover -s tests/tooling -p 'test_python_perf*.py' -v
 ```
 
 The injected variant must be detected even when the historical pair is quiet.
-Historical candidate slowdowns still require review (exit 2) wherever observed;
+Historical candidate warm slowdowns beyond their matched null envelope still
+require review (exit 2);
 they are not assumed on every platform. A missing or inconclusive injected
-control refuses the run (exit 1). Exit 0 means
-no above-floor slowdown was observed, not proof of equivalence. `--smoke`
+control refuses the run (exit 1). Exit 0 means no warm review trigger remains
+under this protocol, not proof of equivalence or absence of raw alerts. `--smoke`
 reduces sampling and configurations; local runs always have
 `release_eligible: false`. Their success validates tooling only.
 
@@ -323,3 +369,101 @@ reviewable code change, with comparator/injection tests and the historical compa
 replayed. Do not calibrate a permissive time threshold from a noisy run. Add
 real workload regressions to the corpus when found; no finite suite covers all
 Python programs or all platforms.
+
+### v0.13 release attribution follow-up
+
+The writer-only `release_diagnostic` dispatch investigates the accepted
+observations from run **36331650860**, report SHA-256
+`57ad969645ca156262f798346267a077f65e8467a62c3c0e2bdb12b67573184a`.
+`bench/python_release_instructions.py` verifies the original workload and every
+retained consumer/header/library hash before using the actual measured binaries;
+it never substitutes a rebuild. The four declared fixtures are SMALL-default /
+7-integer-prepared, LARGE-default / 7-symbol-prepared, LARGE-Release /
+7-symbol-prepared, and LARGE-Release / 93-integer-prepared. Base v0.12.0 and the
+measured candidate run in each; the cold Release case also retains v0.11.1,
+the reference for its p95 observation.
+
+Two processes per revision/fixture, in opposite revision order, count the first
+request and total samples 0, 100, 421, 422, 436, 448, 449 and 500. The original
+501 samples, 50 warmups, schema-3 telemetry and checked answers remain. Collection
+covers the complete transaction, excluding setup, clocks and answer checks;
+helper/Python call-boundary instructions remain in the profile. Preserve raw
+Callgrind profiles and exclusive per-function Ir/Dr/Dw annotations. No instrumented
+latencies or simulated cache misses are interpreted as hardware measurements.
+Separate `LD_DEBUG=bindings` traces mark the first transaction and record actual
+Python `dlopen` flags, to test whether lazy symbol resolution occurs inside it.
+
+This investigation does not alter the release report, its classifications, the
+accepted tradeoff or the release gate. It does not reopen the closed native
+padding sweeps. Equal software counts can exclude added executed work within
+the counted samples; they cannot establish equal cycles or explain an earlier
+transient retroactively. A hardware/runner cause still requires direct evidence.
+
+The separate `release_process_control` dispatch uses those four fixtures and
+the same original binaries. `base` and `base_copy` are **the same installed
+consumer path and bytes**, executed in independent processes; `head` is the
+original candidate. Four A/A passes per label precede twelve rounds containing
+each of the six revision/label permutations twice. Each warm process keeps
+501 requests, 50 warmups and schema-3 telemetry. Each symbol case retains 31
+fresh-interpreter first requests per pass. All phase diagnostics, samples and
+outputs remain in artifacts. Counts and timings run in separate jobs; no
+Valgrind timing is used. The new diagnostic's A/A classifications and round
+signs are preserved for both the identical-binary control and candidate.
+They are not substituted for the published release matrix or used to widen
+its thresholds. A same-binary label difference measures process/environment
+variation in this run; it does not establish the cause of an earlier event.
+
+#### Findings from the v0.13 attribution runs
+
+[Instruction run 36338645720](https://github.com/maelys-dev/maelys-datalog/actions/runs/36338645720)
+retains 18 processes and 162 scoped profiles. In the 72 base/candidate paired
+scopes, exclusive Ir/Dr/Dw match for every reported native-engine and generated
+CFFI-module function. Whole-process profiles match in 50/72 comparisons. All
+remaining differences are localized: cold calls have -137 Ir/-22 Dr in the
+unoptimized configurations or +122 Ir/+20 Dr in Release, solely in CPython
+`_Py_dict_lookup` and `insertdict`; the call graph traces them to CFFI's
+`get_or_insert_unique_type`. Warm differences are confined to libc
+`__strcmp_avx2` (+/-72 Ir, unchanged Dr/Dw). These are scoped software counts,
+not a cycle bound or a claim about every input.
+
+[CFFI 2.0.0's type cache](https://github.com/python-cffi/cffi/blob/v2.0.0/src/c/_cffi_backend.c#L4730)
+uses byte-string keys made from native addresses. Fixing `PYTHONHASHSEED` does
+not fix those addresses or their dictionary probe paths. This identifies the
+small executed-work difference at cold entry; it does not attribute the
+original percentage latency gaps to that difference. All five separate loader
+traces report RTLD_NOW and no symbol binding between the first-request markers:
+lazy dynamic linking is not the cold-entry cause in those traces.
+
+The original linked CFFI modules have the same 162 function bodies and relative
+addresses in every configuration. The native library's PLT grows by three net
+16-byte entries in default builds and one in Release: configured window
+initializers add entries, while the windows' old call to input_edb_add_fact
+vanishes. Native hot text therefore moves by 48 or 16 bytes. Data sections also
+move. This establishes a layout change, not its hardware performance effect;
+object-file equivalence alone misses it.
+
+[Process-control run 36338922896](https://github.com/maelys-dev/maelys-datalog/actions/runs/36338922896)
+keeps all twelve rounds. For SMALL-default/7-integer-prepared, the median of
+round median deltas is +0.27% for head/base and +0.28% for base_copy/base. The
+identical-binary control is classified slower in 6/12 LARGE-Release cold median
+comparisons; its LARGE-default cold median gap reaches +9.10% in one round.
+Head/base's median cold delta in LARGE-default is +0.19% across rounds. These
+statistics describe this diagnostic, not a replacement release verdict.
+
+The unchanged v0.12.0 binary also produces warm bursts: SMALL-default base aa3
+has median 82.545 microseconds and p95 159.529 microseconds; base_copy aa0 has
+median 81.783 and p95 160.671. Adjacent calibration drops from 480 to 320
+iterations during those bursts. Requests above 1.5 times their own process
+median (a descriptive listing, never an exclusion rule) show no overlapping GC,
+page faults or recorded context switches in these two processes. Thus a v0.13
+change is not necessary for this symptom; reduced nearby Python throughput
+supports common execution pressure. It does not distinguish SMT, frequency,
+interrupts, hypervisor behavior or in-process/cache effects.
+
+Preserve the original accepted observations. This investigation found no added
+engine work in its declared cases and demonstrated above-floor alerts without
+any binary change. It does not establish an exact retrospective hardware cause
+or authorize a timing-only engine fix. Future attribution at this scale should
+include an independently measured identical-binary control and multiple
+counterbalanced processes, alongside instruction evidence. Neither the control
+nor a quiet later pass may erase a historical signal or widen its A/A floor.
