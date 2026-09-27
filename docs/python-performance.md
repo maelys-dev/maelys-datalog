@@ -169,6 +169,61 @@ established positive control for every Linux configuration. Schema 2 records
 each role's binary commit and request count in `variants`. Neither the candidate
 references nor its per-metric A/A algorithm changed.
 
+### Descriptive null-against-null cross-check
+
+The additive `null_cross_check` section of schema-4 reports (diagnostic schema
+1) reuses the existing null rows; it collects no further samples. For each
+matching **configuration / case / phase / statistic**, each direction counts
+a null row in a round when both conditions hold:
+
+- its own copy/reference delta is raw `slower` under its original A/A floor;
+- that delta exceeds the **other reference's** null envelope,
+  `max(other null A/A floor, abs(other round 1 delta), abs(other round 2 delta))`.
+
+This crosses two ratios, each comparing an unchanged binary with itself. It
+does **not** compare the request time of one reference version with the other.
+Both directions are reported separately. Counts and proportions are per round,
+with rows alerting in exactly one or both rounds distinguished. Breakdowns
+retain total-request, phase, statistic and configuration counts. Each direction
+also reports envelope-only exceedances before the own-floor test; JSON retains
+their full breakdown and row-level decisions.
+
+The denominator is the number of matching warm rows, not the number of all
+candidate rows. A phase below 10 microseconds for one reference can select
+`min` while the other selects `median`/`p95`; these rows are explicitly listed
+as unmatched, never compared across statistics. Cold rows are counted as
+excluded. Candidate columns retain their original screening against **their
+own reference's** null on that same matched population. Unmatched candidate
+alerts remain in the original report. If the two references share null samples,
+or have no matching warm statistics, the cross-check is unavailable, **not a
+zero alert rate**. Missing or inconsistent source rows remain tooling errors.
+
+These are **observed null cross-screening rates**, not an estimated expected
+false-positive rate for the candidate. Different reference binaries can have
+different variability, the two-round envelopes are empirical, and correlated
+phase/statistic rows are not independent trials. Do not pool the directions,
+subtract their counts from candidate alerts, or derive a new tolerance. A
+similar number of candidate and null alerts alone cannot dismiss a particular
+candidate signal. The diagnostic changes no A/A floor, classification,
+`review_required` status, positive-control requirement or release decision.
+
+An already verified schema-4 report can be supplemented offline:
+
+```sh
+python3 tools/report_python_null_cross.py \
+  --report /tmp/python-performance/report.json \
+  --output /tmp/python-null-cross-supplement
+```
+
+The output directory must be new. `null-cross.json` and `null-cross.md` record
+the original report's SHA-256, run, revisions, status and positive-control
+finding, plus the analysis code hashes. They preserve the source report byte
+for byte. This checks the stored rows' consistency; it does not revalidate the
+raw artifact or replace its integrity review. The supplement is explicitly
+ineligible as standalone release evidence. Keep it beside the original run
+artifact, outside git; never rewrite historical reports or compare latencies
+from separate runs. No build, workload execution or workflow dispatch is needed.
+
 ### Contemporaneous telemetry (schema 3)
 
 The complete benchmark now invokes `python_workload.py --telemetry` for **every**
@@ -301,7 +356,8 @@ the following in the changelog pull request:
 - measurement run URL and the report's SHA-256;
 - complete-request findings, both rounds, phase diagnostics and positive-control status;
 - matched null envelopes, remaining warm triggers, unresolved warm observations
-  and informative cold findings (schema 4);
+  and informative cold findings (schema 4), with descriptive null cross-check
+  counts and matched denominators when available;
 - deterministic allocation/call-budget results and instruction evidence when relevant;
 - the maintainer's decision and rationale, including unresolved observations
   and any accepted user-facing cost.

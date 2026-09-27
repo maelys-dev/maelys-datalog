@@ -249,6 +249,15 @@ when it has what they name.
   null evidence fails; positive-control validity is never screened by the null.
   `no_review_required` does not approve a release. This prospective protocol
   change must not rewrite historical reports or their original decisions.
+- Keep null-against-null cross-screening descriptive and offline: same warm
+  scenario/statistic, own raw A/A slowdown plus the other null's envelope,
+  separate directions and per-round counts with matched candidate denominators.
+  List unmatched statistics; shared null samples mean unavailable, not zero.
+  Different reference binaries and correlated rows do not establish an expected
+  candidate false-positive rate. Never subtract null alerts or change review
+  status, floors or release decisions from this diagnostic. Supplement archived
+  reports separately with source/code hashes; never overwrite them or remeasure
+  merely to calculate the cross-check. Follow `docs/python-performance.md`.
 - Before `maelys-release cut ... --apply`, read the Python report and record the
   measured commit, run URL, report SHA-256, findings and maintainer decision in
   the changelog pull request. Review any later runtime, binding, build or harness

@@ -160,6 +160,9 @@ class PositiveControlTests(unittest.TestCase):
                 self.assertEqual(report['variants']['base_null'], report['variants']['anchor_null'])
                 self.assertNotEqual(report['variants']['base_null'], report['variants']['base'])
                 self.assertEqual(len(report['null_control']['rows']), len(report['rows']))
+                self.assertFalse(report['null_cross_check']['available'])
+                self.assertEqual(report['null_cross_check']['reason'], 'shared_null_samples')
+                self.assertIn('Null-against-null cross-check (informative)', (output / 'report.md').read_text())
                 self.assertEqual(len(list((output / 'raw').glob('*.json'))), 300)
                 # The same binary is invoked again, with separate raw files.
                 normal = output / 'raw' / 'SMALL-Release-anchor-reference-requests1-ab0-7-symbol-solve-0.json'
