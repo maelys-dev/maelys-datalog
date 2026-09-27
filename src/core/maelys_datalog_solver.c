@@ -3674,6 +3674,11 @@ maelys_result_t maelys_datalog_solve_result_derived_fact_count(
     return MAELYS_OK;
 }
 
+const maelys_datalog_fact_set_t *maelys_datalog_solve_result_derived_view(
+    const maelys_datalog_internal_solve_result_t *result) {
+    return result && result->finalized ? &result->idb_final : NULL;
+}
+
 maelys_result_t maelys_datalog_solve_result_idb_fact(
     const maelys_datalog_internal_solve_result_t *result, size_t index, maelys_datalog_internal_fact_t *out) {
     if (!result || !out) return MAELYS_ERR_INVALID_ARGUMENT;

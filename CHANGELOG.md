@@ -14,9 +14,14 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
   directly and no longer reserves the unused export array. External backends
   retain their canonical input contract and creation-time reservation; no
   additional allocation or public API/backend ABI change.
+- Reference results expose a read-only view of the finalized native derived
+  facts, eliminating the public result's duplicate array and its export/import
+  conversions. External backends keep runtime-owned emission storage reserved
+  at session creation. Canonical enumeration and result/explanation leases are
+  preserved.
 - On the checked 64-bit SMALL/LARGE builds, a reference session sharing an
-  engine-owned policy reserves 433,496/771,416 bytes instead of 515,416/935,256,
-  saving 80/160 KiB across the same three engine allocations. Policy creation
+  engine-owned policy reserves 359,768/623,960 bytes instead of 515,416/935,256,
+  saving 152/304 KiB across the same three engine allocations. Policy creation
   and optional workspaces are excluded. This is a reservation reduction, not
   a claim of faster solving or lower Python process RSS.
 

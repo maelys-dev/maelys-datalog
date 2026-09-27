@@ -116,7 +116,8 @@ static void backend_export_reservation(const maelys_datalog_policy_t *policy, si
         assert(total - before == 3u);
         size_t reservation = allocated_bytes - bytes_before;
         assert(reservation == reference_bytes + (external ?
-            MAELYS_DATALOG_MAX_EDB_FACTS * sizeof(maelys_datalog_fact_t) : 0u));
+            MAELYS_DATALOG_MAX_EDB_FACTS * sizeof(maelys_datalog_fact_t) +
+            MAELYS_DATALOG_MAX_IDB_FACTS * sizeof(maelys_datalog_internal_fact_t) : 0u));
         maelys_datalog_fact_t fact = {.predicate="seed", .arity=1};
         fact.terms[0] = symbol("external");
         forbidden = 1;
@@ -155,9 +156,9 @@ static void caller_owned_policy_snapshot(void) {
     const size_t reservation = allocated_bytes - bytes_before;
     assert(total - before == 3u);
 #ifdef MAELYS_DATALOG_PROFILE_LARGE
-    assert(reservation <= 1140000u);
+    assert(reservation <= 995000u);
 #else
-    assert(reservation <= 820000u);
+    assert(reservation <= 735000u);
 #endif
     assert(maelys_datalog_policy_free(policy) == 0);
     memset(storage, 0xa5, bytes); free(storage);
@@ -379,10 +380,10 @@ int main(void) {
     /* Bound the total reservation, including both public/native result storage.
      * A second full ruleset copy must not silently return. */
 #ifdef MAELYS_DATALOG_PROFILE_LARGE
-    assert(create_bytes <= 820000u);
+    assert(create_bytes <= 645000u);
     assert(create_zero_bytes <= 350000u);
 #else
-    assert(create_bytes <= 450000u);
+    assert(create_bytes <= 380000u);
     assert(create_zero_bytes <= 200000u);
 #endif
     size_t reset_before = memset_bytes;

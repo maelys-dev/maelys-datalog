@@ -2,6 +2,7 @@
 #include "src/public/maelys_datalog_public_internal.h"
 #include "src/public/maelys_datalog_values_internal.h"
 #include "src/runtime/maelys_datalog_transaction_internal.h"
+#include "src/runtime/maelys_datalog_result_internal.h"
 #include "src/compiler/maelys_datalog_program_internal.h"
 #include "src/core/maelys_datalog_prepared_session_internal.h"
 #include "src/core/maelys_datalog_solver_internal.h"
@@ -130,8 +131,10 @@ struct maelys_datalog_result {
     maelys_datalog_prepared_explanation_t *explanations;
     maelys_datalog_fact_set_t derived;
     size_t per_predicate[MAELYS_DATALOG_MAX_PREDICATES];
-    /* Retained payload; live entries are defined solely by derived.count. */
-    maelys_datalog_internal_fact_t facts[MAELYS_DATALOG_MAX_IDB_FACTS];
+};
+struct backend_payload {
+    maelys_datalog_fact_t canonical[MAELYS_DATALOG_MAX_EDB_FACTS];
+    maelys_datalog_internal_fact_t derived[MAELYS_DATALOG_MAX_IDB_FACTS];
 };
 struct maelys_datalog_session {
     maelys_datalog_internal_prepared_session_t *inputs;
@@ -157,7 +160,7 @@ struct maelys_datalog_session {
     int pending_commit; /* Runtime-only candidate; no flag inserted into the retained payload. */
     /* Same allocation as the session, reserved only when !borrows_inputs.
      * Every live entry is initialized before an external solve callback. */
-    maelys_datalog_fact_t solve_scratch[];
+    struct backend_payload solve_scratch[];
 };
 struct maelys_datalog_backend_output {
     maelys_datalog_result_t *result;
@@ -192,6 +195,12 @@ maelys_datalog_status_t maelys_datalog_backend_charge(maelys_datalog_backend_out
     out->work += units;
     return MAELYS_DATALOG_STATUS_OK;
 }
+int maelys_datalog_backend_borrow_derived(maelys_datalog_backend_output_t *out,
+    const maelys_datalog_fact_set_t *derived) {
+    if (!out->result->owner->borrows_inputs) return 0;
+    out->result->derived = *derived;
+    return 1;
+}
 maelys_datalog_status_t maelys_datalog_backend_emit(maelys_datalog_backend_output_t *out,
                                                     const maelys_datalog_fact_t *in) {
     if (!out || !out->result || !in || !in->predicate || in->arity > MAELYS_DATALOG_MAX_TERMS)
@@ -223,7 +232,7 @@ maelys_datalog_status_t maelys_datalog_backend_emit(maelys_datalog_backend_outpu
     if (result->derived.count >= MAELYS_DATALOG_MAX_IDB_FACTS ||
         result->per_predicate[fact.predicate_id] >= MAELYS_DATALOG_MAX_FACTS_PER_PRED)
         return output_fail(out, MAELYS_DATALOG_STATUS_PAYLOAD_TOO_LARGE);
-    result->facts[result->derived.count++] = fact;
+    result->derived.facts[result->derived.count++] = fact;
     result->derived.sorted = 0;
     ++result->per_predicate[fact.predicate_id];
     return MAELYS_DATALOG_STATUS_OK;
@@ -368,20 +377,13 @@ static maelys_datalog_status_t session_create_with_storage(
         (bytes && !storage->bytes) || (storage->bytes && storage->alignment < alignment))
         return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
     const int borrows_inputs = b->solve == maelys_datalog_backend_reference()->solve;
-    const size_t export_bytes = borrows_inputs ? 0 :
-        MAELYS_DATALOG_MAX_EDB_FACTS * sizeof(maelys_datalog_fact_t);
+    const size_t export_bytes = borrows_inputs ? 0 : sizeof(struct backend_payload);
     maelys_datalog_session_t *s = malloc(sizeof(*s) + export_bytes);
     if (!s)
         return MAELYS_DATALOG_STATUS_INTERNAL;
-    /* Retained result facts and external-backend export scratch are populated
-     * before use, on the first solve as on reuse. Initialize only metadata;
-     * reserve every required payload byte up front. */
-    memset(s, 0, offsetof(maelys_datalog_session_t, result_storage) +
-        offsetof(maelys_datalog_result_t, facts));
-    const size_t result_end = offsetof(maelys_datalog_session_t, result_storage) +
-        sizeof(s->result_storage);
-    memset((unsigned char *)s + result_end, 0,
-        sizeof(*s) - result_end);
+    /* External payload entries are written before use; only metadata lives in
+     * the fixed session prefix. Reference facts belong to the native result. */
+    memset(s, 0, sizeof(*s));
     maelys_result_t rc = policy->owns_storage
         ? maelys_datalog_prepared_session_borrow(view.ruleset, &s->inputs)
         : maelys_datalog_prepared_session_create(view.ruleset, &s->inputs);
@@ -551,7 +553,7 @@ maelys_datalog_status_t maelys_datalog_session_solve(maelys_datalog_session_t *s
     /* Canonical public facts exist for external backends only. */
     size_t canonical_count = s->borrows_inputs ? 0 : s->inputs->edb.fact_set.count;
     maelys_datalog_fact_t *canonical =
-        canonical_count ? s->solve_scratch : NULL;
+        canonical_count ? s->solve_scratch[0].canonical : NULL;
     if (canonical_count) memset(canonical, 0, canonical_count * sizeof(*canonical));
     for (size_t i = 0; i < canonical_count; ++i) {
         status = (maelys_datalog_status_t)maelys_datalog_export_fact(
@@ -561,20 +563,21 @@ maelys_datalog_status_t maelys_datalog_session_solve(maelys_datalog_session_t *s
         }
     }
     maelys_datalog_result_t *result = &s->result_storage;
-    memset(result, 0, offsetof(maelys_datalog_result_t, facts));
+    memset(result, 0, sizeof(*result));
     result->owner = s;
-    maelys_datalog_fact_set_init(&result->derived, result->facts, MAELYS_DATALOG_MAX_IDB_FACTS);
+    if (!s->borrows_inputs)
+        maelys_datalog_fact_set_init(&result->derived, s->solve_scratch[0].derived, MAELYS_DATALOG_MAX_IDB_FACTS);
     maelys_datalog_backend_output_t output = {result, MAELYS_DATALOG_STATUS_OK, 0, 0, 0};
     s->busy = 1;
     status = maelys_datalog_callback_status(
         s->backend.solve(s->state, canonical, canonical_count, &output, &result->state, diag));
     if (output.error)
         status = output.error;
-    if (status == MAELYS_DATALOG_STATUS_OK)
+    if (status == MAELYS_DATALOG_STATUS_OK && !s->borrows_inputs)
         status = (maelys_datalog_status_t)maelys_datalog_fact_set_sort(&result->derived);
     if (status != MAELYS_DATALOG_STATUS_OK) {
         s->backend.destroy_result(s->state, result->state);
-        memset(result, 0, offsetof(maelys_datalog_result_t, facts));
+        memset(result, 0, sizeof(*result));
         s->busy = 0;
         if (diag) diag->status = status;
         if (diag && diag->source == MAELYS_DATALOG_DIAGNOSTIC_NONE) {
@@ -675,7 +678,7 @@ maelys_datalog_status_t maelys_datalog_result_enumerate(const maelys_datalog_res
         return rc;
     size_t n = 0;
     for (size_t i = 0; i < result->derived.count; ++i) {
-        const maelys_datalog_internal_fact_t *f = &result->facts[i];
+        const maelys_datalog_internal_fact_t *f = &result->derived.facts[i];
         if (f->predicate_id != pid)
             continue;
         if (n < capacity) {
@@ -1045,7 +1048,7 @@ maelys_datalog_status_t maelys_datalog_result_free(maelys_datalog_result_t *resu
     s->active = NULL;
     s->pending_commit = 0;
     s->busy = 0;
-    memset(result, 0, offsetof(maelys_datalog_result_t, facts));
+    memset(result, 0, sizeof(*result));
     return MAELYS_DATALOG_STATUS_OK;
 }
 
