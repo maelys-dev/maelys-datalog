@@ -156,6 +156,11 @@ when it has what they name.
   release. Legacy solves and copying workspaces retain independent snapshots.
   Keep caller-EDB-clear, late window rejection/fresh premise extraction and
   workspace-reuse tests; reset metadata only and preserve the borrowing mode.
+- Normal transaction dictionary resets copy used text, valid entries and the
+  complete hash index, including empty buckets; do not reconstruct the index
+  without separate instruction evidence. Rejections restore the entire canonical
+  dictionary byte-for-byte. Preserve collision/wrap, stale-symbol, capacity and
+  rollback tests; quantify reset work separately from reserved session bytes.
 - Do not use libc qsort on the hot path: it may allocate. Use the bounded
   in-place sort and maintain the all-engine allocation-guard test.
 - Never claim the whole engine is zero-malloc based on an input-buffer test.

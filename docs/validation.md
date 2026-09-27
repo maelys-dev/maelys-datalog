@@ -278,6 +278,25 @@ use on both solve paths. The layout probe records the optional EDB reservation,
 resolved EDB address, array offsets and actual addresses. Removing the fixed EDB
 array changes later member offsets; no unchanged-layout or cache claim follows.
 
+Successful transaction resets restore the policy's used text and live entries,
+plus the full bounded hash index (including empty buckets and wrapped collision
+chains). Inactive text/entry tails may remain from earlier transactions and are
+never read. Rejection restores the entire dictionary byte-for-byte. The prepared
+fixture poisons old state, checks every policy symbol, full-hash and wraparound
+collisions, absence of prior symbols, late rejection and subsequent reuse.
+When text and entry capacities are both fully used, one full copy avoids
+splitting the same payload across three copies. This is an exact capacity case,
+not a timing-selected threshold. Reset changes do not reduce dictionary capacity.
+
+`bench/bench_dictionary_reset.c` is a manual, internal instruction diagnostic:
+`empty`, `sparse` (32 entries), `count-limit` and `saturated` (both entry/text
+capacities), each in `normal` and `reject` mode. The `dictionary-counts` target
+in `bench/Makefile.compare` collects one complete materialization after 50
+warmups with Callgrind `--collect-atstart=no`; preparation, checks and output
+stay outside the region. Build each revision/profile once, repeat counts in
+separate processes, and retain per-function counts as well as totals. This
+probe does not replace the public lifecycle or Python workload measurements.
+
 The prepared-session tests keep the immutable snapshot byte-identical while transaction symbols change;
 filter evaluation, diagnostic export and both explanation kinds use the result's
 transaction dictionary. No public layout, API version or backend ABI changes.

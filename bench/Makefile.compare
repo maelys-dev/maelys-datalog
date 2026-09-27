@@ -47,3 +47,6 @@ $(OUT)/lifecycle: $(OBJECTS) $(DRIVER)/bench/bench_session_lifecycle.c
 
 $(OUT)/lifecycle-counts: $(OBJECTS) $(DRIVER)/bench/bench_session_lifecycle.c
 	$(CC) $(FLAGS) -DMAELYS_BENCH_COUNT $(DRIVER)/bench/bench_session_lifecycle.c $(OBJECTS) -o $@
+
+$(OUT)/dictionary-counts: $(OBJECTS) $(DRIVER)/bench/bench_dictionary_reset.c
+	$(CC) $(FLAGS) -DMAELYS_BENCH_COUNT $(DRIVER)/bench/bench_dictionary_reset.c $(OBJECTS) -o $@
