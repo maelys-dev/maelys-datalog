@@ -47,11 +47,30 @@ All builds finish before any timings begin. There are no concurrent builds,
 affinity/priority adjustments or selected-out passes within the job.
 
 References are the previous published ancestor release, the durable **v0.11.1
-commit `0f247a7c81ec4a297f35ccee2bf007344f72ac7e`**, and a positive detection
-control: v0.11.0 at `e2c357eae1f441774f6c54b13ac20124da79686e`. The durable
+commit `0f247a7c81ec4a297f35ccee2bf007344f72ac7e`**, and the informative
+historical comparison v0.11.0 at `e2c357eae1f441774f6c54b13ac20124da79686e`. The durable
 reference prevents a succession of individually accepted changes from hiding
 their accumulated cost. Equal reference commits reuse the same binary and
 samples; they are not presented as independent repetitions.
+
+Sensitivity is checked independently of that history: a benchmark-only wrapper
+executes **three complete requests instead of one**, with the same installed
+v0.11.1 binding and native binary. This variant shares the binary, not the
+normal anchor's samples. No injected code or option is added to the distributed
+binding, engine or SDK. Each repeated request performs input, solve, queries
+and release; every answer from all three requests is checked after timing.
+The ordinary transaction callable is unchanged. There is no sleep, busy-wait,
+timer-derived delay or calibration to the ongoing run.
+
+The fixed three-request choice adds two requests of real work (nominally 200%).
+It was declared before the new run: this is 2.46 times the largest A/A floor
+in the [first hosted report](https://github.com/maelys-dev/maelys-datalog/actions/runs/36305554306)
+(81.19%, on a phase p95). This fixes work, not elapsed time; actual control
+deltas and floors are measured and retained. It establishes detection of this
+coarse cost only, not sensitivity to smaller regressions or validity of every
+candidate speedup. The candidate's classifications and human review remain
+separate. The original report stays `inconclusive_control` under its original
+protocol and is not retrospectively validated by this change.
 
 For each of SMALL/LARGE and default CMake/Release (`-O3`), all declared cases
 run: 7 or 93 input facts, symbols or integers, `Ruleset.solve()` or a reused
@@ -69,9 +88,14 @@ are the first request in each of 31 fresh interpreters for the two
 7-symbol cases. Import and policy compilation are outside that interval:
 “cold” is first-request latency, not interpreter startup or a cold OS cache.
 Other scenarios have one recorded first request but no cold-distribution claim.
+The injected variant uses the same sample counts and cases. Its cold sample is
+a group whose first request is cold and whose next two are warm; it is not
+three cold starts. Its phase diagnostics sum the three per-request durations,
+while its total includes the wrapper and all three complete requests.
 
-Two A/A pairs per binary precede two interleaved rounds of all distinct
-revisions. Below 10 microseconds (determined from reference A/A medians), the
+Two A/A pairs per distinct binary/variant precede two interleaved rounds of all
+variants, including the injected variant with its own A/A samples. Below
+10 microseconds (determined from reference A/A medians), the
 comparator uses minima. Otherwise median and nearest-rank p95 each retain
 their own A/A floor, the maximum relative difference of the two pairs in both
 revisions. Raw nanoseconds and every round remain available.
@@ -81,16 +105,26 @@ metric against either reference produces `review_required` (harness exit 2).
 The workflow preserves that status, report and classifications, and emits a
 warning without failing the job. This prevents a timing observation from
 becoming an indirect tag gate through the socle's check inspection. Tooling
-errors and an inconclusive historical control still fail: they did not produce
+errors and an inconclusive injected control still fail: they did not produce
 usable evidence. A green workflow means the measurement completed, not that a
 maintainer approved the performance. Reproducible complete-request slowdowns
 require a release decision; phase timings inform diagnosis.
 Below-floor differences remain `indeterminate`, never “no overhead”. A fully
 quiet report says `no_slowdown_observed`, a statement limited to these cases
-and this run. The known 0.11.0 warm quickstart total-median regression must be
-detected in both rounds of every configuration. If it is not, the instrument
+and this run. Every injected warm total's primary metric (median, or minimum
+below 10 microseconds) must classify slower in both rounds of **all eight cases
+in all four configurations**. Missing samples or a missing injection fail;
+the historical comparison cannot rescue them. If detection is incomplete, the instrument
 returns `inconclusive_control`, which cannot be accepted as a timing exception.
-That named control is not a noise tolerance for unrelated workloads.
+
+The historical v0.11.0 comparison remains complete and informative. The first
+hosted run did not detect its quickstart slowdown in SMALL-Release and only
+detected one SMALL-default round. A regression observed on macOS was not an
+established positive control for every Linux configuration. Schema 2 records
+`positive_control` separately from `historical_control` (with
+`informative_only: true`), preserves both full comparison tables and records
+each role's binary commit and request count in `variants`. Neither the candidate
+references nor its per-metric A/A algorithm changed.
 
 An A/A floor describes one binary's repeatability, not systematic differences
 between binaries. Timing observations alone do not identify an algorithm,
@@ -159,15 +193,17 @@ python3 -m venv /tmp/maelys-python-perf-env
 python3 -m unittest discover -s tests/tooling -p 'test_python_perf*.py' -v
 ```
 
-The historical negative candidate should require review (exit 2), or refuse
-an inconclusive run (exit 1), never establish release acceptance. Exit 0 means
+The injected variant must be detected even when the historical pair is quiet.
+Historical candidate slowdowns still require review (exit 2) wherever observed;
+they are not assumed on every platform. A missing or inconclusive injected
+control refuses the run (exit 1). Exit 0 means
 no above-floor slowdown was observed, not proof of equivalence. `--smoke`
 reduces sampling and configurations; local runs always have
 `release_eligible: false`. Their success validates tooling only.
 
 Keep the declared scenarios and references stable. A dependency, compiler,
 Python version, sample scheme, baseline or acceptance-policy change is a
-reviewable code change, with comparator tests and the real historical control
+reviewable code change, with comparator/injection tests and the historical comparison
 replayed. Do not calibrate a permissive time threshold from a noisy run. Add
 real workload regressions to the corpus when found; no finite suite covers all
 Python programs or all platforms.

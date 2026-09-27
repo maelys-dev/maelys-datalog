@@ -11,6 +11,8 @@ CASES = [f"{n}-{kind}-{mode}" for n in (7, 93)
          for kind in ("symbol", "integer") for mode in ("solve", "prepared")]
 COLD_CASES = ["7-symbol-solve", "7-symbol-prepared"]
 PHASES = ["input", "solve", "query", "close", "total"]
+# Fixed before measurement: two extra real requests, never a calibrated delay.
+POSITIVE_CONTROL_REQUESTS = 3
 SOURCE = """can_read(User, Doc) :- owns(User, Doc) or delegated(User, Doc), not(blocked(User)).
 has_any_document(User) :- owns(User, _).
 allow(User, Doc) :- user(User), can_read(User, Doc).
@@ -40,7 +42,32 @@ def fixture(case):
     return facts, queries, mode
 
 
-def measure(case, samples, warmup):
+def repeat_transaction(transaction, repetitions):
+    """Benchmark-only injection; the normal path keeps the original callable."""
+    if repetitions == 1:
+        return transaction
+    if repetitions != POSITIVE_CONTROL_REQUESTS:
+        raise ValueError("unsupported request repetition count")
+
+    def repeated(phases=False):
+        answers = []
+        durations = [0] * (len(PHASES) - 1) if phases else None
+        for _ in range(repetitions):
+            values, stamps = transaction(phases)
+            answers.extend(values)
+            if phases:
+                for i in range(len(durations)):
+                    durations[i] += stamps[i + 1] - stamps[i]
+        combined = [0] if phases else None
+        if phases:
+            for duration in durations:
+                combined.append(combined[-1] + duration)
+        return answers, combined
+
+    return repeated
+
+
+def measure(case, samples, warmup, positive_control=False):
     # Import and policy compilation are outside request latency; each invocation
     # is a fresh interpreter. Cold means its first request, not machine boot.
     import maelys_datalog as md
@@ -79,13 +106,18 @@ def measure(case, samples, warmup):
                     stamps.append(time.perf_counter_ns())
                 return answers, stamps
 
+            # Select before starting any clock. The injected variant calls the
+            # same binding/binary; every request completes input/solve/query/close.
+            repetitions = POSITIVE_CONTROL_REQUESTS if positive_control else 1
+            transaction = repeat_transaction(transaction, repetitions)
             expected = [q[2] for q in queries]
+            expected_measured = expected * repetitions
             def checked(phases=False):
                 start = time.perf_counter_ns()
                 answers, stamps = transaction(phases)
                 elapsed = time.perf_counter_ns() - start
-                if answers != expected:
-                    raise ValueError(f"wrong query answers: {case}: {answers} != {expected}")
+                if answers != expected_measured:
+                    raise ValueError(f"wrong query answers: {case}: {answers} != {expected_measured}")
                 return elapsed, stamps
 
             cold, _ = checked()
@@ -102,7 +134,7 @@ def measure(case, samples, warmup):
             if session:
                 reused.close()
                 session.close()
-    return dict(case=case, cold=cold, samples=data,
+    return dict(case=case, cold=cold, samples=data, request_repetitions=repetitions,
                 output_sha256=hashlib.sha256(json.dumps(expected).encode()).hexdigest())
 
 
@@ -111,5 +143,7 @@ if __name__ == "__main__":
     parser.add_argument("case", choices=CASES)
     parser.add_argument("--samples", type=int, default=501)
     parser.add_argument("--warmup", type=int, default=50)
+    parser.add_argument("--positive-control", action="store_true",
+                        help="benchmark only: execute three complete requests per sample")
     args = parser.parse_args()
-    print(json.dumps(measure(args.case, args.samples, args.warmup)))
+    print(json.dumps(measure(args.case, args.samples, args.warmup, args.positive_control)))

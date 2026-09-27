@@ -188,8 +188,17 @@ when it has what they name.
   native call counts do not establish zero allocation or speed.
 - `python-performance.yml` automatically measures main commits, separately from
   the manual native benchmark. Build every reference before timing. Keep the
-  previous published release, immutable v0.11.1 anchor and v0.11.0 detection
-  control, all declared cases, both CMake build modes and both size profiles.
+  previous published release, immutable v0.11.1 anchor and informative v0.11.0
+  comparison, all declared cases, both CMake build modes and both size profiles.
+  The positive control uses the anchor binary with three complete requests per
+  measured sample, injected only in the benchmark wrapper. Every warm total's
+  primary metric must be slower in both rounds of every case/configuration;
+  an inconclusive injected control cannot be accepted as a timing exception.
+  Keep its amplitude fixed before measurement, its own A/A samples and its raw
+  results. It proves detection of this coarse injected cost, not sensitivity to
+  smaller regressions. Never adapt the injection to an ongoing run's noise.
+  Preserve the first hosted report (run 36305554306): its historical control
+  was inconclusive in SMALL; do not retroactively label that run validated.
 - Before `maelys-release cut ... --apply`, read the Python report and record the
   measured commit, run URL, report SHA-256, findings and maintainer decision in
   the changelog pull request. Review any later runtime, binding, build or harness

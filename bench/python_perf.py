@@ -20,14 +20,14 @@ import subprocess
 import sys
 import tarfile
 
-from python_workload import CASES, COLD_CASES, PHASES
+from python_workload import CASES, COLD_CASES, PHASES, POSITIVE_CONTROL_REQUESTS
 
 ROOT = Path(__file__).resolve().parents[1]
 ANCHOR = "0f247a7c81ec4a297f35ccee2bf007344f72ac7e"  # v0.11.1; not a moving tag.
-HISTORICAL = "e2c357eae1f441774f6c54b13ac20124da79686e"  # v0.11.0 regression.
+HISTORICAL = "e2c357eae1f441774f6c54b13ac20124da79686e"  # v0.11.0, informative.
 CONFIGS = [f"{profile}-{build}" for profile in ("SMALL", "LARGE")
            for build in ("default", "Release")]
-SCHEMA = 1
+SCHEMA = 2
 HARNESS_FILES = ("bench/python_perf.py", "bench/python_workload.py", "bench/python-perf-requirements.txt")
 
 
@@ -91,12 +91,39 @@ def compare(samples, candidate="head", references=("base", "anchor")):
 
 
 def historical_detected(rows, configs):
-    # A named positive control, not a universal noise tolerance. Only the
-    # complete warm quickstart median is the sentinel; other metrics stay raw.
+    # Retain the old historical diagnostic; it no longer decides validity.
     return all(any(row["scenario"] == f"{config}/7-symbol-solve/total" and
                        row["metric"] == "median" and
                        row["classification"] == ["slower", "slower"] for row in rows)
                for config in configs)
+
+
+def positive_detected(rows, configs):
+    # Every declared warm total must detect the injected work in both rounds.
+    return bool(configs) and all(any(
+        row["scenario"] == f"{config}/{case}/total" and
+        row["metric"] in ("median", "min") and
+        row["classification"] == ["slower", "slower"] for row in rows)
+        for config in configs for case in CASES)
+
+
+def measurement_variants(commits):
+    # Equal ordinary references may share samples; the same binary with an
+    # injected request count must never alias the anchor's normal samples.
+    variants = {role: (commit, 1) for role, commit in commits.items()}
+    variants["positive_control"] = (commits["anchor"], POSITIVE_CONTROL_REQUESTS)
+    return variants
+
+
+def assess(samples, configs):
+    rows = compare(samples)
+    positive = compare(samples, "positive_control", ("anchor",))
+    historical = compare(samples, "historical", ("anchor",))
+    detected = positive_detected(positive, configs)
+    status = ("inconclusive_control" if not detected else
+              "review_required" if any(row["review_required"] for row in rows)
+              else "no_slowdown_observed")
+    return rows, positive, historical, detected, status
 
 
 def build(source, dest, config, compiler, log):
@@ -120,7 +147,7 @@ def build(source, dest, config, compiler, log):
                     ignore=shutil.ignore_patterns("build", "__pycache__", "*.so", "*.dylib"))
     subprocess.run([sys.executable, str(consumer / "build_cffi.py"), "--sdk-prefix", str(sdk)],
                    env=env, stdout=log, stderr=log, check=True)
-    files = [p for parent in (consumer / "maelys_datalog", sdk / "include")
+    files = [p for parent in (consumer / "maelys_datalog", sdk / "include", sdk / "lib")
              for p in parent.rglob("*") if p.is_file() and p.suffix != ".pyc"]
     hashes = {str(p.relative_to(dest)): sha256(p) for p in sorted(files)}
     return consumer, hashes
@@ -153,17 +180,18 @@ def run(args):
                 builds[commit, config], hashes[f"{commit}/{config}"] = build(
                     source, dest, config, args.compiler, log)
     # All builds finish before any measurement; no per-process path overrides.
-    samples = {role: {name: {} for _, name in schedule([role])} for role in commits}
+    variants = measurement_variants(commits)
+    samples = {role: {name: {} for _, name in schedule([role])} for role in variants}
     raw = out / "raw"
     raw.mkdir()
     outputs = {}
     unique = list(dict.fromkeys(commits.values()))
-    plan = schedule(unique)
+    plan = schedule(list(dict.fromkeys(variants.values())))
     warm_samples, cold_samples = (31, 2) if args.smoke else (501, 31)
     for config in configs:
-        for commit, pass_name in plan:
-            print(f"measure {config} {commit[:12]} {pass_name}", flush=True)
-            roles = [role for role, sha in commits.items() if sha == commit]
+        for (commit, repetitions), pass_name in plan:
+            print(f"measure {config} {commit[:12]} requests={repetitions} {pass_name}", flush=True)
+            roles = [role for role, variant in variants.items() if variant == (commit, repetitions)]
             env = dict(os.environ, PYTHONPATH=str(builds[commit, config]),
                        PYTHONHASHSEED="0", PYTHONDONTWRITEBYTECODE="1")
             for case in CASES:
@@ -173,8 +201,11 @@ def run(args):
                     value = json.loads(command([
                         sys.executable, "-B", ROOT / "bench/python_workload.py", case,
                         "--samples", warm_samples if repeat == 0 else 0,
-                        "--warmup", 50], cwd=out, env=env))
-                    filename = f"{config}-{commit}-{pass_name}-{case}-{repeat}.json"
+                        "--warmup", 50] + (["--positive-control"] if repetitions > 1 else []),
+                        cwd=out, env=env))
+                    if value["request_repetitions"] != repetitions:
+                        raise ValueError("workload did not execute the requested control variant")
+                    filename = f"{config}-{commit}-requests{repetitions}-{pass_name}-{case}-{repeat}.json"
                     (raw / filename).write_text(json.dumps(value) + "\n")
                     old = outputs.setdefault(case, value["output_sha256"])
                     if old != value["output_sha256"]:
@@ -187,16 +218,13 @@ def run(args):
                 if case in COLD_CASES:
                     for role in roles:
                         samples[role][pass_name][f"{config}/{case}/cold"] = cold
-    rows = compare(samples)
-    control = compare(samples, "historical", ("anchor",))
-    control_ok = historical_detected(control, configs)
-    needs_review = any(row["review_required"] for row in rows)
-    status = ("inconclusive_control" if not control_ok else
-              "review_required" if needs_review else "no_slowdown_observed")
+    rows, positive, historical, control_ok, status = assess(samples, configs)
     report = dict(schema=SCHEMA, status=status,
                   release_eligible=bool(not args.smoke and os.environ.get("GITHUB_ACTIONS") == "true"
                                         and os.environ.get("GITHUB_SHA") == commits["head"]),
                   commits=commits, configs=configs,
+                  variants={role: dict(commit=sha, request_repetitions=repetitions)
+                            for role, (sha, repetitions) in variants.items()},
                   samples=dict(warm=warm_samples, cold=cold_samples),
                   environment=dict(python=sys.version, platform=platform.platform(), machine=platform.machine(),
                                    compiler=command([args.compiler, "--version"]),
@@ -207,7 +235,10 @@ def run(args):
                                    run_attempt=os.environ.get("GITHUB_RUN_ATTEMPT")),
                   harness={name: sha256(ROOT / name) for name in HARNESS_FILES},
                   binaries=hashes, outputs=outputs, rows=rows,
-                  historical_control=dict(detected=control_ok, rows=control))
+                  positive_control=dict(detected=control_ok, rows=positive,
+                                        reference="anchor", request_repetitions=POSITIVE_CONTROL_REQUESTS),
+                  historical_control=dict(detected=historical_detected(historical, configs),
+                                          informative_only=True, rows=historical))
     report_path = out / "report.json"
     report_path.write_text(json.dumps(report, indent=2) + "\n")
     with (out / "samples.csv").open("w", newline="") as stream:
@@ -220,16 +251,24 @@ def run(args):
     summary = ["# Python performance evidence", "", f"Status: **{report['status']}**.",
                f"Candidate: `{commits['head']}`; previous: `{commits['base']}`; anchor: `{ANCHOR}`.",
                f"Report SHA-256: `{sha256(report_path)}`.", "",
-               f"Historical v0.11.0 quickstart regression detected in every configuration: **{control_ok}**.", "",
+               f"Injected {POSITIVE_CONTROL_REQUESTS}-request control detected in every case/configuration: **{control_ok}**.",
+               "This coarse control does not certify sensitivity to smaller regressions.",
+               f"Historical v0.11.0 quickstart slowdown detected everywhere (informative): **{report['historical_control']['detected']}**.", "",
                "A/A floors measure within-binary repeatability, not placement effects between binaries.",
                "Below-floor differences are indeterminate. Equal instructions would not establish equal cycles.",
                "An above-floor slowdown requires review; this is not algorithmic attribution.", "",
                "| Reference | Scenario | Metric | A/A % | Round 1 % | Round 2 % | Classes |",
                "|---|---|---|---:|---:|---:|---|"]
-    for row in rows:
-        summary.append(f"| {row['reference']} | {row['scenario']} | {row['metric']} | "
-                       f"{100*row['aa_floor']:.2f} | {100*row['delta'][0]:+.2f} | "
-                       f"{100*row['delta'][1]:+.2f} | {', '.join(row['classification'])} |")
+    for title, section in (("Candidate", rows), ("Injected positive control", positive),
+                           ("Historical comparison (informative)", historical)):
+        if title != "Candidate":
+            summary.extend(["", f"## {title}", "",
+                            "| Reference | Scenario | Metric | A/A % | Round 1 % | Round 2 % | Classes |",
+                            "|---|---|---|---:|---:|---:|---|"])
+        for row in section:
+            summary.append(f"| {row['reference']} | {row['scenario']} | {row['metric']} | "
+                           f"{100*row['aa_floor']:.2f} | {100*row['delta'][0]:+.2f} | "
+                           f"{100*row['delta'][1]:+.2f} | {', '.join(row['classification'])} |")
     (out / "report.md").write_text("\n".join(summary) + "\n")
     # Preserve binaries, headers and build logs, not intermediate object trees.
     for commit in unique:
@@ -237,7 +276,7 @@ def run(args):
         for config in configs:
             shutil.rmtree(out / commit / config / "build")
     print(f"{report['status']}: {report_path}; sha256={sha256(report_path)}", flush=True)
-    return 1 if not control_ok else 2 if needs_review else 0
+    return {"inconclusive_control": 1, "review_required": 2, "no_slowdown_observed": 0}[status]
 
 
 if __name__ == "__main__":
