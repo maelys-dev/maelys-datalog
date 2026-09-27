@@ -11,7 +11,7 @@ Use `window_storage_requirements_configured` / `window_init_configured`, or
 the corresponding `group_window_*` functions, to reserve a raw static-fact
 capacity in `maelys_datalog_window_options_t` in addition to the existing
 event/contribution capacity. Set `struct_size` to `sizeof` that record and
-reserved `flags` to zero; NULL options mean defaults. Legacy
+`flags` to zero or `MAELYS_DATALOG_WINDOW_EXPIRATION`; NULL options mean defaults. Legacy
 constructors mean zero static capacity. Static input starts empty. All adapter
 memory is in the queried caller arena; no operation allocates or grows storage.
 The query covers both banks and checked alignment/size arithmetic, but excludes
@@ -59,6 +59,51 @@ operations preserve them. Never pass a borrowed view back into a mutating
 operation: input, output and diagnostic ranges must remain disjoint from the
 adapter arena. Access is serialized, and reentry is rejected.
 
+## Explicit expiration without insertion
+
+Set `MAELYS_DATALOG_WINDOW_EXPIRATION` in the creation options to reserve
+per-event/group deadline metadata in both banks. The legacy constructors and
+configured zero-flag path do not reserve deadline arrays. On the checked 64-bit
+layout each record is 16 bytes, so enabling expiry adds 32 bytes per event/group
+slot across the two banks, plus any queried alignment padding. The opaque
+adapter header also carries pointers and a watermark; always query the current
+SDK's storage requirement. There is no allocation or fallback during operations.
+
+`*_push_until(..., expires_at, ...)` adds one absolute uint64 deadline to an
+otherwise normal push. Time units and the clock source belong to the caller;
+the adapter reads no clock and computes no TTL. Ordinary pushes have no time
+deadline and may coexist with timed pushes. Arrival order still controls FIFO
+capacity. Deadlines may be out of order, and both zero and UINT64_MAX are valid.
+No insertion advances the time watermark or implicitly expires other entries.
+
+`*_expire(window, now, &expired, diagnostic)` removes **all** timed events/groups
+whose deadline is **<= now**, preserving the order and IDs of survivors. The
+returned count is events/groups, including empty groups, not unique facts.
+Static input is preserved, and the group union retains facts supported by any
+survivor or by static input. Publication recomputes the complete candidate with
+the same result lease and backend commit/abort boundary as static replacement.
+It consumes no ID and still works after ID exhaustion.
+
+The watermark advances only on success. Time may remain equal, but moving
+backwards is INVALID_ARGUMENT. A newly supplied deadline at or before an
+already committed watermark is rejected with INVALID_ARGUMENT; no ID is
+consumed. `*_expiry_watermark` returns the last committed value and a boolean
+indicating whether any expire call has succeeded; before that it returns 0/false.
+Time operations without the creation flag return UNSUPPORTED.
+
+If nothing is due, expire changes only the watermark. It does not solve, invoke
+a backend, replace a result or invalidate a borrowed view; a prepared explanation
+can remain alive. If anything is due, publication may be blocked by that lease.
+All failures preserve the committed watermark and state and leave the optional
+expired-count output unchanged. In particular, removing an input can enable
+facts through negation and cause an aggregate/derived-capacity failure: removal
+is not inherently infallible. The caller must inspect the status before treating
+the requested time as committed, release leases or adjust context, and retry.
+
+This is an explicitly driven adapter, not a scheduler or a deadline guarantee.
+No event is removed until an expire call succeeds. There are no background
+threads, automatic wake-ups, late-data buffering or duration arithmetic.
+
 ## Validation and release boundary
 
 Independent snapshot tests cover both adapters, authorization removal without
@@ -69,7 +114,12 @@ shared SDK run the same consumer. White-box allocation guards compare complete
 committed banks/metadata on rejection with engine allocators disabled. The
 external recording provider checks exact canonical input and commit/abort
 behavior on replacement, callback failure and clearing without an insertion.
-These checks make no timing or whole-application memory claim.
+Expiry tests add independent bounded event sequences, unordered/equal/maximal
+deadlines, mixed untimed inputs, empty and multi-fact groups, survivor slice
+compaction, static duplicate suppliers, no-op watermark progress, exhausted IDs,
+negation-induced aggregate overflow, callback failures and byte-exact lease/
+release rollback with allocators disabled. These checks make no timing or
+whole-application memory claim.
 
 Before cutting 0.13.0, build the downstream consumer against a clean installed
 integrated candidate SDK and record revisions, profile, commands, outcomes and

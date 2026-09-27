@@ -5,7 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define OPTIONS(n) (&(maelys_datalog_window_options_t){sizeof(maelys_datalog_window_options_t),(n),0})
+#define OPTIONS(n) (&(maelys_datalog_window_options_t){sizeof(maelys_datalog_window_options_t),(n),MAELYS_DATALOG_WINDOW_EXPIRATION})
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%s:%d: %s\n", __FILE__, __LINE__, #c); exit(1); } } while (0)
 #define OK(c) CHECK((c) == MAELYS_DATALOG_STATUS_OK)
 #define INVALID MAELYS_DATALOG_STATUS_INVALID_ARGUMENT
@@ -571,9 +571,25 @@ static void window_commit(int groups) {
     pools[1].state.inspect_inputs=1;pools[1].state.expected_inputs=expected;pools[1].state.expected_count=1;
     if(groups) OK(maelys_datalog_group_window_replace_static(g,NULL,0,NULL));
     else OK(maelys_datalog_window_replace_static(w,NULL,0,NULL));
+    pools[0].state.inspect_inputs=pools[1].state.inspect_inputs=0;
+    if(groups) OK(maelys_datalog_group_window_push_until(g,&input,1,9,&id,NULL));
+    else OK(maelys_datalog_window_push_until(w,"event",f.terms,1,9,&id,NULL));
+    CHECK(id==1);
+    solves=pools[1].state.solve;size_t expired=123;
+    if(groups) OK(maelys_datalog_group_window_expire(g,0,&expired,NULL));
+    else OK(maelys_datalog_window_expire(w,0,&expired,NULL));
+    CHECK(expired==0&&pools[1].state.solve==solves);
+    pools[1].state.inspect_inputs=1;pools[1].state.expected_count=0;pools[1].state.expected_inputs=NULL;
+    pools[1].state.mode=CALLBACK_ERROR;expired=123;commits=pools[1].state.commits;aborts=pools[1].state.aborts;
+    rc=groups?maelys_datalog_group_window_expire(g,9,&expired,NULL):maelys_datalog_window_expire(w,9,&expired,NULL);
+    CHECK(rc==MAELYS_DATALOG_STATUS_UNSUPPORTED&&expired==123&&pools[1].state.commits==commits&&pools[1].state.aborts==aborts+1);
+    pools[1].state.mode=GOOD;
+    if(groups) OK(maelys_datalog_group_window_expire(g,9,&expired,NULL));
+    else OK(maelys_datalog_window_expire(w,9,&expired,NULL));
+    CHECK(expired==1&&pools[1].state.commits==commits+1);
     if (groups) OK(maelys_datalog_group_window_free(g)); else OK(maelys_datalog_window_free(w));
     OK(maelys_datalog_session_free(a)); OK(maelys_datalog_session_free(b)); free(storage);
-    CHECK(pools[1].state.releases == 2 && pools[0].state.destroy == 1 && pools[1].state.destroy == 1);
+    CHECK(pools[1].state.releases == 3 && pools[0].state.destroy == 1 && pools[1].state.destroy == 1);
 }
 int main(int argc, char **argv) {
     static const maelys_datalog_predicate_t predicates[] = {

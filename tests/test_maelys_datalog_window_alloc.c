@@ -7,7 +7,7 @@
 #undef memset
 #include <maelys/datalog_window.h>
 #include <assert.h>
-#define OPTIONS(n) (&(maelys_datalog_window_options_t){sizeof(maelys_datalog_window_options_t),(n),0})
+#define OPTIONS(n) (&(maelys_datalog_window_options_t){sizeof(maelys_datalog_window_options_t),(n),MAELYS_DATALOG_WINDOW_EXPIRATION})
 #include <stdio.h>
 #include <string.h>
 
@@ -57,6 +57,9 @@ static maelys_datalog_value_t integer(int64_t n) {
 }
 static void rejected_unchanged(maelys_datalog_window_t *w, const char *predicate,
     maelys_datalog_value_t *values, size_t count, int expected, size_t input_bytes) {
+    size_t bytes,alignment,offset,stride,deadline_offset;
+    assert(!layout(w->capacity,16,w->static_capacity,w->deadlines[0]!=NULL,&bytes,&alignment,&offset,&stride,&deadline_offset));
+    input_bytes=stride;
     unsigned char *bank=malloc(input_bytes); assert(bank);
     unsigned char header[sizeof(*w)];
     memcpy(header,w,sizeof(*w)); memcpy(bank,w->inputs[w->active],input_bytes);
@@ -66,11 +69,21 @@ static void rejected_unchanged(maelys_datalog_window_t *w, const char *predicate
     assert(!memcmp(bank,w->inputs[w->active],input_bytes)); free(bank);
 }
 static void rejected_static(maelys_datalog_window_t *w, const maelys_datalog_fact_t *f,size_t n,int expected) {
-    size_t bytes,alignment; assert(!maelys_datalog_input_edb_storage_requirements(w->capacity+w->static_capacity,16,&bytes,&alignment));
-    unsigned char *committed=(unsigned char *)w->inputs[w->active];
+    size_t bytes,alignment,offset,stride,deadline_offset;
+    assert(!layout(w->capacity,16,w->static_capacity,w->deadlines[0]!=NULL,&bytes,&alignment,&offset,&stride,&deadline_offset));
+    bytes=stride;unsigned char *committed=(unsigned char *)w->inputs[w->active];
     unsigned char *bank=malloc(bytes);assert(bank);memcpy(bank,committed,bytes);
     unsigned char header[sizeof(*w)];memcpy(header,w,sizeof(*w));
     assert(maelys_datalog_window_replace_static(w,f,n,NULL)==expected);
+    assert(!memcmp(header,w,sizeof(*w))&&!memcmp(bank,committed,bytes));free(bank);
+}
+static void rejected_expiry(maelys_datalog_window_t *w,uint64_t now,int expected) {
+    size_t bytes,alignment,offset,stride,deadline_offset;
+    assert(!layout(w->capacity,16,w->static_capacity,w->deadlines[0]!=NULL,&bytes,&alignment,&offset,&stride,&deadline_offset));
+    bytes=stride;unsigned char *committed=(unsigned char *)w->inputs[w->active];
+    unsigned char *bank=malloc(bytes);assert(bank);memcpy(bank,committed,bytes);
+    unsigned char header[sizeof(*w)];memcpy(header,w,sizeof(*w));size_t expired=123;
+    assert(maelys_datalog_window_expire(w,now,&expired,NULL)==expected&&expired==123);
     assert(!memcmp(header,w,sizeof(*w))&&!memcmp(bank,committed,bytes));free(bank);
 }
 int main(void) {
@@ -122,6 +135,16 @@ int main(void) {
         assert(!maelys_datalog_prepared_explanation_release(e));
     }
     /* A release failure need not be caused by an explanation lease. */
+    maelys_datalog_fact_t timed={.predicate="event",.arity=2,.terms={integer(999),integer(1)}};
+    assert(!maelys_datalog_window_push_until(w,"event",timed.terms+1,1,10,NULL,NULL));
+    size_t expired=123;assert(!maelys_datalog_window_expire(w,9,&expired,NULL)&&expired==0);
+    release_failure_target=w->result;rejected_expiry(w,10,MAELYS_DATALOG_STATUS_INVALID_ARGUMENT);release_failure_target=NULL;
+    maelys_datalog_value_t missing=integer(42);maelys_datalog_prepared_explanation_t *held=NULL;
+    assert(!maelys_datalog_result_prepare_explanation(w->result,MAELYS_DATALOG_EXPLAIN_FALSE,"out",&missing,1,workspace,explain_bytes,&held));
+    rejected_expiry(w,10,MAELYS_DATALOG_STATUS_INVALID_STATE);
+    assert(!maelys_datalog_prepared_explanation_release(held));
+    assert(!maelys_datalog_window_expire(w,10,&expired,NULL)&&expired==1);
+    rejected_expiry(w,9,MAELYS_DATALOG_STATUS_INVALID_ARGUMENT);
     maelys_datalog_fact_t static_fact={.predicate="event",.arity=2,.terms={integer(999),integer(0)}};
     assert(!maelys_datalog_window_replace_static(w,&static_fact,1,NULL));
     rejected_static(w,&static_fact,3,MAELYS_DATALOG_STATUS_PAYLOAD_TOO_LARGE);

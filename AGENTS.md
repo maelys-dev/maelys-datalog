@@ -118,7 +118,12 @@ when it has what they name.
   event. Preserve raw static/event bounds separately, canonical combined input,
   cursor stability, result/explanation leases and byte-exact committed rollback.
   Test reference and external ABI 5 commit/abort paths with allocators disabled
-  where guaranteed. Future expiry must preserve static facts and consume no ID.
+  where guaranteed. Explicit expiry preserves static facts and consumes no ID.
+  Reserve deadlines only with the creation flag; no implicit clock or expiry on
+  insertion. Commit the monotone watermark with the result, keep equal-boundary
+  (deadline <= now) and late-deadline rejection semantics explicit, and test
+  removal failures caused by negation plus live explanations. A no-op expiry
+  advances only time and must preserve the result lease without a backend call.
 
 - Prefer caller-owned, aligned storage and explicit bounded capacities for new
   runtime APIs. Opaque handles do not justify mandatory heap allocation.

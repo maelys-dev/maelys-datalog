@@ -41,7 +41,8 @@ sum 5. Empty D expires B, leaving no runtime facts. Count/sum on an existing
 aggregate group give zero, min/max fail; no absent grouping domain is invented.
 Policy facts remain independent of window expiry. The optional
 [transactional static EDB](window-transactions.md) also survives FIFO expiry
-and participates in the same union.
+and participates in the same union. [Explicit expiry](window-transactions.md#explicit-expiration-without-insertion)
+can remove due groups without accepting a new one.
 
 Include an explicit occurrence field in the input facts if two otherwise equal
 observations must contribute twice to sum or be distinguishable to Datalog.

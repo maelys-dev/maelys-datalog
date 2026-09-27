@@ -3,6 +3,10 @@
 #define MAELYS_DATALOG_TRANSACTION_INTERNAL_H
 #include "maelys/datalog.h"
 
+/* Caller-arena metadata for opt-in window expiry, never part of the SDK ABI. */
+typedef struct { uint64_t at; int timed; } maelys_datalog_window_deadline;
+enum { MAELYS_WINDOW_PUSH, MAELYS_WINDOW_REPLACE_STATIC, MAELYS_WINDOW_EXPIRE };
+
 /* Runtime-only publication boundary. A successful candidate leases its session
  * but is not committed and cannot be explained. The window either frees it
  * (abort), or installs it and calls commit once after its last fallible step.

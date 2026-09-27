@@ -13,13 +13,16 @@ struct maelys_datalog_group_window {
     maelys_datalog_result_t *result;
     maelys_datalog_group_window_capacities_t capacities;
     size_t group_count, unique_count, static_capacity, static_count;
+    maelys_datalog_window_deadline *deadlines[2];
+    uint64_t now;
+    int has_now;
     uint64_t next;
     unsigned active;
     int busy;
 };
 
 typedef struct {
-    size_t bytes, alignment, start, stride, input, groups, facts, input_bytes;
+    size_t bytes, alignment, start, stride, input, groups, facts, input_bytes, deadlines;
 } group_layout;
 
 static maelys_datalog_status_t group_error(maelys_datalog_diagnostic_t *d,
@@ -47,7 +50,7 @@ static int reserve_region(size_t *end, size_t count, size_t item, size_t alignme
 }
 
 static maelys_datalog_status_t group_storage_layout(
-    const maelys_datalog_group_window_capacities_t *c, size_t static_capacity, group_layout *l) {
+    const maelys_datalog_group_window_capacities_t *c, size_t static_capacity, int timed, group_layout *l) {
     if (!c || !c->groups || !c->contributions || (uint64_t)c->groups > (uint64_t)INT32_MAX + 1u ||
         static_capacity > SIZE_MAX - c->contributions ||
         !c->unique_facts || c->unique_facts > c->contributions + static_capacity)
@@ -62,6 +65,7 @@ static maelys_datalog_status_t group_storage_layout(
     if (!reserve_region(&end, 1, input_bytes, alignment, &v.input) ||
         !reserve_region(&end, c->groups, sizeof(maelys_datalog_event_group_t), alignment, &v.groups) ||
         !reserve_region(&end, c->contributions + static_capacity, sizeof(maelys_datalog_fact_t), alignment, &v.facts) ||
+        !reserve_region(&end, timed ? c->groups : 0, sizeof(maelys_datalog_window_deadline), alignment, &v.deadlines) ||
         !reserve_region(&end, 0, 1, alignment, &ignored))
         return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
     v.stride = end;
@@ -81,14 +85,14 @@ maelys_datalog_status_t maelys_datalog_group_window_storage_requirements(
 maelys_datalog_status_t maelys_datalog_group_window_storage_requirements_configured(
     const maelys_datalog_group_window_capacities_t *c, const maelys_datalog_window_options_t *options,
     size_t *bytes, size_t *alignment) {
-    if (options && (options->struct_size != sizeof(*options) || options->flags)) {
+    if (options && (options->struct_size != sizeof(*options) || (options->flags & ~MAELYS_DATALOG_WINDOW_EXPIRATION))) {
         return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
     }
     size_t static_capacity = options ? options->static_fact_capacity : 0;
 
     if (!bytes || !alignment) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
     group_layout l;
-    maelys_datalog_status_t rc = group_storage_layout(c, static_capacity, &l);
+    maelys_datalog_status_t rc = group_storage_layout(c, static_capacity, options && (options->flags & MAELYS_DATALOG_WINDOW_EXPIRATION), &l);
     if (!rc) { *bytes = l.bytes; *alignment = l.alignment; }
     return rc;
 }
@@ -109,13 +113,13 @@ maelys_datalog_status_t maelys_datalog_group_window_init_configured(
 
     if (out) *out = NULL;
     { maelys_datalog_status_t ds = maelys_datalog_diagnostic_clear(diag); if (ds) return ds; }
-    if (options && (options->struct_size != sizeof(*options) || options->flags))
+    if (options && (options->struct_size != sizeof(*options) || (options->flags & ~MAELYS_DATALOG_WINDOW_EXPIRATION)))
         return group_error(diag, MAELYS_DATALOG_STATUS_INVALID_ARGUMENT, "Invalid window options.");
     size_t static_capacity = options ? options->static_fact_capacity : 0;
     if (!out || !storage || !a || !b || a == b || first > INT32_MAX)
         return group_error(diag, MAELYS_DATALOG_STATUS_INVALID_ARGUMENT, "Two distinct sessions, storage and a nonnegative int32 group ID are required.");
     group_layout l;
-    maelys_datalog_status_t rc = group_storage_layout(c, static_capacity, &l);
+    maelys_datalog_status_t rc = group_storage_layout(c, static_capacity, options && (options->flags & MAELYS_DATALOG_WINDOW_EXPIRATION), &l);
     if (rc) return group_error(diag, rc, "Invalid group window capacities.");
     if ((uintptr_t)storage % l.alignment || storage_bytes > UINTPTR_MAX - (uintptr_t)storage)
         return group_error(diag, MAELYS_DATALOG_STATUS_INVALID_ARGUMENT, "Window storage is misaligned or its range overflows.");
@@ -133,6 +137,7 @@ maelys_datalog_status_t maelys_datalog_group_window_init_configured(
         unsigned char *bank = (unsigned char *)storage + l.start + i * l.stride;
         w->groups[i] = (void *)(bank + l.groups);
         w->facts[i] = (void *)(bank + l.facts);
+        if (options && (options->flags & MAELYS_DATALOG_WINDOW_EXPIRATION)) w->deadlines[i] = (void *)(bank + l.deadlines);
         rc = maelys_datalog_input_edb_init(bank + l.input, l.input_bytes,
             c->contributions + static_capacity, c->text_bytes, &w->inputs[i]);
         if (rc) return rc;
@@ -190,19 +195,26 @@ static size_t make_union(maelys_datalog_fact_t *a, size_t n) {
 }
 
 static maelys_datalog_status_t group_update(maelys_datalog_group_window_t *w,
-    const maelys_datalog_fact_t *facts, size_t count, int replace_static, uint32_t *id,
+    const maelys_datalog_fact_t *facts, size_t count, int operation, const uint64_t *time, size_t *out_expired, uint32_t *id,
     maelys_datalog_diagnostic_t *diag) {
     { maelys_datalog_status_t ds = maelys_datalog_diagnostic_clear(diag); if (ds) return ds; }
+    int replace_static = operation == MAELYS_WINDOW_REPLACE_STATIC;
+    int pushing = operation == MAELYS_WINDOW_PUSH;
+    int expiring = operation == MAELYS_WINDOW_EXPIRE;
     if (!w || (!facts && count))
         return group_error(diag, MAELYS_DATALOG_STATUS_INVALID_ARGUMENT, "A nonempty group needs a fact array.");
     if (!w->result) return group_error(diag, MAELYS_DATALOG_STATUS_INVALID_STATE, "Window is closed.");
     if (w->busy) return group_error(diag, MAELYS_DATALOG_STATUS_INVALID_STATE, "Window operation reentry is forbidden.");
-    if (!replace_static && w->next > INT32_MAX)
+    if (pushing && w->next > INT32_MAX)
         return group_error(diag, MAELYS_DATALOG_STATUS_PAYLOAD_TOO_LARGE, "The window group ID space is exhausted.");
     if (replace_static && count > w->static_capacity)
         return group_error(diag, MAELYS_DATALOG_STATUS_PAYLOAD_TOO_LARGE, "Static input capacity is exhausted.");
+    if (time && !w->deadlines[0])
+        return group_error(diag, MAELYS_DATALOG_STATUS_UNSUPPORTED, "Window expiration storage was not enabled.");
+    if (time && w->has_now && (expiring ? *time < w->now : *time <= w->now))
+        return group_error(diag, MAELYS_DATALOG_STATUS_INVALID_ARGUMENT, "Time must not move backwards; a deadline must be after the committed watermark.");
     unsigned active = w->active, candidate = 1u - active;
-    size_t skip_group = !replace_static && w->group_count == w->capacities.groups ? 1u : 0u;
+    size_t skip_group = pushing && w->group_count == w->capacities.groups ? 1u : 0u;
     size_t skip_fact = skip_group ? w->groups[active][0].fact_count : 0;
     const maelys_datalog_fact_t *old = NULL;
     size_t old_count = 0;
@@ -210,13 +222,46 @@ static maelys_datalog_status_t group_update(maelys_datalog_group_window_t *w,
     maelys_datalog_status_t rc = maelys_datalog_input_edb_view(w->inputs[active], &old, &old_count);
     size_t retained = old_count - w->static_count - skip_fact;
     size_t static_count = replace_static ? count : w->static_count;
-    if (!rc && !replace_static && count > w->capacities.contributions - retained)
+    size_t expired = 0;
+    if (expiring) {
+        for (size_t i = 0; i < w->group_count; ++i)
+            if (w->deadlines[active][i].timed && w->deadlines[active][i].at <= *time) ++expired;
+        if (!expired) {
+            w->now = *time; w->has_now = 1; w->busy = 0;
+            if (out_expired) *out_expired = 0;
+            return MAELYS_DATALOG_STATUS_OK;
+        }
+    }
+    if (!rc && pushing && count > w->capacities.contributions - retained)
         rc = group_error(diag, MAELYS_DATALOG_STATUS_PAYLOAD_TOO_LARGE, "Retained raw contributions exceed the window contribution capacity.");
     if (!rc) rc = maelys_datalog_input_edb_clear(w->inputs[candidate]);
     if (!rc) rc = maelys_datalog_input_edb_add_facts(w->inputs[candidate],
         replace_static ? facts : old, static_count, diag);
-    if (!rc) rc = maelys_datalog_input_edb_add_facts(w->inputs[candidate], old + w->static_count + skip_fact, retained, diag);
-    if (!rc && !replace_static) rc = maelys_datalog_input_edb_add_facts(w->inputs[candidate], facts, count, diag);
+    size_t groups = 0;
+    if (expiring) {
+        retained = 0;
+        for (size_t i = 0; !rc && i < w->group_count; ++i) {
+            if (w->deadlines[active][i].timed && w->deadlines[active][i].at <= *time) continue;
+            maelys_datalog_event_group_t g = w->groups[active][i];
+            rc = maelys_datalog_input_edb_add_facts(w->inputs[candidate], old + w->static_count + g.fact_offset, g.fact_count, diag);
+            g.fact_offset = retained; retained += g.fact_count;
+            w->groups[candidate][groups] = g;
+            w->deadlines[candidate][groups++] = w->deadlines[active][i];
+        }
+    } else {
+        if (!rc) rc = maelys_datalog_input_edb_add_facts(w->inputs[candidate], old + w->static_count + skip_fact, retained, diag);
+        groups = w->group_count - skip_group;
+        for (size_t i = 0; !rc && i < groups; ++i) {
+            w->groups[candidate][i] = w->groups[active][i + skip_group];
+            w->groups[candidate][i].fact_offset -= skip_fact;
+            if (w->deadlines[0]) w->deadlines[candidate][i] = w->deadlines[active][i + skip_group];
+        }
+    }
+    if (!rc && pushing) {
+        rc = maelys_datalog_input_edb_add_facts(w->inputs[candidate], facts, count, diag);
+        w->groups[candidate][groups] = (maelys_datalog_event_group_t){(uint32_t)w->next, retained, count};
+        if (w->deadlines[0]) w->deadlines[candidate][groups] = (maelys_datalog_window_deadline){time ? *time : 0, time != NULL};
+    }
     const maelys_datalog_fact_t *raw = NULL;
     size_t total = 0, unique = 0;
     if (!rc) rc = maelys_datalog_input_edb_view(w->inputs[candidate], &raw, &total);
@@ -225,14 +270,6 @@ static maelys_datalog_status_t group_update(maelys_datalog_group_window_t *w,
         unique = make_union(w->facts[candidate], total);
         if (unique > w->capacities.unique_facts)
             rc = group_error(diag, MAELYS_DATALOG_STATUS_PAYLOAD_TOO_LARGE, "Runtime union exceeds the window unique-fact capacity.");
-    }
-    size_t groups = w->group_count - skip_group;
-    if (!rc) {
-        for (size_t i = 0; i < groups; ++i) {
-            w->groups[candidate][i] = w->groups[active][i + skip_group];
-            w->groups[candidate][i].fact_offset -= skip_fact;
-        }
-        if (!replace_static) w->groups[candidate][groups] = (maelys_datalog_event_group_t){(uint32_t)w->next, retained, count};
     }
     maelys_datalog_result_t *result = NULL;
     if (!rc) rc = maelys_datalog_session_solve_candidate(w->sessions[candidate], w->facts[candidate], unique, &result, diag);
@@ -245,12 +282,16 @@ static maelys_datalog_status_t group_update(maelys_datalog_group_window_t *w,
             /* After releasing the old lease, only infallible publication remains. */
             w->result = result;
             w->active = candidate;
-            w->group_count = groups + (replace_static ? 0u : 1u);
+            w->group_count = groups + (pushing ? 1u : 0u);
             w->static_count = static_count;
             w->unique_count = unique;
-            if (!replace_static) {
+            if (pushing) {
                 if (id) *id = (uint32_t)w->next;
                 ++w->next;
+            }
+            if (expiring) {
+                w->now = *time; w->has_now = 1;
+                if (out_expired) *out_expired = expired;
             }
             maelys_datalog_result_commit(result);
         }
@@ -264,11 +305,21 @@ static maelys_datalog_status_t group_update(maelys_datalog_group_window_t *w,
 maelys_datalog_status_t maelys_datalog_group_window_push(maelys_datalog_group_window_t *w,
     const maelys_datalog_fact_t *facts, size_t count, uint32_t *id,
     maelys_datalog_diagnostic_t *diag) {
-    return group_update(w, facts, count, 0, id, diag);
+    return group_update(w, facts, count, MAELYS_WINDOW_PUSH, NULL, NULL, id, diag);
 }
 maelys_datalog_status_t maelys_datalog_group_window_replace_static(maelys_datalog_group_window_t *w,
     const maelys_datalog_fact_t *facts, size_t count, maelys_datalog_diagnostic_t *diag) {
-    return group_update(w, facts, count, 1, NULL, diag);
+    return group_update(w, facts, count, MAELYS_WINDOW_REPLACE_STATIC, NULL, NULL, NULL, diag);
+}
+
+maelys_datalog_status_t maelys_datalog_group_window_push_until(maelys_datalog_group_window_t *w,
+    const maelys_datalog_fact_t *facts, size_t count, uint64_t deadline, uint32_t *id,
+    maelys_datalog_diagnostic_t *diag) {
+    return group_update(w, facts, count, MAELYS_WINDOW_PUSH, &deadline, NULL, id, diag);
+}
+maelys_datalog_status_t maelys_datalog_group_window_expire(maelys_datalog_group_window_t *w,
+    uint64_t now, size_t *expired, maelys_datalog_diagnostic_t *diag) {
+    return group_update(w, NULL, 0, MAELYS_WINDOW_EXPIRE, &now, expired, NULL, diag);
 }
 
 static maelys_datalog_status_t readable(const maelys_datalog_group_window_t *w) {
@@ -333,6 +384,14 @@ maelys_datalog_status_t maelys_datalog_group_window_result(const maelys_datalog_
     *out = w->result;
     return MAELYS_DATALOG_STATUS_OK;
 }
+maelys_datalog_status_t maelys_datalog_group_window_expiry_watermark(const maelys_datalog_group_window_t *w,
+    uint64_t *now, int *has_now) {
+    if (!w || !now || !has_now) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
+    if (!w->result || w->busy) return MAELYS_DATALOG_STATUS_INVALID_STATE;
+    if (!w->deadlines[0]) return MAELYS_DATALOG_STATUS_UNSUPPORTED;
+    *now = w->now; *has_now = w->has_now;
+    return MAELYS_DATALOG_STATUS_OK;
+}
 maelys_datalog_status_t maelys_datalog_group_window_free(maelys_datalog_group_window_t *w) {
     maelys_datalog_status_t rc = readable(w);
     if (rc) return rc;
@@ -342,7 +401,7 @@ maelys_datalog_status_t maelys_datalog_group_window_free(maelys_datalog_group_wi
         w->result = NULL;
         for (unsigned i = 0; i < 2; ++i) {
             w->sessions[i] = NULL; w->inputs[i] = NULL;
-            w->groups[i] = NULL; w->facts[i] = NULL;
+            w->groups[i] = NULL; w->facts[i] = NULL; w->deadlines[i] = NULL;
         }
     }
     w->busy = 0;
