@@ -7,6 +7,11 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## 0.12.0 — 2026-09-27
+
+Session storage reductions and Python consumer performance review. Consumer
+API 2 and backend ABI 5 are unchanged.
+
 ### Changed
 
 - Reserve canonical input export storage only for sessions whose backend solve
@@ -46,6 +51,25 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
   Timing observations remain visible without an automatic timing gate at the
   tag; they are not automatically attributed to the engine. See
   `docs/python-performance.md`.
+
+### Performance and measurement limits
+
+- The [hosted Python measurement](https://github.com/maelys-dev/maelys-datalog/actions/runs/36308020794)
+  on integrated commit `f975be6` detected the injected control in both rounds of
+  all 32 case/configuration pairs. Against v0.11.1, 30 of 32 warm complete-request
+  medians and all eight cold medians classify faster in both rounds; the other
+  warm medians retain indeterminate rounds. This validates detection of the
+  injected three-request cost, not sensitivity to every smaller regression.
+- The report remains `review_required`: SMALL-Release / 7-integer-prepared
+  complete-request p95 is 221.984 versus 89.587 microseconds in one round
+  (+147.79%, A/A floor 4.63%), and 90.980 versus 88.955 in the other (+2.28%,
+  indeterminate). The earlier run also retained a single-round p95 alert for
+  this case. No complete-request metric is slower in both rounds of the new
+  run, but the recurring tail observation remains unresolved. Phase diagnostics
+  additionally retain SMALL-Release / 93-symbol-prepared query p95
+  (+10.92% / +10.27%) and SMALL-default / 7-symbol-prepared input median
+  (+0.89% / +0.82%) above their own floors in both rounds. Timings do not
+  establish an engine, allocator or runner cause, or a general latency guarantee.
 
 ## 0.11.1 — 2026-09-26
 
