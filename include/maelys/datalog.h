@@ -338,6 +338,10 @@ MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_policy_fingerprint(
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_policy_free(
     maelys_datalog_policy_t *policy);
 
+/* Allocating reference constructor: three engine allocations reserve fixed
+ * size-profile transaction/result/provenance storage. The compiled policy and
+ * opt-in explanation storage are accounted separately. No canonical public
+ * input export buffer is reserved for the reference backend. */
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_session_create(
     const maelys_datalog_policy_t *policy,
     size_t policy_index,

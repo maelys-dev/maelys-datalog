@@ -17,7 +17,14 @@ void maelys_bench_session_layout(FILE *out, const maelys_datalog_session_t *sess
     L_ADDRESS("session", session);
     L_FIELD("session", maelys_datalog_session_t, session, inputs);
     L_FIELD("session", maelys_datalog_session_t, session, result_storage);
+#ifdef MAELYS_BENCH_OPTIONAL_EXPORT
+    L_VALUE("offsetof.session.solve_scratch", offsetof(maelys_datalog_session_t, solve_scratch));
+    L_VALUE("reserved.session.solve_scratch", session->borrows_inputs ? 0 :
+        MAELYS_DATALOG_MAX_EDB_FACTS * sizeof(session->solve_scratch[0]));
+    if (!session->borrows_inputs) L_ADDRESS("session.solve_scratch", session->solve_scratch);
+#else
     L_FIELD("session", maelys_datalog_session_t, session, solve_scratch);
+#endif
     L_TYPE("inputs", maelys_datalog_internal_prepared_session_t);
     L_ADDRESS("inputs", inputs);
     L_FIELD("inputs", maelys_datalog_internal_prepared_session_t, inputs, prepared);
