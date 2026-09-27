@@ -323,3 +323,32 @@ reviewable code change, with comparator/injection tests and the historical compa
 replayed. Do not calibrate a permissive time threshold from a noisy run. Add
 real workload regressions to the corpus when found; no finite suite covers all
 Python programs or all platforms.
+
+### v0.13 release attribution follow-up
+
+The writer-only `release_diagnostic` dispatch investigates the accepted
+observations from run **36331650860**, report SHA-256
+`57ad969645ca156262f798346267a077f65e8467a62c3c0e2bdb12b67573184a`.
+`bench/python_release_instructions.py` verifies the original workload and every
+retained consumer/header/library hash before using the actual measured binaries;
+it never substitutes a rebuild. The four declared fixtures are SMALL-default /
+7-integer-prepared, LARGE-default / 7-symbol-prepared, LARGE-Release /
+7-symbol-prepared, and LARGE-Release / 93-integer-prepared. Base v0.12.0 and the
+measured candidate run in each; the cold Release case also retains v0.11.1,
+the reference for its p95 observation.
+
+Two processes per revision/fixture, in opposite revision order, count the first
+request and total samples 0, 100, 421, 422, 436, 448, 449 and 500. The original
+501 samples, 50 warmups, schema-3 telemetry and checked answers remain. Collection
+covers the complete transaction, excluding setup, clocks and answer checks;
+helper/Python call-boundary instructions remain in the profile. Preserve raw
+Callgrind profiles and exclusive per-function Ir/Dr/Dw annotations. No instrumented
+latencies or simulated cache misses are interpreted as hardware measurements.
+Separate `LD_DEBUG=bindings` traces mark the first transaction and record actual
+Python `dlopen` flags, to test whether lazy symbol resolution occurs inside it.
+
+This investigation does not alter the release report, its classifications, the
+accepted tradeoff or the release gate. It does not reopen the closed native
+padding sweeps. Equal software counts can exclude added executed work within
+the counted samples; they cannot establish equal cycles or explain an earlier
+transient retroactively. A hardware/runner cause still requires direct evidence.
