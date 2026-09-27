@@ -19,9 +19,13 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
   conversions. External backends keep runtime-owned emission storage reserved
   at session creation. Canonical enumeration and result/explanation leases are
   preserved.
+- Prepared native results borrow session-owned materialized inputs under the
+  same result/explanation lease. Legacy direct solves and copying workspaces
+  retain independent EDB snapshots. Caller input buffers may still be cleared
+  after solve. No allocation is deferred to solve or explanation preparation.
 - On the checked 64-bit SMALL/LARGE builds, a reference session sharing an
-  engine-owned policy reserves 359,768/623,960 bytes instead of 515,416/935,256,
-  saving 152/304 KiB across the same three engine allocations. Policy creation
+  engine-owned policy reserves 286,040/476,504 bytes instead of 515,416/935,256,
+  saving 224/448 KiB across the same three engine allocations. Policy creation
   and optional workspaces are excluded. This is a reservation reduction, not
   a claim of faster solving or lower Python process RSS.
 

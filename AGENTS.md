@@ -151,6 +151,11 @@ when it has what they name.
   External backends retain runtime-owned emitted facts reserved at creation.
   Compare both paths for canonical IDs, values, enumeration order and reuse;
   retain emission validation, deduplication and capacity failures.
+- Only prepared native results may borrow the session-owned materialized EDB.
+  The result/explanation lease must forbid reuse through the final explanation
+  release. Legacy solves and copying workspaces retain independent snapshots.
+  Keep caller-EDB-clear, late window rejection/fresh premise extraction and
+  workspace-reuse tests; reset metadata only and preserve the borrowing mode.
 - Do not use libc qsort on the hot path: it may allocate. Use the bounded
   in-place sort and maintain the all-engine allocation-guard test.
 - Never claim the whole engine is zero-malloc based on an input-buffer test.

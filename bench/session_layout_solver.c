@@ -14,7 +14,16 @@ void maelys_bench_solver_layout(FILE *out, const maelys_datalog_internal_solve_r
     L_ADDRESS("resolved_program", result->ruleset);
     L_FIELD("result", maelys_datalog_internal_solve_result_t, result, facts_per_pred);
     L_FIELD("result", maelys_datalog_internal_solve_result_t, result, stratum_idb_end);
+#ifdef MAELYS_BENCH_BORROWED_EDB
+    L_FIELD("result", maelys_datalog_internal_solve_result_t, result, borrows_edb);
+    /* The optional tail is absent for this prepared-session fixture. */
+    L_VALUE("offsetof.result.edb_facts", offsetof(maelys_datalog_internal_solve_result_t, edb_facts));
+    L_VALUE("sizeof.result.edb_facts", 0);
+    L_ADDRESS("resolved_edb", result->edb_snapshot.facts);
+#else
     L_FIELD("result", maelys_datalog_internal_solve_result_t, result, edb_facts);
+    L_ADDRESS("resolved_edb", result->edb_facts);
+#endif
     L_FIELD("result", maelys_datalog_internal_solve_result_t, result, idb_facts);
     L_FIELD("result", maelys_datalog_internal_solve_result_t, result, idb_proof_index);
     L_FIELD("result", maelys_datalog_internal_solve_result_t, result, edb_ranges);

@@ -16,9 +16,12 @@ maelys_result_t maelys_datalog_explain_absent_in_workspace(
 const maelys_datalog_why_false_explanation_t *maelys_datalog_why_false_workspace_view(
     const void *storage);
 
-/* Prepared-session workspace allocated only during initialization. The ordinary
+/* Copying workspace allocated only during initialization. The ordinary
  * result release ends a lease and resets this workspace, without freeing it. */
 maelys_datalog_internal_solve_result_t *maelys_datalog_solve_workspace_create(void);
+/* Prepared sessions only: EDB storage must stay immutable until result release,
+ * including every explanation lease. Never borrow caller-owned input here. */
+maelys_datalog_internal_solve_result_t *maelys_datalog_solve_workspace_create_borrowing_inputs(void);
 void maelys_datalog_solve_workspace_destroy(maelys_datalog_internal_solve_result_t *);
 maelys_result_t maelys_datalog_solve_reusing_workspace(
     const maelys_datalog_internal_ruleset_t *, const maelys_datalog_internal_edb_t *,

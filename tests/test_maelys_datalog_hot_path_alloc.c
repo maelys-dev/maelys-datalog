@@ -156,9 +156,9 @@ static void caller_owned_policy_snapshot(void) {
     const size_t reservation = allocated_bytes - bytes_before;
     assert(total - before == 3u);
 #ifdef MAELYS_DATALOG_PROFILE_LARGE
-    assert(reservation <= 995000u);
+    assert(reservation <= 845000u);
 #else
-    assert(reservation <= 735000u);
+    assert(reservation <= 660000u);
 #endif
     assert(maelys_datalog_policy_free(policy) == 0);
     memset(storage, 0xa5, bytes); free(storage);
@@ -380,10 +380,10 @@ int main(void) {
     /* Bound the total reservation, including both public/native result storage.
      * A second full ruleset copy must not silently return. */
 #ifdef MAELYS_DATALOG_PROFILE_LARGE
-    assert(create_bytes <= 645000u);
+    assert(create_bytes <= 495000u);
     assert(create_zero_bytes <= 350000u);
 #else
-    assert(create_bytes <= 380000u);
+    assert(create_bytes <= 305000u);
     assert(create_zero_bytes <= 200000u);
 #endif
     size_t reset_before = memset_bytes;
@@ -448,6 +448,24 @@ int main(void) {
         int present = 0;
         assert(maelys_datalog_result_query(result, "allow", &alpha, 1u, &present) == 0 && present);
         assert(maelys_datalog_result_query(result, "allow", &zeta, 1u, &present) == 0 && !present);
+        if (cycle == 0) {
+            /* Caller EDB was cleared above; explanation premises must still
+             * read session-owned facts and strings with the allocator off. */
+            size_t bytes, alignment, required;
+            assert(maelys_datalog_result_explanation_storage_requirements(result,
+                MAELYS_DATALOG_EXPLAIN_TRUE, &bytes, &alignment) == 0);
+            void *storage = malloc(bytes); assert(storage && (uintptr_t)storage % alignment == 0);
+            maelys_datalog_prepared_explanation_t *explanation = NULL;
+            assert(maelys_datalog_result_prepare_explanation(result, MAELYS_DATALOG_EXPLAIN_TRUE,
+                "allow", &alpha, 1, storage, bytes, &explanation) == 0);
+            assert(maelys_datalog_result_free(result) == MAELYS_DATALOG_STATUS_INVALID_STATE);
+            assert(maelys_datalog_prepared_explanation_text_size(explanation, &required) == 0);
+            char *text = malloc(required + 1); assert(text);
+            assert(maelys_datalog_prepared_explanation_write_text(explanation, text, required + 1) == 0);
+            assert(strstr(text, "origin=edb fact=\"seed\"(\"alpha\")"));
+            assert(maelys_datalog_prepared_explanation_release(explanation) == 0);
+            free(text); free(storage);
+        }
         release_bounded(result);
         assert(maelys_datalog_result_query(other, "allow", &alpha, 1u, &present) == 0 && present);
         release_bounded(other);

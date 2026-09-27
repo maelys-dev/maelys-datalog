@@ -1,5 +1,6 @@
 #include "include/maelys_datalog.h"
 #include "src/core/maelys_datalog_prepared_session_internal.h"
+#include "src/core/maelys_datalog_solver_internal.h"
 #include "tests/helpers/test_framework.h"
 
 #include <stdint.h>
@@ -306,6 +307,39 @@ static maelys_result_t solve_fresh_canonical(
     rc = maelys_datalog_edb_finalize(&edb);
     if (rc != MAELYS_OK) return rc;
     return maelys_datalog_solve_once(ruleset, &edb, out_result);
+}
+
+static int test_legacy_workspaces_keep_input_snapshots(void) {
+    TEST_BEGIN();
+    maelys_datalog_internal_ruleset_t source, ruleset;
+    TEST_ASSERT_EQUAL(MAELYS_OK, make_ruleset(&source), "%d");
+    maelys_datalog_fact_t facts[4]; authorization_facts(facts, 0);
+    maelys_datalog_internal_fact_t pool[MAELYS_DATALOG_MAX_EDB_FACTS];
+    maelys_datalog_internal_solve_result_t *owned = NULL;
+    TEST_ASSERT_EQUAL(MAELYS_OK,
+        solve_fresh_canonical(&source, facts, 4, &ruleset, pool, &owned), "%d");
+    maelys_datalog_internal_prepared_session_t *session = NULL;
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_prepared_session_create(&source, &session), "%d");
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_prepared_session_materialize_inputs(session, facts, 4), "%d");
+    maelys_datalog_internal_solve_result_t *workspace = maelys_datalog_solve_workspace_create();
+    TEST_ASSERT_NOT_NULL(workspace);
+    for (unsigned repeat = 0; repeat < 2; ++repeat) {
+        maelys_datalog_internal_solve_result_t *copy = NULL;
+        TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_solve_reusing_workspace(
+            session->prepared, &session->edb, workspace, &copy, NULL), "%d");
+        TEST_ASSERT_TRUE(explanations_byte_identical(&ruleset, owned, copy));
+        /* Both legacy paths must keep their own EDB even after the caller
+         * overwrites its facts. Keep the dictionary alive as its contract asks. */
+        memset(pool, 0xa5, sizeof(pool));
+        memset(session->fact_pool, 0xa5, sizeof(session->fact_pool));
+        TEST_ASSERT_TRUE(explanations_byte_identical(&ruleset, owned, copy));
+        maelys_datalog_solve_result_free(copy);
+        TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_prepared_session_materialize_inputs(session, facts, 4), "%d");
+    }
+    maelys_datalog_solve_workspace_destroy(workspace);
+    maelys_datalog_solve_result_free(owned);
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_prepared_session_destroy(session), "%d");
+    TEST_END();
 }
 
 static int test_order_independent_results_and_why_true(void) {
@@ -698,6 +732,14 @@ static int test_input_text_is_borrowed_only_during_solve(void) {
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       maelys_datalog_prepared_session_solve(
                           session, facts, 2u, &result), "%d");
+    maelys_datalog_predicate_id_t member_id;
+    TEST_ASSERT_TRUE(maelys_datalog_predicate_registry_find(&session->prepared->registry, "member", 2, &member_id));
+    const maelys_datalog_internal_fact_t *slice = NULL;
+    size_t count = 0;
+    TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_test_solve_result_edb_slice(result, member_id, &slice, &count), "%d");
+    TEST_ASSERT_EQUAL((size_t)1, count, "%zu");
+    TEST_ASSERT_TRUE((uintptr_t)slice >= (uintptr_t)session->fact_pool &&
+                     (uintptr_t)slice < (uintptr_t)(session->fact_pool + session->edb.fact_count));
     free(member);
     free(admin);
     free(alice);
@@ -1257,6 +1299,8 @@ int main(int argc, char **argv) {
          TEST_MODE_NON_BLOCKING, test_matches_fresh_full_solve_oracle},
         {"prepared_session/reset_discards_prior_runtime_symbols",
          TEST_MODE_NON_BLOCKING, test_reset_discards_prior_runtime_symbols},
+        {"prepared_session/legacy_workspaces_keep_input_snapshots",
+         TEST_MODE_NON_BLOCKING, test_legacy_workspaces_keep_input_snapshots},
         {"prepared_session/fingerprint_snapshot_and_result_lease",
          TEST_MODE_NON_BLOCKING, test_fingerprint_snapshot_and_result_lease},
         {"prepared_session/argument_refusals_clear_outputs_and_preserve_session",

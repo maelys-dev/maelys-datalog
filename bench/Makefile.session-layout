@@ -11,6 +11,9 @@ endif
 ifneq ($(shell grep -c 'const maelys_datalog_internal_ruleset_t \*prepared;' src/core/maelys_datalog_prepared_session_internal.h),0)
 LAYOUT_FLAGS += -DMAELYS_BENCH_SPLIT_STATE
 endif
+ifneq ($(shell grep -c 'edb_facts\[\];' src/core/maelys_datalog_solver.c),0)
+LAYOUT_FLAGS += -DMAELYS_BENCH_BORROWED_EDB
+endif
 session-layout: $(foreach pad,$(PADS),$(OUT)/layout-$(pad) $(OUT)/counts-$(pad))
 $(OUT)/obj/src/runtime/maelys_datalog_runtime.o: $(DRIVER)/bench/session_layout_runtime.c $(DRIVER)/bench/session_layout.h
 	@mkdir -p $(dir $@)
