@@ -220,6 +220,13 @@ when it has what they name.
   present local smoke, flat instruction counts or indeterminate timings as a
   universal absence of regressions. Do not silently move references or widen
   budgets to make a candidate pass.
+- For a transient Python tail, use the bounded diagnostics documented in
+  `docs/python-performance.md`: preserve unchanged workload samples alongside
+  separate CPU/resource/GC observations and scoped software counts. Never pair
+  separate phase samples by index with total samples. A later quiet run does
+  not erase an earlier alert; equal CPU and wall inflation does not identify
+  an engine mechanism, and unchanged instruction counts do not prove equal
+  cycles. Keep a non-reproduced original event explicitly unattributed.
 
 ## Manual benchmark evidence
 
