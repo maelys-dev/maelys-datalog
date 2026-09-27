@@ -102,7 +102,9 @@ def parse_profile(path):
     events = re.search(r'^events: (.+)$', value, re.M).group(1).split()
     totals = list(map(int, re.search(r'^summary: (.+)$', value, re.M).group(1).split()))
     counts = dict(zip(events, totals))
-    if len(events) != len(totals) or any(counts.get(k, 0) <= 0 for k in ('Ir', 'Dr', 'Dw')):
+    # Callgrind omits trailing zero cache events. Require the three actual
+    # software counters; unused simulator fields need not be present.
+    if len(totals) > len(events) or any(counts.get(k, 0) <= 0 for k in ('Ir', 'Dr', 'Dw')):
         raise ValueError('incomplete software counters')
     return dict(scope=match.group(1), counts={k: counts[k] for k in ('Ir', 'Dr', 'Dw')})
 

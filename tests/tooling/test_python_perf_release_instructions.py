@@ -53,6 +53,9 @@ class ReleaseInstructionTests(unittest.TestCase):
             path.write_text('desc: Trigger: Client Request: cold\nevents: Dr Ir Dw\nsummary: 2 10 3\n')
             self.assertEqual(subject.parse_profile(path),
                              {'scope': 'cold', 'counts': {'Ir': 10, 'Dr': 2, 'Dw': 3}})
+            path.write_text('desc: Trigger: Client Request: total_436\nevents: Ir Dr Dw I1mr D1mr D1mw ILmr DLmr DLmw\nsummary: 577847 193430 102094 16151 6936 1094\n')
+            self.assertEqual(subject.parse_profile(path)['counts'],
+                             {'Ir': 577847, 'Dr': 193430, 'Dw': 102094})
             path.write_text('desc: Trigger: Client Request: total_422\nevents: Ir Dr Dw\nsummary: 10 2\n')
             with self.assertRaises(ValueError):
                 subject.parse_profile(path)
