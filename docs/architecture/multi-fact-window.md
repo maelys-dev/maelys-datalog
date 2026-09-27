@@ -39,7 +39,9 @@ groups, three contributions and two facts. The sum over reading values is 10;
 the distinct-value count is 1. Empty C expires A, leaving reading(1,5) via B and
 sum 5. Empty D expires B, leaving no runtime facts. Count/sum on an existing
 aggregate group give zero, min/max fail; no absent grouping domain is invented.
-Policy facts remain independent of window expiry.
+Policy facts remain independent of window expiry. The optional
+[transactional static EDB](window-transactions.md) also survives FIFO expiry
+and participates in the same union.
 
 Include an explicit occurrence field in the input facts if two otherwise equal
 observations must contribute twice to sum or be distinguishable to Datalog.

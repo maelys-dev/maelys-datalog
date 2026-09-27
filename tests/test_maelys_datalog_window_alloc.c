@@ -7,6 +7,7 @@
 #undef memset
 #include <maelys/datalog_window.h>
 #include <assert.h>
+#define OPTIONS(n) (&(maelys_datalog_window_options_t){sizeof(maelys_datalog_window_options_t),(n),0})
 #include <stdio.h>
 #include <string.h>
 
@@ -64,6 +65,14 @@ static void rejected_unchanged(maelys_datalog_window_t *w, const char *predicate
     assert(id==UINT32_MAX && !memcmp(header,w,sizeof(*w)));
     assert(!memcmp(bank,w->inputs[w->active],input_bytes)); free(bank);
 }
+static void rejected_static(maelys_datalog_window_t *w, const maelys_datalog_fact_t *f,size_t n,int expected) {
+    size_t bytes,alignment; assert(!maelys_datalog_input_edb_storage_requirements(w->capacity+w->static_capacity,16,&bytes,&alignment));
+    unsigned char *committed=(unsigned char *)w->inputs[w->active];
+    unsigned char *bank=malloc(bytes);assert(bank);memcpy(bank,committed,bytes);
+    unsigned char header[sizeof(*w)];memcpy(header,w,sizeof(*w));
+    assert(maelys_datalog_window_replace_static(w,f,n,NULL)==expected);
+    assert(!memcmp(header,w,sizeof(*w))&&!memcmp(bank,committed,bytes));free(bank);
+}
 int main(void) {
     const maelys_datalog_predicate_t preds[]={
         {"event",2,MAELYS_DATALOG_PREDICATE_EDB},
@@ -81,15 +90,15 @@ int main(void) {
     assert(!maelys_datalog_session_create_configured(p,0,config,&b));
     assert(!maelys_datalog_policy_free(p)); assert(!maelys_datalog_session_config_free(config));
     size_t bytes,alignment,input_bytes,input_alignment;
-    assert(!maelys_datalog_window_storage_requirements(2,16,&bytes,&alignment));
-    assert(!maelys_datalog_input_edb_storage_requirements(2,16,&input_bytes,&input_alignment));
+    assert(!maelys_datalog_window_storage_requirements_configured(2,16, OPTIONS(2),&bytes,&alignment));
+    assert(!maelys_datalog_input_edb_storage_requirements(4,16,&input_bytes,&input_alignment));
     void *storage=malloc(bytes); assert(storage && (uintptr_t)storage%alignment==0);
     size_t explain_bytes,explain_alignment;
     assert(!maelys_datalog_session_explanation_storage_bound(a,MAELYS_DATALOG_EXPLAIN_FALSE,&explain_bytes,&explain_alignment));
     void *workspace=malloc(explain_bytes); assert(workspace);
     size_t before=live; forbidden=1;
     maelys_datalog_window_t *w=NULL;
-    assert(!maelys_datalog_window_init(storage,bytes,2,16,0,a,b,&w,NULL));
+    assert(!maelys_datalog_window_init_configured(storage,bytes,2,16, OPTIONS(2),0,a,b,&w,NULL));
     for(uint32_t i=0;i<600;++i) {
         maelys_datalog_value_t v=integer(1); uint32_t id=UINT32_MAX;
         assert(!maelys_datalog_window_push(w,"event",&v,1,&id,NULL) && id==i);
@@ -109,9 +118,20 @@ int main(void) {
         assert(!maelys_datalog_result_prepare_explanation(r,MAELYS_DATALOG_EXPLAIN_FALSE,"out",&v,1,workspace,explain_bytes,&e));
         rejected_unchanged(w,"event",&v,1,MAELYS_DATALOG_STATUS_INVALID_STATE,input_bytes);
         assert(!maelys_datalog_prepared_explanation_write_text(e,text,sizeof(text)));
+        rejected_static(w,NULL,0,MAELYS_DATALOG_STATUS_INVALID_STATE);
         assert(!maelys_datalog_prepared_explanation_release(e));
     }
     /* A release failure need not be caused by an explanation lease. */
+    maelys_datalog_fact_t static_fact={.predicate="event",.arity=2,.terms={integer(999),integer(0)}};
+    assert(!maelys_datalog_window_replace_static(w,&static_fact,1,NULL));
+    rejected_static(w,&static_fact,3,MAELYS_DATALOG_STATUS_PAYLOAD_TOO_LARGE);
+    const maelys_datalog_fact_t *static_view=NULL;size_t static_count;
+    assert(!maelys_datalog_window_static_facts(w,&static_view,&static_count)&&static_count==1);
+    assert(static_view[0].terms[0].as.integer==999);
+    release_failure_target=w->result;
+    rejected_static(w,NULL,0,MAELYS_DATALOG_STATUS_INVALID_ARGUMENT);
+    release_failure_target=NULL;
+    assert(!maelys_datalog_window_replace_static(w,NULL,0,NULL));
     release_failure_target=w->result;
     maelys_datalog_value_t proposed=integer(1);
     rejected_unchanged(w,"event",&proposed,1,MAELYS_DATALOG_STATUS_INVALID_ARGUMENT,input_bytes);

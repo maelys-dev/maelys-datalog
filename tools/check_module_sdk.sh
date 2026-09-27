@@ -39,6 +39,7 @@ cp "$root/tests/test_maelys_datalog_advanced.c" "$scratch/"
 cp "$root/tests/test_maelys_datalog_backend_transaction.c" "$scratch/"
 cp "$root/tests/test_maelys_datalog_window.c" "$scratch/"
 cp "$root/tests/test_maelys_datalog_group_window.c" "$scratch/"
+cp "$root/tests/test_maelys_datalog_window_updates.c" "$scratch/"
 cp "$root/examples/multi_fact_window.c" "$scratch/"
 for mapping in filter:exact_match frontend:arrow_frontend backend:naive_backend; do
   cp "$root/sdk/examples/${mapping%:*}/src/extension.c" "$scratch/${mapping#*:}.c"
@@ -138,6 +139,8 @@ for linkage in "${linkages[@]}"; do
   ./window
   "$cc" "${flags[@]}" -UNDEBUG test_maelys_datalog_group_window.c "${libs[@]}" -o group-window
   ./group-window
+  "$cc" "${flags[@]}" -UNDEBUG test_maelys_datalog_window_updates.c "${libs[@]}" -o window-updates
+  ./window-updates
   "$cc" "${flags[@]}" multi_fact_window.c "${libs[@]}" -o group-example
   ./group-example
   "$cc" "${flags[@]}" -pthread test_maelys_datalog_modules.c exact_match.o \

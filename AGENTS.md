@@ -114,6 +114,12 @@ when it has what they name.
   installed-SDK external consumers, and do not infer downstream backend support
   for new window operations from unchanged descriptor signatures alone.
 
+- Window static EDB replacement is an immediate transaction even without an
+  event. Preserve raw static/event bounds separately, canonical combined input,
+  cursor stability, result/explanation leases and byte-exact committed rollback.
+  Test reference and external ABI 5 commit/abort paths with allocators disabled
+  where guaranteed. Future expiry must preserve static facts and consume no ID.
+
 - Prefer caller-owned, aligned storage and explicit bounded capacities for new
   runtime APIs. Opaque handles do not justify mandatory heap allocation.
 - Do not add per-fact, per-term, or grow-on-demand allocations to input paths.

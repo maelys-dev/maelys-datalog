@@ -541,3 +541,9 @@ Public layout/version and backend ABI are unchanged. Private unions only reuse
 mutually exclusive error payloads, with size/alignment/offset assertions; public
 sections remain independently present. Python and Wasm test the same failures
 through installed SDKs, including the second/third argument projection.
+
+The installed-SDK `test_maelys_datalog_window_updates` consumer compares both
+window adapters with independent snapshots across static EDB replacement,
+rights revocation without insertion, leases, duplicates, normalization, canonical
+IDs, capacity/overflow rejection and close. Both allocation guards and the
+ABI 5 recording provider exercise replacement, rollback and reuse.

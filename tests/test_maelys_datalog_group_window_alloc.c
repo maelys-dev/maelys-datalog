@@ -7,6 +7,7 @@
 #undef memset
 #include <maelys/datalog_window.h>
 #include <assert.h>
+#define OPTIONS(n) (&(maelys_datalog_window_options_t){sizeof(maelys_datalog_window_options_t),(n),0})
 #include <stdio.h>
 #include <string.h>
 
@@ -57,7 +58,7 @@ static maelys_datalog_fact_t reading(int64_t id,int64_t x) {
 }
 static void rejected_unchanged(maelys_datalog_group_window_t *w,
     const maelys_datalog_fact_t *facts,size_t n,int expected) {
-    group_layout layout; assert(!group_storage_layout(&w->capacities,&layout));
+    group_layout layout; assert(!group_storage_layout(&w->capacities,w->static_capacity,&layout));
     unsigned char *bank=malloc(layout.stride); assert(bank);
     unsigned char header[sizeof(*w)]; memcpy(header,w,sizeof(*w));
     unsigned char *committed=(unsigned char *)w+layout.start+w->active*layout.stride;
@@ -66,6 +67,14 @@ static void rejected_unchanged(maelys_datalog_group_window_t *w,
     assert(maelys_datalog_group_window_push(w,facts,n,&id,&d)==expected);
     assert(id==UINT32_MAX && !memcmp(header,w,sizeof(*w)) && !memcmp(bank,committed,layout.stride));
     free(bank);
+}
+static void rejected_static(maelys_datalog_group_window_t *w, const maelys_datalog_fact_t *f,size_t n,int expected) {
+    group_layout l; assert(!group_storage_layout(&w->capacities,w->static_capacity,&l));
+    size_t bytes=l.stride; unsigned char *committed=(unsigned char *)w+l.start+w->active*l.stride;
+    unsigned char *bank=malloc(bytes);assert(bank);memcpy(bank,committed,bytes);
+    unsigned char header[sizeof(*w)];memcpy(header,w,sizeof(*w));
+    assert(maelys_datalog_group_window_replace_static(w,f,n,NULL)==expected);
+    assert(!memcmp(header,w,sizeof(*w))&&!memcmp(bank,committed,bytes));free(bank);
 }
 int main(void) {
     const maelys_datalog_predicate_t preds[]={
@@ -85,12 +94,12 @@ int main(void) {
     assert(!maelys_datalog_policy_free(p)); assert(!maelys_datalog_session_config_free(config));
     maelys_datalog_group_window_capacities_t caps={2,4,2,16};
     size_t bytes,alignment,explain_bytes,explain_alignment;
-    assert(!maelys_datalog_group_window_storage_requirements(&caps,&bytes,&alignment));
+    assert(!maelys_datalog_group_window_storage_requirements_configured(&caps, OPTIONS(2),&bytes,&alignment));
     void *storage=malloc(bytes); assert(storage && (uintptr_t)storage%alignment==0); memset(storage,0xa5,bytes);
     assert(!maelys_datalog_session_explanation_storage_bound(a,MAELYS_DATALOG_EXPLAIN_FALSE,&explain_bytes,&explain_alignment));
     void *workspace=malloc(explain_bytes); assert(workspace);
     size_t before=live; forbidden=1; maelys_datalog_group_window_t *w=NULL;
-    assert(!maelys_datalog_group_window_init(storage,bytes,&caps,0,a,b,&w,NULL));
+    assert(!maelys_datalog_group_window_init_configured(storage,bytes,&caps, OPTIONS(2),0,a,b,&w,NULL));
     for(uint32_t i=0;i<100;++i) {
         maelys_datalog_fact_t batch[]={reading(i,1),reading(i,1)}; uint32_t id=UINT32_MAX;
         assert(!maelys_datalog_group_window_push(w,batch,2,&id,NULL) && id==i);
@@ -113,8 +122,19 @@ int main(void) {
         rejected_unchanged(w,batch,2,MAELYS_DATALOG_STATUS_INVALID_STATE);
         assert(maelys_datalog_group_window_free(w)==MAELYS_DATALOG_STATUS_INVALID_STATE);
         assert(!maelys_datalog_prepared_explanation_write_text(e,text,sizeof(text)));
+        rejected_static(w,NULL,0,MAELYS_DATALOG_STATUS_INVALID_STATE);
         assert(!maelys_datalog_prepared_explanation_release(e));
     }
+    maelys_datalog_fact_t static_fact=reading(99,1);
+    assert(!maelys_datalog_group_window_replace_static(w,&static_fact,1,NULL));
+    rejected_static(w,&static_fact,3,MAELYS_DATALOG_STATUS_PAYLOAD_TOO_LARGE);
+    const maelys_datalog_fact_t *static_view=NULL;size_t static_count;
+    assert(!maelys_datalog_group_window_static_facts(w,&static_view,&static_count)&&static_count==1);
+    assert(static_view[0].terms[0].as.integer==99);
+    release_failure_target=w->result;
+    rejected_static(w,NULL,0,MAELYS_DATALOG_STATUS_INVALID_ARGUMENT);
+    release_failure_target=NULL;
+    assert(!maelys_datalog_group_window_replace_static(w,NULL,0,NULL));
     release_failure_target=w->result;
     maelys_datalog_fact_t proposed=reading(101,1);
     rejected_unchanged(w,&proposed,1,MAELYS_DATALOG_STATUS_INVALID_ARGUMENT);

@@ -6,6 +6,15 @@
 extern "C" {
 #endif
 
+/* Extension options shared by both adapters. Initialize every member.
+ * struct_size must equal sizeof(maelys_datalog_window_options_t); flags is
+ * reserved and must be zero. NULL options select the legacy defaults. */
+typedef struct {
+    size_t struct_size;
+    size_t static_fact_capacity; /* Raw static slots in addition to event slots. */
+    uint32_t flags;
+} maelys_datalog_window_options_t;
+
 /* Single-fact events with generated occurrence IDs. */
 typedef struct maelys_datalog_window maelys_datalog_window_t;
 
@@ -101,6 +110,41 @@ MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_window_text_usage(
  * unchanged; push still reports its error through the optional diagnostic. */
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_window_free(
     maelys_datalog_window_t *window);
+
+/* Optional mutable static EDB (additive API). The legacy constructors above
+ * are equivalent to static_fact_capacity == 0. Both banks reserve
+ * event_capacity + static_fact_capacity raw slots (sum <= MAX_EDB_FACTS),
+ * sharing text_capacity per bank; events retain their independent N bound.
+ * options.static_fact_capacity selects the static reservation.
+ * Static facts are complete facts: no generated ID is prepended. */
+MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_window_storage_requirements_configured(
+    size_t event_capacity, size_t text_capacity, const maelys_datalog_window_options_t *options,
+    size_t *out_bytes, size_t *out_alignment);
+MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_window_init_configured(
+    void *storage, size_t storage_bytes, size_t event_capacity, size_t text_capacity,
+    const maelys_datalog_window_options_t *options, uint32_t first_occurrence,
+    maelys_datalog_session_t *session_a, maelys_datalog_session_t *session_b,
+    maelys_datalog_window_t **out_window, maelys_datalog_diagnostic_t *out_diagnostic);
+
+/* Replace the ENTIRE static EDB and solve it together with retained events,
+ * immediately, without an insertion or ID consumption. NULL/0 clears it.
+ * Static capacity counts raw facts, including duplicates. Shape/text validation,
+ * boolean normalization and runtime set semantics match session inputs. Static
+ * facts never expire with the FIFO. This operation does not modify policy facts.
+ * EVERY failure (including a live explanation lease) preserves committed static
+ * facts, events, text, result and cursor. Candidate work can run before rejection.
+ * On success all borrowed views/results are invalidated, even for equal input.
+ * Inputs must not overlap the adapter arena; they are copied before returning.
+ * No allocation/free, growth or fallback. Callback side effects are not rolled
+ * back. text_usage includes BOTH static and event text; events/state count ONLY
+ * events. All original lifetime, serialization and session contracts apply. */
+MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_window_replace_static(
+    maelys_datalog_window_t *window, const maelys_datalog_fact_t *facts, size_t fact_count,
+    maelys_datalog_diagnostic_t *out_diagnostic);
+/* Ordered raw static facts, including duplicates; O(1), borrowed like events. */
+MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_window_static_facts(
+    const maelys_datalog_window_t *window,
+    const maelys_datalog_fact_t **out_facts, size_t *out_count);
 
 /* Groups of complete facts, with IDs kept as adapter metadata. */
 typedef struct maelys_datalog_group_window maelys_datalog_group_window_t;
@@ -208,6 +252,33 @@ MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_group_window_facts(
     const maelys_datalog_fact_t **out_facts, size_t *out_count);
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_group_window_result(
     const maelys_datalog_group_window_t *window, maelys_datalog_result_t **out_result);
+
+/* Static EDB variant: contributions remains the raw EVENT contribution bound;
+ * static_fact_capacity is a separate raw bound. Their sum must fit MAX_EDB_FACTS.
+ * The two input/sort banks reserve that sum; text_bytes is shared per bank.
+ * unique_facts bounds the COMBINED union and may be up to that sum with these
+ * constructors. Legacy constructors are equivalent to static_fact_capacity=0.
+ * Capacities, existing struct layouts and backend/program ABIs are unchanged. */
+MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_group_window_storage_requirements_configured(
+    const maelys_datalog_group_window_capacities_t *capacities,
+    const maelys_datalog_window_options_t *options,
+    size_t *out_bytes, size_t *out_alignment);
+MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_group_window_init_configured(
+    void *storage, size_t storage_bytes,
+    const maelys_datalog_group_window_capacities_t *capacities,
+    const maelys_datalog_window_options_t *options,
+    uint32_t first_group, maelys_datalog_session_t *session_a, maelys_datalog_session_t *session_b,
+    maelys_datalog_group_window_t **out_window, maelys_datalog_diagnostic_t *out_diagnostic);
+/* Same replacement/rollback/lease contract as window_replace_static. No group or
+ * ID is consumed. Groups/contributions remain event-only views; facts and
+ * usage.unique_facts expose the combined union, usage.text_bytes shared text.
+ * A fact survives expiry while supplied by any retained group OR static input. */
+MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_group_window_replace_static(
+    maelys_datalog_group_window_t *window, const maelys_datalog_fact_t *facts, size_t fact_count,
+    maelys_datalog_diagnostic_t *out_diagnostic);
+MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_group_window_static_facts(
+    const maelys_datalog_group_window_t *window,
+    const maelys_datalog_fact_t **out_facts, size_t *out_count);
 
 /* Close releases the result and returns both sessions; it never frees/erases
  * the caller arena. A result-release failure leaves the window usable. Success

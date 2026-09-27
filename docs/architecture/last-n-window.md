@@ -38,9 +38,9 @@ contract; a failed evaluation rejects the entire push.
 N is shared across all event predicates. At N=3, `[A,B,C] + D` proposes
 `[B,C,D]`. A rejected D leaves `[A,B,C]` and its result intact. The initial
 window is empty but already has a solved result, including any policy facts.
-Static context can be expressed with policy facts; a separate mutable static
-EDB, multi-fact events, explicit deletions, batches, clocks, timestamps and
-out-of-order delivery are outside this initial API.
+Static context can be expressed with policy facts or the optional
+[transactional static EDB](window-transactions.md). Multi-fact events use the
+group adapter; clocks and explicit time expiry are separate additions.
 
 IDs advance only on success. After committing ID `INT32_MAX`, pushes fail with
 `PAYLOAD_TOO_LARGE`; the reported next ID is `INT32_MAX+1`. IDs never wrap or
