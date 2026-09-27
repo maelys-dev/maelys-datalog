@@ -33,6 +33,16 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
   and optional workspaces are excluded. This is a reservation reduction, not
   a claim of faster solving or lower Python process RSS.
 
+### Validation
+
+- Python lifecycle performance now has deterministic call budgets in SDK CI and
+  an automatic main-commit benchmark against the previous release and v0.11.1,
+  with v0.11.0 as a regression-detection control. Before cutting a release,
+  maintainers review the report and record their decision in the changelog PR.
+  Timing observations remain visible without an automatic timing gate at the
+  tag; they are not automatically attributed to the engine. See
+  `docs/python-performance.md`.
+
 ## 0.11.1 — 2026-09-26
 
 ### Changed

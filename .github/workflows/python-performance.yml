@@ -1,0 +1,61 @@
+name: Python performance
+
+# Separate from the native, manual bench-compare.yml. PRs run deterministic
+# contracts in CI; trusted main commits produce reports for human release review.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: python-performance-${{ github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  evidence:
+    name: Python performance evidence
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12.12'
+      - name: Install fixed measurement dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang-18 cmake
+          python -m pip install -r bench/python-perf-requirements.txt
+      - name: Measure candidate, previous release and durable v0.11.1 reference
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          base="$(python tools/check_python_performance.py previous-release)"
+          set +e
+          python bench/python_perf.py --base "$base" --compiler clang-18 --output evidence
+          status=$?
+          set -e
+          case "$status" in
+            0) ;;
+            2) echo '::warning::Python timing observations require human review before cut --apply. Record the report and decision in the changelog PR; this job is not performance approval.' ;;
+            *) exit "$status" ;;
+          esac
+      - name: Preserve every measurement
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-performance-${{ github.sha }}
+          path: evidence/
+          if-no-files-found: error
+          retention-days: 90
+      - name: Report
+        if: always()
+        run: |
+          if test -f evidence/report.md; then cat evidence/report.md >> "$GITHUB_STEP_SUMMARY"; fi

@@ -23,13 +23,23 @@ extracted-archive consumers in both SMALL and LARGE. Native packaging itself
 runs the extracted-archive gate before producing a checksum or receipt; no
 release may bypass a missing-header or private-header failure.
 
+Before `cut --apply`, read the **Python performance** report and record the
+measured commit, run URL, report SHA-256, findings and maintainer decision in
+the changelog pull request. Review any measured tradeoff using
+[`docs/python-performance.md`](docs/python-performance.md); do not waive a
+timing finding by changing its threshold or deleting a case. Obtain new
+measurements if runtime, binding, build or harness changes have landed since
+the reviewed commit. Version/documentation-only changes do not by themselves
+require a repeat. This is a human review before the cut; there is no Python
+timing or Actions-artifact hook in `scripts/verify-release.sh` or at the tag.
+
 Then run the two local gates on the tree that will be released:
 
 ```bash
 scripts/release-gates.sh
 ```
 
-Gate 1 is `scripts/verify-release.sh` on this machine (clang); `cut` runs it
+Gate 1 is `scripts/verify-release.sh` on this machine (`make check` with clang); `cut` runs it
 again itself, so gate 1 is the fast answer before gate 2. Gate 2 is `make
 check CC=gcc` in a pinned `ubuntu:24.04` container on a disposable copy of
 the tree — the second compiler, which no runner of the release matrix uses,
@@ -62,6 +72,11 @@ restores `VERSION` and creates nothing.
 
 Merge the release pull request when its checks are green. `cut` never merges
 its own pull request.
+
+The automatic Python report on the merge commit remains available for review.
+A version/documentation-only merge does not require a fresh timing acceptance.
+If performance-relevant code changed since the reviewed report, update the
+measurements and the recorded decision before proceeding.
 
 ## 4. Second stop: the tag
 

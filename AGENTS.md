@@ -178,6 +178,40 @@ when it has what they name.
   claim secure erasure from ordinary memset; an explicit erasure contract would
   require a non-elidable primitive and its own measurements.
 
+## Python performance and release evidence
+
+- Follow `docs/python-performance.md`. Protect the complete Python input /
+  solve / query / close lifecycle, both convenience and reused sessions; native
+  prepared-solve timing alone cannot establish Python performance.
+- Preserve the native allocation/reservation/reset budgets and the installed-SDK
+  Python lifecycle call budgets in SMALL and LARGE. Python/CFFI still allocate;
+  native call counts do not establish zero allocation or speed.
+- `python-performance.yml` automatically measures main commits, separately from
+  the manual native benchmark. Build every reference before timing. Keep the
+  previous published release, immutable v0.11.1 anchor and v0.11.0 detection
+  control, all declared cases, both CMake build modes and both size profiles.
+- Before `maelys-release cut ... --apply`, read the Python report and record the
+  measured commit, run URL, report SHA-256, findings and maintainer decision in
+  the changelog pull request. Review any later runtime, binding, build or harness
+  changes with new measurements; a version/documentation-only change does not
+  by itself require another benchmark. Missing or incomplete evidence is not a
+  pass: obtain a usable report before making the release decision.
+- Keep this human review in the release ceremony. Never add a Python timing or
+  Actions-artifact hook to `scripts/verify-release.sh`, packaging or tag replay.
+  Timing observations must not fail the workflow and thereby become an indirect
+  tag gate. Tooling failures remain failures; workflow success is not approval
+  of the measured performance.
+- Preserve above-floor observations, without automatic algorithmic attribution.
+  A reproducible complete-Python slowdown requires a maintainer decision before
+  release; phase timings inform diagnosis. Agents must obtain the user's
+  decision on the concrete report before accepting a tradeoff, and record it
+  in the changelog PR. Preserve classifications and the original report.
+- Keep generated measurements in run artifacts, not git. Run comparator/evidence
+  tests and replay the historical regression when changing the harness. Never
+  present local smoke, flat instruction counts or indeterminate timings as a
+  universal absence of regressions. Do not silently move references or widen
+  budgets to make a candidate pass.
+
 ## Manual benchmark evidence
 
 - Keep `bench-compare.yml` workflow_dispatch-only, with base/head inputs and

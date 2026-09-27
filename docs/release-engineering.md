@@ -234,3 +234,16 @@ or `gh attestation verify` to function. The chain is locally testable without
 a tag: `package-release.sh TARGET`, `release-gates.sh`, `maelys-release
 rehearse . linux-arm64` (the socle's build job replayed in Docker) and the
 plan-only stops of `maelys-release cut`.
+
+## Python consumer performance
+
+Before `cut --apply`, maintainers read the Python performance report and record
+its measured commit, run URL, SHA-256 and release decision in the changelog PR.
+The separate read-only `python-performance.yml` workflow measures main commits
+against the previous published release and a durable v0.11.1 reference,
+retaining v0.11.0 as a detection control. A reproducible complete-Python slowdown
+requires human review; phase timings inform diagnosis. Workflow success is not
+performance approval. There is no Python timing or artifact hook in
+`verify-release.sh`, packaging or tag replay. The contract and operator commands
+are in [Python performance](python-performance.md); the generated release
+workflow and the release environment's final approval are unchanged.

@@ -9,6 +9,16 @@ permissions:
   contents: read
 
 jobs:
+  python-perf-tooling:
+    name: Python performance tooling
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12.12'
+      - run: python -m unittest discover -s tests/tooling -p 'test_python_perf*.py' -v
+
   # The shared CI of the socle: make check on the three release targets and
   # the conventions drift, from the declarations in maelys-release.conf. Its
   # sanitizers and fuzz jobs run in parallel on Linux with clang and
