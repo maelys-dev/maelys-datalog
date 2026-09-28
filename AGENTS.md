@@ -223,6 +223,11 @@ when it has what they name.
   accounting. Preserve complete export, retained copies, failures and full-replace
   losses. A restricted host saving does not reserve an ABI or waive the remaining
   vocabulary, window, incarnation and explanation conformance obligations.
+- A future consumer delta API belongs to sessions; keep ABI 5 snapshot delivery
+  unchanged unless separate evidence justifies a backend contract change. For
+  the linear-composition experiment, follow `docs/proposals/host-delta-linear-composition.md`:
+  keep A/B/L in the same run, account for compaction/merge writes, retain small-
+  delta losses and complete-replacement costs, and reserve no signature or ABI.
 
 ## Python performance and release evidence
 

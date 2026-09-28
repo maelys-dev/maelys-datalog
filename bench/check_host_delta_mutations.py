@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MPL-2.0
-"""Prove that the oracle/atomicity checks detect four transaction defects."""
+"""Prove that the oracle/atomicity checks detect transaction and linear-composition defects."""
 import argparse
 import json
 import subprocess
@@ -15,6 +15,12 @@ MUTATIONS = {
                              "current = NULL;\n    if (rc) { delta_accept(b,logical,op->delta); return rc; }"),
     "skip_raw_rejection": ("if (rc) return rc;\n    }\n    size_t n = b->committed.count;",
                            "/* discarded validation error */\n    }\n    size_t n = b->committed.count;"),
+    "skip_linear_removals": ("if (nr) {", "if (0 && nr) {"),
+    "keep_existing_additions": ("if (base < n && !maelys_datalog_fact_cmp(&facts[base], &added[i])) continue;",
+                                "if (0 && base < n && !maelys_datalog_fact_cmp(&facts[base], &added[i])) continue;"),
+    "reject_exact_capacity": ("if (fresh > capacity - n)", "if (fresh >= capacity - n)"),
+    "merge_wrong_order": ("maelys_datalog_fact_cmp(&facts[left-1], &added[right-1]) > 0",
+                          "maelys_datalog_fact_cmp(&facts[left-1], &added[right-1]) < 0"),
 }
 
 

@@ -20,6 +20,7 @@ from pathlib import Path
 paths=subprocess.check_output(['git','ls-files','--cached','--others','--exclude-standard','-z']).decode().split('\0')
 Path(sys.argv[1]).write_text(json.dumps({p:hashlib.sha256(Path(p).read_bytes()).hexdigest() for p in sorted(set(paths)) if p and Path(p).is_file()},indent=2)+'\n')
 PYCODE
+printf '%s\n' '{"schema":2,"variants":["A","B","L"],"order":["A1","B1","L1","L2","B2","A2"],"transactions":8}' > "$out/experiment.json"
 python3 -m unittest discover -s bench -p test_report_host_delta.py > "$out/reporter-tests.log" 2>&1
 for profile in SMALL LARGE; do
     large=OFF
@@ -40,7 +41,7 @@ done
 # No builds run during this counterbalanced collection. These are software
 # counts in separate processes, never timing or hardware-counter measurements.
 for profile in SMALL LARGE; do
-    for label in A1 B1 B2 A2; do
+    for label in A1 B1 L1 L2 B2 A2; do
         role=$(printf '%s' "$label" | cut -c1)
         for scope in engine caller; do
             dir="$out/$profile/$label-$scope"
