@@ -16,6 +16,9 @@ are refused everywhere. The allocation service is planned as an additive
 This extends the [sized-reference proposal](../architecture/sized-reference-sessions.md)
 to explicitly admitted external backends and narrows the broader
 [resource design](../architecture/session-resource-contract.md) to this delivery.
+Step 1 is now available as [proposed C declarations and identity vectors](backend-session-resources-c-api.md),
+with a non-installed proposal header. Declaration review still precedes runtime code.
+
 It does not change the current [ABI 5 contract](../architecture/compiler-backends.md),
 import private implementation code, or implement the [future delta protocol](backend-transaction-deltas.md).
 
@@ -138,8 +141,8 @@ fixed capacities. No provider advertises the reserved allocator feature in 0.14.
 | Selected path | 0.14.0 admission |
 | --- | --- |
 | Legacy constructor/configuration, reference or ABI 5 provider, defaults | Preserve behavior, storage requirements and callbacks. |
-| ABI 5 provider, explicit E/D/S/T equal to defaults, legacy host construction | Normalize to defaults; no quota record is sent to the provider. |
-| ABI 5 provider, any non-default effective quota | `UNSUPPORTED` before `prepare`; no alternate backend. |
+| ABI 5 provider, explicit E/D/S/T equal to defaults, no additional required resource feature, legacy host construction | Normalize to defaults; no quota record is sent to the provider. |
+| ABI 5 provider, any non-default effective quota or explicit session-capacity resource requirement | `UNSUPPORTED` before `prepare`; no alternate backend. |
 | ABI 5 provider, new caller-owned whole-session constructor | `UNSUPPORTED`, even at defaults. Existing backend-arena provisioning remains supported. |
 | ABI 6 reference or fixed provider, supported quotas and FIXED | Compute/validate the actual host/backend plan, then prepare. |
 | Any request selecting BACKEND_ELASTIC | `UNSUPPORTED` before requirements/prepare, even without a feature bit. |
@@ -176,7 +179,8 @@ field's name:
 
 - Reject a record shorter than the mandatory prefix. Read a known field only
   when its complete published extent lies within `struct_size`; reject a record
-  truncated inside a known field. Published compatible prefixes are tested.
+  truncated inside a known input field. Short outputs fail before payload writes;
+  published compatible prefixes are tested.
 - Missing optional fields take their documented defaults. Never read the local
   `sizeof` from a shorter caller object, or overwrite a short output record.
 - Reject unknown contract versions, required features and selected modes with
