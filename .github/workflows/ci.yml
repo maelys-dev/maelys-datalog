@@ -18,6 +18,7 @@ jobs:
         with:
           python-version: '3.12.12'
       - run: python -m unittest discover -s tests/tooling -p 'test_python_perf*.py' -v
+      - run: python -m unittest discover -s bench -p 'test_report_host_delta.py' -v
 
   # The shared CI of the socle: make check on the three release targets and
   # the conventions drift, from the declarations in maelys-release.conf. Its

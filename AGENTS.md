@@ -214,6 +214,16 @@ when it has what they name.
   claim secure erasure from ordinary memset; an explicit erasure contract would
   require a non-elidable primitive and its own measurements.
 
+## Experimental delta transport
+
+- The agreement in `docs/proposals/backend-transaction-deltas.md` is not a public
+  API. Keep the first A/B driver isolated under `bench/`; follow
+  `docs/proposals/host-delta-snapshot-experiment.md` for its admitted subset,
+  alternating-bank bases, unchanged ABI 5 provider, oracle and exclusive Ir/Dr/Dw
+  accounting. Preserve complete export, retained copies, failures and full-replace
+  losses. A restricted host saving does not reserve an ABI or waive the remaining
+  vocabulary, window, incarnation and explanation conformance obligations.
+
 ## Python performance and release evidence
 
 - Follow `docs/python-performance.md`. Protect the complete Python input /
