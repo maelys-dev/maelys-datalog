@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MPL-2.0
-"""Fail-closed, exclusive software-count report for the bounded A/B/L experiment."""
+"""Fail-closed, exclusive software-count report for the bounded A/B/L/T experiment."""
 import csv
 import hashlib
 import json
@@ -134,12 +134,35 @@ def compare(base, candidate):
                 host_saved_percent=100*host_saved[0]/base["host"][0])
 
 
+def compare_variants(row):
+    return {f"{candidate}/{base}": compare(row[base], row[candidate])
+            for base, candidate in (("A", "B"), ("A", "L"), ("B", "L"),
+                                    ("A", "T"), ("B", "T"), ("L", "T"))}
+
+
+def tombstone_exceptions(rows):
+    exceptions = []
+    for row in rows:
+        if not (row['region'].startswith('engine/') and row['region'].endswith('/steady')):
+            continue
+        base = min(('B', 'L'), key=lambda role: row[role]['host'][0])
+        extra = row['T']['host'][0] - row[base]['host'][0]
+        if extra <= 0:
+            continue
+        functions = {fn: [row['T']['functions'].get(fn, [0, 0, 0])[i] -
+                          row[base]['functions'].get(fn, [0, 0, 0])[i] for i in range(3)]
+                     for fn in row['T']['functions'].keys() | row[base]['functions'].keys()}
+        exceptions.append(dict(profile=row['profile'], region=row['region'], baseline=base,
+                               host_extra_Ir=extra, functions={k:v for k,v in sorted(functions.items()) if any(v)}))
+    return exceptions
+
+
 def report(root):
     metadata = json.loads((root/"experiment.json").read_text())
-    expected_metadata = dict(schema=2, variants=["A", "B", "L"],
-                             order=["A1", "B1", "L1", "L2", "B2", "A2"], transactions=8)
+    expected_metadata = dict(schema=3, variants=["A", "B", "L", "T"],
+                             order=["A1", "B1", "L1", "T1", "T2", "L2", "B2", "A2"], transactions=8)
     if metadata != expected_metadata:
-        raise ValueError("expected the declared schema-2 A/B/L experiment; replay schema 1 with its original reporter")
+        raise ValueError("expected the declared schema-3 A/B/L/T experiment; replay older schemas with their original reporter")
     roles = metadata["variants"]
     comparisons = []
     repeats = []
@@ -199,24 +222,33 @@ def report(root):
                         explicit_primitive_bytes=dict(zip(("copy", "move", "set"), memory[role][key])))
                     if role != "A" and backend != row["A"]["backend"]:
                         raise ValueError(f"provider work changed: {profile}/{role}/{key}")
-                row["pairs"] = {f"{candidate}/{base}":compare(row[base],row[candidate])
-                                for base,candidate in (("A","B"),("A","L"),("B","L"))}
+                row["pairs"] = compare_variants(row)
                 comparisons.append(row)
-    return dict(schema=2, experiment=metadata, events=EVENTS, repetitions=repeats, comparisons=comparisons)
+    return dict(schema=3, experiment=metadata, events=EVENTS, repetitions=repeats,
+                comparisons=comparisons, tombstone_exceptions=tombstone_exceptions(comparisons))
 
 
 def write(root):
     result = report(root)
     (root/"report.json").write_text(json.dumps(result, indent=2)+"\n")
-    lines = ["# Host delta → snapshot: software-count experiment", "", "Local Linux/ARM64 Docker; same Clang -O2 binary for A/B/L. A=snapshot, B=repeated moves, L=linear composition. No timing or hardware counters.",
+    lines = ["# Host delta → snapshot: software-count experiment", "", "Local Linux/ARM64 Docker; same Clang -O2 binary for A/B/L/T. A=snapshot, B=repeated moves, L=linear composition, T=tombstones and bounded compaction. No timing or hardware counters.",
         "Host = exclusive non-provider function costs, including shared runtime/libc/driver costs. Client-request boundary residual is separate; totals retain it.",
         "Groups are exclusive function buckets, not fully separated semantic phases: shared/inlined helpers remain in the shared bucket. Init includes the common over-reserved diagnostic scaffolding.", "",
         "SMALL: 8/64; 256 exceeds its per-predicate bound. LARGE: 8/64/256. Window N counts occurrences; initial live set is N/2, not N.",
         "First = one transaction; steady = seven; failure = eight attempts. Caller scope includes the modeled occurrence ledger and full snapshot or delta production; it is not the production window adapter.", "",
         f"Exact repeated operation regions: {sum(x['identical'] for x in result['repetitions'] if not x['region'].endswith('/init'))}. Init drifts (retained): {sum(not x['identical'] for x in result['repetitions'] if x['region'].endswith('/init'))}.", "",
-        "| Profile | Region | Host A Ir | Host B Ir | Host L Ir | L/A host saved | L/B host saved | L/A total saved Ir |", "|---|---|---:|---:|---:|---:|---:|---:|"]
+        "| Profile | Region | Host A Ir | Host B Ir | Host L Ir | Host T Ir | L/A host saved | L/B host saved | T/A host saved | T/B host saved | T/L host saved |", "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|"]
     for row in result["comparisons"]:
-        lines.append(f"| {row['profile']} | {row['region']} | {row['A']['host'][0]} | {row['B']['host'][0]} | {row['L']['host'][0]} | {row['pairs']['L/A']['host_saved_percent']:.2f}% | {row['pairs']['L/B']['host_saved_percent']:.2f}% | {row['pairs']['L/A']['total_saved'][0]} |")
+        values = ' | '.join(f"{row['pairs'][pair]['host_saved_percent']:.2f}%" for pair in ('L/A','L/B','T/A','T/B','T/L'))
+        lines.append(f"| {row['profile']} | {row['region']} | {row['A']['host'][0]} | {row['B']['host'][0]} | {row['L']['host'][0]} | {row['T']['host'][0]} | {values} |")
+    lines += ['', '## Every T > min(B,L) exception in engine steady regions', '',
+              'Function deltas below are exclusive Ir against the named cheaper path; all Ir/Dr/Dw deltas are in JSON.', '']
+    for row in result['tombstone_exceptions']:
+        lines += [f"### {row['profile']} {row['region']}", '',
+                  f"T minus {row['baseline']}: +{row['host_extra_Ir']} host Ir across seven transactions.", '',
+                  '| Exclusive function | T minus baseline Ir |', '|---|---:|']
+        lines.extend(f'| {fn} | {values[0]:+d} |' for fn,values in row['functions'].items() if values[0])
+        lines.append('')
     lines += ["", "Positive savings justify reviewing this restricted host path, not an ABI decision. Full-replace losses, reservation costs, unsupported language/vocabulary modes and the absence of real window/explanation integration remain material limitations.", ""]
     (root/"report.md").write_text("\n".join(lines))
     with (root/"SHA256SUMS").open("w") as stream:

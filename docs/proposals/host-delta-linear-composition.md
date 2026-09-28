@@ -96,3 +96,53 @@ production windows, lack of real explanation leases, cross-incarnation token
 work, storage over-reservation and excluded language features remain the limits
 of #139. The next public API decision cannot skip those obligations because L
 improves a benchmark. No private implementation is read or changed for this work.
+
+## Prospective schema 3: tombstones (T)
+
+The schema-2 evidence on `db8495a` remains historical. Schema 3 adds T to the
+same binary and declares A1/B1/L1/T1/T2/L2/B2/A2 before collection. Both profiles,
+both scopes, initialization, first/steady transactions and rejection traces are
+retained. T/A, T/B and T/L supplement the original pairs. Every engine steady
+exception to T <= min(B,L) is listed with exclusive function deltas, without
+selecting a threshold or silently choosing another path. Instructions, not
+latency: the local Linux ARM64 Docker protocol does not become hosted evidence.
+
+T marks removed facts in the provisional pool using an otherwise invalid arity
+bit. A compile-time assertion reserves that bit; its comparison helper masks it
+temporarily so binary searches still see the original sorted key. Additions
+already present are no-ops; an addition matching a marked fact clears the mark
+(addition wins). Fresh additions are compacted in existing addition scratch.
+There is no new array or allocation. All submitted entries are still validated,
+sorted and deduplicated before composition. Retained copies and commit remain
+identical to B/L, including their cost.
+
+The affected original interval is half-open [lo,hi). After checking the final
+capacity, T compacts survivors once in that interval, then merges fresh additions
+backward. It needs these two bounded passes to avoid overwriting unread facts
+without extra storage. Binary searches can read outside the interval. When net
+cardinality changes, a contiguous sorted pool necessarily moves the suffix once:
+removing the first fact alone is a counterexample to an immutable suffix. The
+effective write interval then extends to the old/new pool end. With unchanged
+cardinality, composition writes no facts outside [lo,hi). For changed cardinality,
+explicit memmove requests at most (n-hi)*sizeof(fact) bytes per journal step,
+never n*k; assignments, mark writes and retained copies remain separate costs.
+Thus the strict proposal of neither reading nor writing outside the original
+interval is not claimed. Composition is O(k log n + affected span), after raw
+normalization, rather than L's linear scan regardless of the delta size.
+
+The complete typed-set/capacity/sentinel oracle runs 65,536 cases for each of L
+and T per profile. Transaction conformance runs B/L/T. The eight existing mutants
+remain; a ninth removes L's `left &&` guard and must be detected by UBSan even
+when the value oracle happens to survive. Four T mutants expose a tombstone,
+omit unmarking, shorten the interval by one and reject exact capacity. Mutant
+drivers are compiled and linked with `-fsanitize=address,undefined
+-fno-sanitize-recover=all`; compiler/loader errors do not count as detection.
+The complete driver/engine also runs under ASan/UBSan in both profiles before
+measurement. Baselines must pass. Build and validate all binaries, including the
+separate explicit-primitive observer, before Callgrind collection begins.
+
+The full-replacement integer residual is not a target for unrelated tuning:
+validating N removals and N additions differs from validating an N-fact snapshot.
+Keep per-function evidence for both this residual and the small-delta composition
+tradeoff. Full replacement is not promised to beat snapshots. No session API is
+implemented or approved by this experiment.

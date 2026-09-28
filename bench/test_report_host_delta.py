@@ -46,7 +46,7 @@ totals: 90 35 25
     def test_final_dump_is_not_an_operation(self):
         self.assertIsNone(self.parse(self.sample.replace("desc: Trigger: Client Request: A/engine/inert/8/integer/empty/steady", "desc: Trigger: Program termination")))
 
-class ThreeVariantEvidence(unittest.TestCase):
+class FourVariantEvidence(unittest.TestCase):
     def make_run(self, root):
         directory = root/'A1-engine'
         directory.mkdir()
@@ -78,14 +78,37 @@ class ThreeVariantEvidence(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     load_run(directory)
 
-    def test_linear_cannot_disappear_from_protocol(self):
+    def test_variants_and_order_cannot_disappear_from_protocol(self):
         import json
         from report_host_delta import report
         with tempfile.TemporaryDirectory() as d:
             root = Path(d)
-            (root/'experiment.json').write_text(json.dumps(dict(schema=2, variants=['A','B'], order=['A1','B1','B2','A2'], transactions=8)))
-            with self.assertRaises(ValueError):
-                report(root)
+            for schema, variants, order in (
+                (2, ['A','B','L'], ['A1','B1','L1','L2','B2','A2']),
+                (3, ['A','B','L'], ['A1','B1','L1','L2','B2','A2']),
+                (3, ['A','B','L','T'], ['A1','B1','L1','T1','L2','T2','B2','A2']),
+            ):
+                (root/'experiment.json').write_text(json.dumps(dict(schema=schema, variants=variants, order=order, transactions=8)))
+                with self.assertRaisesRegex(ValueError, 'schema-3'):
+                    report(root)
+
+    def test_all_t_pairs_and_exceptions_retain_exclusive_costs(self):
+        from report_host_delta import compare_variants, tombstone_exceptions
+        row = dict(profile='LARGE', region='engine/inert/256/integer/one/steady')
+        for role, ir in zip(('A','B','L','T'), (100, 60, 80, 70)):
+            row[role] = dict(host=[ir,20,10], total=[ir+10,25,15], functions={'compose':[ir,20,10]})
+        pairs = compare_variants(row)
+        self.assertEqual(set(pairs), {'B/A','L/A','L/B','T/A','T/B','T/L'})
+        self.assertEqual(pairs['T/B']['host_saved'][0], -10)
+        self.assertEqual(pairs['T/L']['host_saved'][0], 10)
+        exceptions = tombstone_exceptions([row])
+        self.assertEqual(exceptions[0]['baseline'], 'B')
+        self.assertEqual(exceptions[0]['functions'], {'compose':[10,0,0]})
+        row['T'] = row['B']
+        self.assertEqual(tombstone_exceptions([row]), [])
+        del row['T']
+        with self.assertRaises(KeyError):
+            compare_variants(row)
 
     def test_loss_and_total_are_preserved_separately(self):
         from report_host_delta import compare
