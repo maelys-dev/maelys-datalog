@@ -74,7 +74,7 @@ def main():
     for manifest in ("core", "standard", "native"):
         sources += [line for line in (ROOT / f"build-support/{manifest}-sources.txt").read_text().splitlines()
                     if line and not line.startswith("#")]
-    flags = ["-std=c11", "-O1", "-g", "-Wall", "-Wextra", "-Werror", "-Wno-unused-function",
+    flags = ["-std=c11", "-D_POSIX_C_SOURCE=200809L", "-O1", "-g", "-Wall", "-Wextra", "-Werror", "-Wno-unused-function",
              "-UNDEBUG", "-fsanitize=address,undefined", "-fno-sanitize-recover=all",
              "-fno-omit-frame-pointer", f"-DMAELYS_DATALOG_PROFILE_{args.profile}"]
     env = dict(os.environ, ASAN_OPTIONS="detect_leaks=0:halt_on_error=1",
