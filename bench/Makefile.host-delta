@@ -1,0 +1,17 @@
+# SPDX-License-Identifier: MPL-2.0
+include bench/Makefile.compare
+FLAGS += $(EXTRA_FLAGS) -include $(DRIVER)/bench/host_delta_alloc.h
+HOST_DELTA_DRIVER ?= bench/host_delta.c
+.PHONY: host-delta
+host-delta: $(OUT)/host-delta
+$(OUT)/obj/src/runtime/maelys_datalog_runtime.o: $(HOST_DELTA_DRIVER)
+	@mkdir -p $(dir $@)
+	$(CC) $(FLAGS) $(COUNT_FLAGS) -c $< -o $@
+$(OUT)/backend.o: bench/host_delta_backend.c bench/host_delta_backend.h
+	$(CC) $(EXTRA_FLAGS) -O2 -g -Wall -Wextra -I$(SDK)/include -c $< -o $@
+$(OUT)/alloc.o: bench/host_delta_alloc.c
+	$(CC) $(EXTRA_FLAGS) -O2 -g -Wall -Wextra -c $< -o $@
+$(OUT)/host-delta: $(OBJECTS) $(OUT)/backend.o $(OUT)/alloc.o $(EXTRA_OBJECTS)
+	$(CC) $(EXTRA_FLAGS) -g $(OBJECTS) $(OUT)/backend.o $(OUT)/alloc.o $(EXTRA_OBJECTS) -o $@
+
+$(OBJECTS): bench/host_delta_alloc.h
