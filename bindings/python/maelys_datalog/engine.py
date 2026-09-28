@@ -369,6 +369,29 @@ class Engine:
         self.close()
 
 
+@dataclass(frozen=True)
+class SessionCapacities:
+    """Fixed native E/D/S/T quotas. None means the loaded SDK's default; zero
+    is an exact quota. Program-rooted symbols and NUL bytes count in S/T.
+    This bounds native execution, not Python or CFFI allocations.
+    """
+
+    input_facts: int | None = None
+    derived_facts: int | None = None
+    symbols: int | None = None
+    text_bytes: int | None = None
+
+    def __post_init__(self) -> None:
+        for name in ("input_facts", "derived_facts", "symbols", "text_bytes"):
+            value = getattr(self, name)
+            if value is None:
+                continue
+            if isinstance(value, bool) or not isinstance(value, int):
+                raise TypeError(f"{name} must be an int or None")
+            if not 0 <= value < (1 << (8 * ffi.sizeof("size_t"))):
+                raise ValueError(f"{name} must fit size_t")
+
+
 class Ruleset:
     def __init__(self, engine: Engine, policy) -> None:
         self.engine = engine
@@ -402,7 +425,8 @@ class Ruleset:
         return Edb(self, fact_capacity=fact_capacity, text_capacity=text_capacity)
 
     def prepare(self, policy_index: int = 0, *, required_capabilities: int = 0,
-                work_limit: int = 0, explanations: ExplanationKind | int = 0) -> Session:
+                work_limit: int = 0, explanations: ExplanationKind | int = 0,
+                capacities: SessionCapacities | None = None) -> Session:
         """Prepare reusable native state for one policy (no incremental solving)."""
         self._require_open()
         if isinstance(policy_index, bool) or not isinstance(policy_index, int):
@@ -418,7 +442,9 @@ class Ruleset:
             raise TypeError("explanations must be an ExplanationKind mask")
         if explanations < 0 or explanations & ~int(ExplanationKind.TRUE | ExplanationKind.FALSE):
             raise ValueError("explanations must contain only ExplanationKind.TRUE/FALSE")
-        if required_capabilities == 0 and work_limit == 0 and explanations == 0:
+        if capacities is not None and not isinstance(capacities, SessionCapacities):
+            raise TypeError("capacities must be SessionCapacities or None")
+        if required_capabilities == 0 and work_limit == 0 and explanations == 0 and capacities is None:
             out = ffi.new("maelys_datalog_session_t **")
             _check(lib.maelys_datalog_session_create(self._policy, policy_index, out),
                    "create session")
@@ -429,6 +455,18 @@ class Ruleset:
         _check(lib.maelys_datalog_session_config_create(config), "create session configuration")
         out = ffi.new("maelys_datalog_session_t **")
         try:
+            if capacities is not None:
+                request = ffi.new("maelys_datalog_session_resource_request_t *")
+                request.struct_size = ffi.sizeof("maelys_datalog_session_resource_request_t")
+                request.contract_version = lib.MAELYS_DATALOG_RESOURCE_CONTRACT_VERSION
+                request.memory_mode = lib.MAELYS_DATALOG_MEMORY_FIXED
+                for bit, name in enumerate(("input_facts", "derived_facts", "symbols", "text_bytes")):
+                    value = getattr(capacities, name)
+                    if value is not None:
+                        request.capacity_mask |= 1 << bit
+                        setattr(request, name, value)
+                _check(lib.maelys_datalog_session_config_set_resources(config[0], request),
+                       "set fixed session capacities")
             _check(lib.maelys_datalog_session_config_set_required_capabilities(
                 config[0], required_capabilities), "set required capabilities")
             _check(lib.maelys_datalog_session_config_set_work_limit(
@@ -446,10 +484,11 @@ class Ruleset:
 
     def solve(self, edb: Edb, *, policy_index: int = 0,
               required_capabilities: int = 0, work_limit: int = 0,
-              explanations: ExplanationKind | int = 0) -> SolveResult:
+              explanations: ExplanationKind | int = 0,
+              capacities: SessionCapacities | None = None) -> SolveResult:
         """Convenience solve with a private session owned by the returned result."""
         session = self.prepare(policy_index, required_capabilities=required_capabilities,
-                               work_limit=work_limit, explanations=explanations)
+                               work_limit=work_limit, explanations=explanations, capacities=capacities)
         try:
             result = session.solve(edb)
         except BaseException:
@@ -501,6 +540,18 @@ class Session:
         self.ruleset._require_open()
         if self._closed:
             raise RuntimeError("Session is closed")
+
+    @property
+    def capacities(self) -> SessionCapacities:
+        """Effective native quotas, queried only when explicitly requested."""
+        self._require_open()
+        out = ffi.new("maelys_datalog_session_resources_t *")
+        out.struct_size = ffi.sizeof("maelys_datalog_session_resources_t")
+        out.contract_version = lib.MAELYS_DATALOG_RESOURCE_CONTRACT_VERSION
+        out.memory_mode = lib.MAELYS_DATALOG_MEMORY_FIXED
+        _check(lib.maelys_datalog_session_get_resources(self._session, out), "session resources")
+        return SessionCapacities(*(int(getattr(out, name)) for name in
+            ("input_facts", "derived_facts", "symbols", "text_bytes")))
 
     @property
     def fingerprint(self) -> str:

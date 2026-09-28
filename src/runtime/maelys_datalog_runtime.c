@@ -9,6 +9,7 @@
 #include "src/core/maelys_datalog_filter.h"
 #include "src/core/maelys_datalog_query_internal.h"
 #include "common/maelys_sha256.h"
+#include "maelys/datalog_resources.h"
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdarg.h>
@@ -24,10 +25,23 @@ struct maelys_datalog_session_config {
     maelys_datalog_backend_t backend;
     char backend_name[64], backend_semantic_id[128];
     int custom_backend;
+    maelys_datalog_backend_v6_t backend_v6;
+    int use_v6;
+    int canonical_reference;
+    maelys_datalog_session_resource_request_t resources;
     maelys_datalog_context_t *context;
     char context_backend_name[64];
     maelys_datalog_backend_storage_t backend_storage;
 };
+
+static maelys_datalog_status_t create_resourced(
+    const maelys_datalog_policy_t *, size_t, const maelys_datalog_session_config_t *,
+    maelys_datalog_session_t **);
+static void resource_session_unlink(maelys_datalog_session_t *);
+static void resource_session_track_legacy(maelys_datalog_session_t *, size_t,
+    const maelys_datalog_backend_storage_t *);
+static maelys_datalog_status_t resource_failure(maelys_datalog_diagnostic_t *,
+    maelys_datalog_status_t, const char *, size_t, size_t);
 
 static maelys_datalog_status_t configure_explanation_workspace(
     maelys_datalog_session_t *, const maelys_datalog_session_config_t *);
@@ -100,11 +114,15 @@ maelys_datalog_status_t maelys_datalog_session_config_set_explanation_storage(
 maelys_datalog_status_t maelys_datalog_session_create_configured(
     const maelys_datalog_policy_t *policy, size_t index,
     const maelys_datalog_session_config_t *config, maelys_datalog_session_t **out) {
+    if (out) *out = NULL;
     if (!config) return maelys_datalog_session_create(policy, index, out);
+    if (config->use_v6 || config->resources.struct_size)
+        return create_resourced(policy, index, config, out);
     const maelys_datalog_session_options_t options = {
         .abi_version = MAELYS_DATALOG_BACKEND_ABI_VERSION,
         .struct_size = sizeof(options),
-        .backend = config->custom_backend ? &config->backend : NULL,
+        .backend = config->custom_backend ? (config->canonical_reference
+            ? maelys_datalog_backend_reference() : &config->backend) : NULL,
         .required_capabilities = config->required_capabilities,
         .work_limit = config->work_limit,
     };
@@ -142,6 +160,15 @@ struct maelys_datalog_session {
     maelys_datalog_backend_t backend;
     char name[64], semantic_id[128], execution_fingerprint[65];
     void *state;
+    maelys_datalog_session_resources_t resources;
+    maelys_datalog_fact_t *canonical;
+    maelys_datalog_internal_fact_t *emitted;
+    int planned, owns_arena;
+    size_t arena_bytes, backend_bytes;
+    void *backend_bytes_start;
+    void *reserved_explanation;
+    size_t reserved_explanation_bytes;
+    maelys_datalog_session_t *arena_next;
     maelys_datalog_result_t *active;
     maelys_datalog_result_t result_storage;
     uint64_t work_limit;
@@ -167,6 +194,7 @@ struct maelys_datalog_backend_output {
     maelys_datalog_status_t error;
     uint64_t work;
     size_t filter_count, filter_cost;
+    int derived_quota;
 };
 struct maelys_datalog_prepared_explanation {
     maelys_datalog_result_t *owner;
@@ -229,8 +257,11 @@ maelys_datalog_status_t maelys_datalog_backend_emit(maelys_datalog_backend_outpu
         return output_fail(out, MAELYS_DATALOG_STATUS_INVALID_FIELD);
     if (maelys_datalog_fact_set_contains(&result->derived, &fact))
         return MAELYS_DATALOG_STATUS_OK;
-    if (result->derived.count >= MAELYS_DATALOG_MAX_IDB_FACTS ||
-        result->per_predicate[fact.predicate_id] >= MAELYS_DATALOG_MAX_FACTS_PER_PRED)
+    if (result->derived.count >= s->resources.derived_facts) {
+        out->derived_quota = s->resources.derived_facts < MAELYS_DATALOG_MAX_IDB_FACTS;
+        return output_fail(out, MAELYS_DATALOG_STATUS_PAYLOAD_TOO_LARGE);
+    }
+    if (result->per_predicate[fact.predicate_id] >= MAELYS_DATALOG_MAX_FACTS_PER_PRED)
         return output_fail(out, MAELYS_DATALOG_STATUS_PAYLOAD_TOO_LARGE);
     result->derived.facts[result->derived.count++] = fact;
     result->derived.sorted = 0;
@@ -290,7 +321,8 @@ static maelys_datalog_status_t context_session_create_with_storage(maelys_datalo
     if (index >= policy->set.policy_count) return MAELYS_DATALOG_STATUS_NOT_FOUND;
     if (policy->set.policies[index].modules != context) return MAELYS_DATALOG_STATUS_INVALID_FIELD;
     const maelys_datalog_backend_t *backend = maelys_datalog_context_backend(context, backend_name);
-    if (!backend) return MAELYS_DATALOG_STATUS_NOT_FOUND;
+    if (!backend) return maelys_datalog_context_backend_v6(context, backend_name)
+        ? MAELYS_DATALOG_STATUS_UNSUPPORTED : MAELYS_DATALOG_STATUS_NOT_FOUND;
     maelys_datalog_session_options_t options = {MAELYS_DATALOG_BACKEND_ABI_VERSION,
         sizeof(options), backend, required, work_limit};
     return session_create_with_storage(policy, index, &options, storage, out);
@@ -393,6 +425,14 @@ static maelys_datalog_status_t session_create_with_storage(
     }
     s->program.ruleset = s->inputs->prepared;
     s->program.prepared_inputs = s->inputs;
+    s->resources = (maelys_datalog_session_resources_t){
+        sizeof(s->resources), MAELYS_DATALOG_RESOURCE_CONTRACT_VERSION,
+        MAELYS_DATALOG_MEMORY_FIXED, 0, MAELYS_DATALOG_MAX_EDB_FACTS,
+        MAELYS_DATALOG_MAX_IDB_FACTS, MAELYS_DATALOG_MAX_SYMBOLS, MAELYS_DATALOG_STRING_POOL_BYTES};
+    if (!borrows_inputs) {
+        s->canonical = s->solve_scratch[0].canonical;
+        s->emitted = s->solve_scratch[0].derived;
+    }
     s->backend = *b;
     s->reference_backend = b == maelys_datalog_backend_reference();
     s->borrows_inputs = borrows_inputs;
@@ -432,6 +472,7 @@ static maelys_datalog_status_t session_create_with_storage(
         maelys_datalog_policy_retain_storage(policy);
         s->policy_owner = policy;
     }
+    resource_session_track_legacy(s, sizeof(*s) + export_bytes, storage);
     *out = s;
     return MAELYS_DATALOG_STATUS_OK;
 }
@@ -473,10 +514,11 @@ maelys_datalog_status_t maelys_datalog_session_free(maelys_datalog_session_t *s)
         return MAELYS_DATALOG_STATUS_INVALID_STATE;
     s->busy = 1;
     s->backend.destroy(s->state);
+    resource_session_unlink(s);
     maelys_datalog_prepared_session_destroy(s->inputs);
     destroy_explanation_workspace(s);
     if (s->policy_owner) maelys_datalog_policy_release_storage(s->policy_owner);
-    free(s);
+    if (!s->planned || s->owns_arena) free(s);
     return MAELYS_DATALOG_STATUS_OK;
 }
 static maelys_datalog_status_t solve_input_error(
@@ -511,7 +553,10 @@ maelys_datalog_status_t maelys_datalog_session_solve(maelys_datalog_session_t *s
     if (!facts && count)
         return solve_input_error(diag, MAELYS_DATALOG_STATUS_INVALID_ARGUMENT,
                                  "Input batch is NULL but fact_count is %zu.", count);
-    if (count > MAELYS_DATALOG_MAX_EDB_FACTS)
+    if (count > s->resources.input_facts && s->resources.input_facts < MAELYS_DATALOG_MAX_EDB_FACTS)
+        return resource_failure(diag, MAELYS_DATALOG_STATUS_PAYLOAD_TOO_LARGE,
+                                "input_facts", count, s->resources.input_facts);
+    if (count > s->resources.input_facts)
         return solve_input_error(diag, MAELYS_DATALOG_STATUS_PAYLOAD_TOO_LARGE,
                                  "Input batch contains %zu facts; EDB fact limit is %u (before deduplication).",
                                  count, MAELYS_DATALOG_MAX_EDB_FACTS);
@@ -547,13 +592,16 @@ maelys_datalog_status_t maelys_datalog_session_solve(maelys_datalog_session_t *s
             s->inputs, facts, count, message, sizeof(message));
         if (status != MAELYS_DATALOG_STATUS_OK)
             solve_input_error(diag, status, "%s", message[0] ? message : "Input materialization failed.");
+        if (status != MAELYS_DATALOG_STATUS_OK && s->inputs->quota_field)
+            resource_failure(diag, status, s->inputs->quota_field,
+                             s->inputs->quota_observed, s->inputs->quota_limit);
     }
     if (status != MAELYS_DATALOG_STATUS_OK)
         return status;
     /* Canonical public facts exist for external backends only. */
     size_t canonical_count = s->borrows_inputs ? 0 : s->inputs->edb.fact_set.count;
     maelys_datalog_fact_t *canonical =
-        canonical_count ? s->solve_scratch[0].canonical : NULL;
+        canonical_count ? s->canonical : NULL;
     if (canonical_count) memset(canonical, 0, canonical_count * sizeof(*canonical));
     for (size_t i = 0; i < canonical_count; ++i) {
         status = (maelys_datalog_status_t)maelys_datalog_export_fact(
@@ -566,8 +614,8 @@ maelys_datalog_status_t maelys_datalog_session_solve(maelys_datalog_session_t *s
     memset(result, 0, sizeof(*result));
     result->owner = s;
     if (!s->borrows_inputs)
-        maelys_datalog_fact_set_init(&result->derived, s->solve_scratch[0].derived, MAELYS_DATALOG_MAX_IDB_FACTS);
-    maelys_datalog_backend_output_t output = {result, MAELYS_DATALOG_STATUS_OK, 0, 0, 0};
+        maelys_datalog_fact_set_init(&result->derived, s->emitted, s->resources.derived_facts);
+    maelys_datalog_backend_output_t output = {.result=result};
     s->busy = 1;
     status = maelys_datalog_callback_status(
         s->backend.solve(s->state, canonical, canonical_count, &output, &result->state, diag));
@@ -576,6 +624,9 @@ maelys_datalog_status_t maelys_datalog_session_solve(maelys_datalog_session_t *s
     if (status == MAELYS_DATALOG_STATUS_OK && !s->borrows_inputs)
         status = (maelys_datalog_status_t)maelys_datalog_fact_set_sort(&result->derived);
     if (status != MAELYS_DATALOG_STATUS_OK) {
+        if (output.derived_quota)
+            resource_failure(diag, status, "derived_facts", s->resources.derived_facts + 1u,
+                             s->resources.derived_facts);
         s->backend.destroy_result(s->state, result->state);
         memset(result, 0, sizeof(*result));
         s->busy = 0;
@@ -1055,9 +1106,9 @@ maelys_datalog_status_t maelys_datalog_result_free(maelys_datalog_result_t *resu
 maelys_datalog_status_t maelys_datalog_session_config_set_backend(
     maelys_datalog_session_config_t *c, const maelys_datalog_backend_t *b) {
     if (!c) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
-    if (!b || b == maelys_datalog_backend_reference()) {
+    if (!b) {
         maelys_datalog_context_release(c->context); c->context = NULL;
-        c->custom_backend = 0; return MAELYS_DATALOG_STATUS_OK;
+        c->custom_backend = 0; c->use_v6 = 0; return MAELYS_DATALOG_STATUS_OK;
     }
     if (!maelys_datalog_backend_descriptor_valid(b)) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
     if (strlen(b->name) >= sizeof(c->backend_name) || strlen(b->semantic_id) >= sizeof(c->backend_semantic_id))
@@ -1066,7 +1117,8 @@ maelys_datalog_status_t maelys_datalog_session_config_set_backend(
     c->backend = *b;
     strcpy(c->backend_name, b->name); strcpy(c->backend_semantic_id, b->semantic_id);
     c->backend.name = c->backend_name; c->backend.semantic_id = c->backend_semantic_id;
-    c->custom_backend = 1;
+    c->custom_backend = 1; c->use_v6 = 0;
+    c->canonical_reference = b == maelys_datalog_backend_reference();
     return MAELYS_DATALOG_STATUS_OK;
 }
 maelys_datalog_status_t maelys_datalog_session_config_set_requirements(
@@ -1215,10 +1267,15 @@ maelys_datalog_status_t maelys_datalog_session_config_set_context(
     if (!c || !context || (name && !name[0])) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
     if (!maelys_datalog_context_is_sealed(context)) return MAELYS_DATALOG_STATUS_INVALID_STATE;
     if (name && strlen(name) >= sizeof(c->context_backend_name)) return MAELYS_DATALOG_STATUS_PAYLOAD_TOO_LARGE;
-    if (!maelys_datalog_context_backend(context, name)) return MAELYS_DATALOG_STATUS_NOT_FOUND;
+    if (!maelys_datalog_context_backend(context, name))
+        return maelys_datalog_context_backend_v6(context, name)
+            ? MAELYS_DATALOG_STATUS_UNSUPPORTED : MAELYS_DATALOG_STATUS_NOT_FOUND;
     maelys_datalog_context_retain(context);
     maelys_datalog_context_release(c->context);
-    c->context = context; c->custom_backend = 0;
+    c->context = context; c->custom_backend = 0; c->use_v6 = 0;
     strcpy(c->context_backend_name, name ? name : "");
     return MAELYS_DATALOG_STATUS_OK;
 }
+
+/* Creation-only resource normalization and arena ownership. */
+#include "src/runtime/maelys_datalog_resources.inc"

@@ -365,7 +365,8 @@ static void conformance(const maelys_datalog_policy_t *policy) {
     CHECK(delta_execute(&op,b,b->committed.generation,3,NULL,0,0,&r)==MAELYS_DATALOG_STATUS_INVALID_FIELD);
     CHECK(!memcmp(before,&b->committed,sizeof(*before)));
     /* Reuse after poisoned provisional storage must start from retained EDB. */
-    memset(b->session->inputs->fact_pool,0xa5,sizeof(b->session->inputs->fact_pool));
+    memset(b->session->inputs->fact_pool,0xa5,
+           b->session->inputs->pool_capacity*sizeof(*b->session->inputs->fact_pool));
     memset(b->added,0xa5,sizeof(b->added)); memset(b->removed,0xa5,sizeof(b->removed));
     c->nr=0;
     c->na=0; OK(delta_execute(&op,b,b->committed.generation,3,NULL,0,0,&r)); OK(maelys_datalog_result_free(r));

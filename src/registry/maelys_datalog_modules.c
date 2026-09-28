@@ -150,12 +150,18 @@ typedef struct {
 } backend_slot_t;
 typedef struct {
     identity_t id;
+    maelys_datalog_backend_v6_t value;
+} backend_v6_slot_t;
+typedef struct {
+    identity_t id;
     maelys_datalog_planner_module_t value;
 } planner_slot_t;
 typedef struct {
     filter_slot_t filters[FILTER_CAPACITY];
     frontend_slot_t frontends[MAELYS_DATALOG_CONTEXT_MAX_COMPONENTS];
     backend_slot_t backends[MAELYS_DATALOG_CONTEXT_MAX_COMPONENTS];
+    backend_v6_slot_t backends_v6[MAELYS_DATALOG_CONTEXT_MAX_COMPONENTS];
+    size_t backend_v6_count;
     planner_slot_t planners[MAELYS_DATALOG_CONTEXT_MAX_COMPONENTS];
     identity_t packages[MAELYS_DATALOG_CONTEXT_MAX_EXTENSIONS];
     size_t filter_count, frontend_count, backend_count, planner_count, package_count;
@@ -217,6 +223,10 @@ static void catalog_rebind(catalog_t *c) {
     for (size_t i = 0; i < c->backend_count; ++i) {
         c->backends[i].value.name = c->backends[i].id.name;
         c->backends[i].value.semantic_id = c->backends[i].id.semantic_id;
+    }
+    for (size_t i = 0; i < c->backend_v6_count; ++i) {
+        c->backends_v6[i].value.name = c->backends_v6[i].id.name;
+        c->backends_v6[i].value.semantic_id = c->backends_v6[i].id.semantic_id;
     }
     for (size_t i = 0; i < c->planner_count; ++i) {
         c->planners[i].value.name = c->planners[i].id.name;
@@ -294,6 +304,9 @@ static maelys_datalog_status_t catalog_add(catalog_t *c, const maelys_datalog_ex
             return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
         for (size_t i = 0; i < c->backend_count; ++i)
             if (identity_conflicts(&c->backends[i].id, d->name, d->semantic_id))
+                return MAELYS_DATALOG_STATUS_INVALID_FIELD;
+        for (size_t i = 0; i < c->backend_v6_count; ++i)
+            if (identity_conflicts(&c->backends_v6[i].id, d->name, d->semantic_id))
                 return MAELYS_DATALOG_STATUS_INVALID_FIELD;
         backend_slot_t *s = &c->backends[c->backend_count++];
         s->value = *d;
@@ -467,4 +480,81 @@ maelys_datalog_context_component_info(const maelys_datalog_context_t *c,
     }
     *out = (maelys_datalog_component_info_t){id->name, id->semantic_id};
     return MAELYS_DATALOG_STATUS_OK;
+}
+
+maelys_datalog_status_t maelys_datalog_backend_v6_validate(const maelys_datalog_backend_v6_t *d) {
+    if (!d || d->struct_size < sizeof(*d)) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
+    if (d->abi_version != MAELYS_DATALOG_BACKEND_V6_ABI_VERSION ||
+        !(d->resource_features & MAELYS_DATALOG_RESOURCE_SESSION_CAPACITIES) ||
+        (d->resource_features & ~MAELYS_DATALOG_RESOURCE_SUPPORTED_014))
+        return MAELYS_DATALOG_STATUS_UNSUPPORTED;
+    if (!valid_identity(d->name,d->semantic_id) || !d->storage_requirements || !d->prepare ||
+        !d->solve || !d->commit || !d->destroy_result || !d->destroy ||
+        (d->capabilities & ~MAELYS_DATALOG_CAP_ALL) ||
+        ((d->capabilities & (MAELYS_DATALOG_CAP_EXPLAIN_TRUE | MAELYS_DATALOG_CAP_EXPLAIN_FALSE)) &&
+         (!d->explanation_storage_requirements || !d->explanation_prepare || !d->explanation_write_text)))
+        return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
+    return MAELYS_DATALOG_STATUS_OK;
+}
+const maelys_datalog_backend_v6_t *maelys_datalog_context_backend_v6(
+    const maelys_datalog_context_t *c,const char *name) {
+    if (!c || !c->sealed) return NULL;
+    /* NULL is an explicit typed reference selection, never a name fallback. */
+    if (!name) return maelys_datalog_backend_reference_v6();
+    for(size_t i=0;i<c->catalog.backend_v6_count;++i)
+        if (!strcmp(name,c->catalog.backends_v6[i].id.name)) return &c->catalog.backends_v6[i].value;
+    return NULL;
+}
+maelys_datalog_status_t maelys_datalog_context_backend_v6_count(const maelys_datalog_context_t *c,size_t *out) {
+    if (!c || !out) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
+    *out=c->catalog.backend_v6_count;
+    return MAELYS_DATALOG_STATUS_OK;
+}
+maelys_datalog_status_t maelys_datalog_context_backend_v6_info(
+    const maelys_datalog_context_t *c,size_t i,maelys_datalog_component_info_t *out) {
+    if (!c || !out) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
+    if (i>=c->catalog.backend_v6_count) return MAELYS_DATALOG_STATUS_NOT_FOUND;
+    *out=(maelys_datalog_component_info_t){c->catalog.backends_v6[i].id.name,c->catalog.backends_v6[i].id.semantic_id};
+    return MAELYS_DATALOG_STATUS_OK;
+}
+maelys_datalog_status_t maelys_datalog_context_register_v2(
+    maelys_datalog_context_t *ctx,const maelys_datalog_extension_v2_t *e) {
+    if (!ctx || !e) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
+    if (ctx->sealed) return MAELYS_DATALOG_STATUS_INVALID_STATE;
+    if (e->struct_size < sizeof(*e)) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
+    if (e->abi_version != MAELYS_DATALOG_EXTENSION_V2_ABI_VERSION) return MAELYS_DATALOG_STATUS_UNSUPPORTED;
+    if (!valid_identity(e->name,e->semantic_id) || (!e->frontends && e->frontend_count) ||
+        (!e->backends_v5 && e->backend_v5_count) || (!e->backends_v6 && e->backend_v6_count) ||
+        (!e->filters && e->filter_count) || (!e->planners && e->planner_count) ||
+        !(e->frontend_count || e->backend_v5_count || e->backend_v6_count || e->filter_count || e->planner_count))
+        return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
+    const catalog_t *c=&ctx->catalog;
+    if (c->package_count==MAELYS_DATALOG_CONTEXT_MAX_EXTENSIONS ||
+        e->frontend_count>MAELYS_DATALOG_CONTEXT_MAX_COMPONENTS-c->frontend_count ||
+        e->backend_v5_count>MAELYS_DATALOG_CONTEXT_MAX_COMPONENTS-c->backend_count ||
+        e->backend_v6_count>MAELYS_DATALOG_CONTEXT_MAX_COMPONENTS-c->backend_v6_count ||
+        e->planner_count>MAELYS_DATALOG_CONTEXT_MAX_COMPONENTS-c->planner_count ||
+        e->filter_count>FILTER_CAPACITY-c->filter_count) return MAELYS_DATALOG_STATUS_PAYLOAD_TOO_LARGE;
+    catalog_t *candidate=malloc(sizeof(*candidate));
+    if (!candidate) return MAELYS_DATALOG_STATUS_INTERNAL;
+    *candidate=*c;
+    maelys_datalog_extension_t legacy={MAELYS_DATALOG_EXTENSION_ABI_VERSION,sizeof(legacy),
+        e->name,e->semantic_id,e->frontends,e->frontend_count,e->backends_v5,e->backend_v5_count,
+        e->planners,e->planner_count,e->filters,e->filter_count};
+    maelys_datalog_status_t rc=catalog_add(candidate,&legacy);
+    for(size_t k=0;!rc && k<e->backend_v6_count;++k) {
+        const maelys_datalog_backend_v6_t *d=&e->backends_v6[k];
+        rc=d->struct_size==sizeof(*d) ? maelys_datalog_backend_v6_validate(d) : MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
+        for(size_t i=0;!rc && i<candidate->backend_count;++i)
+            if(identity_conflicts(&candidate->backends[i].id,d->name,d->semantic_id)) rc=MAELYS_DATALOG_STATUS_INVALID_FIELD;
+        for(size_t i=0;!rc && i<candidate->backend_v6_count;++i)
+            if(identity_conflicts(&candidate->backends_v6[i].id,d->name,d->semantic_id)) rc=MAELYS_DATALOG_STATUS_INVALID_FIELD;
+        if(!rc) {
+            backend_v6_slot_t *slot=&candidate->backends_v6[candidate->backend_v6_count++];
+            slot->value=*d; identity_copy(&slot->id,d->name,d->semantic_id);
+        }
+    }
+    if(!rc) {ctx->catalog=*candidate;catalog_rebind(&ctx->catalog);}
+    free(candidate);
+    return rc;
 }

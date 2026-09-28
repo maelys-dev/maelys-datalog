@@ -189,7 +189,7 @@ maelys_result_t maelys_datalog_edb_init(maelys_datalog_internal_edb_t *edb,
                                         size_t fact_capacity,
                                         maelys_datalog_symbol_table_t *symbols,
                                         const maelys_datalog_predicate_registry_t *registry) {
-    if (!edb || !fact_pool || fact_capacity == 0 || !symbols || !registry) return MAELYS_ERR_INVALID_ARGUMENT;
+    if (!edb || !fact_pool || !symbols || !registry) return MAELYS_ERR_INVALID_ARGUMENT;
     memset(edb, 0, offsetof(maelys_datalog_internal_edb_t, runtime_pair_ids_scratch));
     edb->facts = fact_pool;
     edb->fact_capacity = fact_capacity;

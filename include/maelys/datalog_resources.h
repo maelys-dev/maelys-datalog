@@ -1,14 +1,11 @@
 /* SPDX-License-Identifier: MPL-2.0 */
-/* PROPOSAL ONLY: not installed, linked, or included by the engine build.
- * Review contract: backend-session-resources-c-api.md. No function bodies. */
-#ifndef MAELYS_DATALOG_PROPOSED_SESSION_RESOURCES_V6_H
-#define MAELYS_DATALOG_PROPOSED_SESSION_RESOURCES_V6_H
+/* Fixed session resources, ABI 6. See the installed advanced API and
+ * docs/proposals/backend-session-resources-c-api.md for record evolution. */
+#ifndef MAELYS_DATALOG_RESOURCES_H
+#define MAELYS_DATALOG_RESOURCES_H
 #include <stddef.h>
 #include <stdint.h>
-#include <maelys/datalog_advanced.h>
-/* The reviewed declarations are now available in the installed SDK. Keep
- * this historical proposal compilable against both the old and new SDK. */
-#ifndef MAELYS_DATALOG_RESOURCES_H
+#include "datalog_extension.h"
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -213,5 +210,4 @@ MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_context_backend_v6_inf
 #ifdef __cplusplus
 }
 #endif
-#endif /* declarations not already supplied by the installed resources API */
 #endif

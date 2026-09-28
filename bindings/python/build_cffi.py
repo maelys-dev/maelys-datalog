@@ -94,6 +94,24 @@ typedef struct maelys_datalog_policy maelys_datalog_policy_t;
 typedef struct maelys_datalog_session maelys_datalog_session_t;
 typedef struct maelys_datalog_result maelys_datalog_result_t;
 typedef struct maelys_datalog_session_config maelys_datalog_session_config_t;
+typedef struct {
+    size_t struct_size;
+    uint32_t contract_version, memory_mode;
+    uint64_t required_features, capacity_mask;
+    size_t input_facts, derived_facts, symbols, text_bytes;
+} maelys_datalog_session_resource_request_t;
+typedef struct {
+    size_t struct_size;
+    uint32_t contract_version, memory_mode;
+    uint64_t required_features;
+    size_t input_facts, derived_facts, symbols, text_bytes;
+} maelys_datalog_session_resources_t;
+#define MAELYS_DATALOG_RESOURCE_CONTRACT_VERSION ...
+#define MAELYS_DATALOG_MEMORY_FIXED ...
+int maelys_datalog_session_config_set_resources(maelys_datalog_session_config_t *,
+    const maelys_datalog_session_resource_request_t *);
+int maelys_datalog_session_get_resources(const maelys_datalog_session_t *,
+    maelys_datalog_session_resources_t *);
 typedef struct maelys_datalog_input_edb maelys_datalog_input_edb_t;
 typedef struct maelys_datalog_prepared_explanation maelys_datalog_prepared_explanation_t;
 typedef enum {
@@ -265,6 +283,7 @@ int maelys_datalog_result_explain_false_text(
     builder.set_source(
         "maelys_datalog._maelys_cffi",
         "#include <maelys/datalog.h>\n"
+        "#include <maelys/datalog_resources.h>\n"
         '_Static_assert(MAELYS_DATALOG_PUBLIC_API_VERSION == 2u, "Consumer API 2 required");',
         include_dirs=[str(sdk_prefix / "include")],
         library_dirs=[str(PACKAGE)],

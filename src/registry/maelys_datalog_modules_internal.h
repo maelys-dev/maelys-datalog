@@ -2,6 +2,10 @@
 #ifndef MAELYS_DATALOG_MODULES_INTERNAL_H
 #define MAELYS_DATALOG_MODULES_INTERNAL_H
 #include "maelys/datalog_extension.h"
+#include "maelys/datalog_resources.h"
+maelys_datalog_status_t maelys_datalog_backend_v6_validate(const maelys_datalog_backend_v6_t *);
+const maelys_datalog_backend_v6_t *maelys_datalog_context_backend_v6(
+    const maelys_datalog_context_t *, const char *);
 void maelys_datalog_modules_seal(void);
 int maelys_datalog_identity_valid(const char *, size_t, int);
 const maelys_datalog_planner_module_t *maelys_datalog_active_planner(void);

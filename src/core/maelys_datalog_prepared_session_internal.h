@@ -14,14 +14,17 @@ struct maelys_datalog_prepared_session {
     /* Only the dictionary varies per transaction. The compiled snapshot stays
      * immutable, including the vocabulary exposed to extension backends. */
     maelys_datalog_symbol_table_t symbols;
-    maelys_datalog_internal_fact_t fact_pool[MAELYS_DATALOG_MAX_EDB_FACTS];
+    maelys_datalog_internal_fact_t *fact_pool;
     maelys_datalog_internal_edb_t edb;
     /* The pointer sort finishes before native facts are inserted. Reuse its
      * storage without increasing session size or changing any public layout. */
-    union {
-        const char *symbol_inputs[MAELYS_DATALOG_MAX_INPUT_SYMBOLS];
-        maelys_datalog_edb_insert_index_t fact_index;
-    };
+    const char **symbol_inputs;
+    maelys_datalog_edb_insert_index_t *fact_index;
+    size_t input_capacity, pool_capacity, scratch_bytes;
+    size_t symbol_capacity, text_capacity;
+    const char *quota_field;
+    size_t quota_observed, quota_limit;
+    int owns_storage;
     maelys_datalog_internal_solve_result_t *active_result;
     maelys_datalog_internal_solve_result_t *result_workspace;
 };
@@ -30,9 +33,14 @@ struct maelys_datalog_prepared_session {
 maelys_result_t maelys_datalog_prepared_session_borrow(
     const maelys_datalog_internal_ruleset_t *, maelys_datalog_internal_prepared_session_t **);
 
-_Static_assert(sizeof(maelys_datalog_edb_insert_index_t) <=
-                   sizeof(((maelys_datalog_internal_prepared_session_t *)0)->symbol_inputs),
-               "fact index must fit existing session scratch storage");
+/* Sized input state, initialized inside the containing session arena. The
+ * dictionary and EDB pair scratch retain their build-sized storage in this
+ * first delivery; effective S/T are nevertheless exact admission bounds. */
+size_t maelys_datalog_prepared_session_storage_bytes(size_t input, size_t pool);
+maelys_result_t maelys_datalog_prepared_session_init_sized(
+    void *, const maelys_datalog_internal_ruleset_t *, size_t, size_t,
+    size_t, size_t, maelys_datalog_internal_solve_result_t *,
+    maelys_datalog_internal_prepared_session_t **);
 
 void maelys_datalog_prepared_session_result_released(
     void *owner,

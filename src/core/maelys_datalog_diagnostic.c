@@ -233,6 +233,10 @@ void maelys_datalog_copy_solve_diagnostic(maelys_datalog_diagnostic_t *out,
         out->present |= MAELYS_DATALOG_DIAGNOSTIC_CAPACITY;
         out->observed_count = in->count_observed; out->limit = in->capacity;
         out->limit_kind = (maelys_datalog_limit_t)in->limit_kind;
+        if (out->code == MAELYS_DATALOG_DIAG_SOLVE_IDB_OVERFLOW && !in->limit_kind) {
+            out->present |= MAELYS_DATALOG_DIAGNOSTIC_CONTEXT;
+            snprintf(out->field, sizeof(out->field), "session_derived_facts");
+        }
     }
     if (in->category == MAELYS_DATALOG_SOLVE_DIAG_COMPARISON_TYPE_ERROR) {
         out->present |= MAELYS_DATALOG_DIAGNOSTIC_COMPARISON;

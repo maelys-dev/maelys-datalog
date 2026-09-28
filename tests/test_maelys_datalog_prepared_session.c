@@ -331,7 +331,7 @@ static int test_legacy_workspaces_keep_input_snapshots(void) {
         /* Both legacy paths must keep their own EDB even after the caller
          * overwrites its facts. Keep the dictionary alive as its contract asks. */
         memset(pool, 0xa5, sizeof(pool));
-        memset(session->fact_pool, 0xa5, sizeof(session->fact_pool));
+        memset(session->fact_pool, 0xa5, session->pool_capacity * sizeof(*session->fact_pool));
         TEST_ASSERT_TRUE(explanations_byte_identical(&ruleset, owned, copy));
         maelys_datalog_solve_result_free(copy);
         TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_prepared_session_materialize_inputs(session, facts, 4), "%d");
@@ -698,7 +698,7 @@ static int test_refused_input_leaves_session_retryable(void) {
                       session->symbols.count,
                       "%zu");
     TEST_ASSERT_EQUAL((size_t)0u, session->edb.fact_count, "%zu");
-    for (size_t i = 0u; i < sizeof(session->fact_pool); i++) {
+    for (size_t i = 0u; i < session->pool_capacity * sizeof(*session->fact_pool); i++) {
         TEST_ASSERT_EQUAL(0,
                           ((const unsigned char *)session->fact_pool)[i],
                           "%d");
@@ -1315,8 +1315,8 @@ static int test_reuse_ignores_inactive_payload(void) {
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_prepared_session_create(&source, &session), "%d");
     /* Inactive payload is not required to be zero. Catch reads of old facts,
      * pointers or index slots before their current-transaction initialization. */
-    memset(session->fact_pool, 0xa5, sizeof(session->fact_pool));
-    memset(session->symbol_inputs, 0x5a, sizeof(session->symbol_inputs));
+    memset(session->fact_pool, 0xa5, session->pool_capacity * sizeof(*session->fact_pool));
+    memset(session->symbol_inputs, 0x5a, session->scratch_bytes);
     for (size_t pass = 0; pass < 4; ++pass) {
         size_t count = 0, symbol_count = 0;
         if (pass == 0) {
@@ -1345,7 +1345,7 @@ static int test_reuse_ignores_inactive_payload(void) {
         TEST_ASSERT_TRUE(results_byte_identical(actual, expected));
         /* The tail beyond the index must no longer retain caller pointers,
          * including when a duplicate-heavy batch fills the pointer scratch. */
-        for (size_t i = sizeof(session->fact_index); i < symbol_count * sizeof(session->symbol_inputs[0]); ++i)
+        for (size_t i = sizeof(*session->fact_index); i < symbol_count * sizeof(session->symbol_inputs[0]); ++i)
             TEST_ASSERT_EQUAL(0, ((unsigned char *)session->symbol_inputs)[i], "%d");
         maelys_datalog_solve_result_free(actual);
         maelys_datalog_solve_result_free(expected);
@@ -1357,9 +1357,9 @@ static int test_reuse_ignores_inactive_payload(void) {
     TEST_ASSERT_NULL(result);
     TEST_ASSERT_EQUAL(0, session->edb.fact_count, "%zu");
     TEST_ASSERT_EQUAL(0, memcmp(&session->prepared->symbols, &session->symbols, sizeof(session->symbols)), "%d");
-    for (size_t i = 0; i < sizeof(session->fact_pool); ++i)
+    for (size_t i = 0; i < session->pool_capacity * sizeof(*session->fact_pool); ++i)
         TEST_ASSERT_EQUAL(0, ((unsigned char *)session->fact_pool)[i], "%d");
-    for (size_t i = 0; i < sizeof(session->symbol_inputs); ++i)
+    for (size_t i = 0; i < session->scratch_bytes; ++i)
         TEST_ASSERT_EQUAL(0, ((unsigned char *)session->symbol_inputs)[i], "%d");
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_prepared_session_solve(session, NULL, 0, &result), "%d");
     maelys_datalog_solve_result_free(result);

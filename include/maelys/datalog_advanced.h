@@ -2,6 +2,7 @@
 #ifndef MAELYS_DATALOG_ADVANCED_H
 #define MAELYS_DATALOG_ADVANCED_H
 #include "datalog_extension.h"
+#include "datalog_resources.h"
 #ifdef __cplusplus
 extern "C" {
 #endif
