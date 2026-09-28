@@ -204,6 +204,151 @@ def assess(samples, configs):
     return rows, positive, historical, null_rows, detected, status
 
 
+def null_cross_check(report):
+    """Descriptive cross-screening of existing null ratios; never a gate.
+
+    Compare each null's copy/reference deltas with the other null's envelope,
+    not one version's request time with another version's request time.
+    """
+    if report['schema'] != 4:
+        raise ValueError('null cross-check requires a schema-4 report')
+    refs = ('base', 'anchor')
+
+    def index(rows, candidate=False):
+        indexed = {ref: {} for ref in refs}
+        metrics = {ref: {} for ref in refs}
+        for row in rows:
+            ref, scenario, metric = row['reference'], row['scenario'], row['metric']
+            if ref not in refs or len(scenario.split('/')) != 3 or metric not in ('min', 'median', 'p95'):
+                raise ValueError('invalid cross-check row identity')
+            floor, deltas = row['aa_floor'], row['delta']
+            if (len(deltas) != 2 or any(type(x) not in (int, float) or not math.isfinite(x)
+                                       for x in [floor, *deltas]) or floor < 0 or min(deltas) <= -1):
+                raise ValueError('invalid cross-check floor/deltas')
+            classes = ['slower' if d > floor else 'faster' if d < -floor else 'indeterminate'
+                       for d in deltas]
+            flag = row['aa_review_required' if candidate else 'review_required']
+            if row['classification'] != classes or flag is not ('slower' in classes):
+                raise ValueError('inconsistent raw A/A classification')
+            key = (scenario, metric)
+            if key in indexed[ref]:
+                raise ValueError('duplicate cross-check row')
+            indexed[ref][key] = row
+            metrics[ref].setdefault(scenario, set()).add(metric)
+        if not metrics['base'] or metrics['base'].keys() != metrics['anchor'].keys():
+            raise ValueError('incomplete cross-check scenario matrix')
+        if any(ms not in ({'min'}, {'median', 'p95'}) for rows in metrics.values() for ms in rows.values()):
+            raise ValueError('incomplete cross-check statistic pair')
+        return indexed
+
+    nulls = index(report['null_control']['rows'])
+    candidates = index(report['rows'], candidate=True)
+    # Verify the preserved candidate decisions; this diagnostic cannot rewrite
+    # either classifications or release status, even when the null alerts more.
+    raw = [dict(row, review_required=row['aa_review_required']) for row in report['rows']]
+    if screen_with_null(raw, report['null_control']['rows']) != report['rows']:
+        raise ValueError('inconsistent preserved candidate screening')
+
+    def identity(role):
+        variant = report['variants'][role]
+        return (variant['commit'], variant['request_repetitions'], variant['sampling_identity'])
+
+    for ref in refs:
+        normal, copy = identity(ref), identity(ref + '_null')
+        if normal[0] != report['commits'][ref] or normal[:2] != copy[:2] or copy[1] != 1 or normal == copy:
+            raise ValueError('null must independently sample its own unchanged reference')
+
+    result = dict(schema=1, informative_only=True, changes_review_status=False,
+                  rule='own raw slower AND own delta > other null envelope; warm matched statistics only',
+                  limitation='Observed cross-screening, not an expected candidate false-positive rate, confidence bound or release approval',
+                  directions=[])
+    if identity('base_null') == identity('anchor_null'):
+        return dict(result, available=False, reason='shared_null_samples')
+
+    warm = {ref: {key for key in nulls[ref] if not key[0].endswith('/cold')} for ref in refs}
+    matched = warm['base'] & warm['anchor']
+    if not matched:
+        return dict(result, available=False, reason='no_matching_warm_statistics')
+
+    def counts(flags):
+        n = len(flags)
+        rounds = [sum(pair[i] for pair in flags) for i in range(2)]
+        return dict(rounds=rounds, rates=[count / n if n else None for count in rounds],
+                    any_round=sum(any(pair) for pair in flags),
+                    single_round=sum(sum(pair) == 1 for pair in flags),
+                    both_rounds=sum(all(pair) for pair in flags))
+
+    for ref, other in (('base', 'anchor'), ('anchor', 'base')):
+        records = []
+        for scenario, metric in sorted(matched):
+            row, control = nulls[ref][scenario, metric], nulls[other][scenario, metric]
+            band = max(control['aa_floor'], *map(abs, control['delta']))
+            exceeded = [d > band for d in row['delta']]
+            records.append(dict(scenario=scenario, metric=metric,
+                                own_aa_floor=row['aa_floor'], own_delta=row['delta'],
+                                other_null_band=band, envelope_exceeded=exceeded,
+                                null_alerts=[exceeded[i] and row['classification'][i] == 'slower' for i in range(2)],
+                                candidate_alerts=[s == 'beyond_null' for s in candidates[ref][scenario, metric]['screening']]))
+        groups = {'all_warm': records, 'total': [r for r in records if r['scenario'].endswith('/total')]}
+        for column, values in (
+                ('metric', sorted({r['metric'] for r in records})),
+                ('config', sorted({r['scenario'].split('/')[0] for r in records})),
+                ('phase', sorted({r['scenario'].split('/')[2] for r in records}))):
+            for value in values:
+                groups[f'{column}:{value}'] = [r for r in records if (
+                    r['metric'] if column == 'metric' else r['scenario'].split('/')[0 if column == 'config' else 2]) == value]
+        summary = {name: dict(rows=len(items), null=counts([r['null_alerts'] for r in items]),
+                             candidate=counts([r['candidate_alerts'] for r in items]),
+                             envelope_exceeded=counts([r['envelope_exceeded'] for r in items]))
+                   for name, items in groups.items()}
+        result['directions'].append(dict(reference=ref, envelope_reference=other,
+                                         total_warm_rows=len(warm[ref]),
+                                         excluded_cold_rows=len(nulls[ref]) - len(warm[ref]),
+                                         unmatched=[dict(scenario=s, metric=m) for s, m in sorted(warm[ref] - matched)],
+                                         summary=summary, rows=records))
+    return dict(result, available=True, reason=None)
+
+
+def null_cross_markdown(diagnostic):
+    lines = ['## Null-against-null cross-check (informative)', '',
+             'Each direction screens an existing copy/reference ratio against the other reference\'s null envelope.',
+             'A counted alert must also be slower than its own original A/A floor. Cold rows are excluded.',
+             'Rates are counts / matched warm rows, not independent statistical trials or an expected candidate false-positive rate.',
+             'Different binaries can have different variation; both directions remain separate. No status, floor or sample changes.',
+             'Candidate columns retain the original screening against their own reference\'s null, restricted to the same matched rows.',
+             'Single / both counts rows alerting in exactly one / both rounds; JSON also retains envelope-only exceedances before the own-floor test.', '']
+    if not diagnostic['available']:
+        return lines + [f"Unavailable: `{diagnostic['reason']}`. This is not a zero alert rate.", '']
+    for direction in diagnostic['directions']:
+        warm = direction['summary']['all_warm']
+        n = warm['rows']
+        crossings = warm['envelope_exceeded']
+        lines += [f"### {direction['reference']} null against {direction['envelope_reference']} envelope", '',
+                  f"Warm rows: {direction['total_warm_rows']}; unmatched statistics: {len(direction['unmatched'])}; "
+                  f"cold rows excluded: {direction['excluded_cold_rows']}.", '',
+                  f"Envelope-only crossings before the own A/A floor: round 1 **{crossings['rounds'][0]}/{n} "
+                  f"({100*crossings['rates'][0]:.2f}%)**, round 2 **{crossings['rounds'][1]}/{n} "
+                  f"({100*crossings['rates'][1]:.2f}%)**; single / both: "
+                  f"{crossings['single_round']} / {crossings['both_rounds']}. "
+                  'The alert table below also requires the original own-floor test.', '',
+                  '| Scope | Matched rows | Null round 1 | Null round 2 | Null single / both | Candidate round 1 | Candidate round 2 | Candidate single / both |',
+                  '|---|---:|---:|---:|---:|---:|---:|---:|']
+        for scope, summary in direction['summary'].items():
+            n = summary['rows']
+            def rate(kind, i):
+                count = summary[kind]['rounds'][i]
+                return f'{count}/{n} ({100*count/n:.2f}%)' if n else 'unavailable (0 rows)'
+            null, candidate = summary['null'], summary['candidate']
+            lines.append(f"| {scope} | {n} | {rate('null', 0)} | {rate('null', 1)} | "
+                         f"{null['single_round']} / {null['both_rounds']} | {rate('candidate', 0)} | {rate('candidate', 1)} | "
+                         f"{candidate['single_round']} / {candidate['both_rounds']} |")
+        if direction['unmatched']:
+            lines += ['', 'Unmatched (kept in the original report, never compared across different statistics):']
+            lines += [f"- `{row['scenario']}` / `{row['metric']}`" for row in direction['unmatched']]
+        lines.append('')
+    return lines
+
+
 def build(source, dest, config, compiler, log):
     profile, build_type = config.split("-")
     build_dir, sdk, consumer = dest / "build", dest / "sdk", dest / "python"
@@ -334,6 +479,7 @@ def run(args):
                                         reference="anchor", request_repetitions=POSITIVE_CONTROL_REQUESTS),
                   historical_control=dict(detected=historical_detected(historical, configs),
                                           informative_only=True, rows=historical))
+    report['null_cross_check'] = null_cross_check(report)
     report_path = out / "report.json"
     report_path.write_text(json.dumps(report, indent=2) + "\n")
     with (out / "samples.csv").open("w", newline="") as stream:
@@ -380,6 +526,7 @@ def run(args):
                            f"{100*row['aa_floor']:.2f} | {100*row['delta'][0]:+.2f} | "
                            f"{100*row['delta'][1]:+.2f} | {', '.join(row['classification'])} | "
                            f"{band} | {', '.join(row.get('screening', []))} |")
+    summary.extend([''] + null_cross_markdown(report['null_cross_check']))
     (out / "report.md").write_text("\n".join(summary) + "\n")
     # Preserve binaries, headers and build logs, not intermediate object trees.
     for commit in unique:
