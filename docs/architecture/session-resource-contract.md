@@ -24,6 +24,13 @@ records the 0.12.0 host reservations and a possible fixed, within-profile public
 reference path. It does not implement or freeze this backend resource/delta
 contract; external ABI 5 default paths and program/build bounds stay unchanged.
 
+The accepted [0.14.0 capacity directive](../proposals/backend-session-resources.md)
+defines a bounded delivery of that resource negotiation: E/D/S/T capacities,
+fixed storage and explicit ABI 5 admission. The allocator service and its
+qualification move to 0.15.0; 0.14.0 reserves and refuses the elastic mode/bit. It also records the L delta /
+separate snapshot direction; it does not implement either input API or general
+host elasticity. The broader requirements below remain the longer-term design.
+
 ## Delivery gates
 
 Two gates have different deadlines. The first private incremental experiment
