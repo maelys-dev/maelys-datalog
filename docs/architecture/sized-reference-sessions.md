@@ -13,6 +13,15 @@ without freezing its backend negotiation, catalogue, elastic modes or strict
 native no-heap artifact. Four explicit advanced capacities are considered here;
 versioned predefined profiles remain a separate product decision.
 
+The follow-on [0.14.0 capacity specification](../proposals/backend-session-resources.md)
+records accepted option B: a distinct fixed backend resource contract and
+explicit ABI 5 admission in 0.14.0, with the allocation service deferred to 0.15.0.
+XLARGE remains a future additive compilation profile with a public-boundary
+compatibility test required before the fixed-capacity delivery. The reference-only
+first-delivery scope recorded below remains the historical proposal, not the
+external-backend support matrix of that follow-on. Neither document implements
+an API or changes program/build bounds.
+
 ## Reproduce the current inventory
 
 From the repository root:
