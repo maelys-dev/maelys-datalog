@@ -81,5 +81,53 @@ The earlier #143 reports and the original 7-symbol burst remain distinct
 observations. The local instruction reduction and any quieter later case do
 not erase them, establish equal cycles, or identify a hardware cause. The
 [complete #143 comparison](https://github.com/maelys-dev/maelys-datalog/actions/runs/36566987207)
-and its fixed scoped x86 count follow-up are pending. This change is draft;
+is recorded separately below. This change is draft;
 there is no maintainer timing exception, merge approval or release acceptance.
+
+## Complete Python comparison against #143
+
+[Run 36566987207](https://github.com/maelys-dev/maelys-datalog/actions/runs/36566987207)
+compares the same candidate with its exact #143 parent, `1d6ca95`, using the
+complete matrix. This additional comparison is explicitly not a release report.
+AMD EPYC 7763, Clang 18.1.3, Python 3.12.12, glibc 2.39. Report SHA-256:
+`7f607e60fa7eaaf3d1055f75ef265c83f299e5ef0e4ef6da1cbbb646aa4bbc54`.
+
+Independent reconstruction verifies 11,424 raw JSON files, 3,377,136 sample rows,
+240 binary/header/binding hashes, and all 617 comparison and 617 null rows.
+All 32 fixed positive-control primary totals are detected in both rounds.
+There are 43 warm review-required rows, including seven complete-request rows
+(six against #143, one against the anchor). All are retained:
+
+| Reference | Configuration / case | Statistic | Round 1 | Round 2 | A/A floor | Null envelope | Rounds beyond both |
+|---|---|---|---:|---:|---:|---:|---|
+| #143 | LARGE Release / 7-integer-solve | p95 | +2.45% | +1.91% | 2.09% | 2.09% | 1 |
+| #143 | LARGE Release / 93-integer-solve | p95 | +4.21% | +0.72% | 1.95% | 2.50% | 1 |
+| #143 | LARGE default / 7-symbol-prepared | p95 | +78.59% | +6.09% | 40.20% | 40.20% | 1 |
+| #143 | SMALL Release / 93-symbol-solve | median | -0.95% | +1.60% | 0.67% | 1.37% | 2 |
+| #143 | SMALL default / 7-integer-solve | p95 | +12.85% | +1.62% | 2.47% | 1.04% | 1 |
+| #143 | SMALL default / 93-symbol-prepared | median | +0.97% | -0.68% | 0.63% | 0.63% | 1 |
+| v0.11.1 | LARGE default / 7-symbol-prepared | p95 | +71.83% | +1.58% | 1.98% | 1.60% | 1 |
+
+The SMALL default / 93-integer-prepared median is -1.37% and -1.24%, above its
+1.15% A/A floor in both rounds; SMALL Release is -0.85% and -1.26%, with a 1.20%
+floor (only the second round exceeds it). These limited observations do not
+establish a general speedup or explain the other rows. In particular, the large
+single-round symbol p95 remains unattributed. No timing is pooled across this
+run and the release comparison, even though the reported CPU model matches.
+
+A bounded read of every total-loop sample in the LARGE default / 7-symbol
+comparison preserves the original p95 event: candidate round 1 has 201.539 us
+p95 versus 112.851 us for #143. Fixed consecutive bins of 100 samples show the
+candidate wall median around 100 us in bins 0--399, then 138.34 us in 400--499;
+the matching thread-CPU median in that last bin is 139.96 us. That process has
+no recorded GC event, page fault, involuntary switch or CPU change at request
+boundaries. The next round has 117.911 us candidate p95. These observations
+neither identify a hardware mechanism nor show that all CPU migrations were
+absent; the original event and all samples remain unexplained and retained.
+
+The separately dispatched [count follow-up 36574841013](https://github.com/maelys-dev/maelys-datalog/actions/runs/36574841013)
+reuses these exact installed SDKs after verifying the report digest and every
+selected binary hash. It counts six prospectively declared fixtures, two roles,
+two reversed repetitions and five complete-request indices: 24 processes and
+120 regions. Only the instrumentation helper is built; Valgrind latency is not
+used. Its results are pending.
