@@ -561,3 +561,37 @@ exclude creation/release and cannot establish whole-request instruction parity.
 The report is explicitly ineligible for release approval; the maintainer still
 decides the named original report. Session reuse in the Python convenience
 binding, if pursued, is a separate change outside the 0.14.0 implementation.
+
+## #143 prepared-request investigation
+
+The optional `prepared_diagnostic` dispatch preserves the complete reports from
+runs `36545968747` (v0.13.0 comparison) and `36545921158` (post-#142 comparison).
+`bench/python_prepared_diagnostic.py` checks their fixed SHA-256 digests, selected
+installed SDK/binding/header hashes, unchanged request harness, interpreter and
+dependency versions. It reuses those binaries: base `43bbde6`, parent `41c8857`
+and candidate `646ac3d`. An independent `head_copy` label consumes the identical
+candidate path and bytes. No production source or allocator policy is changed.
+
+Five fixtures are declared before measurement: SMALL default and Release
+`93-integer-prepared`, SMALL default and LARGE Release `7-symbol-prepared`, and
+SMALL Release `93-symbol-prepared`. Each label has two A/A pairs, followed by
+eight interleaved rounds that place each label in each position twice. All
+501 complete requests, 501 separate phase requests, one cold request, 50 warmups,
+CPU/resource/GC observations and adjacent calibration samples remain in the
+artifact. This scoped investigation does not replace the complete release
+matrix, its positive controls, its null screening or any historical alert.
+
+After all timings, separate Callgrind processes count complete requests at
+indices 0, 100, 192, 320 and 500, with two reversed-order repetitions for every
+fixture and revision. Preparation, clocks and checks are outside each scope;
+the ctypes/client-request boundary remains an explicit instrumentation cost.
+The instrument retains exclusive per-function Ir/Dr/Dw and unassigned summary
+residuals, including CPython, CFFI, native library and libc work. Names unresolved
+by Callgrind remain unresolved; equal names in multiple objects are aggregated.
+Valgrind timings are never used. Counts from earlier native-only `solve_edb`
+probes cannot establish parity for these complete Python transactions.
+
+All builds (only the counter helper) and layout exports finish before timing.
+Independent process controls inform attribution without erasing an original
+event, changing a floor, normalizing a latency or establishing a hardware cause.
+This diagnostic is explicitly ineligible for release approval.
