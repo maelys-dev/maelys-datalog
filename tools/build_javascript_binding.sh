@@ -10,9 +10,14 @@ case "$profile" in small) large=OFF ;; large) large=ON ;; *) exit 2 ;; esac
 case "$runtime" in native|wasm) ;; *) exit 2 ;; esac
 mkdir -p "$output"
 output="$(cd "$output" && pwd)"
-build="$root/build/javascript-$runtime-$profile"
-export EM_CACHE="${EM_CACHE:-$root/build/emscripten-cache}"
+scratch="$(mktemp -d "${TMPDIR:-/tmp}/maelys-js-consumer.XXXXXX")"
+trap 'rm -rf -- "$scratch"' EXIT
+# CMake preserves a compiler selected by an earlier toolchain. A fresh SDK
+# prevents a release's pinned emcc from linking objects made by another emcc.
+build="$scratch/build"
 if [ "$runtime" = wasm ]; then
+  compiler_key="$(emcc --version | python3 -c 'import hashlib, sys; print(hashlib.sha256(sys.stdin.buffer.read()).hexdigest()[:16])')"
+  export EM_CACHE="${EM_CACHE:-$root/build/emscripten-cache-$compiler_key}"
   emcmake cmake -S "$root" -B "$build" -DBUILD_TESTING=OFF -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_LIBDIR=lib -DCMAKE_INSTALL_INCLUDEDIR=include \
     -DMAELYS_DATALOG_PROFILE_LARGE="$large"
 else
@@ -20,8 +25,6 @@ else
     -DMAELYS_DATALOG_PROFILE_LARGE="$large" -DCMAKE_POSITION_INDEPENDENT_CODE=ON
 fi
 cmake --build "$build" --target maelys_datalog maelys_datalog_shared --parallel 2
-scratch="$(mktemp -d "${TMPDIR:-/tmp}/maelys-js-consumer.XXXXXX")"
-trap 'rm -rf -- "$scratch"' EXIT
 cmake --install "$build" --prefix "$scratch/sdk"
 cp "$root/bindings/javascript/native/"* "$scratch/"
 mkdir -p "$output/src"
