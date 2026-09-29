@@ -89,6 +89,11 @@ cache preconditions were corrected; the native WASM transport probe separately
 checks and drains its one retained block before its final leak assertion.
 The complete Make check passes as well. Initial failure logs, including an
 unsupported absolute Make build-directory invocation, are preserved.
+The first CI also exposed a missing guarded-object selection in `Makefile.asan`
+and a test assumption that default legacy/fixed arenas have identical sizes.
+The latter depends on target alignment: cross-constructor hits are required
+only when their actual byte sizes match; mismatches must miss. Both controls
+were corrected without changing the recycling implementation.
 
 ## Required measurements
 

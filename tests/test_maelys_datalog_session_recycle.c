@@ -113,16 +113,37 @@ static void cross_constructor(void) {
     maelys_datalog_session_config_t *c; OK(maelys_datalog_session_config_create(&c));
     maelys_datalog_session_resource_request_t q=MAELYS_DATALOG_RESOURCE_REQUEST_INIT;
     OK(maelys_datalog_session_config_set_resources(c,&q));
+    maelys_datalog_session_storage_plan_t p=MAELYS_DATALOG_SESSION_PLAN_INIT;
+    OK(maelys_datalog_session_storage_requirements_configured(policy,0,c,&p,NULL));
     size_t base=live; maelys_datalog_session_t *s;
+    size_t bytes=requested;
     OK(maelys_datalog_session_create(policy,0,&s));
+    bytes=requested-bytes;
+    printf("legacy/fixed default arena sizes=%zu/%zu\n",bytes,p.arena_bytes);
     char before[65],after[65]; OK(maelys_datalog_session_execution_fingerprint(s,before));
     OK(maelys_datalog_session_free(s));
     size_t a=allocations; forbidden=1;
-    OK(maelys_datalog_session_create_configured(policy,0,c,&s)); solve(s,11);
+    maelys_datalog_status_t rc=maelys_datalog_session_create_configured(policy,0,c,&s);
+    if(bytes==p.arena_bytes) { assert(!rc && allocations==a); }
+    else {
+        /* max_align_t padding can differ between layouts. A size mismatch
+         * must miss, even though both constructors have default semantics. */
+        assert(rc==MAELYS_DATALOG_STATUS_INTERNAL && !s && allocations==a+1);
+        forbidden=0; OK(maelys_datalog_session_create_configured(policy,0,c,&s));
+    }
+    solve(s,11);
     OK(maelys_datalog_session_execution_fingerprint(s,after));assert(!strcmp(before,after));
     OK(maelys_datalog_session_free(s));
-    OK(maelys_datalog_session_create(policy,0,&s)); solve(s,13);
+    a=allocations; forbidden=1;
+    OK(maelys_datalog_session_create_configured(policy,0,c,&s));
     OK(maelys_datalog_session_free(s)); assert(allocations==a);
+    rc=maelys_datalog_session_create(policy,0,&s);
+    if(bytes==p.arena_bytes) { assert(!rc && allocations==a); }
+    else {
+        assert(rc==MAELYS_DATALOG_STATUS_INTERNAL && !s && allocations==a+1);
+        forbidden=0; OK(maelys_datalog_session_create(policy,0,&s));
+    }
+    solve(s,13); OK(maelys_datalog_session_free(s));
     forbidden=0; maelys_datalog_session_recycle_purge();assert(live==base);
     OK(maelys_datalog_session_config_free(c));
 }
