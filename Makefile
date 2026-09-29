@@ -20,9 +20,6 @@ TEST_HELPER_SRCS = \
 	tests/helpers/test_log.c \
 	tests/helpers/test_framework.c
 
-WASM_TEST_SRCS = \
-	bindings/wasm/maelys_datalog_wasm.c
-WASM_TEST_HEADERS = bindings/wasm/maelys_datalog_wasm.h
 
 TEST_SRCS = $(wildcard tests/test_*.c)
 TEST_BINS = $(TEST_SRCS:tests/%.c=$(BUILD_DIR)/tests/%)
@@ -65,8 +62,8 @@ $(BUILD_DIR)/tests/test_maelys_datalog_diagnostic_writes: tests/test_maelys_data
 $(BUILD_DIR)/tests/test_maelys_datalog_input_edb_alloc: tests/test_maelys_datalog_input_edb_alloc.c $(SRCS) $(ENGINE_HEADERS) | $(BUILD_DIR)/tests
 	$(CC) $(TEST_CFLAGS) -UNDEBUG -I. -Iinclude $(filter-out src/runtime/maelys_datalog_input_edb.c,$(SRCS)) $< -o $@
 
-$(BUILD_DIR)/tests/test_maelys_datalog_wasm_builder: tests/test_maelys_datalog_wasm_builder.c tests/fixtures/allocation_guard.h $(SRCS) $(WASM_TEST_SRCS) $(WASM_TEST_HEADERS) $(ENGINE_HEADERS) | $(BUILD_DIR)/tests
-	$(CC) $(TEST_CFLAGS) -UNDEBUG -DMAELYS_WASM_ALLOCATION_TEST -include tests/fixtures/allocation_guard.h $(SRCS) $(WASM_TEST_SRCS) $< -o $@
+$(BUILD_DIR)/tests/test_maelys_datalog_javascript_transport: tests/test_maelys_datalog_javascript_transport.c tests/fixtures/allocation_guard.h $(SRCS) bindings/javascript/native/transport.c bindings/javascript/native/transport.h $(ENGINE_HEADERS) | $(BUILD_DIR)/tests
+	$(CC) $(TEST_CFLAGS) -UNDEBUG -include tests/fixtures/allocation_guard.h $(SRCS) bindings/javascript/native/transport.c $< -o $@
 
 $(BUILD_DIR)/tests/test_maelys_datalog_hot_path_alloc $(BUILD_DIR)/tests/test_maelys_datalog_prepared_explanations $(BUILD_DIR)/tests/test_maelys_datalog_session_resources: $(BUILD_DIR)/tests/%: tests/%.c tests/fixtures/allocation_guard.h $(SRCS) $(ENGINE_HEADERS) | $(BUILD_DIR)/tests
 	$(CC) $(TEST_CFLAGS) -UNDEBUG -include tests/fixtures/allocation_guard.h $(SRCS) $< -o $@
@@ -84,8 +81,8 @@ $(BUILD_DIR)/tests/test_maelys_datalog_window_alloc: tests/test_maelys_datalog_w
 bench-pipeline: $(BUILD_DIR)/tests/test_maelys_datalog_pipeline
 	./$(BUILD_DIR)/tests/test_maelys_datalog_pipeline --bench
 
-$(BUILD_DIR)/tests/%: tests/%.c $(SRCS) $(DOMAIN_FIXTURE_SRCS) $(TEST_HELPER_SRCS) $(WASM_TEST_SRCS) $(WASM_TEST_HEADERS) $(ENGINE_HEADERS) | $(BUILD_DIR)/tests
-	$(CC) $(TEST_CFLAGS) -I. -Iinclude $(SRCS) $(DOMAIN_FIXTURE_SRCS) $(TEST_HELPER_SRCS) $(WASM_TEST_SRCS) $(TEST_EXTRA_SRCS) $< -o $@
+$(BUILD_DIR)/tests/%: tests/%.c $(SRCS) $(DOMAIN_FIXTURE_SRCS) $(TEST_HELPER_SRCS) $(ENGINE_HEADERS) | $(BUILD_DIR)/tests
+	$(CC) $(TEST_CFLAGS) -I. -Iinclude $(SRCS) $(DOMAIN_FIXTURE_SRCS) $(TEST_HELPER_SRCS) $(TEST_EXTRA_SRCS) $< -o $@
 
 $(BUILD_DIR)/tests:
 	mkdir -p $@

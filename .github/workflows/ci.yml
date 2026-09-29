@@ -191,15 +191,15 @@ jobs:
       - uses: mymindstorm/setup-emsdk@v14
         with:
           version: ${{ matrix.emsdk }}
-      - name: Verify the typed Wasm consumer
-        run: npm exec --yes --package=typescript@5.9.3 -- tsc --strict --noEmit --target ES2020 --module commonjs tests/wasm/types.ts
-      - name: Build and run all Node tests sequentially in both profiles
+      - name: Verify the common API and installed WASM extension SDK in both profiles
         run: |
           for profile in small large; do
-            make -f Makefile.wasm maelys_datalog_dynamic.js WASM_PROFILE="$profile" EM_CACHE="$PWD/build/emscripten-cache"
-            bash tools/check_wasm_binding.sh "$profile"
-            EM_CACHE="$PWD/build/emscripten-cache" bash tools/check_wasm_extensions.sh "$profile"
+            tools/build_javascript_binding.sh wasm "$profile" build/javascript-package
+            MAELYS_PROFILE="$profile" MAELYS_JS_RUNTIMES=wasm node --test bindings/javascript/test/contract.mjs
+            bash tools/check_wasm_extensions.sh "$profile"
           done
+          npm install --prefix build/js-test-deps --ignore-scripts --no-package-lock typescript@5.9.3
+          TSC="$PWD/build/js-test-deps/node_modules/.bin/tsc" MAELYS_JS_RUNTIMES=wasm node bindings/javascript/test/package.mjs
 
   javascript-native:
     name: JavaScript native (${{ matrix.os }}, Node ${{ matrix.node }})

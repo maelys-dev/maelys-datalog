@@ -12,7 +12,10 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 - Add one JavaScript/TypeScript consumer API with native Node-API and WASM
   implementations, independent resource ownership, manifests, fixed capacities,
   typed results, diagnostics and canonical explanations. Package both profiles
-  as `@maelys-dev/datalog`, alongside the existing WASM package.
+  as `@maelys-dev/datalog`. This release retires `@maelys-dev/datalog-wasm`,
+  `MaelysPlayground`, the old C bridge, build scripts and legacy archive/channel
+  immediately; pinned historical releases remain available. See the
+  [migration contract](bindings/javascript/README.md#sdk-compatibility-and-migration).
 - Add `maelys_datalog_policy_load_manifest_buffer` with the same manifest
   contract as the stable file loader; preserve Advanced memory loading semantics.
 - Pin native JavaScript compatibility to glibc >= 2.34 or macOS arm64 >= 13.5,
@@ -366,7 +369,7 @@ consumers and migrate removed interfaces; there are no compatibility aliases.
   Remove input symbol IDs, raw engine exports and historical core/examples JS
   targets without aliases. Types are supplied by the SDK and mandatory in the
   release package. Unknown-symbol explanations now throw NOT_FOUND; absent
-  Why-true returns canonical not-derived text. See `bindings/wasm/README.md`
+  Why-true returns canonical not-derived text. See [the v0.10.0 binding guide](https://github.com/maelys-dev/maelys-datalog/blob/v0.10.0/bindings/wasm/README.md)
   for the full migration and allocation/lifetime contracts. Native engine API,
   backend ABI, algorithms and layouts are unchanged by this adapter migration.
 

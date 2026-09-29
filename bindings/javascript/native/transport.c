@@ -17,7 +17,7 @@ _Static_assert(MAELYS_DATALOG_PUBLIC_MAX_TERMS == 4u, "Review transport arity");
 #define CLOSED MAELYS_DATALOG_STATUS_INVALID_STATE
 #define TOO_LARGE MAELYS_DATALOG_STATUS_PAYLOAD_TOO_LARGE
 #define INTERNAL MAELYS_DATALOG_STATUS_INTERNAL
-#define MAELYS_WASM_FACT_WORDS 15u
+#define MAELYS_JS_FACT_WORDS 15u
 
 enum { POLICY = 1, EDB, SESSION, RESULT };
 typedef struct handle {
@@ -129,11 +129,11 @@ static const char *span(const char *text, uint32_t bytes, uint32_t offset, uint3
 static int decode(maelys_js_context *c, const uint32_t *words, uint32_t word_count, uint32_t count,
                   const char *text, uint32_t text_bytes) {
     if (count > c->max_facts) return TOO_LARGE;
-    if (count > UINT32_MAX / MAELYS_WASM_FACT_WORDS || word_count != count * MAELYS_WASM_FACT_WORDS ||
+    if (count > UINT32_MAX / MAELYS_JS_FACT_WORDS || word_count != count * MAELYS_JS_FACT_WORDS ||
         (!words && count)) return INVALID;
     maelys_datalog_fact_t *facts = c->scratch;
     for (uint32_t i = 0; i < count; ++i) {
-        const uint32_t *w = words + i * MAELYS_WASM_FACT_WORDS;
+        const uint32_t *w = words + i * MAELYS_JS_FACT_WORDS;
         maelys_datalog_fact_t *f = &facts[i];
         memset(f, 0, sizeof(*f));
         f->predicate = span(text, text_bytes, w[0], w[1]); f->arity = w[2];
@@ -362,7 +362,7 @@ static int dispatch(maelys_js_context *c, uint32_t op, const uint32_t *w, uint32
     }
     case 16: case 19: {
         uint32_t prefix = op == 16 ? 1 : 2;
-        REQUIRE(n == prefix + MAELYS_WASM_FACT_WORDS); HANDLE(h, w[0], RESULT);
+        REQUIRE(n == prefix + MAELYS_JS_FACT_WORDS); HANDLE(h, w[0], RESULT);
         REQUIRE(op == 16 || w[1] == 1 || w[1] == 2);
         TRY(decode(c, w + prefix, n - prefix, 1, text, bytes));
         const maelys_datalog_fact_t *f = c->scratch;
@@ -419,7 +419,8 @@ static int dispatch(maelys_js_context *c, uint32_t op, const uint32_t *w, uint32
 int maelys_js_call(maelys_js_context *c, uint32_t op, const uint32_t *w, uint32_t n,
                    const char *text, uint32_t bytes) {
     if (!c) return CLOSED;
-    free(c->owned_text); c->owned_text = NULL; c->text = ""; c->word_count = 0;
+    if (c->owned_text) free(c->owned_text);
+    c->owned_text = NULL; c->text = ""; c->word_count = 0;
     (void)maelys_datalog_diagnostic_clear(&c->diagnostic);
     c->status = dispatch(c, op, w, n, text, bytes);
     return c->status;

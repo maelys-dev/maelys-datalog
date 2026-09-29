@@ -154,17 +154,27 @@ this binding will supply that SDK and its matching prebuilds together. Python's
 declares the memory-bundle function to preserve complete stable-C coverage, and
 checks the same header feature guard when building that extension.
 
-`@maelys-dev/datalog-wasm`, its old C adapters and `MaelysPlayground` remain
-compatibility paths during migration. They are not additional implementations
-of this common object API. The migration order is:
+The first release carrying this package retires `@maelys-dev/datalog-wasm` and
+`MaelysPlayground` immediately. Only `@maelys-dev/datalog` is maintained and
+published, with `/node` and `/wasm` entry points sharing this API. There is no
+compatibility wrapper, old package alias, or fallback. Old tags and their
+published archives remain immutable and usable by pinned historical consumers.
 
-1. Publish the common package with both runtimes and profiles, keeping legacy
-   assets available during adoption.
-2. Move the playground to `/wasm`; promote JS, WASM, declarations and receipts
-   from that published release together. Generate the new reference signatures
-   from its declaration and review explanations against the new ownership API.
-   Existing legacy reference URLs keep documenting their pinned legacy release.
-3. After playground and known legacy consumers have migrated, announce a final
-   legacy package version and remove its channel/adapters in a separate reviewed
-   change. Existing released archives remain available. No removal date or
-   deprecation publication is implied by this candidate.
+Consumers must migrate before upgrading. Replace `MaelysPlayground.create` with
+`Engine.create`, `loadPolicy` with `loadInlineRuleset`, and move facts to an `Edb`.
+Keep the `SolveResult` returned by a `Session` or `Ruleset.solve` for queries and
+explanations; close the engine to release the full ownership tree. `query`
+becomes `containsFact`, `enumerate` becomes `enumeratePredicateFacts`, and
+`freeResult` becomes `result.close`. Close is now idempotent. Chained mutations
+become separate statements. Register domains with `(name, predicates, atoms)`;
+`Predicate` factories replace `PredKind` declarations. `limits`, `usage` and
+`fingerprint` are properties on the corresponding owners.
+
+Browser consumers promote the published package's `src/wasm.mjs`,
+`src/core.mjs`, `src/wasm-transport.mjs`, selected `wasm/<profile>/engine.mjs`
+and `engine.wasm`, and `src/index.d.ts` together, retaining relative paths.
+Generate reference signatures from that exact declaration. Prepare runtime,
+reference pages and receipt checks before publishing the cutover release; then
+promote its immutable bytes together. Historical URLs may redirect or explain
+migration, but must not present the retired API as the current binding. No
+intermediate release continues both publication channels.

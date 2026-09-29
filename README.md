@@ -382,7 +382,6 @@ is included. Python/JS bindings continue to use the reference backend.
 | `build-support/` | Source manifests shared by native, WASM, fuzz and benchmark builds |
 | `src/manifest/` | File and in-memory manifest loading |
 | `bindings/javascript/` | Common TypeScript/JavaScript API, native Node-API and WASM; [build and ownership contract](bindings/javascript/README.md) |
-| `bindings/wasm/` | WebAssembly-facing C boundary and its JavaScript wrapper |
 | `bindings/python/` | Single Python binding over the installed public SDK; [build and 0.10.0 migration](bindings/python/README.md) |
 | `tests/` | Native, Python, WASM, corpus, and fuzz tests |
 | `tests/fixtures/` | Shared test material: the example domains every native test installs, and the out-of-tree SDK consumers |

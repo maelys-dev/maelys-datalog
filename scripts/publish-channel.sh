@@ -9,11 +9,11 @@
 # Idempotent by contract: a replayed tag runs the channel again on a version
 # the registry already holds, and this script must then exit 0 without
 # republishing. It records what it did in $CHANNEL_RECORD when the socle
-# provides one; those fields join the channel-npm.json marker the socle
+# provides one; those fields join the channel-npm-javascript.json marker the socle
 # attaches to the release — the observation of a publication, never an
 # intention (D3).
 #
-# `maelys-release rehearse . --channel npm --tag vX.Y.Z` sets CHANNEL_DRY_RUN=1,
+# `maelys-release rehearse . --channel npm-javascript --tag vX.Y.Z` sets CHANNEL_DRY_RUN=1,
 # which channel.yml never sets: the script then takes its real path up to
 # the registry's write and stops there — assembly, the tarball checked as a
 # file, the registry read with the run's token — instead of exiting early
@@ -32,9 +32,8 @@ version="${tag#v}"
 [ "$version" = "$(cat VERSION)" ] \
   || { echo "error: tag $tag does not name VERSION $(cat VERSION)" >&2; exit 1; }
 case "$channel" in
-  npm) package="@maelys-dev/datalog-wasm" ;;
   npm-javascript) package="@maelys-dev/datalog" ;;
-  *) echo "error: unknown channel: $channel (this product publishes: npm, npm-javascript)" >&2; exit 1 ;;
+  *) echo "error: unknown channel: $channel (this product publishes: npm-javascript)" >&2; exit 1 ;;
 esac
 
 registry="https://npm.pkg.github.com"
@@ -71,14 +70,8 @@ if [ "$dry_run" = 0 ] && npm view "$package@$version" version >/dev/null 2>&1; t
   exit 0
 fi
 
-case "$channel" in
-  npm)
-    bash scripts/build-npm-package.sh dist/ >/dev/null
-    tgz="./dist/maelys-dev-datalog-wasm-$version.tgz" ;;
-  npm-javascript)
-    python3 scripts/build-javascript-package.py dist/ >/dev/null
-    tgz="./dist/maelys-dev-datalog-$version.tgz" ;;
-esac
+python3 scripts/build-javascript-package.py dist/ >/dev/null
+tgz="./dist/maelys-dev-datalog-$version.tgz"
 # npm reads a bare "dir/name.tgz" as the GitHub shorthand "owner/repo" and
 # tries to clone it: v0.3.0's channel job died on "git ls-remote
 # ssh://git@github.com/dist/maelys-dev-datalog-wasm-0.3.0.tgz.git". The path

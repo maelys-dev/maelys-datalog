@@ -61,7 +61,7 @@ output contract is distinct from registration's synchronous copy contract.
   `kind_flags`) or named constructors, and rebuild against the installed SDK.
 - Wasm now consumes the installed public SDK through its typed API. The old
   native-object builder and raw exports are removed without aliases; see the
-  [Wasm migration](../../bindings/wasm/README.md).
+  [Wasm migration](../../bindings/javascript/README.md).
 - The declaration migration preserves stable C declaration layouts, language
   syntax, fact semantics and memory profiles. The coordinated 0.10.0 diagnostic
   migration separately requires consumer API 2, backend ABI 4 and program ABI 2.

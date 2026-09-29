@@ -167,48 +167,11 @@ ensure_pinned_emsdk() {
 if [ "$target" = wasm32 ]; then
   ensure_pinned_emsdk
 
-  dts_path="bindings/wasm/maelys_playground.d.ts"
-  if [ ! -f "$dts_path" ]; then
-    echo "error: the Wasm SDK requires its TypeScript declarations" >&2
-    exit 1
-  fi
-
-  build_wasm_profile() {  # $1 = small|large, $2 = WASM_BUILD_DIR
-    local profile="$1" build_dir="$2"
-    echo "==> wasm profile: ${profile} (${build_dir})"
-    rm -f "$build_dir/maelys_datalog_dynamic.js" "$build_dir/maelys_datalog_dynamic.wasm"
-    make -f Makefile.wasm maelys_datalog_dynamic.js WASM_PROFILE="$profile" WASM_BUILD_DIR="$build_dir"
-  }
-
-  stage_wasm() {  # $1 = small|large (tarball suffix), $2 = WASM_BUILD_DIR
-    local suffix="$1" build_dir="$2"
-    local stage
-    stage="$(mktemp -d)"
-    cp "$build_dir/maelys_datalog_dynamic.js" "$stage/"
-    cp "$build_dir/maelys_datalog_dynamic.wasm" "$stage/"
-    cp "$build_dir/maelys_playground.js" "$stage/"
-    cp "$build_dir/maelys_playground.d.ts" "$stage/"
-
-    local name="maelys-datalog-${version}-wasm-${suffix}.tar.gz"
-    tar -czf "$dist/${name}" -C "$stage" .
-    ( cd "$dist" && sha256 "${name}" > "${name}.sha256" )
-    rm -rf "$stage"
-
-    echo "packaged ${name}"
-    artifacts+=("$name")
-  }
-
-  build_wasm_profile small build/wasm
-  stage_wasm small build/wasm
-
-  build_wasm_profile large build/wasm-large
-  stage_wasm large build/wasm-large
-
   emsdk_recorded="$EMSDK_VERSION"
 fi
 
-# The unified package uses distinct archives so legacy WASM/SDK consumers keep
-# their existing payloads. Compile and test here, before any publish job.
+# Both runtimes and profiles belong to the one supported JavaScript package.
+# Compile and test here, before any publish job.
 js_stage="$(mktemp -d)"
 trap 'rm -rf -- "$js_stage"' EXIT
 if [ "$target" = wasm32 ]; then js_runtime=wasm; else js_runtime=native; fi
