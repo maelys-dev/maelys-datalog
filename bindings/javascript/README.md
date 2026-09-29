@@ -149,9 +149,10 @@ additive symbol. This binding requires the post-v0.13.0 SDK containing
 `MAELYS_DATALOG_HAS_MANIFEST_BUFFER` header feature guard at compilation.
 Always use headers and libraries installed from the same revision and profile;
 an API 2 SDK from an older release is insufficient. The first release carrying
-this binding will supply that SDK and its matching prebuilds together. The Python
-binding still calls the stable file manifest loader; it does not call the new
-buffer loader.
+this binding will supply that SDK and its matching prebuilds together. Python's
+`Engine.load_manifest` still uses the stable file loader. Its CFFI surface also
+declares the memory-bundle function to preserve complete stable-C coverage, and
+checks the same header feature guard when building that extension.
 
 `@maelys-dev/datalog-wasm`, its old C adapters and `MaelysPlayground` remain
 compatibility paths during migration. They are not additional implementations
