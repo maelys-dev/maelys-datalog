@@ -31,8 +31,13 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
   requires review: SMALL seven-fact convenience-request medians are
   58.70–67.48% higher than v0.13.0 across both build modes and comparison rounds,
   beyond the A/A and matching null controls. The fixed positive control passes
-  throughout. These costs are not accepted for release; the maintainer decision
-  is pending. The validation note records the report SHA-256 and all limits.
+  throughout. A [bounded allocator-policy control](https://github.com/maelys-dev/maelys-datalog/actions/runs/36535239421)
+  reproduces and removes the seven-integer cost on the original binaries under
+  explicit glibc settings, together with the repeated page faults. This leaves
+  production defaults and original classifications unchanged; it does not
+  qualify every other alert or prove complete-request instruction parity.
+  The maintainer decision on the named original report is pending. The
+  validation note records both report SHA-256 values and attribution limits.
 
 ## 0.13.0 — 2026-09-27
 

@@ -345,16 +345,89 @@ Report `report.json` SHA-256:
 Artifact ZIP SHA-256:
 `86acfc07f8a1d0fe81209e417dd918690fa966fe202f7f67ebc939e5659539f0`.
 
+## Hosted allocator-policy confirmation
+
+The [bounded allocator run](https://github.com/maelys-dev/maelys-datalog/actions/runs/36535239421)
+uses signed diagnostic `2873989cb918fe8fdde148b4071afdf26e6e6606`. It reuses the
+original `43bbde6` and `f2372725` binaries and unchanged `7-integer-solve`
+workload, without rebuilding. The pre-PR `9338993` main has identical runtime,
+installed-header and binding sources to the published reference. The runner is
+AMD EPYC 9V74, Ubuntu glibc 2.39-0ubuntu8.9, Python 3.12.12. Its same CPU model
+does not permit absolute latency comparison with the original run.
+
+Both SMALL build modes compare four conditions: base/head with default glibc,
+and base/head with exactly `MALLOC_TRIM_THRESHOLD_=268435456
+MALLOC_TOP_PAD_=67108864`. Two A/A pairs per condition precede four rounds with
+balanced condition positions. All 64 raw processes, 160,320 phase/total sample
+values, 58 preserved binary/header/binding hashes, outputs and 24 statistical
+comparisons are independently checked. The original report and classifications
+are unchanged; the diagnostic is not release-eligible.
+
+Ranges below are **process medians across the four comparison rounds**;
+minor faults count the 501 warm total requests within each process:
+
+| SMALL build | glibc condition | Base median range (µs) | Candidate median range (µs) | Base minor faults | Candidate minor faults |
+| --- | --- | ---: | ---: | ---: | ---: |
+| default | default | 70.434–72.707 | 117.504–120.148 | 4 | 9,522 |
+| default | explicit two-variable treatment | 70.394–72.347 | 70.254–72.838 | 4 | 3 |
+| Release | default | 61.380–63.734 | 103.413–109.802 | 4 | 9,522 |
+| Release | explicit two-variable treatment | 60.319–62.042 | 58.516–59.288 | 4 | 3 |
+
+With default glibc, candidate/base median gaps are +65.00% to +70.58% in the
+default build (A/A floor 7.11%) and +68.15% to +72.28% in Release (floor 1.62%):
+all eight round comparisons are slower. Under the treatment, the default-build
+gaps are −2.72% to +3.47%, all indeterminate at floor 4.54%; Release gaps are
+−5.68% to −2.36%, three indeterminate and one faster at floor 4.83%. The base's
+own treatment gaps are indeterminate in every round. The candidate's treatment
+reduces its median by 38.01–46.71%, always above the corresponding A/A floor.
+P95 and minimum classifications remain in the artifact, including unresolved
+tails; convergence of medians does not establish equality of distributions.
+
+This controlled intervention reproduces and removes the large default-policy
+cost while reducing the candidate's warm minor faults from approximately 19 per
+request to three across the entire 501-request series. It establishes allocator
+policy as a causal factor in the observed cost for this case. The reviewer also
+reports a local Docker ARM64/glibc 2.39 reproduction with the default ordering
+reversed (base slower) and converging medians under these variables; that is
+independent reported evidence, not a cross-machine latency comparison.
+
+Eight additional processes run under `strace`, only after timing completes.
+All 501 marked warm transactions per process have no `brk`, `mmap`, `munmap` or
+`madvise` calls, and their telemetry has zero minor faults. The trace parser and
+raw marked regions are independently checked. Thus these differently observed
+processes do **not** reproduce the ordinary candidate's faulting regime; their
+times are unused. They cannot identify which syscall returned pages in the
+untraced processes. Their import/marker/tracing context also differs, so this
+does not isolate one observer effect. The two-variable intervention changes
+arena retention and adaptive allocator behavior; it does not distinguish
+trimming from every other allocation-policy contribution. The native scoped
+instruction counts exclude session construction/destruction and cannot support
+the broader claim that complete engine/request work is identical.
+
+Report SHA-256:
+`1a91654b4958639f05cf4dda4067cba6cd6631ab50c2bbd1ee1175dca507e6e2`.
+Artifact ZIP SHA-256:
+`c1dd4ffcb5b6ca88c5d1f6854cada7b5166e080265b7dc9cbb94ed34652db429`.
+The 59 Python-performance tooling tests pass, including rejection of changed
+original evidence, inherited tuning, incomplete traces and incorrectly scoped
+requests. [CI 36535218644](https://github.com/maelys-dev/maelys-datalog/actions/runs/36535218644)
+passes all 17 jobs on the signed diagnostic head. No production allocator
+setting, workload threshold or noise budget
+has changed. A mitigation through reuse of a prepared Python session belongs
+in a separate binding PR outside 0.14.0, with its own lifecycle/lease and
+performance qualification; it is not implemented here.
+
 ## Release decision remains open
 
 Step 3 now supplies the installed matrix, downstream replay, reservation
 inventory and complete native/Python measurements. Functional qualification
-passes, but the repeated SMALL complete-Python slowdowns remain unaccepted.
-PR #142 stays in draft for that performance follow-up; workflow success is not
-approval. The next diagnostic should scope complete convenience requests,
-including construction/release and the observed page faults, while preserving
-these original binaries and observations. Any runtime, binding, build or
-harness correction requires new measurements; a later quiet run cannot erase
-this one. The maintainer's decision on the concrete report must be recorded
-before a release. No allocator service, delta API, private-provider claim,
-merge or release is introduced here.
+passes. The allocator intervention now removes the dominant seven-integer
+convenience cost on the hosted runner, with the attribution limits above; it
+does not investigate every other original phase, prepared-session or tail
+alert. The original schema-4 report remains `review_required` and no performance
+exception has yet been accepted by the maintainer. PR #142 stays in draft
+pending that explicit decision on report `1fa3e1ce…`, informed by diagnostic
+`1a91654b…`; workflow success is not approval. Any runtime, binding, build or
+ordinary benchmark correction requires new measurements; a later quiet run
+cannot erase the original. No allocator service, delta API, private-provider
+claim, merge or release is introduced here.
