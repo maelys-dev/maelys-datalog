@@ -280,6 +280,27 @@ static maelys_datalog_status_t load_manifest_source_mode(
         write_bytes(manifest_path, manifest, (size_t)manifest_length)) {
         status = maelys_datalog_policy_load_manifest(
             manifest_path, flags, out_policy, out_diagnostic);
+        /* The stable memory loader is the same contract without filesystem I/O.
+         * Exercise every existing permission/hash/atom failure against both. */
+        maelys_datalog_policy_bundle_entry_t bundle = {"policy", source, strlen(source)};
+        maelys_datalog_policy_t *memory = NULL;
+        maelys_datalog_diagnostic_t detail = MAELYS_DATALOG_DIAGNOSTIC_INIT;
+        maelys_datalog_status_t memory_status = maelys_datalog_policy_load_manifest_buffer(
+            manifest, (size_t)manifest_length, &bundle, 1, flags, &memory, &detail);
+        if (memory_status != status || (memory_status != MAELYS_DATALOG_STATUS_OK && memory)) {
+            fprintf(stderr, "file/memory manifest status mismatch: %d/%d\n", status, memory_status);
+            status = MAELYS_DATALOG_STATUS_INTERNAL;
+        }
+        if (memory && out_policy && *out_policy) {
+            char disk_fingerprint[65], memory_fingerprint[65];
+            if (maelys_datalog_policy_fingerprint(*out_policy, disk_fingerprint) ||
+                maelys_datalog_policy_fingerprint(memory, memory_fingerprint) ||
+                strcmp(disk_fingerprint, memory_fingerprint)) {
+                fprintf(stderr, "file/memory manifest fingerprint mismatch\n");
+                status = MAELYS_DATALOG_STATUS_INTERNAL;
+            }
+        }
+        if (memory) (void)maelys_datalog_policy_free(memory);
     } else if (out_policy) {
         *out_policy = NULL;
     }

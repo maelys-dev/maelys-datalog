@@ -32,11 +32,11 @@ version="${tag#v}"
 [ "$version" = "$(cat VERSION)" ] \
   || { echo "error: tag $tag does not name VERSION $(cat VERSION)" >&2; exit 1; }
 case "$channel" in
-  npm) ;;
-  *) echo "error: unknown channel: $channel (this product publishes: npm)" >&2; exit 1 ;;
+  npm) package="@maelys-dev/datalog-wasm" ;;
+  npm-javascript) package="@maelys-dev/datalog" ;;
+  *) echo "error: unknown channel: $channel (this product publishes: npm, npm-javascript)" >&2; exit 1 ;;
 esac
 
-package="@maelys-dev/datalog-wasm"
 registry="https://npm.pkg.github.com"
 # The dist-tag follows the series (D4/D5): next while 0.x, latest from 1.0.0.
 case "$version" in 0.*) dist_tag=next ;; *) dist_tag=latest ;; esac
@@ -71,13 +71,19 @@ if [ "$dry_run" = 0 ] && npm view "$package@$version" version >/dev/null 2>&1; t
   exit 0
 fi
 
-bash scripts/build-npm-package.sh dist/ >/dev/null
+case "$channel" in
+  npm)
+    bash scripts/build-npm-package.sh dist/ >/dev/null
+    tgz="./dist/maelys-dev-datalog-wasm-$version.tgz" ;;
+  npm-javascript)
+    python3 scripts/build-javascript-package.py dist/ >/dev/null
+    tgz="./dist/maelys-dev-datalog-$version.tgz" ;;
+esac
 # npm reads a bare "dir/name.tgz" as the GitHub shorthand "owner/repo" and
 # tries to clone it: v0.3.0's channel job died on "git ls-remote
 # ssh://git@github.com/dist/maelys-dev-datalog-wasm-0.3.0.tgz.git". The path
 # must start with "./" (or "/") to be taken as a file.
-tgz="$(find ./dist -maxdepth 1 -name 'maelys-dev-datalog-wasm-*.tgz' | head -1)"
-[ -n "$tgz" ] || { echo "error: no package tarball assembled in dist/" >&2; exit 1; }
+[ -f "$tgz" ] || { echo "error: no package tarball assembled in dist/" >&2; exit 1; }
 case "$tgz" in ./*|/*) ;; *) tgz="./$tgz" ;; esac
 if [ "$dry_run" = 1 ]; then
   # The real path up to the write: the tarball is a readable archive under a
@@ -90,5 +96,5 @@ if [ "$dry_run" = 1 ]; then
   exit 0
 fi
 echo "publishing $package@$version from $tgz to $registry (dist-tag: $dist_tag)"
-npm publish "$tgz" --tag "$dist_tag"
+npm publish "$tgz" --ignore-scripts --tag "$dist_tag"
 record

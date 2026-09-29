@@ -1,0 +1,49 @@
+{
+  "name": "@maelys-dev/datalog",
+  "version": "0.0.0",
+  "description": "Maelys Datalog JavaScript API with native Node-API and WebAssembly runtimes",
+  "license": "MPL-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/maelys-dev/maelys-datalog.git",
+    "directory": "bindings/javascript"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "main": "./src/node.cjs",
+  "types": "./src/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.d.ts",
+      "browser": "./src/wasm.mjs",
+      "node": {
+        "import": "./src/node.mjs",
+        "require": "./src/node.cjs"
+      },
+      "default": "./src/wasm.mjs"
+    },
+    "./node": {
+      "types": "./src/index.d.ts",
+      "import": "./src/node.mjs",
+      "require": "./src/node.cjs"
+    },
+    "./wasm": {
+      "types": "./src/index.d.ts",
+      "import": "./src/wasm.mjs",
+      "require": "./src/wasm.cjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "src",
+    "prebuilds",
+    "wasm",
+    "README.md",
+    "LICENSE",
+    "licenses"
+  ],
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  }
+}

@@ -201,6 +201,68 @@ jobs:
             EM_CACHE="$PWD/build/emscripten-cache" bash tools/check_wasm_extensions.sh "$profile"
           done
 
+  javascript-native:
+    name: JavaScript native (${{ matrix.os }}, Node ${{ matrix.node }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, ubuntu-24.04-arm, macos-15]
+        node: ['22', '24']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - name: Verify artifact assembly failure controls
+        run: python3 -m unittest discover -s tests/tooling -p test_javascript_packaging.py -v
+      - name: Build and test the installed native SDK consumers
+        run: |
+          for profile in small large; do
+            tools/build_javascript_binding.sh native "$profile" build/javascript-package
+            MAELYS_PROFILE="$profile" MAELYS_JS_RUNTIMES=node node --test bindings/javascript/test/contract.mjs
+          done
+          node bindings/javascript/test/native-workers.mjs
+      - name: Verify packed CommonJS and ESM consumers and declarations
+        run: |
+          npm install --prefix build/js-test-deps --ignore-scripts --no-package-lock typescript@5.9.3
+          TSC="$PWD/build/js-test-deps/node_modules/.bin/tsc" MAELYS_JS_RUNTIMES=node node bindings/javascript/test/package.mjs
+      - name: Exercise malformed transport frames with ASan and UBSan
+        if: matrix.node == '22'
+        run: |
+          tools/check_javascript_transport.sh small
+          tools/check_javascript_transport.sh large
+
+  javascript-parity:
+    name: JavaScript native, WASM, Python and browser parity
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: '3.1.61'
+      - name: Build both runtimes and compare identical inputs against Python
+        run: |
+          python -m pip install cffi setuptools
+          for profile in small large; do
+            tools/build_javascript_binding.sh native "$profile" build/javascript-package
+            tools/build_javascript_binding.sh wasm "$profile" build/javascript-package
+            MAELYS_PROFILE="$profile" node --test bindings/javascript/test/contract.mjs
+            tools/check_javascript_python.sh "$profile" python
+          done
+      - name: Verify the real npm archive and browser/module-worker execution
+        run: |
+          npm install --prefix build/js-test-deps --ignore-scripts --no-package-lock typescript@5.9.3 @playwright/test@1.62.1
+          build/js-test-deps/node_modules/.bin/playwright install --with-deps chromium
+          TSC="$PWD/build/js-test-deps/node_modules/.bin/tsc" node bindings/javascript/test/package.mjs
+          PLAYWRIGHT_MODULE="$PWD/build/js-test-deps/node_modules/@playwright/test/index.mjs" PLAYWRIGHT_CHANNEL=chromium node bindings/javascript/test/browser.mjs
+
   fuzz-smoke:
     name: Bounded parser fuzz smokes
     runs-on: ubuntu-latest

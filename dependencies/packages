@@ -8,7 +8,9 @@ clang
 jq
 cmake
 python3
+nodejs
 
 [macos]
 cmake
 python@3.12
+node@22

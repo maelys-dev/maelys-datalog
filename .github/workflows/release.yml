@@ -28,8 +28,8 @@ jobs:
       product: maelys-datalog
       tag: ${{ inputs.tag || github.ref_name }}
       verify_command: bash scripts/verify-release.sh TARGET
-      linux_packages: build-essential dpkg-dev file rpm clang jq cmake python3
-      macos_packages: cmake python@3.12
+      linux_packages: build-essential dpkg-dev file rpm clang jq cmake python3 nodejs
+      macos_packages: cmake python@3.12 node@22
       targets: '[{"target": "linux-x86_64"}, {"target": "linux-arm64"}, {"target": "macos-arm64"}, {"target": "wasm32", "runner": "ubuntu-26.04"}]'
       manifest_patterns: '*.tar.gz *.deb *.rpm release-receipt-*.json'
 
@@ -44,5 +44,19 @@ jobs:
       product: maelys-datalog
       tag: ${{ inputs.tag || github.ref_name }}
       channel: npm
+      publish_command: bash scripts/publish-channel.sh TAG CHANNEL
+      release_environment: ''
+
+  channel-npm-javascript:
+    needs: release
+    if: needs.release.result == 'success'
+    uses: maelys-dev/maelys-release/.github/workflows/channel.yml@ecb0a665d39cdf47fa2400fc573d8a555f2d6470 # v0.60.0
+    permissions:
+      contents: write
+      packages: write
+    with:
+      product: maelys-datalog
+      tag: ${{ inputs.tag || github.ref_name }}
+      channel: npm-javascript
       publish_command: bash scripts/publish-channel.sh TAG CHANNEL
       release_environment: ''

@@ -207,6 +207,24 @@ if [ "$target" = wasm32 ]; then
   emsdk_recorded="$EMSDK_VERSION"
 fi
 
+# The unified package uses distinct archives so legacy WASM/SDK consumers keep
+# their existing payloads. Compile and test here, before any publish job.
+js_stage="$(mktemp -d)"
+trap 'rm -rf -- "$js_stage"' EXIT
+if [ "$target" = wasm32 ]; then js_runtime=wasm; else js_runtime=native; fi
+for profile in small large; do
+  bash tools/build_javascript_binding.sh "$js_runtime" "$profile" "$js_stage/package"
+  if [ "$js_runtime" = native ]; then test_runtime=node; else test_runtime=wasm; fi
+  MAELYS_JS_PACKAGE="$js_stage/package" MAELYS_JS_RUNTIMES="$test_runtime" MAELYS_PROFILE="$profile" \
+    node --test bindings/javascript/test/contract.mjs
+done
+js_name="maelys-datalog-${version}-javascript-${target}.tar.gz"
+tar -czf "$dist/$js_name" -C "$js_stage/package" .
+( cd "$dist" && sha256 "$js_name" > "$js_name.sha256" )
+artifacts+=("$js_name")
+rm -rf -- "$js_stage"
+trap - EXIT
+
 # ---------------------------------------------------------------------------
 # Release receipt (D3): one per target, immutable, listed by SHA256SUMS.
 # ---------------------------------------------------------------------------
