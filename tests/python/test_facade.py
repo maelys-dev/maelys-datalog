@@ -240,13 +240,14 @@ class FacadeTest(unittest.TestCase):
         for name in exports:
             self.assertTrue(callable(getattr(binding.lib, name)), name)
 
-    def test_bridge_depends_only_on_consumer_header(self):
+    def test_bridge_depends_only_on_installed_consumer_resources(self):
         builder = Path(__file__).resolve().parents[2] / "bindings/python/build_cffi.py"
         source = builder.read_text(encoding="utf-8")
         self.assertEqual(re.findall(r"#include\s+[<\"]([^>\"]+)[>\"]", source),
-                         ["maelys/datalog.h"])
+                         ["maelys/datalog.h", "maelys/datalog_resources.h"])
         self.assertNotIn("MAELYS_DATALOG_BACKEND_ABI_VERSION", source)
         self.assertNotIn("maelys_datalog_session_options_t", source)
+        self.assertNotIn("maelys_datalog_backend_v6_t", source)
 
     def test_default_preparation_uses_public_constructor_without_configuration(self):
         rules = self.policy()

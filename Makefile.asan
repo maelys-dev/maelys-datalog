@@ -60,7 +60,7 @@ $(BUILD_DIR)/test_maelys_datalog_context: sdk/examples/frontend/src/extension.c 
 $(BUILD_DIR)/test_maelys_datalog_pipeline: ASAN_EXTRA_SRCS = sdk/examples/frontend/src/extension.c
 $(BUILD_DIR)/test_maelys_datalog_pipeline: sdk/examples/frontend/src/extension.c
 
-ASAN_HEADERS = $(wildcard include/maelys/*.h src/core/*.h src/compiler/*.h src/public/*.h src/registry/*.h src/runtime/*.h modules/standard/*.h bindings/wasm/*.h)
+ASAN_HEADERS = $(wildcard include/maelys/*.h src/core/*.h src/compiler/*.h src/public/*.h src/registry/*.h src/runtime/*.h src/runtime/*.inc modules/standard/*.h bindings/wasm/*.h)
 
 # The engine, fixtures and helpers are instrumented once into objects and
 # linked into every test: compiling them again per test binary made the
@@ -94,7 +94,8 @@ $(BUILD_DIR)/test_maelys_datalog_wasm_builder: tests/test_maelys_datalog_wasm_bu
 	$(CC) $(ASAN_CFLAGS) -UNDEBUG -DMAELYS_WASM_ALLOCATION_TEST -include tests/fixtures/allocation_guard.h $(ASAN_GUARD_OBJS) $< -o $@
 	$(if $(filter 1,$(ASAN_RUN_ON_BUILD)),$(ASAN_ENV) ./$@,@:)
 
-$(BUILD_DIR)/test_maelys_datalog_hot_path_alloc $(BUILD_DIR)/test_maelys_datalog_prepared_explanations: $(BUILD_DIR)/%: tests/%.c $(ASAN_GUARD_OBJS) $(ASAN_HEADERS) tests/fixtures/allocation_guard.h | $(BUILD_DIR)
+$(BUILD_DIR)/test_maelys_datalog_session_resources: ASAN_CFLAGS += -DRESOURCE_ALLOCATION_TEST
+$(BUILD_DIR)/test_maelys_datalog_hot_path_alloc $(BUILD_DIR)/test_maelys_datalog_prepared_explanations $(BUILD_DIR)/test_maelys_datalog_session_resources: $(BUILD_DIR)/%: tests/%.c $(ASAN_GUARD_OBJS) $(ASAN_HEADERS) tests/fixtures/allocation_guard.h | $(BUILD_DIR)
 	$(CC) $(ASAN_CFLAGS) -UNDEBUG $(ASAN_GUARD_OBJS) $< -o $@
 	$(if $(filter 1,$(ASAN_RUN_ON_BUILD)),$(ASAN_ENV) ./$@,@:)
 

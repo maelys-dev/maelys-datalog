@@ -7,6 +7,41 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+
+- Fixed session capacities E/D/S/T and a separate backend ABI 6 resource
+  contract. E/D payload reservations are sized; S/T are exact admission limits,
+  but lowering S/T does not yet reduce the profile-sized dictionary reservation.
+  ABI 5 remains available with unchanged default program bounds and identity.
+
+### Changed
+
+- Disposable `solve_once` workspaces use `malloc` plus metadata initialization
+  instead of zeroing the complete reservation with `calloc`. Used facts, proof
+  indices and provenance validity are initialized before reading; unused payload
+  is not exposed. This removes a fixed initialization cost from the allocating
+  microbenchmark, not from an already prepared session. See the scoped local
+  and hosted timing evidence and qualification limits in
+  [session resources validation](docs/validation/session-resources.md).
+
+### Qualification pending
+
+- Signed candidate `f2372725` passes the installed-SDK compatibility matrix
+  and downstream replay, but its [Python lifecycle report](https://github.com/maelys-dev/maelys-datalog/actions/runs/36504178509)
+  requires review: SMALL seven-fact convenience-request medians are
+  58.70–67.48% higher than v0.13.0 across both build modes and comparison rounds,
+  beyond the A/A and matching null controls. The fixed positive control passes
+  throughout. A [bounded allocator-policy control](https://github.com/maelys-dev/maelys-datalog/actions/runs/36535239421)
+  reproduces and removes the seven-integer cost on the original binaries under
+  explicit glibc settings, together with the repeated page faults. This leaves
+  production defaults and original classifications unchanged; it does not
+  qualify every other alert or prove complete-request instruction parity.
+  David accepts this documented tradeoff for merging #142 only, not for
+  release. The 0.14.0 cut waits for a separate, qualified session-storage
+  recycling change and a complete default-glibc Python replay, including
+  93-fact and prepared-session cases. The validation note records both report
+  SHA-256 values and attribution limits.
+
 ## 0.13.0 — 2026-09-27
 
 Transactional window context and explicit expiration. Consumer API 2, program

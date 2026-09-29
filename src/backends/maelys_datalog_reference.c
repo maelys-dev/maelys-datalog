@@ -7,6 +7,7 @@
 #include "src/core/maelys_datalog_explanation_format.h"
 #include "src/public/maelys_datalog_values_internal.h"
 #include "src/runtime/maelys_datalog_result_internal.h"
+#include "maelys/datalog_resources.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -145,5 +146,33 @@ const maelys_datalog_backend_t *maelys_datalog_backend_reference(void) {
                                                      commit,
                                                      destroy_result,
                                                      destroy};
+    return &backend;
+}
+
+static maelys_datalog_status_t storage_requirements_v6(const maelys_datalog_program_t *program,
+    const maelys_datalog_session_resources_t *resources, size_t *bytes, size_t *alignment) {
+    if (!resources || resources->struct_size < sizeof(*resources) ||
+        resources->contract_version != MAELYS_DATALOG_RESOURCE_CONTRACT_VERSION ||
+        resources->memory_mode != MAELYS_DATALOG_MEMORY_FIXED ||
+        (resources->required_features & ~MAELYS_DATALOG_RESOURCE_SUPPORTED_014))
+        return MAELYS_DATALOG_STATUS_UNSUPPORTED;
+    return storage_requirements(program, bytes, alignment);
+}
+static maelys_datalog_status_t prepare_v6(const maelys_datalog_program_t *program,
+    const maelys_datalog_session_resources_t *resources,
+    const maelys_datalog_backend_storage_t *storage, void **out) {
+    size_t bytes, alignment;
+    maelys_datalog_status_t rc = storage_requirements_v6(program, resources, &bytes, &alignment);
+    return rc ? rc : prepare(program, storage, out);
+}
+const maelys_datalog_backend_v6_t *maelys_datalog_backend_reference_v6(void) {
+    static const maelys_datalog_backend_v6_t backend = {
+        MAELYS_DATALOG_BACKEND_V6_ABI_VERSION, sizeof(backend), "reference", "maelys.reference.v1",
+        MAELYS_DATALOG_CAP_LANGUAGE | MAELYS_DATALOG_CAP_AGGREGATES |
+        MAELYS_DATALOG_CAP_MIN | MAELYS_DATALOG_CAP_MAX | MAELYS_DATALOG_CAP_SUM |
+        MAELYS_DATALOG_CAP_EXPLAIN_TRUE | MAELYS_DATALOG_CAP_EXPLAIN_FALSE,
+        MAELYS_DATALOG_RESOURCE_SESSION_CAPACITIES,
+        storage_requirements_v6, prepare_v6, solve, explanation_storage_requirements,
+        explanation_prepare, explanation_write_text, commit, destroy_result, destroy};
     return &backend;
 }

@@ -16,6 +16,8 @@ maelys_result_t maelys_datalog_explain_absent_in_workspace(
 const maelys_datalog_why_false_explanation_t *maelys_datalog_why_false_workspace_view(
     const void *storage);
 
+size_t maelys_datalog_solve_workspace_bytes(size_t derived, int borrows_edb);
+maelys_datalog_internal_solve_result_t *maelys_datalog_solve_workspace_init(void *, size_t, int);
 /* Copying workspace allocated only during initialization. The ordinary
  * result release ends a lease and resets this workspace, without freeing it. */
 maelys_datalog_internal_solve_result_t *maelys_datalog_solve_workspace_create(void);

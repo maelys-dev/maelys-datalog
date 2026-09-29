@@ -104,6 +104,26 @@ static maelys_result_t intern_input_symbols(
         const char *text = session->symbol_inputs[i];
         if (previous && strcmp(previous, text) == 0) continue;
         maelys_datalog_symbol_id_t id = MAELYS_DATALOG_SYMBOL_ID_INVALID;
+        if (session->symbol_capacity != MAELYS_DATALOG_MAX_SYMBOLS ||
+            session->text_capacity != MAELYS_DATALOG_STRING_POOL_BYTES) {
+            int found = 0;
+            maelys_result_t lookup = maelys_datalog_symbol_lookup_readonly(
+                &session->symbols, text, strlen(text), &id, &found);
+            if (lookup) return lookup;
+            if (!found && (session->symbols.count >= session->symbol_capacity ||
+                           strlen(text) + 1u > session->text_capacity - session->symbols.used)) {
+                int symbol_limit = session->symbols.count >= session->symbol_capacity;
+                session->quota_field = symbol_limit ? "symbols" : "text_bytes";
+                session->quota_observed = symbol_limit ? session->symbols.count + 1u
+                    : session->symbols.used + strlen(text) + 1u;
+                session->quota_limit = symbol_limit ? session->symbol_capacity : session->text_capacity;
+                input_message(message, message_capacity,
+                    "Session %s capacity exceeded (symbols=%zu, text_bytes=%zu).",
+                    session->symbols.count >= session->symbol_capacity ? "symbols" : "text_bytes",
+                    session->symbol_capacity, session->text_capacity);
+                return MAELYS_ERR_PAYLOAD_TOO_LARGE;
+            }
+        }
         maelys_result_t rc = maelys_datalog_symbol_intern(
             &session->symbols, text, strlen(text), &id);
         if (rc != MAELYS_OK) {
@@ -175,7 +195,7 @@ static maelys_result_t materialize_input_fact(
         }
     }
     return maelys_datalog_edb_add_fact_indexed(
-        &session->edb, input->predicate, terms, input->arity, &session->fact_index);
+        &session->edb, input->predicate, terms, input->arity, session->fact_index);
 }
 
 static maelys_result_t reset_transaction_state(
@@ -202,7 +222,7 @@ static maelys_result_t reset_transaction_state(
     return maelys_datalog_edb_init(
         &session->edb,
         session->fact_pool,
-        MAELYS_DATALOG_MAX_EDB_FACTS,
+        session->pool_capacity,
         &session->symbols,
         &session->prepared->registry);
 }
@@ -212,52 +232,73 @@ static maelys_result_t reject_transaction(
     maelys_result_t rejection) {
     /* Preserve the canonical rejected state, including partially collected
      * borrowed pointers. Full payload clearing is confined to failure paths. */
-    memset(session->fact_pool, 0, sizeof(session->fact_pool));
-    memset(session->symbol_inputs, 0, sizeof(session->symbol_inputs));
+    memset(session->fact_pool, 0, session->pool_capacity * sizeof(*session->fact_pool));
+    memset(session->symbol_inputs, 0, session->scratch_bytes);
     maelys_result_t reset = reset_transaction_state(session, 1);
     return reset == MAELYS_OK ? rejection : reset;
 }
 
+size_t maelys_datalog_prepared_session_storage_bytes(size_t input, size_t pool) {
+    /* Both arguments have already been checked against the build ceiling. */
+    size_t scratch = input * MAELYS_DATALOG_MAX_TERMS * sizeof(const char *);
+    if (scratch < sizeof(maelys_datalog_edb_insert_index_t))
+        scratch = sizeof(maelys_datalog_edb_insert_index_t);
+    return sizeof(maelys_datalog_internal_prepared_session_t) +
+        pool * sizeof(maelys_datalog_internal_fact_t) + scratch;
+}
+maelys_result_t maelys_datalog_prepared_session_init_sized(
+    void *storage, const maelys_datalog_internal_ruleset_t *ruleset,
+    size_t input, size_t pool, size_t symbols, size_t text,
+    maelys_datalog_internal_solve_result_t *workspace,
+    maelys_datalog_internal_prepared_session_t **out) {
+    maelys_datalog_internal_prepared_session_t *session = storage;
+    memset(session, 0, sizeof(*session));
+    session->prepared = ruleset;
+    session->input_capacity = input;
+    session->pool_capacity = pool;
+    session->symbol_capacity = symbols;
+    session->text_capacity = text;
+    session->fact_pool = (void *)(session + 1);
+    session->symbol_inputs = (void *)(session->fact_pool + pool);
+    session->fact_index = (void *)session->symbol_inputs;
+    session->scratch_bytes = maelys_datalog_prepared_session_storage_bytes(input, pool) -
+        sizeof(*session) - pool * sizeof(*session->fact_pool);
+    session->symbols = ruleset->symbols;
+    session->result_workspace = workspace;
+    maelys_result_t rc = maelys_datalog_edb_init(&session->edb, session->fact_pool,
+        pool, &session->symbols, &ruleset->registry);
+    if (rc) return rc;
+    maelys_datalog_context_retain(ruleset->modules);
+    *out = session;
+    MAELYS_DATALOG_COUNT_PIPELINE(preparations);
+    return MAELYS_OK;
+}
 static maelys_result_t create_session(
     const maelys_datalog_internal_ruleset_t *ruleset,
     maelys_datalog_internal_prepared_session_t **out_session, int borrow) {
     if (out_session) *out_session = NULL;
     if (!ruleset || !out_session) return MAELYS_ERR_INVALID_ARGUMENT;
-    if (!ruleset->loaded || !maelys_sha256_hex_is_lowercase(ruleset->sha256)) {
+    if (!ruleset->loaded || !maelys_sha256_hex_is_lowercase(ruleset->sha256))
         return MAELYS_ERR_INVALID_STATE;
+    size_t state_bytes = maelys_datalog_prepared_session_storage_bytes(
+        MAELYS_DATALOG_MAX_EDB_FACTS, MAELYS_DATALOG_MAX_EDB_FACTS);
+    /* init_sized initializes metadata and the dictionary. Payload slots are
+     * written before use; do not zero the entire allocation a second time. */
+    void *storage = malloc(state_bytes + (borrow ? 0 : sizeof(*ruleset)));
+    if (!storage) return MAELYS_ERR_INTERNAL;
+    maelys_datalog_internal_solve_result_t *workspace =
+        maelys_datalog_solve_workspace_create_borrowing_inputs();
+    if (!workspace) { free(storage); return MAELYS_ERR_INTERNAL; }
+    if (!borrow) {
+        maelys_datalog_internal_ruleset_t *copy = (void *)((unsigned char *)storage + state_bytes);
+        *copy = *ruleset;
+        ruleset = copy;
     }
-    /* A copied snapshot shares the session allocation; borrowing needs only
-     * transaction storage. Both paths reserve the result before publication. */
-    struct owned_session {
-        maelys_datalog_internal_prepared_session_t state;
-        maelys_datalog_internal_ruleset_t snapshot;
-    };
-    maelys_datalog_internal_prepared_session_t *session =
-        calloc(1u, borrow ? sizeof(*session) : sizeof(struct owned_session));
-    if (!session) return MAELYS_ERR_INTERNAL;
-    session->result_workspace = maelys_datalog_solve_workspace_create_borrowing_inputs();
-    if (!session->result_workspace) { free(session); return MAELYS_ERR_INTERNAL; }
-    if (borrow) session->prepared = ruleset;
-    else {
-        struct owned_session *owned = (struct owned_session *)session;
-        owned->snapshot = *ruleset;
-        session->prepared = &owned->snapshot;
-    }
-    session->symbols = ruleset->symbols;
-    maelys_result_t rc = maelys_datalog_edb_init(
-        &session->edb,
-        session->fact_pool,
-        MAELYS_DATALOG_MAX_EDB_FACTS,
-        &session->symbols,
-        &session->prepared->registry);
-    if (rc != MAELYS_OK) {
-        maelys_datalog_solve_workspace_destroy(session->result_workspace);
-        free(session);
-        return rc;
-    }
-    maelys_datalog_context_retain(ruleset->modules);
-    *out_session = session;
-    MAELYS_DATALOG_COUNT_PIPELINE(preparations);
+    maelys_result_t rc = maelys_datalog_prepared_session_init_sized(storage, ruleset,
+        MAELYS_DATALOG_MAX_EDB_FACTS, MAELYS_DATALOG_MAX_EDB_FACTS,
+        MAELYS_DATALOG_MAX_SYMBOLS, MAELYS_DATALOG_STRING_POOL_BYTES, workspace, out_session);
+    if (rc) { maelys_datalog_solve_workspace_destroy(workspace); free(storage); return rc; }
+    (*out_session)->owns_storage = 1;
     return MAELYS_OK;
 }
 
@@ -278,8 +319,10 @@ maelys_result_t maelys_datalog_prepared_session_destroy(
     if (!session) return MAELYS_ERR_INVALID_ARGUMENT;
     if (session->active_result) return MAELYS_ERR_INVALID_STATE;
     maelys_datalog_context_release(session->prepared->modules);
-    maelys_datalog_solve_workspace_destroy(session->result_workspace);
-    free(session);
+    if (session->owns_storage) {
+        maelys_datalog_solve_workspace_destroy(session->result_workspace);
+        free(session);
+    }
     return MAELYS_OK;
 }
 
@@ -351,13 +394,14 @@ maelys_result_t maelys_datalog_prepared_session_materialize_inputs_diagnosed(
         return MAELYS_ERR_INVALID_ARGUMENT;
     }
     if (session->active_result) return MAELYS_ERR_INVALID_STATE;
-    if (fact_count > MAELYS_DATALOG_MAX_EDB_FACTS) {
+    if (fact_count > session->input_capacity) {
         input_message(message, message_capacity,
-                      "Input batch contains %zu facts; EDB fact limit is %u (before deduplication).",
-                      fact_count, MAELYS_DATALOG_MAX_EDB_FACTS);
+                      "Input batch contains %zu facts; session input_facts limit is %zu (before deduplication).",
+                      fact_count, session->input_capacity);
         return MAELYS_ERR_PAYLOAD_TOO_LARGE;
     }
 
+    session->quota_field = NULL;
     MAELYS_DATALOG_COUNT_PIPELINE(materializations);
     /* Reset only mutable transaction state. The parsed rules, registry,
      * strata and prepared identity are reused without another ruleset copy. */
@@ -373,8 +417,8 @@ maelys_result_t maelys_datalog_prepared_session_materialize_inputs_diagnosed(
      * even for integer-only batches following an indexed transaction. The
      * unused pointer tail never needs clearing; neither phase reads it. */
     size_t scratch_bytes = symbol_count * sizeof(session->symbol_inputs[0]);
-    if (scratch_bytes < sizeof(session->fact_index))
-        scratch_bytes = sizeof(session->fact_index);
+    if (scratch_bytes < sizeof(*session->fact_index))
+        scratch_bytes = sizeof(*session->fact_index);
     memset(session->symbol_inputs, 0, scratch_bytes);
     for (size_t i = 0u; i < fact_count; i++) {
         rc = materialize_input_fact(session, &facts[i]);

@@ -28,5 +28,7 @@ size_t maelys_inventory_solver(void) {
         - sizeof(((result_t *)0)->edb_ranges));
     STORAGE_VALUE("reservation.legacy_edb_snapshot_addition",
         MAELYS_DATALOG_MAX_EDB_FACTS * sizeof(maelys_datalog_internal_fact_t));
-    return sizeof(result_t);
+    STORAGE_VALUE("reservation.derived_payload",
+        MAELYS_DATALOG_MAX_IDB_FACTS * (sizeof(maelys_datalog_internal_fact_t) + sizeof(uint16_t)));
+    return maelys_datalog_solve_workspace_bytes(MAELYS_DATALOG_MAX_IDB_FACTS, 1);
 }

@@ -16,6 +16,7 @@ from .engine import (
     Ruleset,
     ResultTerm,
     Session,
+    SessionCapacities,
     SolveResult,
     Status,
 )
@@ -36,6 +37,7 @@ __all__ = [
     "Ruleset",
     "ResultTerm",
     "Session",
+    "SessionCapacities",
     "SolveResult",
     "Status",
 ]

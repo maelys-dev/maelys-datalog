@@ -1,7 +1,8 @@
 # Maelys Datalog Python binding
 
 Backend ABI 5 preparation/acceptance ships in 0.11.0. This binding
-exposes no backend descriptors; its API and implementation are unchanged.
+exposes no backend descriptors. The fixed-capacity API additionally uses the
+installed `<maelys/datalog_resources.h>` contract (0.14.0 development).
 
 `maelys_datalog` is the single Python binding. From the 0.10.0 migration onward,
 it uses the implementation developed as `python-next`, directly through public
@@ -13,6 +14,29 @@ The binding requires consumer API 2. Backend ABI numbers, native structures and
 extension descriptors are not part of its Python interface. The reference
 backend is selected by the native session API. Python/CFFI conversions and
 objects allocate; this is not a zero-malloc Python binding.
+
+## Fixed session capacities
+
+`ruleset.prepare(capacities=SessionCapacities(input_facts=16,
+derived_facts=32, symbols=32, text_bytes=2048))` selects exact native quotas.
+Omitted fields use the loaded profile's default; zero is an exact bound.
+`session.capacities` returns the normalized values. The same option exists on
+the convenience `ruleset.solve` path. Requests above the loaded profile or below
+the program's rooted dictionary are refused; quotas never grow at solve time.
+
+E counts raw dynamic input facts before deduplication, D includes auxiliary IDB
+relations, and S/T include program symbols and their NUL-terminated text.
+Compiled policy facts do not consume E. The input `Edb` builder has its own
+storage capacities, independent of a session's execution quotas. A rejected
+transaction publishes no result and the session is reusable.
+
+The default call without `capacities` preserves its native constructor and
+execution fingerprint. An explicit vector equal to defaults has that same
+fingerprint. Other vectors bind their normalized quotas into a versioned
+fingerprint. Only FIXED is exposed; there is no allocator or elastic mode.
+Python objects, conversions and CFFI still allocate. The actual native storage
+plan includes fixed dictionary/index/provenance reservations as well as sized
+E/D payloads; smaller S/T do not currently shrink those reservations.
 
 ## Build
 

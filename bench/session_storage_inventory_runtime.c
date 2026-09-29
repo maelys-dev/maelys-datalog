@@ -6,10 +6,6 @@
 int main(void) {
     typedef maelys_datalog_internal_prepared_session_t inputs_t;
     typedef maelys_datalog_symbol_table_t symbols_t;
-    struct owned_inputs {
-        inputs_t state;
-        maelys_datalog_internal_ruleset_t snapshot;
-    };
     printf("key,value\nprofile,%s\n", MAELYS_DATALOG_SIZE_PROFILE_NAME);
     STORAGE_VALUE("pointer_bytes", sizeof(void *));
     STORAGE_VALUE("capacity.input_facts", MAELYS_DATALOG_MAX_EDB_FACTS);
@@ -47,8 +43,12 @@ int main(void) {
     STORAGE_FIELD("backend_payload", struct backend_payload, canonical);
     STORAGE_FIELD("backend_payload", struct backend_payload, derived);
     const size_t result = maelys_inventory_solver();
-    const size_t reference = sizeof(maelys_datalog_session_t) + sizeof(inputs_t) + result;
-    const size_t snapshot = sizeof(struct owned_inputs) - sizeof(inputs_t);
+    const size_t input_bytes = maelys_datalog_prepared_session_storage_bytes(
+        MAELYS_DATALOG_MAX_EDB_FACTS, MAELYS_DATALOG_MAX_EDB_FACTS);
+    STORAGE_VALUE("reservation.inputs", input_bytes);
+    STORAGE_VALUE("reservation.input_payload", input_bytes - sizeof(inputs_t));
+    const size_t reference = sizeof(maelys_datalog_session_t) + input_bytes + result;
+    const size_t snapshot = sizeof(maelys_datalog_internal_ruleset_t);
     STORAGE_VALUE("reservation.reference_shared_policy", reference);
     STORAGE_VALUE("reservation.exporting_shared_policy", reference + sizeof(struct backend_payload));
     STORAGE_VALUE("reservation.caller_policy_snapshot_addition", snapshot);

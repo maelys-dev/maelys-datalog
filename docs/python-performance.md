@@ -523,3 +523,41 @@ or authorize a timing-only engine fix. Future attribution at this scale should
 include an independently measured identical-binary control and multiple
 counterbalanced processes, alongside instruction evidence. Neither the control
 nor a quiet later pass may erase a historical signal or widen its A/A floor.
+
+## #142 allocator-policy control
+
+The optional `allocator_diagnostic` dispatch uses the original installed
+binaries from run `36504178509`, whose report SHA-256 is
+`1fa3e1ceae271b226cb695d5bb1421688ff3d552dce6df69340714ea2480d20b`.
+`bench/python_allocator_control.py` verifies that report, all selected binary,
+header and binding hashes, the unchanged workload, and Python/dependency
+versions before execution. It compares v0.13.0 (`43bbde6`) with the measured
+candidate (`f2372725`); runtime/binding sources on pre-PR main `9338993` are
+identical to that published reference. No original binary is rebuilt.
+
+The declared case is `7-integer-solve`, SMALL default and Release. Each has
+four conditions: base/head with default glibc, and base/head with exactly
+`MALLOC_TRIM_THRESHOLD_=268435456 MALLOC_TOP_PAD_=67108864`. Two A/A pairs per
+condition precede four counterbalanced comparison rounds; each condition
+occupies each round position once. Every process keeps one cold request, 50
+warmups, 501 complete-request samples and 501 separately measured phase
+samples with contemporaneous telemetry. All 64 process outputs, medians,
+p95s, page-fault distributions and CPU/resource observations are retained.
+Inherited allocator tuning is rejected, not silently included in the default.
+
+Only after all timing ends, eight separate `strace` processes preserve scoped
+`brk`, `mmap`, `munmap` and `madvise` activity for the 501 warm complete requests
+of each condition/configuration. Their timings are unused. Marker and tracing
+overheads can change the allocator regime; they are not paired retrospectively
+with the untraced processes. A/A classifications are descriptive diagnostics,
+not amendments to the original schema-4 decisions or new release tolerances.
+
+The [glibc allocator contract](https://sourceware.org/glibc/manual/latest/html_node/Malloc-Tunable-Parameters.html)
+describes both arena retention and dynamic threshold behavior. This joint
+intervention is therefore not a trim-only isolation experiment: convergence
+would support allocator-policy sensitivity, not identical engine work on every
+path or an exact retrospective syscall attribution. The original native counts
+exclude creation/release and cannot establish whole-request instruction parity.
+The report is explicitly ineligible for release approval; the maintainer still
+decides the named original report. Session reuse in the Python convenience
+binding, if pursued, is a separate change outside the 0.14.0 implementation.
