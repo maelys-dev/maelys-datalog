@@ -36,8 +36,11 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
   explicit glibc settings, together with the repeated page faults. This leaves
   production defaults and original classifications unchanged; it does not
   qualify every other alert or prove complete-request instruction parity.
-  The maintainer decision on the named original report is pending. The
-  validation note records both report SHA-256 values and attribution limits.
+  David accepts this documented tradeoff for merging #142 only, not for
+  release. The 0.14.0 cut waits for a separate, qualified session-storage
+  recycling change and a complete default-glibc Python replay, including
+  93-fact and prepared-session cases. The validation note records both report
+  SHA-256 values and attribution limits.
 
 ## 0.13.0 — 2026-09-27
 

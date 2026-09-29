@@ -417,17 +417,21 @@ has changed. A mitigation through reuse of a prepared Python session belongs
 in a separate binding PR outside 0.14.0, with its own lifecycle/lease and
 performance qualification; it is not implemented here.
 
-## Release decision remains open
+## Maintainer decision: merge only, release remains blocked
 
 Step 3 now supplies the installed matrix, downstream replay, reservation
 inventory and complete native/Python measurements. Functional qualification
 passes. The allocator intervention now removes the dominant seven-integer
 convenience cost on the hosted runner, with the attribution limits above; it
 does not investigate every other original phase, prepared-session or tail
-alert. The original schema-4 report remains `review_required` and no performance
-exception has yet been accepted by the maintainer. PR #142 stays in draft
-pending that explicit decision on report `1fa3e1ce…`, informed by diagnostic
-`1a91654b…`; workflow success is not approval. Any runtime, binding, build or
-ordinary benchmark correction requires new measurements; a later quiet run
-cannot erase the original. No allocator service, delta API, private-provider
-claim, merge or release is introduced here.
+alert. The original schema-4 report remains `review_required`. On 2026-09-29,
+David accepted the documented tradeoff on report `1fa3e1ce…`, informed by
+diagnostic `1a91654b…`, for merging #142 only. This is not release approval.
+The 0.14.0 cut waits for a separate session-storage recycling PR, its functional
+and allocation qualification, and a complete default-glibc Python replay on
+the baseline and candidate, including 93-fact and prepared-session cases. The
+bounded seven-integer control does not replace that replay. Its concrete report
+still needs a maintainer release decision; workflow success is not approval.
+Any runtime, binding, build or ordinary benchmark correction requires new
+measurements; a later quiet run cannot erase the original. No allocator
+service, delta API or private-provider support claim is introduced here.
