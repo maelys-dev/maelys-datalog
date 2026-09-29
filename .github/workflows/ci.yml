@@ -86,6 +86,8 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Verify CMake build
         run: |
@@ -120,6 +122,24 @@ jobs:
           bash tools/check_sdk_archive.sh "$PWD/build/cmake-large"
           python3 tools/check_native_reproducibility.py LARGE
           bash tools/check_python_binding.sh "$PWD/build/cmake-large" python large
+
+      - name: Compile old and new resource callers and providers independently
+        run: |
+          bash tools/check_session_resource_history.sh "$PWD/build/cmake" SMALL "$RUNNER_TEMP/resource-matrix-SMALL"
+          bash tools/check_session_resource_history.sh "$PWD/build/cmake-large" LARGE "$RUNNER_TEMP/resource-matrix-LARGE"
+
+      - name: Preserve public resource compatibility evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: session-resource-matrix-${{ matrix.os }}
+          path: |
+            ${{ runner.temp }}/resource-matrix-*/revisions.txt
+            ${{ runner.temp }}/resource-matrix-*/*.log
+            ${{ runner.temp }}/resource-matrix-*/matrix/commands.json
+            ${{ runner.temp }}/resource-matrix-*/matrix/report.json
+            ${{ runner.temp }}/resource-matrix-*/matrix/*.log
+          retention-days: 30
 
   # The socle's sanitizers job covers SMALL on Linux; the three other cells
   # (LARGE on Linux, both profiles on macOS) keep the coverage of the

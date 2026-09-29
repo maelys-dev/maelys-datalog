@@ -7,6 +7,23 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+
+- Fixed session capacities E/D/S/T and a separate backend ABI 6 resource
+  contract. E/D payload reservations are sized; S/T are exact admission limits,
+  but lowering S/T does not yet reduce the profile-sized dictionary reservation.
+  ABI 5 remains available with unchanged default program bounds and identity.
+
+### Changed
+
+- Disposable `solve_once` workspaces use `malloc` plus metadata initialization
+  instead of zeroing the complete reservation with `calloc`. Used facts, proof
+  indices and provenance validity are initialized before reading; unused payload
+  is not exposed. This removes a fixed initialization cost from the allocating
+  microbenchmark, not from an already prepared session. See the scoped local
+  timing evidence and qualification limits in
+  [session resources validation](docs/validation/session-resources.md).
+
 ## 0.13.0 — 2026-09-27
 
 Transactional window context and explicit expiration. Consumer API 2, program
