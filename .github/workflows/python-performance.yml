@@ -7,6 +7,10 @@ on:
     branches: [main]
   workflow_dispatch:
     inputs:
+      comparison_base:
+        description: 'Optional full SHA for an additional complete comparison (not release evidence)'
+        type: string
+        default: ''
       tail_diagnostic:
         description: 'Run the fixed SMALL-Release tail investigation (not release evidence)'
         type: boolean
@@ -61,12 +65,21 @@ jobs:
         if: inputs.allocator_diagnostic != true && inputs.tail_diagnostic != true && inputs.instruction_diagnostic != true && inputs.release_diagnostic != true && inputs.release_process_control != true
         env:
           GH_TOKEN: ${{ github.token }}
+          COMPARISON_BASE: ${{ inputs.comparison_base }}
         run: |
           # Schema 4 includes independent same-binary null controls for both
           # references, plus the fixed three-request positive control.
           base="$(python tools/check_python_performance.py previous-release)"
+          extra=()
+          if test -n "$COMPARISON_BASE"; then
+            [[ "$COMPARISON_BASE" =~ ^[0-9a-f]{40}$ ]] || exit 1
+            test "$(git rev-parse "$COMPARISON_BASE^{commit}")" = "$COMPARISON_BASE"
+            base="$COMPARISON_BASE"
+            extra=(--comparison-only)
+          fi
+          test -z "${MALLOC_TRIM_THRESHOLD_:-}${MALLOC_TOP_PAD_:-}${GLIBC_TUNABLES:-}${LD_PRELOAD:-}"
           set +e
-          python bench/python_perf.py --base "$base" --compiler clang-18 --output evidence
+          python bench/python_perf.py --base "$base" --compiler clang-18 --output evidence "${extra[@]}"
           status=$?
           set -e
           case "$status" in
@@ -116,6 +129,9 @@ jobs:
           python bench/python_allocator_control.py --evidence original-evidence --output evidence
       - name: Reject ambiguous allocator diagnostic selection
         if: inputs.allocator_diagnostic == true && (inputs.tail_diagnostic == true || inputs.instruction_diagnostic == true || inputs.release_diagnostic == true || inputs.release_process_control == true)
+        run: exit 1
+      - name: Reject an extra baseline with a scoped diagnostic
+        if: inputs.comparison_base != '' && (inputs.allocator_diagnostic == true || inputs.tail_diagnostic == true || inputs.instruction_diagnostic == true || inputs.release_diagnostic == true || inputs.release_process_control == true)
         run: exit 1
       - name: Reject ambiguous diagnostic selection
         if: (inputs.instruction_diagnostic == true && inputs.tail_diagnostic == true) || (inputs.release_diagnostic == true && (inputs.instruction_diagnostic == true || inputs.tail_diagnostic == true)) || (inputs.release_process_control == true && (inputs.release_diagnostic == true || inputs.instruction_diagnostic == true || inputs.tail_diagnostic == true))

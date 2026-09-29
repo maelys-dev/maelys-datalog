@@ -448,7 +448,8 @@ def run(args):
     print('measure separate observer/storage controls', flush=True)
     observation_controls = telemetry_controls(out, builds, commits, warm_samples)
     report = dict(schema=SCHEMA, status=status,
-                  release_eligible=bool(not args.smoke and os.environ.get("GITHUB_ACTIONS") == "true"
+                  comparison_only=getattr(args, 'comparison_only', False),
+                  release_eligible=bool(not args.smoke and not getattr(args, 'comparison_only', False) and os.environ.get("GITHUB_ACTIONS") == "true"
                                         and os.environ.get("GITHUB_SHA") == commits["head"]),
                   commits=commits, configs=configs, telemetry_controls=observation_controls,
                   telemetry=dict(version=TELEMETRY_VERSION, sample_storage='fixed', contemporaneous=True,
@@ -490,7 +491,8 @@ def run(args):
                 for case, values in cases.items():
                     writer.writerows((role, name, case, i, value) for i, value in enumerate(values))
     summary = ["# Python performance evidence", "", f"Status: **{report['status']}**.",
-               f"Candidate: `{commits['head']}`; previous: `{commits['base']}`; anchor: `{ANCHOR}`.",
+               f"Additional comparison only: **{report['comparison_only']}**; release eligible: **{report['release_eligible']}**.",
+               f"Candidate: `{commits['head']}`; base: `{commits['base']}`; anchor: `{ANCHOR}`.",
                f"Report SHA-256: `{sha256(report_path)}`.", "",
                f"Injected {POSITIVE_CONTROL_REQUESTS}-request control detected in every case/configuration: **{control_ok}**.",
                "This coarse control does not certify sensitivity to smaller regressions.",
@@ -544,4 +546,6 @@ if __name__ == "__main__":
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--compiler", default="clang")
     parser.add_argument("--smoke", action="store_true", help="short tooling test, never release evidence")
+    parser.add_argument("--comparison-only", action="store_true",
+                        help="complete extra comparison against a non-release base; not release evidence")
     sys.exit(run(parser.parse_args()))

@@ -3,6 +3,7 @@
 #include "src/public/maelys_datalog_values_internal.h"
 #include "src/runtime/maelys_datalog_transaction_internal.h"
 #include "src/runtime/maelys_datalog_result_internal.h"
+#include "src/runtime/maelys_datalog_recycle_internal.h"
 #include "src/compiler/maelys_datalog_program_internal.h"
 #include "src/core/maelys_datalog_prepared_session_internal.h"
 #include "src/core/maelys_datalog_solver_internal.h"
@@ -189,6 +190,7 @@ struct maelys_datalog_session {
      * Every live entry is initialized before an external solve callback. */
     struct backend_payload solve_scratch[];
 };
+#include "src/runtime/maelys_datalog_recycle.inc"
 struct maelys_datalog_backend_output {
     maelys_datalog_result_t *result;
     maelys_datalog_status_t error;
@@ -409,16 +411,27 @@ static maelys_datalog_status_t session_create_with_storage(
         (bytes && !storage->bytes) || (storage->bytes && storage->alignment < alignment))
         return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
     const int borrows_inputs = b->solve == maelys_datalog_backend_reference()->solve;
-    const size_t export_bytes = borrows_inputs ? 0 : sizeof(struct backend_payload);
-    maelys_datalog_session_t *s = malloc(sizeof(*s) + export_bytes);
+    if (!view.ruleset->loaded || !maelys_sha256_hex_is_lowercase(view.ruleset->sha256))
+        return MAELYS_DATALOG_STATUS_INVALID_STATE;
+    const session_layout_t layout = session_layout(!borrows_inputs, !policy->owns_storage);
+    maelys_datalog_session_t *s = session_storage_acquire(layout.bytes);
     if (!s)
         return MAELYS_DATALOG_STATUS_INTERNAL;
     /* External payload entries are written before use; only metadata lives in
      * the fixed session prefix. Reference facts belong to the native result. */
     memset(s, 0, sizeof(*s));
-    maelys_result_t rc = policy->owns_storage
-        ? maelys_datalog_prepared_session_borrow(view.ruleset, &s->inputs)
-        : maelys_datalog_prepared_session_create(view.ruleset, &s->inputs);
+    unsigned char *arena = (void *)s;
+    const maelys_datalog_internal_ruleset_t *rules = view.ruleset;
+    if (!policy->owns_storage) {
+        maelys_datalog_internal_ruleset_t *copy = (void *)(arena + layout.snapshot);
+        *copy = *rules; rules = copy;
+    }
+    maelys_datalog_internal_solve_result_t *workspace = maelys_datalog_solve_workspace_init(
+        arena + layout.workspace, MAELYS_DATALOG_MAX_IDB_FACTS, 1);
+    maelys_result_t rc = maelys_datalog_prepared_session_init_sized(
+        arena + layout.prepared, rules, MAELYS_DATALOG_MAX_EDB_FACTS,
+        MAELYS_DATALOG_MAX_EDB_FACTS, MAELYS_DATALOG_MAX_SYMBOLS,
+        MAELYS_DATALOG_STRING_POOL_BYTES, workspace, &s->inputs);
     if (rc != MAELYS_OK) {
         free(s);
         return (maelys_datalog_status_t)rc;
@@ -472,7 +485,7 @@ static maelys_datalog_status_t session_create_with_storage(
         maelys_datalog_policy_retain_storage(policy);
         s->policy_owner = policy;
     }
-    resource_session_track_legacy(s, sizeof(*s) + export_bytes, storage);
+    resource_session_track_legacy(s, layout.bytes, storage);
     *out = s;
     return MAELYS_DATALOG_STATUS_OK;
 }
@@ -518,7 +531,7 @@ maelys_datalog_status_t maelys_datalog_session_free(maelys_datalog_session_t *s)
     maelys_datalog_prepared_session_destroy(s->inputs);
     destroy_explanation_workspace(s);
     if (s->policy_owner) maelys_datalog_policy_release_storage(s->policy_owner);
-    if (!s->planned || s->owns_arena) free(s);
+    if (!s->planned || s->owns_arena) session_storage_release(s, s->arena_bytes);
     return MAELYS_DATALOG_STATUS_OK;
 }
 static maelys_datalog_status_t solve_input_error(

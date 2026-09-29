@@ -13,6 +13,7 @@
 #endif
 
 #ifdef MAELYS_WASM_ALLOCATION_TEST
+#include "src/runtime/maelys_datalog_recycle_internal.h"
 #undef malloc
 #undef calloc
 #undef realloc
@@ -172,6 +173,12 @@ int main(void) {
     assert(query(text,4,&out)==MAELYS_DATALOG_STATUS_INVALID_STATE);
     assert(maelys_datalog_wasm_open()==MAELYS_DATALOG_STATUS_INVALID_STATE);
 #ifdef MAELYS_WASM_ALLOCATION_TEST
+    /* This transport probe is compiled natively: its one idle raw session
+     * arena is distinct from live handles. Real Emscripten builds do not cache. */
+#if (defined(__GNUC__) || defined(__clang__)) && !defined(__EMSCRIPTEN__)
+    assert(live_allocations==1);
+#endif
+    maelys_datalog_session_recycle_purge();
     /* The domain registry is process-lifetime bounded state; no owned handles remain. */
     assert(live_allocations==0);
 #endif

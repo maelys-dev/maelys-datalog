@@ -21,7 +21,8 @@ Reservations are recorded before provider preparation, so reentrant creation
 cannot reuse an arena still being initialized. The registry reads immutable
 planned ranges, without following concurrently initialized input pointers.
 It allocates and frees no engine storage. The convenience resource constructor
-uses exactly one arena allocation. Program storage loaded in a caller buffer
+uses one arena allocation on a miss (or reuses the bounded idle allocation
+described by the [subsequent recycling change](session-recycling.md)). Program storage loaded in a caller buffer
 is copied into that arena; an owned policy is retained instead. External
 provider and explanation storage count once, by required slice length.
 
@@ -98,7 +99,8 @@ on a late explanation-lease rejection with equal quotas.
 
 The allocation-guard build disables engine allocation throughout caller arena
 initialization, solve, query, explanation preparation/release and caller close.
-It separately checks the allocating constructor's one allocation/one free.
+It separately checks the cold constructor's one allocation and eventual free
+after draining the idle-storage slot introduced after #142.
 Existing dictionary rollback, collision, canonical-ID, result-reset and window
 tests remain in the native and sanitizer inventories; their budgets are not
 relaxed. Python fixed-capacity tests run against installed SDKs, with default
