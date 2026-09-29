@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: MPL-2.0 */
 #include "bindings/javascript/native/transport.h"
+#include "src/runtime/maelys_datalog_recycle_internal.h"
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -57,6 +58,11 @@ int main(void) {
     assert(maelys_js_call(c,12,reset,2,NULL,0)==0);
     assert(maelys_js_call(c,14,&edb,1,NULL,0)==0 && maelys_js_words(c)[0]==0);
     assert(calls==0); forbidden=0;
-    maelys_js_destroy(c); assert(live==0);
+    maelys_js_destroy(c);
+#if (defined(__GNUC__) || defined(__clang__)) && !defined(__EMSCRIPTEN__)
+    /* Native execution retains one idle arena; WASM deliberately does not. */
+    assert(live==1);
+#endif
+    maelys_datalog_session_recycle_purge(); assert(live==0);
     puts("PASS: shared JS transport partial initialization, atomic rollback, prepared allocation contract and leases");
 }

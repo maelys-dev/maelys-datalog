@@ -561,3 +561,116 @@ exclude creation/release and cannot establish whole-request instruction parity.
 The report is explicitly ineligible for release approval; the maintainer still
 decides the named original report. Session reuse in the Python convenience
 binding, if pursued, is a separate change outside the 0.14.0 implementation.
+
+## #143 prepared-request investigation
+
+The optional `prepared_diagnostic` dispatch preserves the complete reports from
+runs `36545968747` (v0.13.0 comparison) and `36545921158` (post-#142 comparison).
+`bench/python_prepared_diagnostic.py` checks their fixed SHA-256 digests, selected
+installed SDK/binding/header hashes, unchanged request harness, interpreter and
+dependency versions. It reuses those binaries: base `43bbde6`, parent `41c8857`
+and candidate `646ac3d`. An independent `head_copy` label consumes the identical
+candidate path and bytes. No production source or allocator policy is changed.
+
+Five fixtures are declared before measurement: SMALL default and Release
+`93-integer-prepared`, SMALL default and LARGE Release `7-symbol-prepared`, and
+SMALL Release `93-symbol-prepared`. Each label has two A/A pairs, followed by
+eight interleaved rounds that place each label in each position twice. All
+501 complete requests, 501 separate phase requests, one cold request, 50 warmups,
+CPU/resource/GC observations and adjacent calibration samples remain in the
+artifact. This scoped investigation does not replace the complete release
+matrix, its positive controls, its null screening or any historical alert.
+
+After all timings, separate Callgrind processes count complete requests at
+indices 0, 100, 192, 320 and 500, with two reversed-order repetitions for every
+fixture and revision. Preparation, clocks and checks are outside each scope;
+the ctypes/client-request boundary remains an explicit instrumentation cost.
+The instrument retains exclusive per-function Ir/Dr/Dw and unassigned summary
+residuals, including CPython, CFFI, native library and libc work. Names unresolved
+by Callgrind remain unresolved; equal names in multiple objects are aggregated.
+Valgrind timings are never used. Counts from earlier native-only `solve_edb`
+probes cannot establish parity for these complete Python transactions.
+
+All builds (only the counter helper) and layout exports finish before timing.
+Independent process controls inform attribution without erasing an original
+event, changing a floor, normalizing a latency or establishing a hardware cause.
+This diagnostic is explicitly ineligible for release approval.
+
+
+The completed [original-binary investigation](https://github.com/maelys-dev/maelys-datalog/actions/runs/36563840404)
+measured `c1a7dcd7114c53289db2866a0b1d6a98022dbcf4` tooling on an AMD EPYC
+9V45 with Python 3.12.12, glibc 2.39 and Valgrind 3.22.0. Its report SHA-256 is
+`8612aec4c6cff24510868d4313438dae77124044ad05c16122ae7f238406c834`.
+Independent reconstruction verified all 240 process files, 252,720 telemetry
+records, 129 comparison rows and 150 raw client-request count regions from 30
+processes. Every scope retains the 15 Ir / 1 Dr / 7 Dw boundary residual.
+Original report digests, harness/helper hashes and checked answers agree.
+
+Across five fixtures, complete-request median/p95 classifications over eight
+rounds include 6 slower / 5 faster / 69 indeterminate head/base observations;
+the independently sampled identical-head comparison has 11 slower / 13 faster /
+56 indeterminate. These are raw A/A classifications, not a replacement null
+screening rule. The same-binary observations demonstrate process variability
+in this run; they do not retrospectively assign the original timing alerts or
+prove that a candidate effect is absent.
+
+Named engine functions selected by `solve_`, `maelys_datalog_`, `materialize_`,
+`reset_transaction`, `intern_input` and `collect_input` prefixes repeat their
+exclusive Ir/Dr/Dw vectors in all ten scopes per fixture and revision. Their
+post-#142/#143 vectors are equal. This stated subset is not the entire engine;
+raw unselected functions, unresolved symbols and libc/CPython variation remain
+in the artifact. Callgrind recursion suffixes are combined only in this analysis,
+not removed from the raw records.
+
+For SMALL Release / 93 integers on x86, `solve_once_freeze_active_stratum`
+is 40,386 Ir / 13,086 Dr / 12,829 Dw at v0.13.0 versus 38,434 / 15,492 / 12,275
+after #142 and #143. Local ARM64 showed extra instructions as well as reads in
+this function. Instruction effects are architecture/compiler dependent; neither
+vector establishes a latency cause. The separate IDB-array-span change must
+therefore be measured against #143 on both targets before a broader claim.
+
+The optional `prepared_span_counts` dispatch consumes only the installed SDKs
+of the fixed full-Python comparison run `36566987207` (base `1d6ca95`, candidate
+`adf2cf3`), with its independently verified report digest supplied explicitly.
+It checks revision, protocol, harness, interpreter/dependency and binary hashes,
+then counts the same five complete requests in two reversed-order repetitions.
+The six fixtures are the original five plus LARGE default / 7-integer-prepared,
+declared before the count run because the independently verified release report
+36566938072 retains +6.34/+5.30% median alerts in both rounds (4.35% floor/envelope).
+This gives 24 processes and 120 regions. Only the counter helper
+is built before measurement. It retains both linked layouts, full function
+counts, unresolved names and boundary residuals. There are no timing results
+from this instrument; the complete original Python report remains authoritative
+for its timing observations and release review.
+
+
+A further offline traversal of raw Callgrind `ob=` identities separates the
+native shared object from its libc/Python callees. Every native function vector
+repeats exactly across ten scopes per fixture/revision, and the entire native
+object matches between post-#142 and #143. Versus v0.13.0, native Ir changes are
++0.2601% (SMALL default / 93 integers), +0.2379% (SMALL Release / 93 integers),
++3.9627% (SMALL default / 7 symbols), +0.3740% (LARGE Release / 7 symbols) and
++0.2740% (SMALL Release / 93 symbols). Raw complete-request counts retain the
+separate libc/CPython variation and boundary residuals. This attribution does
+not turn instruction differences into a cycle or latency explanation.
+
+The fixed [span count follow-up](https://github.com/maelys-dev/maelys-datalog/actions/runs/36574841013)
+completed with tooling `ad8d10b8156d69f0bdc062ea1107e5aa66bb0d11`. Its report
+SHA-256 is `5a676466517d44d004a7bb78fc2c21eec8fac135f4e9467b6b97f4bff3e4891a`;
+the source comparison report digest is
+`7f607e60fa7eaaf3d1055f75ef265c83f299e5ef0e4ef6da1cbbb646aa4bbc54`.
+Independent reconstruction verifies 120 selected installed-file hashes, all
+24 consumers, all 120 regions and every exclusive function vector. Native
+shared-object vectors repeat exactly in all ten scopes per fixture/revision;
+each region retains 15 Ir/1 Dr/7 Dw of boundary residual. libc/Python variability
+and every raw count remain visible.
+
+This x86 follow-up does not generalize the ARM instruction gain. Relative to
+#143, exclusive native differences (Ir/Dr/Dw) are -4,744/-6,160/+708 for SMALL
+default / 93 integers; +150/-2,804/+142 for SMALL Release / 93 integers;
++8/0/+4 for SMALL default / 7 symbols; +62/+12/+10 for LARGE Release / 7 symbols;
++148/-2,812/+142 for SMALL Release / 93 symbols; and +8/0/+4 for LARGE default /
+7 integers. Reduced pointer reloads coexist with changed register/spill/check
+work. These mixed software counts neither explain nor erase the complete
+Python timing alerts. The runtime proposal retains that tradeoff for review;
+no general speedup, timing exception or release approval follows.

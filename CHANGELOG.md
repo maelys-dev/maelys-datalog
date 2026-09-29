@@ -29,6 +29,14 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ### Changed
 
+- Native session constructors consolidate their host regions into one aligned
+  allocation and can reuse one bounded equal-sized idle block after close.
+  Caller-owned storage and active result leases are excluded. Retained memory
+  is additional to live-session reservations and is released at native library
+  teardown; no malloc tuning or public API is added. See the
+  [ownership and qualification limits](docs/validation/session-recycling.md).
+  Complete Python performance review remains required before 0.14.0.
+
 - Disposable `solve_once` workspaces use `malloc` plus metadata initialization
   instead of zeroing the complete reservation with `calloc`. Used facts, proof
   indices and provenance validity are initialized before reading; unused payload
@@ -38,6 +46,19 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
   [session resources validation](docs/validation/session-resources.md).
 
 ### Qualification pending
+
+- Recycling candidate `646ac3d` passes 17 CI checks, allocator/sanitizer and
+  installed-consumer qualification. Its two complete default-glibc Python
+  reports cover 7/93 facts and prepared sessions with valid positive controls.
+  Against merged #142, convenience medians improve by 5.93–56.20% across the
+  measured cases. The ordinary v0.13.0 comparison still requires review:
+  SMALL/93 integer prepared medians are 1.84–4.29% higher in both rounds,
+  and one SMALL/7 symbol prepared round is 21.75% higher. All remaining phase
+  and tail alerts, report links, measured revisions and SHA-256 values are
+  retained in [session recycling validation](docs/validation/session-recycling.md).
+  These observations are not attributed to a mechanism. Recycling merge and
+  David's decision on the concrete reports remain prerequisites for 0.14.0;
+  no release acceptance follows from workflow success.
 
 - Signed candidate `f2372725` passes the installed-SDK compatibility matrix
   and downstream replay, but its [Python lifecycle report](https://github.com/maelys-dev/maelys-datalog/actions/runs/36504178509)

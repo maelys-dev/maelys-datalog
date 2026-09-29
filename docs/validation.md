@@ -246,8 +246,8 @@ policies in the same bundle) remains until the last session releases it. A polic
 in caller-owned storage is copied into the session allocation instead, so the
 caller may overwrite that storage immediately after policy release.
 
-The allocator guard checks three constructor allocations on both paths and caps
-their requested bytes at 305,000/495,000 (shared SMALL/LARGE) and
+The allocator guard checks one cold constructor allocation on both paths and caps
+its requested bytes at 305,000/495,000 (shared SMALL/LARGE) and
 660,000/845,000 (copied SMALL/LARGE). These exclude the separately owned policy
 allocation and optional explanation/backend storage. The guard also checks
 allocation-failure cleanup, shared-policy lifetime, caller-storage reuse, zero
@@ -261,7 +261,10 @@ Canonical public input export storage is a creation-time tail in the session
 allocation, reserved only when the selected solve callback does not borrow the
 materialized inputs. The reference and copied/renamed reference descriptors
 reserve none; an external wrapper reserves the canonical input array and
-runtime-owned derived array, still in three engine allocations. The allocation
+runtime-owned derived array, in the same single host arena. Native constructors
+can reuse one bounded, equal-sized idle host allocation; caller-owned arenas
+never enter that cache. See [session recycling](validation/session-recycling.md)
+for its process-wide retention and lifecycle limits. The allocation
 guard checks the exact additional bytes for both arrays, both selections, every
 constructor failure point, and repeated solve/query/release with allocation
 disabled. The backend transaction oracle checks canonical order, integer

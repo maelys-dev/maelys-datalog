@@ -55,6 +55,7 @@ $(BUILD_DIR)/test_maelys_datalog_compiler: ASAN_EXTRA_SRCS = sdk/examples/fronte
 $(BUILD_DIR)/test_maelys_datalog_compiler: sdk/examples/frontend/src/extension.c sdk/examples/backend/src/extension.c
 $(BUILD_DIR)/test_maelys_datalog_context: ASAN_EXTRA_SRCS = sdk/examples/frontend/src/extension.c sdk/examples/backend/src/extension.c
 $(BUILD_DIR)/test_maelys_datalog_context: ASAN_CFLAGS += -pthread
+$(BUILD_DIR)/test_maelys_datalog_session_recycle: ASAN_CFLAGS += -pthread
 $(BUILD_DIR)/test_maelys_datalog_context: sdk/examples/frontend/src/extension.c sdk/examples/backend/src/extension.c
 $(BUILD_DIR)/test_maelys_datalog_pipeline: ASAN_EXTRA_SRCS = sdk/examples/frontend/src/extension.c
 $(BUILD_DIR)/test_maelys_datalog_pipeline: sdk/examples/frontend/src/extension.c
@@ -94,7 +95,7 @@ $(BUILD_DIR)/test_maelys_datalog_javascript_transport: tests/test_maelys_datalog
 	$(if $(filter 1,$(ASAN_RUN_ON_BUILD)),$(ASAN_ENV) ./$@,@:)
 
 $(BUILD_DIR)/test_maelys_datalog_session_resources: ASAN_CFLAGS += -DRESOURCE_ALLOCATION_TEST
-$(BUILD_DIR)/test_maelys_datalog_hot_path_alloc $(BUILD_DIR)/test_maelys_datalog_prepared_explanations $(BUILD_DIR)/test_maelys_datalog_session_resources: $(BUILD_DIR)/%: tests/%.c $(ASAN_GUARD_OBJS) $(ASAN_HEADERS) tests/fixtures/allocation_guard.h | $(BUILD_DIR)
+$(BUILD_DIR)/test_maelys_datalog_hot_path_alloc $(BUILD_DIR)/test_maelys_datalog_prepared_explanations $(BUILD_DIR)/test_maelys_datalog_session_resources $(BUILD_DIR)/test_maelys_datalog_session_recycle: $(BUILD_DIR)/%: tests/%.c $(ASAN_GUARD_OBJS) $(ASAN_HEADERS) tests/fixtures/allocation_guard.h | $(BUILD_DIR)
 	$(CC) $(ASAN_CFLAGS) -UNDEBUG $(ASAN_GUARD_OBJS) $< -o $@
 	$(if $(filter 1,$(ASAN_RUN_ON_BUILD)),$(ASAN_ENV) ./$@,@:)
 

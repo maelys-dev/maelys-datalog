@@ -359,8 +359,13 @@ MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_policy_fingerprint(
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_policy_free(
     maelys_datalog_policy_t *policy);
 
-/* Allocating reference constructor: three engine allocations reserve fixed
- * size-profile transaction/result/provenance storage. The compiled policy and
+/* Allocating reference constructor: one engine allocation on an idle-cache miss
+ * reserves fixed size-profile transaction/result/provenance storage. Native
+ * builds may reuse one equal-sized idle allocation from a previously closed
+ * session, with no allocator call on that hit. Closing can retain this raw
+ * block until replacement or library/process teardown (bounded by the profile's
+ * maximum legacy host arena; see docs/validation/session-recycling.md).
+ * Caller-owned storage never enters this cache. The compiled policy and
  * opt-in explanation storage are accounted separately. No canonical public
  * input export buffer is reserved for the reference backend. */
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_session_create(

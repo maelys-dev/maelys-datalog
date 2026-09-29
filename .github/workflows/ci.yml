@@ -64,6 +64,18 @@ jobs:
           python3 tools/check_session_resource_mutations.py --profile SMALL --output "$RUNNER_TEMP/session-resources-small"
           python3 tools/check_session_resource_mutations.py --profile LARGE --output "$RUNNER_TEMP/session-resources-large"
 
+      - name: Check idle-session storage negative controls and real unload
+        if: runner.os == 'Linux'
+        run: |
+          python3 tools/check_session_recycle_mutations.py --profile SMALL --output "$RUNNER_TEMP/session-recycle-small"
+          python3 tools/check_session_recycle_mutations.py --profile LARGE --output "$RUNNER_TEMP/session-recycle-large"
+
+      - name: Check native library unload on macOS
+        if: runner.os == 'macOS'
+        run: |
+          python3 tools/check_session_recycle_lifecycle.py --output "$RUNNER_TEMP/session-recycle-unload-small"
+          python3 tools/check_session_recycle_lifecycle.py --large --output "$RUNNER_TEMP/session-recycle-unload-large"
+
       - name: Preserve fixed-resource mutation evidence
         if: always() && runner.os == 'Linux'
         uses: actions/upload-artifact@v4
@@ -74,6 +86,10 @@ jobs:
             ${{ runner.temp }}/session-resources-small/results.json
             ${{ runner.temp }}/session-resources-large/**/*.log
             ${{ runner.temp }}/session-resources-large/results.json
+            ${{ runner.temp }}/session-recycle-small/**/*.log
+            ${{ runner.temp }}/session-recycle-small/results.json
+            ${{ runner.temp }}/session-recycle-large/**/*.log
+            ${{ runner.temp }}/session-recycle-large/results.json
           retention-days: 30
 
   sdk-python:
