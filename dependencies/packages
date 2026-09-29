@@ -8,9 +8,9 @@ clang
 jq
 cmake
 python3
-nodejs
+binutils
+curl
 
 [macos]
 cmake
 python@3.12
-node@22

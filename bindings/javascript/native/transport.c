@@ -6,6 +6,9 @@
 #include <string.h>
 #include <limits.h>
 
+#if !defined(MAELYS_DATALOG_HAS_MANIFEST_BUFFER) || !MAELYS_DATALOG_HAS_MANIFEST_BUFFER
+#error "JavaScript requires an SDK with policy_load_manifest_buffer (after v0.13.0)"
+#endif
 _Static_assert(MAELYS_DATALOG_PUBLIC_API_VERSION == 2u, "Review consumer API changes");
 _Static_assert(MAELYS_DATALOG_DIAGNOSTIC_ABI_VERSION == 1u, "Review diagnostic changes");
 _Static_assert(MAELYS_DATALOG_PUBLIC_MAX_TERMS == 4u, "Review transport arity");

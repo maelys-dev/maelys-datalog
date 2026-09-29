@@ -80,6 +80,34 @@ Windows is out of scope (untested toolchain, no CI runner budget for it).
 
 ## D2 — WASM reproducibility
 
+### JavaScript native compatibility
+
+The additional `javascript-<target>` archives carry the unified package's two
+profiles. Their native static SDKs are independent Release/PIC builds; this
+does not change the historical native SDK archive's Debug configuration.
+`tools/javascript-build.json` pins Node 22.23.3, macOS 13.5 and a maximum glibc
+symbol requirement of 2.34. The release script downloads the exact official Node
+distribution (including headers), verifies the hashes committed in
+`tools/javascript-node-sha256.txt`, and uses that Node for both compilation and
+runtime tests. Runner Node packages and ambient PATH do not select this version.
+Development builds may fetch their selected Node version's headers from
+nodejs.org and verify its official SHASUMS256.txt; there is no install-time hook.
+
+The final native addons must be stripped and export exactly
+`napi_register_module_v1` and `node_api_module_get_api_version_v1`. Engine and
+transport symbols are hidden. Packaging invokes
+`tools/check_javascript_binary.py` on the binary it archives: ELF version needs
+must stay at or below GLIBC_2.34, while Mach-O must declare deployment target
+13.5. A new runner/compiler that introduces a newer dependency fails packaging;
+it does not silently raise the consumer floor. These binary checks do not claim
+execution coverage of every supported OS. Rehearse the declared Linux runners
+with the pinned socle, and preserve actual CI results separately from local runs.
+
+The unified package uses the `npm-javascript` channel; legacy `npm` remains
+available during the migration described in `bindings/javascript/README.md`.
+
+### Emscripten pin
+
 The equivalent of mcp-runtime's SHA-pinned jansson is the **pinned emsdk**:
 
 - `EMSDK_VERSION` is fixed in `package-release.sh` (initially `3.1.61`; update

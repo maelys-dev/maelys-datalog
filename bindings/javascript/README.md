@@ -8,8 +8,12 @@ One JavaScript/TypeScript consumer API, with two implementations:
 The root import selects native Node in Node and WASM with the `browser` export
 condition. Browser code without a bundler uses the ESM WASM entry point. No
 runtime silently falls back to another backend. The native artifact targets
-Linux x64, Linux arm64 and macOS arm64, with Node-API 8; CI exercises Node 22 and
-24. Both runtimes expose SMALL and LARGE engine profiles.
+Linux x64/arm64 with glibc **2.34 or newer**, and macOS arm64 **13.5 or newer**,
+with Node-API 8. The configured CI matrix covers Node 22, 24 and 26; Node's own
+OS requirements also apply. Both runtimes expose SMALL and LARGE engine profiles.
+Windows, musl/Alpine and macOS x64 have no native prebuild. Select `/wasm`
+explicitly there. An unsupported platform or failed native load reports this
+choice without silently changing runtimes.
 
 Packages are released through GitHub Packages. Configure the scope and an
 appropriate package-read token in your npm configuration, then install the package:
@@ -95,12 +99,16 @@ loading to the same C loader as Python. WASM rejects path input with `UNSUPPORTE
 the caller fetches the manifest and source bytes and supplies the memory bundle.
 The existing C Advanced `manifest_text` API retains its historical schema.
 
-Native registry declarations are process-wide (including Node workers), like
-Python's native registry. Each WASM Engine normally owns a separate module and
+Native registry declarations are shared by instances of the same addon/profile
+across the process (including Node workers), like Python's native registry.
+SMALL and LARGE embed separate engines with hidden symbols and independent
+registries. Each WASM Engine normally owns a separate module and
 registry. Register the same domain declaration in every Engine that uses it;
 conflicting declarations are errors. The Node addon serializes entry into the
-native library across workers. Calls are synchronous after `Engine.create()`;
-use a worker for expensive solves to keep an event loop responsive.
+native library across workers through one recursive mutex per loaded profile.
+There are no parallel native solves within a profile, even in separate workers.
+Calls are synchronous after `Engine.create()`; use a worker to keep an event loop
+responsive, and separate processes when parallel native solves are required.
 
 ## Build and verify
 
@@ -119,3 +127,43 @@ that same build. The native static archive is built with PIC; no shared engine
 library needs to be installed separately. `NODE_INCLUDE_DIR` selects a Node-API
 header directory when it is not adjacent to the Node installation. The source
 package contains no install script that downloads or compiles code.
+
+Native builds hide engine symbols, export only the two Node-API registration
+functions, and strip local/debug symbols. `tools/check_javascript_binary.py`
+checks these properties plus the glibc requirements or macOS deployment target
+of each actual binary before release archiving. A newer runner does not relax
+these bounds. The macOS deployment target is pinned for all engine/adapter
+objects and linking. Local validation of the target load command is not an
+execution test on an older macOS installation.
+
+Release packaging builds and tests with Node 22.23.3, fetched with its headers
+from nodejs.org and checked against committed SHA-256 values. Development builds
+use the selected Node and, if needed, fetch that exact version's headers and
+verify its official checksum. Downloads happen during build, never installation.
+
+## SDK compatibility and migration
+
+Consumer API 2 identifies the incompatible-contract generation, not every
+additive symbol. This binding requires the post-v0.13.0 SDK containing
+`maelys_datalog_policy_load_manifest_buffer` and tests the
+`MAELYS_DATALOG_HAS_MANIFEST_BUFFER` header feature guard at compilation.
+Always use headers and libraries installed from the same revision and profile;
+an API 2 SDK from an older release is insufficient. The first release carrying
+this binding will supply that SDK and its matching prebuilds together. The Python
+binding still calls the stable file manifest loader; it does not call the new
+buffer loader.
+
+`@maelys-dev/datalog-wasm`, its old C adapters and `MaelysPlayground` remain
+compatibility paths during migration. They are not additional implementations
+of this common object API. The migration order is:
+
+1. Publish the common package with both runtimes and profiles, keeping legacy
+   assets available during adoption.
+2. Move the playground to `/wasm`; promote JS, WASM, declarations and receipts
+   from that published release together. Generate the new reference signatures
+   from its declaration and review explanations against the new ownership API.
+   Existing legacy reference URLs keep documenting their pinned legacy release.
+3. After playground and known legacy consumers have migrated, announce a final
+   legacy package version and remove its channel/adapters in a separate reviewed
+   change. Existing released archives remain available. No removal date or
+   deprecation publication is implied by this candidate.

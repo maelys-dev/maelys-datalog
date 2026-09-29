@@ -208,14 +208,14 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-24.04, ubuntu-24.04-arm, macos-15]
-        node: ['22', '24']
+        node: ['22', '24', '26']
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node }}
       - name: Verify artifact assembly failure controls
-        run: python3 -m unittest discover -s tests/tooling -p test_javascript_packaging.py -v
+        run: python3 -m unittest discover -s tests/tooling -p 'test_javascript_*.py' -v
       - name: Build and test the installed native SDK consumers
         run: |
           for profile in small large; do
@@ -223,6 +223,7 @@ jobs:
             MAELYS_PROFILE="$profile" MAELYS_JS_RUNTIMES=node node --test bindings/javascript/test/contract.mjs
           done
           node bindings/javascript/test/native-workers.mjs
+          node --test bindings/javascript/test/native-loading.mjs
       - name: Verify packed CommonJS and ESM consumers and declarations
         run: |
           npm install --prefix build/js-test-deps --ignore-scripts --no-package-lock typescript@5.9.3
@@ -232,6 +233,28 @@ jobs:
         run: |
           tools/check_javascript_transport.sh small
           tools/check_javascript_transport.sh large
+
+  javascript-release:
+    name: JavaScript release artifacts (${{ matrix.target }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-26.04, target: linux-x86_64 }
+          - { os: ubuntu-26.04-arm, target: linux-arm64 }
+          - { os: macos-15, target: macos-arm64 }
+          - { os: ubuntu-26.04, target: wasm32 }
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and test the exact release packaging path
+        # package-release.sh selects its pinned Node and Emscripten itself.
+        run: bash scripts/package-release.sh '${{ matrix.target }}'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: javascript-release-${{ matrix.target }}
+          path: dist/
+          retention-days: 14
 
   javascript-parity:
     name: JavaScript native, WASM, Python and browser parity

@@ -15,6 +15,10 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
   as `@maelys-dev/datalog`, alongside the existing WASM package.
 - Add `maelys_datalog_policy_load_manifest_buffer` with the same manifest
   contract as the stable file loader; preserve Advanced memory loading semantics.
+- Pin native JavaScript compatibility to glibc >= 2.34 or macOS arm64 >= 13.5,
+  with stripped addons exporting only Node-API registration. Release packaging
+  uses a checksummed Node distribution and rejects binary compatibility drift.
+  Python parity constructs its own clean SDK; Node CI includes 22, 24 and 26.
 - Fixed session capacities E/D/S/T and a separate backend ABI 6 resource
   contract. E/D payload reservations are sized; S/T are exact admission limits,
   but lowering S/T does not yet reduce the profile-sized dictionary reservation.

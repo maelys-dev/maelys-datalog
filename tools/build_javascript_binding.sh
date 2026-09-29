@@ -15,6 +15,11 @@ trap 'rm -rf -- "$scratch"' EXIT
 # CMake preserves a compiler selected by an earlier toolchain. A fresh SDK
 # prevents a release's pinned emcc from linking objects made by another emcc.
 build="$scratch/build"
+if [ "$runtime" = native ] && [ "$(uname -s)" = Darwin ]; then
+  # Pin every engine and adapter object, including the final link. Do not inherit
+  # the build host's OS version or a caller's newer deployment target.
+  export MACOSX_DEPLOYMENT_TARGET="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["macosMinimum"])' "$root/tools/javascript-build.json")"
+fi
 if [ "$runtime" = wasm ]; then
   compiler_key="$(emcc --version | python3 -c 'import hashlib, sys; print(hashlib.sha256(sys.stdin.buffer.read()).hexdigest()[:16])')"
   export EM_CACHE="${EM_CACHE:-$root/build/emscripten-cache-$compiler_key}"
@@ -22,10 +27,12 @@ if [ "$runtime" = wasm ]; then
     -DMAELYS_DATALOG_PROFILE_LARGE="$large"
 else
   cmake -S "$root" -B "$build" -DBUILD_TESTING=OFF -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_LIBDIR=lib -DCMAKE_INSTALL_INCLUDEDIR=include \
-    -DMAELYS_DATALOG_PROFILE_LARGE="$large" -DCMAKE_POSITION_INDEPENDENT_CODE=ON
+    -DMAELYS_DATALOG_PROFILE_LARGE="$large" -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+    -DCMAKE_C_VISIBILITY_PRESET=hidden
 fi
-cmake --build "$build" --target maelys_datalog maelys_datalog_shared --parallel 2
-cmake --install "$build" --prefix "$scratch/sdk"
+cmake --build "$build" --target maelys_datalog --parallel 2
+cmake --install "$build" --prefix "$scratch/sdk" --component sdk
+cmake --install "$build" --prefix "$scratch/sdk" --component sdk-static
 cp "$root/bindings/javascript/native/"* "$scratch/"
 mkdir -p "$output/src"
 cp "$root/bindings/javascript/src/"* "$output/src/"
@@ -82,11 +89,21 @@ PYHEADERS
     node_include="$scratch/node-headers/node-$node_version/include/node"
   fi
   mkdir -p "$output/prebuilds/$platform"
-  cc "${flags[@]}" -fPIC -MMD -MF consumer.d -c transport.c -o transport.o
-  cc "${flags[@]}" -D_POSIX_C_SOURCE=200809L -fPIC -I"$node_include" -c node.c -o node.o
-  if [ "$(uname -s)" = Darwin ]; then link=(-bundle -undefined dynamic_lookup); else link=(-shared); fi
+  cc "${flags[@]}" -fvisibility=hidden -fPIC -MMD -MF consumer.d -c transport.c -o transport.o
+  cc "${flags[@]}" -D_POSIX_C_SOURCE=200809L -fvisibility=hidden -fPIC -I"$node_include" -c node.c -o node.o
+  if [ "$(uname -s)" = Darwin ]; then
+    link=(-bundle -undefined dynamic_lookup -Wl,-exported_symbols_list,node.exports)
+  else
+    link=(-shared -Wl,--version-script=node.map)
+  fi
   cc "${link[@]}" -pthread transport.o node.o "$scratch/sdk/lib/libmaelys_datalog.a" \
     -o "$output/prebuilds/$platform/$profile.node"
+  if [ "$(uname -s)" = Darwin ]; then
+    strip -S -x "$output/prebuilds/$platform/$profile.node"
+  else
+    strip --strip-unneeded "$output/prebuilds/$platform/$profile.node"
+  fi
+  python3 "$root/tools/check_javascript_binary.py" "$output/prebuilds/$platform/$profile.node"
 fi
 if grep -F "$root/include/" consumer.d || grep -F "$root/src/" consumer.d; then
   echo 'binding reached engine checkout instead of installed SDK' >&2; exit 1

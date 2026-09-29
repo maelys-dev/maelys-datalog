@@ -212,12 +212,7 @@ fi
 js_stage="$(mktemp -d)"
 trap 'rm -rf -- "$js_stage"' EXIT
 if [ "$target" = wasm32 ]; then js_runtime=wasm; else js_runtime=native; fi
-for profile in small large; do
-  bash tools/build_javascript_binding.sh "$js_runtime" "$profile" "$js_stage/package"
-  if [ "$js_runtime" = native ]; then test_runtime=node; else test_runtime=wasm; fi
-  MAELYS_JS_PACKAGE="$js_stage/package" MAELYS_JS_RUNTIMES="$test_runtime" MAELYS_PROFILE="$profile" \
-    node --test bindings/javascript/test/contract.mjs
-done
+bash tools/with_javascript_release_node.sh bash tools/build_javascript_release.sh "$js_runtime" "$js_stage/package"
 js_name="maelys-datalog-${version}-javascript-${target}.tar.gz"
 # BSD tar otherwise adds AppleDouble files for macOS extended attributes.
 # They are not package payloads and disagree with archives built on Linux.

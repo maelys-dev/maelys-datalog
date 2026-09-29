@@ -174,6 +174,18 @@ channel failed on the other one with a green rehearsal.
 
 ## The npm package
 
+The unified `@maelys-dev/datalog` package is assembled by
+`scripts/build-javascript-package.py dist/` from the four receipt-bound
+`javascript-<target>` archives, and published by the `npm-javascript` channel.
+The build-time Node pin, native export/strip checks and OS compatibility floors
+are documented in [release engineering](docs/release-engineering.md#javascript-native-compatibility).
+Assembly checks that all receipts name the same source commit as the assembly
+checkout and that all common package files agree byte-for-byte. It never builds
+or runs a package script. Native addon installation needs no compiler or download.
+
+The legacy package below remains during the explicit migration period described
+in [the JavaScript binding guide](bindings/javascript/README.md#sdk-compatibility-and-migration).
+
 `@maelys-dev/datalog-wasm` is published to **GitHub Packages**
 (`npm.pkg.github.com`), not to npmjs.com, by the socle's channel job with the
 run's `GITHUB_TOKEN`; the dist-tag is `next` while the version is `0.x`,

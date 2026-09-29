@@ -74,6 +74,9 @@ extern "C" {
 #endif
 
 #define MAELYS_DATALOG_PUBLIC_API_VERSION 2u
+/* API_VERSION tracks incompatible consumer contracts, not additive symbols.
+ * Feature guards require matching headers AND libraries from one SDK build. */
+#define MAELYS_DATALOG_HAS_MANIFEST_BUFFER 1
 #define MAELYS_DATALOG_PUBLIC_MAX_TERMS 4u
 #define MAELYS_DATALOG_PUBLIC_FINGERPRINT_BYTES 65u
 /* Independent optional manifest-loading permissions, combined with |.
