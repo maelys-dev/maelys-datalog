@@ -653,3 +653,24 @@ object matches between post-#142 and #143. Versus v0.13.0, native Ir changes are
 +0.2740% (SMALL Release / 93 symbols). Raw complete-request counts retain the
 separate libc/CPython variation and boundary residuals. This attribution does
 not turn instruction differences into a cycle or latency explanation.
+
+The fixed [span count follow-up](https://github.com/maelys-dev/maelys-datalog/actions/runs/36574841013)
+completed with tooling `ad8d10b8156d69f0bdc062ea1107e5aa66bb0d11`. Its report
+SHA-256 is `5a676466517d44d004a7bb78fc2c21eec8fac135f4e9467b6b97f4bff3e4891a`;
+the source comparison report digest is
+`7f607e60fa7eaaf3d1055f75ef265c83f299e5ef0e4ef6da1cbbb646aa4bbc54`.
+Independent reconstruction verifies 120 selected installed-file hashes, all
+24 consumers, all 120 regions and every exclusive function vector. Native
+shared-object vectors repeat exactly in all ten scopes per fixture/revision;
+each region retains 15 Ir/1 Dr/7 Dw of boundary residual. libc/Python variability
+and every raw count remain visible.
+
+This x86 follow-up does not generalize the ARM instruction gain. Relative to
+#143, exclusive native differences (Ir/Dr/Dw) are -4,744/-6,160/+708 for SMALL
+default / 93 integers; +150/-2,804/+142 for SMALL Release / 93 integers;
++8/0/+4 for SMALL default / 7 symbols; +62/+12/+10 for LARGE Release / 7 symbols;
++148/-2,812/+142 for SMALL Release / 93 symbols; and +8/0/+4 for LARGE default /
+7 integers. Reduced pointer reloads coexist with changed register/spill/check
+work. These mixed software counts neither explain nor erase the complete
+Python timing alerts. The runtime proposal retains that tradeoff for review;
+no general speedup, timing exception or release approval follows.
