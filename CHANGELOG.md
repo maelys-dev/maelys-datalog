@@ -21,8 +21,18 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
   indices and provenance validity are initialized before reading; unused payload
   is not exposed. This removes a fixed initialization cost from the allocating
   microbenchmark, not from an already prepared session. See the scoped local
-  timing evidence and qualification limits in
+  and hosted timing evidence and qualification limits in
   [session resources validation](docs/validation/session-resources.md).
+
+### Qualification pending
+
+- Signed candidate `f2372725` passes the installed-SDK compatibility matrix
+  and downstream replay, but its [Python lifecycle report](https://github.com/maelys-dev/maelys-datalog/actions/runs/36504178509)
+  requires review: SMALL seven-fact convenience-request medians are
+  58.70–67.48% higher than v0.13.0 across both build modes and comparison rounds,
+  beyond the A/A and matching null controls. The fixed positive control passes
+  throughout. These costs are not accepted for release; the maintainer decision
+  is pending. The validation note records the report SHA-256 and all limits.
 
 ## 0.13.0 — 2026-09-27
 

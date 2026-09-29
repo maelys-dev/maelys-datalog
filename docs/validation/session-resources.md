@@ -1,6 +1,6 @@
 # Fixed session resources: implementation and acceptance
 
-This is step 2 of the [reviewed 0.14.0 contract](../proposals/backend-session-resources.md),
+This records steps 2 and 3 of the [reviewed 0.14.0 contract](../proposals/backend-session-resources.md),
 based on `9338993f5eb82e928ebec99c385bef3df546c67f`. It does not declare 0.14.0
 release qualification complete. The default ABI 5 declaration and callbacks stay
 available; the distinct ABI 6 descriptor is in `<maelys/datalog_resources.h>`.
@@ -198,12 +198,163 @@ once with Release. The private source and generated results remain outside the
 public repository. The main native `make check` and 53 Python-performance
 tooling tests also pass; these are functional/tooling results, not timings.
 
-## Remaining release qualification
+## Hosted native comparison
 
-Step 3 requires this matrix, downstream installed SDK replay, and measured
-reservation/performance evidence on the signed candidate. The current Python
-exposure selects fixed quotas only. No smaller
-reservation, passing allocator test or software instruction count alone proves
-speed. Native and complete-Python same-run controls, raw classifications and the
-maintainer's release decision remain required by the existing protocols. This
-step introduces no allocator service, delta API, private-provider claim or release.
+Signed candidate `f2372725bd077cd9211dc2f9f2a4eb77334061a1` retains byte-identical
+runtime, headers, bindings and benchmark sources from `446c2c0`. Its
+[CI run](https://github.com/maelys-dev/maelys-datalog/actions/runs/36504147101)
+passes all 17 jobs. The tested PR merge `eb28150` has exactly the same Git tree;
+the installed matrices pass 40/40 in each profile on Linux and macOS. Hosted
+mutation baselines pass 10/10 and all 14 mutations are detected per profile.
+
+The [native run](https://github.com/maelys-dev/maelys-datalog/actions/runs/36504180776)
+compares base `9338993` with that candidate on an AMD EPYC 9V45 96-Core Processor,
+Linux x86_64, Clang 18.1.3, `-O2 -UNDEBUG`, SMALL and LARGE. All builds finish
+before the two A/A pairs and ABAB. The three timing reports reconstruct
+byte-identically from the artifact CSVs; 1,098,048 individual input/session
+samples reproduce their 3,648 summary rows. The legacy solver harness archives
+matching CSV/JSON summaries, not individual solver samples; its quantiles cannot
+be independently reconstructed from individual observations in this artifact.
+
+| Surface / profile | Faster metric rows | Indeterminate | Slower |
+| --- | ---: | ---: | ---: |
+| Solver / SMALL | 43 | 54 | 2 |
+| Solver / LARGE | 75 | 29 | 5 |
+| Input / SMALL | 20 | 46 | 0 |
+| Input / LARGE | 15 | 44 | 5 |
+| Reused sessions / SMALL | 28 | 154 | 87 |
+| Reused sessions / LARGE | 29 | 124 | 117 |
+
+These are per-statistic observations, not independent trials or an aggregate
+performance score. All classifications remain in the artifact, including the
+input changes despite identical input source. No placement or hardware cause
+is established by those timings.
+
+For 1,000 disposable solves, median time is 2,216.946 → 1,036.357 µs in SMALL
+and 3,072.455 → 1,058.087 µs in LARGE (ratios 0.4675 and 0.3444, respective A/A
+floors 2.46% and 1.33%). The LARGE absent-predicate minimum is 2.093 → 0.203667 µs.
+These within-run comparisons support the benefit of the changed disposable
+initialization on those cases; they do not turn the independent ARM64 review
+into a cross-run latency comparison. A contrary tail remains visible:
+LARGE/repeated/10 p95 is 31.527 → 41.152 µs (+30.53%, floor 4.03%).
+
+Reused sessions do not inherit that large benefit. For example,
+LARGE/derive/reverse/integer/256 median is 98.779 → 109.0495 µs (+10.40%, floor
+3.28%); LARGE/derive/sorted/symbol/128 p95 is +10.37% (floor 1.29%). The scoped
+Callgrind diagnostic covers these cases and six predeclared controls, nine
+cases total. Ir/Dr/Dw and exclusive instruction/write counts by function repeat
+exactly twice per revision. Ir changes range from −1.438% to +1.252%; write
+reference counts decrease in all nine. `solve_once_append_idb_merge` contributes
++33,407 Ir on the 256-integer derivations and +8,511 on the 128-symbol case,
+partly offset by materialization changes. This localizes software work, but
+does not explain a +10% time change or imply equal cycles. These counts cover
+`solve_edb`, excluding creation, clocks, checks and release; they do not qualify
+complete Python requests. Cache/branch events in that diagnostic are simulated.
+
+Artifact ZIP SHA-256:
+`5d4e48126749448a50afad4e2723400088c3bf74c1dbdb05a9836f5a20ace58e`.
+Report hashes: `comparison.md`
+`c4f99530329883a4db52bf5e6d60138d7a51ab4bf116c9608a32d384fc8b5949`;
+`sessions.md` `a15ffb2a0ef0f821be7dc4be37425401af235a73b06c870c8e62001a1b2b344c`.
+
+## Complete Python lifecycle review
+
+The [Python run](https://github.com/maelys-dev/maelys-datalog/actions/runs/36504178509)
+measures the same signed `f2372725` against published v0.13.0 (`43bbde6`), the
+immutable v0.11.1 anchor (`0f247a7`), and informative v0.11.0 (`e2c357e`). It uses
+schema 4 on an AMD EPYC 9V74 80-Core Processor, hosted Linux x86_64, Clang 18.1.3,
+Python 3.12.12, CFFI 2.0.0, both size profiles and CMake default/Release builds.
+All builds precede measurement; independently sampled identical-binary nulls,
+two A/A pairs and reversed variant order in the second comparison round are
+retained. CPU models differ from the native run: their absolute timings must
+not be compared.
+
+The artifact ZIP digest matches the Actions API. All 11,424 raw process files,
+3,377,136 flattened observations, 236 binary/header/binding file hashes, checked
+outputs and telemetry are verified. Every candidate, null, positive and
+historical statistic is recomputed from raw observations; candidate and null
+matrices each contain 624 statistic rows. The 72 separate observer/storage
+control files and the null-against-null cross-check also reproduce. No samples
+are filtered, paired across total/phase loops, or normalized with telemetry.
+
+The fixed three-request positive control is detected in **every one of the 32
+case/configuration combinations, in both rounds**. This validates that coarse
+injection, not sensitivity to small costs. The informative v0.11.0 control is
+not detected in every configuration; it does not decide run validity.
+
+The result is **`review_required`**, not performance acceptance: 110 warm
+statistic rows exceed both their A/A floor and matching null envelope (87
+against v0.13.0, 23 against the anchor). Among complete-request totals, 22 rows
+against v0.13.0 and five against the anchor require review. Another 51 warm rows
+have at least one raw alert not distinguished from their null; those remain
+unresolved. Four cold above-floor rows remain informative. Counts refer to
+statistics, not independent trials.
+
+The most substantial repeated changes against v0.13.0 are on the SMALL
+convenience path. The table gives complete-request **median** changes by round:
+
+| Case | Round 1 | Round 2 | A/A floor | Matching null envelope |
+| --- | ---: | ---: | ---: | ---: |
+| SMALL default / 7 integer / solve | +59.66% | +59.74% | 2.27% | 2.27% |
+| SMALL default / 7 symbol / solve | +58.70% | +60.04% | 1.23% | 2.17% |
+| SMALL Release / 7 integer / solve | +67.48% | +63.97% | 4.78% | 3.72% |
+| SMALL Release / 7 symbol / solve | +63.77% | +67.41% | 2.67% | 4.15% |
+| SMALL default / 93 integer / solve | +8.98% | +7.86% | 1.32% | 1.17% |
+| SMALL default / 93 symbol / solve | +8.46% | +7.11% | 0.74% | 1.09% |
+| SMALL Release / 93 integer / solve | +10.96% | +11.92% | 0.91% | 2.98% |
+| SMALL Release / 93 symbol / solve | +11.22% | +10.49% | 1.39% | 1.39% |
+
+All eight rows exceed both controls in both rounds. LARGE convenience medians
+are lower, by 1.99–18.24% across the corresponding cases/rounds; these do not
+cancel the SMALL slowdowns. Prepared sessions have their own alerts, including
+LARGE default / 7 integer median +5.18% / +4.33% (floor 1.75%, null 2.28%), and
+SMALL default / 93 integer p95 +36.36% in round 1 (floor/null 27.27%), with round
+2 indeterminate. All other phases, tails and anchor comparisons remain in the
+unaltered report; none is discarded by this selection.
+
+For SMALL Release / 7 integer / solve, median complete time is
+80.461 → 134.753 µs in round 1 and 81.994 → 134.443 µs in round 2. The
+same-transaction telemetry records **4 → 9,522 minor faults across 501 warm
+requests in each round**, zero major faults and zero CPU-ID changes between
+observed request boundaries. Candidate involuntary switches total six/eight,
+reference zero/zero. Thread CPU medians rise as well (81.601 → 136.032 µs and
+83.193 → 135.692 µs); those clocks bracket the request with observation overhead.
+This establishes changed page-fault activity on that path, not a particular
+allocator, syscall, frequency, placement or hardware cause. Boundary CPU IDs
+do not prove that no migration occurred within a request.
+
+Separate phase loops point to construction/solve and close: for that case,
+`solve` medians are 15.644 → 50.777 µs and 16.705 → 51.908 µs; `close` medians
+2.364 → 12.358 µs and 2.414 → 12.199 µs. Their samples are not the total-loop
+samples and cannot be summed or paired by index. Python's convenience
+`rules.solve()` constructs and owns a prepared public session per request; it
+is not the bare disposable `maelys_datalog_solve_once` microbenchmark. The
+native scoped counts above exclude construction/release and cannot explain
+this complete-request slowdown.
+
+The bounded observer/storage controls are also preserved: candidate medians
+are indeterminate for both selected prepared cases; the reference observer
+control has a second-round 93-integer median +4.79% (floor 4.16%). These controls
+do not cover every workload or remove instrumentation effects. Cross-screening
+the two null references itself produces alerts (32 and 29 rows in the two
+directions among 284 matching warm rows). It does not estimate the candidate's
+false-positive rate or erase its original 110 review triggers.
+
+Report `report.json` SHA-256:
+`1fa3e1ceae271b226cb695d5bb1421688ff3d552dce6df69340714ea2480d20b`.
+Artifact ZIP SHA-256:
+`86acfc07f8a1d0fe81209e417dd918690fa966fe202f7f67ebc939e5659539f0`.
+
+## Release decision remains open
+
+Step 3 now supplies the installed matrix, downstream replay, reservation
+inventory and complete native/Python measurements. Functional qualification
+passes, but the repeated SMALL complete-Python slowdowns remain unaccepted.
+PR #142 stays in draft for that performance follow-up; workflow success is not
+approval. The next diagnostic should scope complete convenience requests,
+including construction/release and the observed page faults, while preserving
+these original binaries and observations. Any runtime, binding, build or
+harness correction requires new measurements; a later quiet run cannot erase
+this one. The maintainer's decision on the concrete report must be recorded
+before a release. No allocator service, delta API, private-provider claim,
+merge or release is introduced here.
