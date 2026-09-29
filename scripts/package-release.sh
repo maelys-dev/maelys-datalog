@@ -219,7 +219,9 @@ for profile in small large; do
     node --test bindings/javascript/test/contract.mjs
 done
 js_name="maelys-datalog-${version}-javascript-${target}.tar.gz"
-tar -czf "$dist/$js_name" -C "$js_stage/package" .
+# BSD tar otherwise adds AppleDouble files for macOS extended attributes.
+# They are not package payloads and disagree with archives built on Linux.
+COPYFILE_DISABLE=1 tar -czf "$dist/$js_name" -C "$js_stage/package" .
 ( cd "$dist" && sha256 "$js_name" > "$js_name.sha256" )
 artifacts+=("$js_name")
 rm -rf -- "$js_stage"
