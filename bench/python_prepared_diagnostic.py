@@ -236,15 +236,108 @@ def run(release, parent, output):
     (output / 'report.md').write_text('\n'.join(lines) + '\n')
 
 
+SPAN_RUN = '36566987207'
+SPAN_COMMITS = {'base': '1d6ca9534bbc8bedf47103555087d042fdf10c60',
+                'head': 'adf2cf3d112efc95fbb9be0a5386346d630fb0bc'}
+
+
+def span_packages(root, report_digest):
+    if perf.sha256(root / 'report.json') != report_digest:
+        raise ValueError('wrong fixed span report digest')
+    report = json.loads((root / 'report.json').read_text())
+    if (report['schema'] != 4 or report['environment']['run_id'] != SPAN_RUN or
+            not report['comparison_only'] or report['release_eligible'] or
+            any(report['commits'][role] != commit for role, commit in SPAN_COMMITS.items())):
+        raise ValueError('wrong span comparison revisions/protocol')
+    if report['harness'] != {f: perf.sha256(perf.ROOT / f) for f in perf.HARNESS_FILES}:
+        raise ValueError('changed complete request harness')
+    if sys.version.split()[0] != report['environment']['python'].split()[0]:
+        raise ValueError('different Python interpreter version')
+    dependencies = {k: importlib.metadata.version(k) for k in report['environment']['packages']}
+    if dependencies != report['environment']['packages']:
+        raise ValueError('different Python dependency versions')
+    packages = {}
+    for role, commit in SPAN_COMMITS.items():
+        for config, _ in FIXTURES:
+            folder = root / commit / config
+            for name, digest in report['binaries'][f'{commit}/{config}'].items():
+                if perf.sha256(folder / name) != digest:
+                    raise ValueError('changed span binary/header/binding: ' + name)
+            packages[role, config] = folder / 'python'
+    return report, packages
+
+
+def span_counts(root, report_digest, output):
+    if any(v for k, v in os.environ.items() if k.startswith('MALLOC_') or
+           k in ('GLIBC_TUNABLES', 'LD_PRELOAD')):
+        raise ValueError('inherited allocator intervention')
+    original, packages = span_packages(root.resolve(), report_digest)
+    output = output.resolve()
+    output.mkdir(parents=True, exist_ok=False)
+    shutil.copy2(root / 'report.json', output / 'original-report.json')
+    helper = output / 'helper.so'
+    (output / 'helper.c').write_text(HELPER)
+    subprocess.run(['cc', '-shared', '-fPIC', '-O2', '-g', str(output / 'helper.c'), '-o', str(helper)], check=True)
+    report = dict(schema=1, release_eligible=False, source_run=SPAN_RUN,
+                  source_report_sha256=report_digest, commits=SPAN_COMMITS, fixtures=FIXTURES,
+                  count_indices=INDICES, helper_sha256=perf.sha256(helper),
+                  harness_sha256=perf.sha256(Path(__file__)), workload_hashes=original['harness'],
+                  environment=dict(host=perf.host_description(), python=sys.version,
+                                   packages=original['environment']['packages'],
+                                   libc=perf.command(['ldd', '--version']),
+                                   valgrind=perf.command(['valgrind', '--version']),
+                                   run_id=os.getenv('GITHUB_RUN_ID')),
+                  counts=[], limits='Software counts only; complete-request timing remains in the original report. Exclusive names are aggregated across objects; unresolved names and summary residuals are retained.')
+    for (role, config), package in packages.items():
+        folder = output / 'linked-layout' / f'{role}-{config}'
+        folder.mkdir(parents=True)
+        for binary in (package / 'maelys_datalog').glob('*.so'):
+            (folder / (binary.name + '.readelf')).write_text(perf.command(['readelf', '-W', '-S', '-s', '-d', binary]) + '\n')
+            (folder / (binary.name + '.asm')).write_text(perf.command(['objdump', '-d', '-w', binary]) + '\n')
+    for repeat in range(2):
+        for config, case in FIXTURES:
+            for role in (('base', 'head') if repeat == 0 else ('head', 'base')):
+                target = output / 'counts' / f'{config}-{case}-{role}-{repeat}'
+                target.mkdir(parents=True)
+                env = dict(os.environ, PYTHONPATH=str(packages[role, config]),
+                           PYTHONHASHSEED='0', PYTHONDONTWRITEBYTECODE='1')
+                with (target / 'consumer.json').open('w') as stdout, (target / 'valgrind.log').open('w') as stderr:
+                    subprocess.run(['valgrind', '--tool=callgrind', '--collect-atstart=no', '--cache-sim=yes',
+                                    '--error-exitcode=9', f'--callgrind-out-file={target}/callgrind.out',
+                                    sys.executable, '-B', str(Path(__file__).resolve()), '--worker', case,
+                                    '--helper', str(helper)], env=env, stdout=stdout, stderr=stderr, check=True)
+                consumer = json.loads((target / 'consumer.json').read_text())
+                expected = [f'total_{i:03d}' for i in INDICES]
+                if consumer != dict(scopes=expected, output_sha256=original['outputs'][case]):
+                    raise ValueError('different span answers or scopes')
+                profiles = []
+                for path in sorted(target.glob('callgrind.out*')):
+                    item = scoped_counts(path)
+                    if item is not None:
+                        profiles.append(dict(item, file=str(path.relative_to(output))))
+                if sorted(p['label'] for p in profiles) != expected:
+                    raise ValueError('incomplete span scope matrix')
+                report['counts'].append(dict(config=config, case=case, role=role, repeat=repeat, profiles=profiles))
+                (output / 'report.json').write_text(json.dumps(report, indent=2) + '\n')
+                print('counted span', config, case, role, repeat, flush=True)
+    (output / 'report.md').write_text('# Prepared IDB spans: software counts\n\n20 processes, 100 complete-request regions. Raw functions and residuals retained; no Valgrind timing used.\n')
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--span-evidence', type=Path)
+    parser.add_argument('--report-sha256')
     parser.add_argument('--worker', choices=workload.CASES)
     parser.add_argument('--helper', type=Path)
     parser.add_argument('--release-evidence', type=Path)
     parser.add_argument('--parent-evidence', type=Path)
     parser.add_argument('--output', type=Path)
     args = parser.parse_args()
-    if args.worker:
+    if args.span_evidence:
+        if args.worker or not args.output or not args.report_sha256:
+            parser.error('--span-evidence requires --report-sha256 and --output, without --worker')
+        span_counts(args.span_evidence, args.report_sha256, args.output)
+    elif args.worker:
         if not args.helper:
             parser.error('--worker requires --helper')
         print(json.dumps(worker(args.worker, args.helper)))

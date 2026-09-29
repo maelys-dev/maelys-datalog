@@ -595,3 +595,47 @@ All builds (only the counter helper) and layout exports finish before timing.
 Independent process controls inform attribution without erasing an original
 event, changing a floor, normalizing a latency or establishing a hardware cause.
 This diagnostic is explicitly ineligible for release approval.
+
+
+The completed [original-binary investigation](https://github.com/maelys-dev/maelys-datalog/actions/runs/36563840404)
+measured `c1a7dcd7114c53289db2866a0b1d6a98022dbcf4` tooling on an AMD EPYC
+9V45 with Python 3.12.12, glibc 2.39 and Valgrind 3.22.0. Its report SHA-256 is
+`8612aec4c6cff24510868d4313438dae77124044ad05c16122ae7f238406c834`.
+Independent reconstruction verified all 240 process files, 252,720 telemetry
+records, 129 comparison rows and 150 raw client-request count regions from 30
+processes. Every scope retains the 15 Ir / 1 Dr / 7 Dw boundary residual.
+Original report digests, harness/helper hashes and checked answers agree.
+
+Across five fixtures, complete-request median/p95 classifications over eight
+rounds include 6 slower / 5 faster / 69 indeterminate head/base observations;
+the independently sampled identical-head comparison has 11 slower / 13 faster /
+56 indeterminate. These are raw A/A classifications, not a replacement null
+screening rule. The same-binary observations demonstrate process variability
+in this run; they do not retrospectively assign the original timing alerts or
+prove that a candidate effect is absent.
+
+Named engine functions selected by `solve_`, `maelys_datalog_`, `materialize_`,
+`reset_transaction`, `intern_input` and `collect_input` prefixes repeat their
+exclusive Ir/Dr/Dw vectors in all ten scopes per fixture and revision. Their
+post-#142/#143 vectors are equal. This stated subset is not the entire engine;
+raw unselected functions, unresolved symbols and libc/CPython variation remain
+in the artifact. Callgrind recursion suffixes are combined only in this analysis,
+not removed from the raw records.
+
+For SMALL Release / 93 integers on x86, `solve_once_freeze_active_stratum`
+is 40,386 Ir / 13,086 Dr / 12,829 Dw at v0.13.0 versus 38,434 / 15,492 / 12,275
+after #142 and #143. Local ARM64 showed extra instructions as well as reads in
+this function. Instruction effects are architecture/compiler dependent; neither
+vector establishes a latency cause. The separate IDB-array-span change must
+therefore be measured against #143 on both targets before a broader claim.
+
+The optional `prepared_span_counts` dispatch consumes only the installed SDKs
+of the fixed full-Python comparison run `36566987207` (base `1d6ca95`, candidate
+`adf2cf3`), with its independently verified report digest supplied explicitly.
+It checks revision, protocol, harness, interpreter/dependency and binary hashes,
+then counts the same five complete requests in the same five fixtures in two
+reversed-order repetitions: 20 processes, 100 regions. Only the counter helper
+is built before measurement. It retains both linked layouts, full function
+counts, unresolved names and boundary residuals. There are no timing results
+from this instrument; the complete original Python report remains authoritative
+for its timing observations and release review.

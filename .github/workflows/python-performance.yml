@@ -11,6 +11,14 @@ on:
         description: 'Optional full SHA for an additional complete comparison (not release evidence)'
         type: string
         default: ''
+      prepared_span_counts:
+        description: 'Count fixed #145 versus #143 complete requests from run 36566987207'
+        type: boolean
+        default: false
+      span_report_sha256:
+        description: 'Verified SHA-256 of the fixed span comparison report'
+        type: string
+        default: ''
       prepared_diagnostic:
         description: 'Investigate fixed #143 prepared requests with original binaries and software counts'
         type: boolean
@@ -60,13 +68,16 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12.12'
+      - name: Reject ambiguous span count selection
+        if: (inputs.prepared_span_counts == true && (inputs.prepared_diagnostic == true || inputs.comparison_base != '' || inputs.allocator_diagnostic == true || inputs.tail_diagnostic == true || inputs.instruction_diagnostic == true || inputs.release_diagnostic == true || inputs.release_process_control == true)) || (inputs.prepared_span_counts != true && inputs.span_report_sha256 != '')
+        run: exit 1
       - name: Install fixed measurement dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y clang-18 cmake
           python -m pip install -r bench/python-perf-requirements.txt
       - name: Measure candidate, previous release and durable v0.11.1 reference
-        if: inputs.prepared_diagnostic != true && inputs.allocator_diagnostic != true && inputs.tail_diagnostic != true && inputs.instruction_diagnostic != true && inputs.release_diagnostic != true && inputs.release_process_control != true
+        if: inputs.prepared_span_counts != true && inputs.prepared_diagnostic != true && inputs.allocator_diagnostic != true && inputs.tail_diagnostic != true && inputs.instruction_diagnostic != true && inputs.release_diagnostic != true && inputs.release_process_control != true
         env:
           GH_TOKEN: ${{ github.token }}
           COMPARISON_BASE: ${{ inputs.comparison_base }}
@@ -92,12 +103,12 @@ jobs:
             *) exit "$status" ;;
           esac
       - name: Diagnose the fixed Python tail observation
-        if: inputs.prepared_diagnostic != true && inputs.allocator_diagnostic != true && inputs.tail_diagnostic == true && inputs.instruction_diagnostic != true && inputs.release_diagnostic != true && inputs.release_process_control != true
+        if: inputs.prepared_span_counts != true && inputs.prepared_diagnostic != true && inputs.allocator_diagnostic != true && inputs.tail_diagnostic == true && inputs.instruction_diagnostic != true && inputs.release_diagnostic != true && inputs.release_process_control != true
         run: |
           python -m unittest discover -s tests/tooling -p 'test_python_perf*.py' -v
           python bench/python_tail_diagnostic.py --compiler clang-18 --output evidence
       - name: Count original Python request instructions
-        if: inputs.prepared_diagnostic != true && inputs.allocator_diagnostic != true && inputs.instruction_diagnostic == true && inputs.tail_diagnostic != true && inputs.release_diagnostic != true && inputs.release_process_control != true
+        if: inputs.prepared_span_counts != true && inputs.prepared_diagnostic != true && inputs.allocator_diagnostic != true && inputs.instruction_diagnostic == true && inputs.tail_diagnostic != true && inputs.release_diagnostic != true && inputs.release_process_control != true
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -106,7 +117,7 @@ jobs:
           python -m unittest discover -s tests/tooling -p 'test_python_perf*.py' -v
           python bench/python_tail_instructions.py --evidence original-evidence --output evidence
       - name: Count v0.13 release request instructions
-        if: inputs.prepared_diagnostic != true && inputs.allocator_diagnostic != true && inputs.release_diagnostic == true && inputs.tail_diagnostic != true && inputs.instruction_diagnostic != true && inputs.release_process_control != true
+        if: inputs.prepared_span_counts != true && inputs.prepared_diagnostic != true && inputs.allocator_diagnostic != true && inputs.release_diagnostic == true && inputs.tail_diagnostic != true && inputs.instruction_diagnostic != true && inputs.release_process_control != true
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -115,7 +126,7 @@ jobs:
           python -m unittest discover -s tests/tooling -p 'test_python_perf*.py' -v
           python bench/python_release_instructions.py --evidence original-evidence --output evidence
       - name: Counterbalance original v0.13 binaries and process labels
-        if: inputs.prepared_diagnostic != true && inputs.allocator_diagnostic != true && inputs.release_process_control == true && inputs.release_diagnostic != true && inputs.tail_diagnostic != true && inputs.instruction_diagnostic != true
+        if: inputs.prepared_span_counts != true && inputs.prepared_diagnostic != true && inputs.allocator_diagnostic != true && inputs.release_process_control == true && inputs.release_diagnostic != true && inputs.tail_diagnostic != true && inputs.instruction_diagnostic != true
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -123,7 +134,7 @@ jobs:
           python -m unittest discover -s tests/tooling -p 'test_python_perf*.py' -v
           python bench/python_release_controls.py --evidence original-evidence --output evidence
       - name: Compare allocator policy on original Python request binaries
-        if: inputs.prepared_diagnostic != true && inputs.allocator_diagnostic == true && inputs.tail_diagnostic != true && inputs.instruction_diagnostic != true && inputs.release_diagnostic != true && inputs.release_process_control != true
+        if: inputs.prepared_span_counts != true && inputs.prepared_diagnostic != true && inputs.allocator_diagnostic == true && inputs.tail_diagnostic != true && inputs.instruction_diagnostic != true && inputs.release_diagnostic != true && inputs.release_process_control != true
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -132,7 +143,7 @@ jobs:
           python -m unittest discover -s tests/tooling -p 'test_python_perf*.py' -v
           python bench/python_allocator_control.py --evidence original-evidence --output evidence
       - name: Investigate the fixed prepared-request observations
-        if: inputs.prepared_diagnostic == true && inputs.comparison_base == '' && inputs.allocator_diagnostic != true && inputs.tail_diagnostic != true && inputs.instruction_diagnostic != true && inputs.release_diagnostic != true && inputs.release_process_control != true
+        if: inputs.prepared_span_counts != true && inputs.prepared_diagnostic == true && inputs.comparison_base == '' && inputs.allocator_diagnostic != true && inputs.tail_diagnostic != true && inputs.instruction_diagnostic != true && inputs.release_diagnostic != true && inputs.release_process_control != true
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -142,22 +153,33 @@ jobs:
           python -m unittest discover -s tests/tooling -p 'test_python_perf*.py' -v
           python bench/python_prepared_diagnostic.py --release-evidence original-release --parent-evidence original-parent --output evidence
       - name: Reject ambiguous prepared diagnostic selection
-        if: inputs.prepared_diagnostic == true && (inputs.comparison_base != '' || inputs.allocator_diagnostic == true || inputs.tail_diagnostic == true || inputs.instruction_diagnostic == true || inputs.release_diagnostic == true || inputs.release_process_control == true)
+        if: inputs.prepared_span_counts != true && inputs.prepared_diagnostic == true && (inputs.comparison_base != '' || inputs.allocator_diagnostic == true || inputs.tail_diagnostic == true || inputs.instruction_diagnostic == true || inputs.release_diagnostic == true || inputs.release_process_control == true)
         run: exit 1
       - name: Reject ambiguous allocator diagnostic selection
-        if: inputs.allocator_diagnostic == true && (inputs.tail_diagnostic == true || inputs.instruction_diagnostic == true || inputs.release_diagnostic == true || inputs.release_process_control == true)
+        if: inputs.prepared_span_counts != true && inputs.allocator_diagnostic == true && (inputs.tail_diagnostic == true || inputs.instruction_diagnostic == true || inputs.release_diagnostic == true || inputs.release_process_control == true)
         run: exit 1
       - name: Reject an extra baseline with a scoped diagnostic
-        if: inputs.comparison_base != '' && (inputs.allocator_diagnostic == true || inputs.tail_diagnostic == true || inputs.instruction_diagnostic == true || inputs.release_diagnostic == true || inputs.release_process_control == true)
+        if: inputs.prepared_span_counts != true && inputs.comparison_base != '' && (inputs.allocator_diagnostic == true || inputs.tail_diagnostic == true || inputs.instruction_diagnostic == true || inputs.release_diagnostic == true || inputs.release_process_control == true)
         run: exit 1
       - name: Reject ambiguous diagnostic selection
         if: (inputs.instruction_diagnostic == true && inputs.tail_diagnostic == true) || (inputs.release_diagnostic == true && (inputs.instruction_diagnostic == true || inputs.tail_diagnostic == true)) || (inputs.release_process_control == true && (inputs.release_diagnostic == true || inputs.instruction_diagnostic == true || inputs.tail_diagnostic == true))
         run: exit 1
+      - name: Count the fixed prepared IDB span comparison
+        if: inputs.prepared_span_counts == true && inputs.prepared_diagnostic != true && inputs.comparison_base == '' && inputs.allocator_diagnostic != true && inputs.tail_diagnostic != true && inputs.instruction_diagnostic != true && inputs.release_diagnostic != true && inputs.release_process_control != true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPORT_SHA256: ${{ inputs.span_report_sha256 }}
+        run: |
+          [[ "$REPORT_SHA256" =~ ^[0-9a-f]{64}$ ]] || exit 1
+          sudo apt-get install -y valgrind
+          gh run download 36566987207 --name python-performance-adf2cf3d112efc95fbb9be0a5386346d630fb0bc --dir span-evidence
+          python -m unittest discover -s tests/tooling -p 'test_python_perf*.py' -v
+          python bench/python_prepared_diagnostic.py --span-evidence span-evidence --report-sha256 "$REPORT_SHA256" --output evidence
       - name: Preserve every measurement
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ inputs.prepared_diagnostic == true && 'python-prepared-diagnostic' || inputs.allocator_diagnostic == true && 'python-allocator-control' || inputs.release_process_control == true && 'python-release-process-control' || inputs.release_diagnostic == true && 'python-release-instructions' || inputs.instruction_diagnostic == true && 'python-tail-instructions' || inputs.tail_diagnostic == true && 'python-tail-diagnostic' || 'python-performance' }}-${{ github.sha }}
+          name: ${{ inputs.prepared_span_counts == true && 'python-prepared-span-counts' || inputs.prepared_diagnostic == true && 'python-prepared-diagnostic' || inputs.allocator_diagnostic == true && 'python-allocator-control' || inputs.release_process_control == true && 'python-release-process-control' || inputs.release_diagnostic == true && 'python-release-instructions' || inputs.instruction_diagnostic == true && 'python-tail-instructions' || inputs.tail_diagnostic == true && 'python-tail-diagnostic' || 'python-performance' }}-${{ github.sha }}
           path: evidence/
           if-no-files-found: error
           retention-days: 90

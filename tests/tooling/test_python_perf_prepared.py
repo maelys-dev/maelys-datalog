@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: MPL-2.0
 from collections import Counter
 from pathlib import Path
+import json
 import sys
 import tempfile
 import unittest
@@ -62,6 +63,36 @@ class PreparedDiagnosticTests(unittest.TestCase):
             (root / 'report.json').write_text('{}')
             with self.assertRaisesRegex(ValueError, 'wrong original report'):
                 subject.originals({'release': root, 'parent': root})
+
+    def test_span_source_and_binaries_must_match_fixed_report(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            report = dict(schema=4, comparison_only=True, release_eligible=False,
+                          commits=subject.SPAN_COMMITS,
+                          environment=dict(run_id=subject.SPAN_RUN, python=sys.version, packages={}),
+                          harness={f: subject.perf.sha256(subject.perf.ROOT / f)
+                                   for f in subject.perf.HARNESS_FILES}, binaries={})
+            for commit in subject.SPAN_COMMITS.values():
+                for config in {config for config, case in subject.FIXTURES}:
+                    folder = root / commit / config
+                    folder.mkdir(parents=True)
+                    (folder / 'sdk.bin').write_bytes(b'original')
+                    report['binaries'][f'{commit}/{config}'] = {'sdk.bin': subject.perf.sha256(folder / 'sdk.bin')}
+            path = root / 'report.json'
+            path.write_text(json.dumps(report))
+            digest = subject.perf.sha256(path)
+            with self.assertRaisesRegex(ValueError, 'wrong fixed span report digest'):
+                subject.span_packages(root, 'wrong')
+            _, packages = subject.span_packages(root, digest)
+            self.assertEqual(len(packages), 6)
+            folder = root / subject.SPAN_COMMITS['head'] / 'SMALL-Release'
+            (folder / 'sdk.bin').write_bytes(b'changed')
+            with self.assertRaisesRegex(ValueError, 'changed span binary'):
+                subject.span_packages(root, digest)
+            report['commits'] = dict(report['commits'], head='0' * 40)
+            path.write_text(json.dumps(report))
+            with self.assertRaisesRegex(ValueError, 'wrong span comparison revisions'):
+                subject.span_packages(root, subject.perf.sha256(path))
 
     def test_empty_final_dump_is_ignored_but_empty_requested_dump_fails(self):
         with tempfile.TemporaryDirectory() as directory:
