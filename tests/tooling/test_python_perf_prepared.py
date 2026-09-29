@@ -73,7 +73,7 @@ class PreparedDiagnosticTests(unittest.TestCase):
                           harness={f: subject.perf.sha256(subject.perf.ROOT / f)
                                    for f in subject.perf.HARNESS_FILES}, binaries={})
             for commit in subject.SPAN_COMMITS.values():
-                for config in {config for config, case in subject.FIXTURES}:
+                for config in {config for config, case in subject.SPAN_FIXTURES}:
                     folder = root / commit / config
                     folder.mkdir(parents=True)
                     (folder / 'sdk.bin').write_bytes(b'original')
@@ -84,7 +84,7 @@ class PreparedDiagnosticTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'wrong fixed span report digest'):
                 subject.span_packages(root, 'wrong')
             _, packages = subject.span_packages(root, digest)
-            self.assertEqual(len(packages), 6)
+            self.assertEqual(len(packages), 8)
             folder = root / subject.SPAN_COMMITS['head'] / 'SMALL-Release'
             (folder / 'sdk.bin').write_bytes(b'changed')
             with self.assertRaisesRegex(ValueError, 'changed span binary'):

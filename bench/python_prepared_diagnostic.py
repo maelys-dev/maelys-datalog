@@ -236,6 +236,9 @@ def run(release, parent, output):
     (output / 'report.md').write_text('\n'.join(lines) + '\n')
 
 
+# Declared before the span count campaign: the completed release report also
+# flags LARGE-default 7-integer-prepared in both rounds (+6.34/+5.30%).
+SPAN_FIXTURES = FIXTURES + (('LARGE-default', '7-integer-prepared'),)
 SPAN_RUN = '36566987207'
 SPAN_COMMITS = {'base': '1d6ca9534bbc8bedf47103555087d042fdf10c60',
                 'head': 'adf2cf3d112efc95fbb9be0a5386346d630fb0bc'}
@@ -258,7 +261,7 @@ def span_packages(root, report_digest):
         raise ValueError('different Python dependency versions')
     packages = {}
     for role, commit in SPAN_COMMITS.items():
-        for config, _ in FIXTURES:
+        for config, _ in SPAN_FIXTURES:
             folder = root / commit / config
             for name, digest in report['binaries'][f'{commit}/{config}'].items():
                 if perf.sha256(folder / name) != digest:
@@ -279,7 +282,7 @@ def span_counts(root, report_digest, output):
     (output / 'helper.c').write_text(HELPER)
     subprocess.run(['cc', '-shared', '-fPIC', '-O2', '-g', str(output / 'helper.c'), '-o', str(helper)], check=True)
     report = dict(schema=1, release_eligible=False, source_run=SPAN_RUN,
-                  source_report_sha256=report_digest, commits=SPAN_COMMITS, fixtures=FIXTURES,
+                  source_report_sha256=report_digest, commits=SPAN_COMMITS, fixtures=SPAN_FIXTURES,
                   count_indices=INDICES, helper_sha256=perf.sha256(helper),
                   harness_sha256=perf.sha256(Path(__file__)), workload_hashes=original['harness'],
                   environment=dict(host=perf.host_description(), python=sys.version,
@@ -295,7 +298,7 @@ def span_counts(root, report_digest, output):
             (folder / (binary.name + '.readelf')).write_text(perf.command(['readelf', '-W', '-S', '-s', '-d', binary]) + '\n')
             (folder / (binary.name + '.asm')).write_text(perf.command(['objdump', '-d', '-w', binary]) + '\n')
     for repeat in range(2):
-        for config, case in FIXTURES:
+        for config, case in SPAN_FIXTURES:
             for role in (('base', 'head') if repeat == 0 else ('head', 'base')):
                 target = output / 'counts' / f'{config}-{case}-{role}-{repeat}'
                 target.mkdir(parents=True)
@@ -320,7 +323,7 @@ def span_counts(root, report_digest, output):
                 report['counts'].append(dict(config=config, case=case, role=role, repeat=repeat, profiles=profiles))
                 (output / 'report.json').write_text(json.dumps(report, indent=2) + '\n')
                 print('counted span', config, case, role, repeat, flush=True)
-    (output / 'report.md').write_text('# Prepared IDB spans: software counts\n\n20 processes, 100 complete-request regions. Raw functions and residuals retained; no Valgrind timing used.\n')
+    (output / 'report.md').write_text('# Prepared IDB spans: software counts\n\n24 processes, 120 complete-request regions. Raw functions and residuals retained; no Valgrind timing used.\n')
 
 
 if __name__ == '__main__':

@@ -633,9 +633,23 @@ The optional `prepared_span_counts` dispatch consumes only the installed SDKs
 of the fixed full-Python comparison run `36566987207` (base `1d6ca95`, candidate
 `adf2cf3`), with its independently verified report digest supplied explicitly.
 It checks revision, protocol, harness, interpreter/dependency and binary hashes,
-then counts the same five complete requests in the same five fixtures in two
-reversed-order repetitions: 20 processes, 100 regions. Only the counter helper
+then counts the same five complete requests in two reversed-order repetitions.
+The six fixtures are the original five plus LARGE default / 7-integer-prepared,
+declared before the count run because the independently verified release report
+36566938072 retains +6.34/+5.30% median alerts in both rounds (4.35% floor/envelope).
+This gives 24 processes and 120 regions. Only the counter helper
 is built before measurement. It retains both linked layouts, full function
 counts, unresolved names and boundary residuals. There are no timing results
 from this instrument; the complete original Python report remains authoritative
 for its timing observations and release review.
+
+
+A further offline traversal of raw Callgrind `ob=` identities separates the
+native shared object from its libc/Python callees. Every native function vector
+repeats exactly across ten scopes per fixture/revision, and the entire native
+object matches between post-#142 and #143. Versus v0.13.0, native Ir changes are
++0.2601% (SMALL default / 93 integers), +0.2379% (SMALL Release / 93 integers),
++3.9627% (SMALL default / 7 symbols), +0.3740% (LARGE Release / 7 symbols) and
++0.2740% (SMALL Release / 93 symbols). Raw complete-request counts retain the
+separate libc/CPython variation and boundary residuals. This attribution does
+not turn instruction differences into a cycle or latency explanation.
