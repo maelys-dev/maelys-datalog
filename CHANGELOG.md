@@ -9,7 +9,8 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ## 0.14.0 — 2026-09-29
 
-Proposed release entry; the performance decision and publication are pending.
+Performance tradeoff accepted by David on 2026-09-29; publication follows the
+normal release checks.
 Consumer API 2 and program ABI 2 remain unchanged. Backend ABI 6 is additive;
 ABI 5 remains available under its existing default resource contract.
 
@@ -41,7 +42,7 @@ ABI 5 remains available under its existing default resource contract.
   and hosted timing evidence and qualification limits in
   [session resources validation](docs/validation/session-resources.md).
 
-### Release review pending
+### Performance review and accepted limits
 
 - Merged main `9260b2ded45cc0a4595c4ad1a444b638f46005ed` passes all 17 CI checks.
   The complete default-glibc [Python run 36610272911](https://github.com/maelys-dev/maelys-datalog/actions/runs/36610272911)
@@ -62,8 +63,10 @@ ABI 5 remains available under its existing default resource contract.
   findings and attribution limits. Earlier reports, including 93-integer
   prepared +1.84–4.29% and the isolated seven-symbol +21.75% median event,
   remain preserved in [session recycling validation](docs/validation/session-recycling.md).
-  David accepted the earlier tradeoffs for merges only. His separate decision
-  on the named report is required before cutting or publishing 0.14.0.
+  David explicitly accepted this named report's documented tradeoff for 0.14.0
+  publication on 2026-09-29, including these unresolved observations. The
+  decision is separate from earlier merge-only approvals and does not claim
+  absence of regressions or an explanation of the remaining latency events.
 
 ## 0.13.0 — 2026-09-27
 
