@@ -534,52 +534,59 @@ static int solve_once_fact_in_range(const maelys_datalog_internal_fact_t *facts,
     return 0;
 }
 
-static void solve_once_swap_idb_fact_with_proof(maelys_datalog_internal_solve_result_t *result,
+/* The sized workspace keeps these arrays behind pointers. Sorting never
+ * changes those pointers: pass the arrays directly so row writes do not force
+ * reloading them through the pointer-bearing result in the inner loop. Facts
+ * and their proof indices still move together, with the same stable ordering. */
+static void solve_once_swap_idb_fact_with_proof(maelys_datalog_internal_fact_t *facts,
+                                                uint16_t *proofs,
                                                 size_t a,
                                                 size_t b) {
-    if (!result || a == b) return;
-    maelys_datalog_internal_fact_t fact_tmp = result->idb_facts[a];
-    result->idb_facts[a] = result->idb_facts[b];
-    result->idb_facts[b] = fact_tmp;
-    uint16_t proof_tmp = result->idb_proof_index[a];
-    result->idb_proof_index[a] = result->idb_proof_index[b];
-    result->idb_proof_index[b] = proof_tmp;
+    if (!facts || !proofs || a == b) return;
+    maelys_datalog_internal_fact_t fact_tmp = facts[a];
+    facts[a] = facts[b];
+    facts[b] = fact_tmp;
+    uint16_t proof_tmp = proofs[a];
+    proofs[a] = proofs[b];
+    proofs[b] = proof_tmp;
 }
 
-static void sort_idb_slice_with_proof(maelys_datalog_internal_solve_result_t *result,
+static void sort_idb_slice_with_proof(maelys_datalog_internal_fact_t *facts,
+                                      uint16_t *proofs,
                                       size_t begin,
                                       size_t end) {
-    if (!result || end <= begin + 1u) return;
+    if (!facts || !proofs || end <= begin + 1u) return;
     for (size_t i = begin + 1u; i < end; i++) {
         size_t j = i;
         while (j > begin &&
-               maelys_datalog_fact_cmp(&result->idb_facts[j - 1u],
-                                       &result->idb_facts[j]) > 0) {
-            solve_once_swap_idb_fact_with_proof(result, j - 1u, j);
+               maelys_datalog_fact_cmp(&facts[j - 1u],
+                                       &facts[j]) > 0) {
+            solve_once_swap_idb_fact_with_proof(facts, proofs, j - 1u, j);
             j--;
         }
     }
 }
 
-static size_t dedup_idb_slice_with_proof(maelys_datalog_internal_solve_result_t *result,
+static size_t dedup_idb_slice_with_proof(maelys_datalog_internal_fact_t *facts,
+                                         uint16_t *proofs,
                                          size_t begin,
                                          size_t end) {
-    if (!result || end <= begin + 1u) return end;
+    if (!facts || !proofs || end <= begin + 1u) return end;
     size_t out = begin + 1u;
     for (size_t i = begin + 1u; i < end; i++) {
-        if (maelys_datalog_fact_equals(&result->idb_facts[out - 1u],
-                                       &result->idb_facts[i])) {
+        if (maelys_datalog_fact_equals(&facts[out - 1u],
+                                       &facts[i])) {
             continue;
         }
         if (out != i) {
-            result->idb_facts[out] = result->idb_facts[i];
-            result->idb_proof_index[out] = result->idb_proof_index[i];
+            facts[out] = facts[i];
+            proofs[out] = proofs[i];
         }
         out++;
     }
     for (size_t i = out; i < end; i++) {
-        memset(&result->idb_facts[i], 0, sizeof(result->idb_facts[i]));
-        result->idb_proof_index[i] = MAELYS_DATALOG_PROOF_NO_PARENT;
+        memset(&facts[i], 0, sizeof(facts[i]));
+        proofs[i] = MAELYS_DATALOG_PROOF_NO_PARENT;
     }
     return out;
 }
@@ -2733,8 +2740,10 @@ static maelys_result_t solve_once_freeze_active_stratum(maelys_datalog_internal_
     }
     const size_t begin = result->stratum_idb_end[result->active_stratum];
     if (begin > result->idb_current_end) return MAELYS_ERR_INVALID_STATE;
-    sort_idb_slice_with_proof(result, begin, result->idb_current_end);
-    result->idb_current_end = dedup_idb_slice_with_proof(result, begin, result->idb_current_end);
+    sort_idb_slice_with_proof(result->idb_facts, result->idb_proof_index,
+                              begin, result->idb_current_end);
+    result->idb_current_end = dedup_idb_slice_with_proof(
+        result->idb_facts, result->idb_proof_index, begin, result->idb_current_end);
     result->idb_delta_begin = result->idb_current_end;
     result->idb_delta_end = result->idb_current_end;
     result->idb_merge_end = result->idb_current_end;
