@@ -436,7 +436,7 @@ static maelys_datalog_status_t create_resourced(const maelys_datalog_policy_t *p
     fixed_plan_t p;
     rc=fixed_plan(policy,index,c,&p,NULL);
     if(rc) return rc;
-    void *arena=malloc(p.public.arena_bytes);
+    void *arena=session_storage_acquire(p.public.arena_bytes);
     if(!arena) return MAELYS_DATALOG_STATUS_INTERNAL;
     rc=fixed_init(arena,p.public.arena_bytes,policy,index,c,&p,out,NULL);
     if(rc) free(arena); else (*out)->owns_arena=1;

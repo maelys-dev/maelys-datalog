@@ -7,6 +7,9 @@
 #include <maelys/datalog_advanced.h>
 #include <maelys/datalog_window.h>
 #include <stdio.h>
+#ifdef RESOURCE_ALLOCATION_TEST
+#include "src/runtime/maelys_datalog_recycle_internal.h"
+#endif
 #include <stdlib.h>
 #include <string.h>
 #define CHECK(x) do { if (!(x)) { fprintf(stderr,"%s:%d: %s\n",__FILE__,__LINE__,#x); exit(1); } } while(0)
@@ -210,8 +213,10 @@ static void arenas(void) {
     /* Closed caller storage is reusable; session_free must never free it. */
     OK(maelys_datalog_session_init_configured(memory,p.arena_bytes,policy,0,c,&s,NULL));OK(maelys_datalog_session_free(s));free(memory);
 #ifdef RESOURCE_ALLOCATION_TEST
+    maelys_datalog_session_recycle_purge();
     before=allocations;OK(maelys_datalog_session_create_configured(policy,0,c,&s));CHECK(allocations==before+1);
-    size_t before_free=frees;OK(maelys_datalog_session_free(s));CHECK(frees==before_free+1);
+    size_t before_free=frees;OK(maelys_datalog_session_free(s));
+    maelys_datalog_session_recycle_purge();CHECK(frees==before_free+1);
 #endif
     OK(maelys_datalog_session_config_free(c));
 }

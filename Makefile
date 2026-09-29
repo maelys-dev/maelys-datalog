@@ -53,6 +53,7 @@ $(BUILD_DIR)/tests/test_maelys_datalog_compiler: TEST_EXTRA_SRCS = sdk/examples/
 $(BUILD_DIR)/tests/test_maelys_datalog_compiler: sdk/examples/frontend/src/extension.c sdk/examples/backend/src/extension.c
 $(BUILD_DIR)/tests/test_maelys_datalog_context: TEST_EXTRA_SRCS = sdk/examples/frontend/src/extension.c sdk/examples/backend/src/extension.c
 $(BUILD_DIR)/tests/test_maelys_datalog_context: TEST_CFLAGS += -pthread
+$(BUILD_DIR)/tests/test_maelys_datalog_session_recycle: TEST_CFLAGS += -pthread
 $(BUILD_DIR)/tests/test_maelys_datalog_context: sdk/examples/frontend/src/extension.c sdk/examples/backend/src/extension.c
 $(BUILD_DIR)/tests/test_maelys_datalog_pipeline: TEST_EXTRA_SRCS = sdk/examples/frontend/src/extension.c
 $(BUILD_DIR)/tests/test_maelys_datalog_pipeline: sdk/examples/frontend/src/extension.c
@@ -68,7 +69,7 @@ $(BUILD_DIR)/tests/test_maelys_datalog_input_edb_alloc: tests/test_maelys_datalo
 $(BUILD_DIR)/tests/test_maelys_datalog_wasm_builder: tests/test_maelys_datalog_wasm_builder.c tests/fixtures/allocation_guard.h $(SRCS) $(WASM_TEST_SRCS) $(WASM_TEST_HEADERS) $(ENGINE_HEADERS) | $(BUILD_DIR)/tests
 	$(CC) $(TEST_CFLAGS) -UNDEBUG -DMAELYS_WASM_ALLOCATION_TEST -include tests/fixtures/allocation_guard.h $(SRCS) $(WASM_TEST_SRCS) $< -o $@
 
-$(BUILD_DIR)/tests/test_maelys_datalog_hot_path_alloc $(BUILD_DIR)/tests/test_maelys_datalog_prepared_explanations $(BUILD_DIR)/tests/test_maelys_datalog_session_resources: $(BUILD_DIR)/tests/%: tests/%.c tests/fixtures/allocation_guard.h $(SRCS) $(ENGINE_HEADERS) | $(BUILD_DIR)/tests
+$(BUILD_DIR)/tests/test_maelys_datalog_hot_path_alloc $(BUILD_DIR)/tests/test_maelys_datalog_prepared_explanations $(BUILD_DIR)/tests/test_maelys_datalog_session_resources $(BUILD_DIR)/tests/test_maelys_datalog_session_recycle: $(BUILD_DIR)/tests/%: tests/%.c tests/fixtures/allocation_guard.h $(SRCS) $(ENGINE_HEADERS) | $(BUILD_DIR)/tests
 	$(CC) $(TEST_CFLAGS) -UNDEBUG -include tests/fixtures/allocation_guard.h $(SRCS) $< -o $@
 
 $(BUILD_DIR)/tests/test_maelys_datalog_session_explanations: tests/test_maelys_datalog_session_explanations.c tests/fixtures/allocation_guard.h $(SRCS) $(ENGINE_HEADERS) | $(BUILD_DIR)/tests

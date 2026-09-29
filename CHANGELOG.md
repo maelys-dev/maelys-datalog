@@ -16,6 +16,14 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ### Changed
 
+- Native session constructors consolidate their host regions into one aligned
+  allocation and can reuse one bounded equal-sized idle block after close.
+  Caller-owned storage and active result leases are excluded. Retained memory
+  is additional to live-session reservations and is released at native library
+  teardown; no malloc tuning or public API is added. See the
+  [ownership and qualification limits](docs/validation/session-recycling.md).
+  Complete Python performance review remains required before 0.14.0.
+
 - Disposable `solve_once` workspaces use `malloc` plus metadata initialization
   instead of zeroing the complete reservation with `calloc`. Used facts, proof
   indices and provenance validity are initialized before reading; unused payload

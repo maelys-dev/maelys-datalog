@@ -61,6 +61,7 @@ static maelys_datalog_session_t *configured(maelys_datalog_policy_t *policy, uns
 }
 
 static void creation_contract(maelys_datalog_policy_t *policy) {
+    maelys_datalog_session_recycle_purge();
     maelys_datalog_session_config_t *config;
     OK(maelys_datalog_session_config_create(&config));
     assert(maelys_datalog_session_config_set_explanation_workspace(NULL, BOTH) == MAELYS_DATALOG_STATUS_INVALID_ARGUMENT);
@@ -94,6 +95,7 @@ static void creation_contract(maelys_datalog_policy_t *policy) {
 
     /* Every constructor failure clears the output and leaves no registered range. */
     for (size_t i = 1; i <= base_allocations + 1; ++i) {
+        maelys_datalog_session_recycle_purge(); /* Exercise each cold allocation failure. */
         fail_at = allocations + i;
         other = (void *)(uintptr_t)1;
         assert(maelys_datalog_session_create_configured(policy, 0, config, &other) != MAELYS_DATALOG_STATUS_OK);
@@ -106,6 +108,7 @@ static void creation_contract(maelys_datalog_policy_t *policy) {
     assert(maelys_datalog_session_create_configured(policy, 0, config, &other) == MAELYS_DATALOG_STATUS_STORAGE_TOO_SMALL);
     assert(!other);
     OK(maelys_datalog_session_config_set_explanation_storage(config, BOTH, buffer, bound));
+    maelys_datalog_session_recycle_purge();
     start = allocations;
     OK(maelys_datalog_session_create_configured(policy, 0, config, &owned));
     assert(allocations - start == base_allocations && !owned->owns_explanation_storage);
