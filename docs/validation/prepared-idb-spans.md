@@ -44,8 +44,8 @@ The original-binary x86 [diagnostic](https://github.com/maelys-dev/maelys-datalo
 shows why the architecture qualifier matters: original SMALL Release freezing
 has 40,386/13,086/12,829 at v0.13.0 versus 38,434/15,492/12,275 after #142/#143.
 More reads need not mean more instructions. A separate fixed installed-binary
-count comparison of this candidate against #143 is pending; no x86 instruction
-benefit is claimed before it completes.
+count comparison of this candidate against #143 is recorded below. It finds
+mixed x86 instruction/read/write tradeoffs, not the ARM instruction reduction.
 
 ## Complete Python release comparison
 
@@ -130,4 +130,58 @@ reuses these exact installed SDKs after verifying the report digest and every
 selected binary hash. It counts six prospectively declared fixtures, two roles,
 two reversed repetitions and five complete-request indices: 24 processes and
 120 regions. Only the instrumentation helper is built; Valgrind latency is not
-used. Its results are pending.
+used. Its verified results follow.
+
+## Installed x86 binaries: mixed software-count result
+
+[Run 36574841013](https://github.com/maelys-dev/maelys-datalog/actions/runs/36574841013)
+completed on AMD EPYC 7763, Python 3.12.12, glibc 2.39 and Valgrind 3.22.
+Report SHA-256:
+`5a676466517d44d004a7bb78fc2c21eec8fac135f4e9467b6b97f4bff3e4891a`.
+Independent verification checks the source report, 120 selected installed-file
+hashes, immutable workload/helper sources, 24 consumers' complete checked
+answers, all 120 raw count regions and their exclusive function vectors.
+Every region retains a boundary residual of 15 Ir / 1 Dr / 7 Dw. All native
+shared-object function vectors repeat exactly across the ten scopes of each
+fixture/revision. libc and Python/CFFI remain separate physical objects; their
+raw variability is retained, not assigned to an engine phase.
+
+The table includes **all six fixtures**. Vectors are exclusive native shared-
+object Ir / Dr / Dw. libc and Python remain part of the complete request but
+are reported separately from this table. The original full-request counters
+and each physical object's counters remain in the artifact; no Valgrind timings
+are used.
+
+| Configuration / prepared case | #143 Ir / Dr / Dw | Candidate Ir / Dr / Dw | Difference Ir / Dr / Dw |
+|---|---:|---:|---:|
+| SMALL default / 93 integers | 2,328,912 / 1,043,043 / 390,353 | 2,324,168 / 1,036,883 / 391,061 | -4,744 / -6,160 / +708 |
+| SMALL Release / 93 integers | 1,192,716 / 268,546 / 134,747 | 1,192,866 / 265,742 / 134,889 | +150 / -2,804 / +142 |
+| SMALL default / 7 symbols | 82,300 / 39,062 / 15,094 | 82,308 / 39,062 / 15,098 | +8 / 0 / +4 |
+| LARGE Release / 7 symbols | 35,965 / 8,353 / 5,770 | 36,027 / 8,365 / 5,780 | +62 / +12 / +10 |
+| SMALL Release / 93 symbols | 1,314,021 / 295,356 / 150,668 | 1,314,169 / 292,544 / 150,810 | +148 / -2,812 / +142 |
+| LARGE default / 7 integers | 81,627 / 40,004 / 14,464 | 81,635 / 40,004 / 14,468 | +8 / 0 / +4 |
+
+For SMALL Release / 93 integers, the entire native difference is in
+`solve_once_freeze_active_stratum`: 38,434 / 15,492 / 12,275 becomes
+38,584 / 12,688 / 12,417. The corresponding 93-symbol vectors are
+38,530 / 15,534 / 12,309 and 38,678 / 12,722 / 12,451. In default mode the changed
+functions are freezing and its separate sort/swap/dedup helpers. For seven-row
+default cases, freezing adds 12 Ir/12 Dr, while each of sort and dedup saves
+2 Ir/6 Dr and adds 2 Dw. In LARGE Release / 7 symbols, freezing accounts for
+the complete +62 Ir/+12 Dr/+10 Dw.
+
+Disassembling the archived x86 SMALL Release binaries independently confirms
+the pointer-load mechanism: #143 reloads the facts pointer through the result
+at 0x24526 after row stores, then the proof pointer at 0x24566. The candidate's
+swap loop retains its row/proof addresses instead. But register use, spill work,
+checks and code generation also change; eliminating those particular loads
+does **not** guarantee fewer total instructions or writes. No cache, cycle or
+layout cause is inferred from the disassembly.
+
+Conclusion for this candidate: ARM shows a scoped instruction reduction; x86
+shows fewer reads on the larger fixtures with some additional instructions and
+writes, and small cases do not benefit in counts. The proposal therefore remains
+draft with this tradeoff explicit. Neither the original prepared-Python alerts
+nor the newer transient symbol p95 are solved or explained by this experiment.
+No general speedup, maintainer timing exception, merge or release approval is
+claimed. All old reports and this unsuccessful generalization are preserved.
