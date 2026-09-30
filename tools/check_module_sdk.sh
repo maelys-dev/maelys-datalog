@@ -40,6 +40,7 @@ cp "$root/tests/test_maelys_datalog_backend_transaction.c" "$scratch/"
 cp "$root/tests/test_maelys_datalog_window.c" "$scratch/"
 cp "$root/tests/test_maelys_datalog_group_window.c" "$scratch/"
 cp "$root/tests/test_maelys_datalog_window_updates.c" "$scratch/"
+cp "$root/tests/test_maelys_datalog_consumer_introspection.c" "$scratch/"
 cp "$root/examples/multi_fact_window.c" "$scratch/"
 for mapping in filter:exact_match frontend:arrow_frontend backend:naive_backend; do
   cp "$root/sdk/examples/${mapping%:*}/src/extension.c" "$scratch/${mapping#*:}.c"
@@ -111,6 +112,13 @@ for library in "$libdir/libmaelys_datalog.a" "$libdir"/libmaelys_datalog_shared.
   fi
 done
 echo 'installed libraries: no test instrumentation symbols'
+"$cc" "${flags[@]}" -pedantic-errors test_maelys_datalog_consumer_introspection.c \
+  "$libdir/libmaelys_datalog.a" -o introspection-c
+./introspection-c
+"$cxx" -x c++ -std=c++17 -Wall -Wextra -Werror -pedantic-errors -I"$prefix/include" \
+  -c test_maelys_datalog_consumer_introspection.c -o introspection-cpp.o
+"$cxx" introspection-cpp.o "$libdir/libmaelys_datalog.a" -o introspection-cpp
+./introspection-cpp
 for role in frontend backend planner filter; do
   starter="$prefix/share/maelys-datalog/templates/$role"
   # A copied starter must keep its license without relying on the repository.

@@ -1,5 +1,10 @@
 # Optional backend allocation — planned additive 0.15.0 delivery
 
+> Schedule update, 2026-09-30: v0.15.0 shipped the common JavaScript binding.
+> Allocation remains deferred; the version references below record the earlier
+> plan, not shipped support or a new release commitment. It is outside the three
+> stages of [public input transactions](public-input-transactions-plan.md).
+
 Status: deferred design, 2026-09-28. The accepted [0.14.0 capacity directive](backend-session-resources.md)
 ships FIXED only. Its reserved allocator feature and BACKEND_ELASTIC mode are
 always refused; no allocator callbacks, cap service or growth path ship in 0.14.0.

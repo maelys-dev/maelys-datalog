@@ -35,7 +35,8 @@ for (const testcase of cases) for (const explanations of [0,3]) {
       const result=rules.solve(edb,{explanations});
       const actual={answers:testcase.queries.map(q=>result.containsFact(q.predicate,q.terms)),
         documents:testcase.documents.map(q=>result[q.kind==='true'?'explainTrue':'explainFalse'](q.predicate,q.terms)),
-        policy:rules.fingerprint,execution:result.executionFingerprint};
+        policy:rules.fingerprint,execution:result.executionFingerprint,
+        counts:rules.programCounts(),policyAtomLimits:[engine.limits.maxPolicyAtoms,engine.limits.maxPolicyAtomBytes]};
       assert.deepEqual(actual,expected);
     }finally{engine.close();}
   }

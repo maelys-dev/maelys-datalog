@@ -9,6 +9,9 @@
 #if !defined(MAELYS_DATALOG_HAS_MANIFEST_BUFFER) || !MAELYS_DATALOG_HAS_MANIFEST_BUFFER
 #error "JavaScript requires an SDK with policy_load_manifest_buffer (after v0.13.0)"
 #endif
+#if !defined(MAELYS_DATALOG_HAS_CONSUMER_INTROSPECTION) || !MAELYS_DATALOG_HAS_CONSUMER_INTROSPECTION
+#error "JavaScript requires an SDK with consumer introspection (after v0.15.0)"
+#endif
 _Static_assert(MAELYS_DATALOG_PUBLIC_API_VERSION == 2u, "Review consumer API changes");
 _Static_assert(MAELYS_DATALOG_DIAGNOSTIC_ABI_VERSION == 1u, "Review diagnostic changes");
 _Static_assert(MAELYS_DATALOG_PUBLIC_MAX_TERMS == 4u, "Review transport arity");
@@ -32,7 +35,7 @@ struct maelys_js_context {
     handle *handles;
     uint32_t serial;
     void *scratch;
-    size_t max_facts, max_predicates, max_per_predicate;
+    size_t max_facts, max_predicates, max_per_predicate, max_policy_atoms;
     uint32_t *words, word_count;
     char fingerprint[MAELYS_DATALOG_PUBLIC_FINGERPRINT_BYTES];
     char *owned_text;
@@ -92,15 +95,17 @@ maelys_js_context *maelys_js_create(void) {
     c->diagnostic.abi_version = MAELYS_DATALOG_DIAGNOSTIC_ABI_VERSION;
     if (maelys_datalog_limit_get(MAELYS_DATALOG_LIMIT_MAX_EDB_FACTS, &c->max_facts) ||
         maelys_datalog_limit_get(MAELYS_DATALOG_LIMIT_MAX_PREDICATES, &c->max_predicates) ||
-        maelys_datalog_limit_get(MAELYS_DATALOG_LIMIT_MAX_FACTS_PER_PRED, &c->max_per_predicate)) {
+        maelys_datalog_limit_get(MAELYS_DATALOG_LIMIT_MAX_FACTS_PER_PRED, &c->max_per_predicate) ||
+        maelys_datalog_limit_get(MAELYS_DATALOG_LIMIT_MAX_POLICY_ATOMS, &c->max_policy_atoms)) {
         free(c); return NULL;
     }
     if (c->max_facts > SIZE_MAX / sizeof(maelys_datalog_fact_t) ||
-        c->max_predicates > (SIZE_MAX - 256 * sizeof(char *)) / sizeof(maelys_datalog_predicate_t) ||
+        c->max_policy_atoms > SIZE_MAX / sizeof(char *) ||
+        c->max_predicates > (SIZE_MAX - c->max_policy_atoms * sizeof(char *)) / sizeof(maelys_datalog_predicate_t) ||
         c->max_per_predicate > (UINT32_MAX - 16u) / 12u ||
         c->max_per_predicate > (SIZE_MAX / sizeof(uint32_t) - 16u) / 12u) { free(c); return NULL; }
     size_t bytes = c->max_facts * sizeof(maelys_datalog_fact_t);
-    size_t predicates = c->max_predicates * sizeof(maelys_datalog_predicate_t) + 256 * sizeof(char *);
+    size_t predicates = c->max_predicates * sizeof(maelys_datalog_predicate_t) + c->max_policy_atoms * sizeof(char *);
     size_t views = c->max_per_predicate * sizeof(maelys_datalog_fact_view_t);
     if (bytes < predicates) bytes = predicates;
     if (bytes < views) bytes = views;
@@ -218,18 +223,19 @@ static int dispatch(maelys_js_context *c, uint32_t op, const uint32_t *w, uint32
         c->word_count = 2; return OK;
     case 1:
         REQUIRE(n == 0);
-        for (unsigned i = 0; i < 12; ++i) {
+        for (unsigned i = 0; i < 14; ++i) {
             size_t value;
             TRY(maelys_datalog_limit_get((maelys_datalog_limit_t)(i + 1), &value));
             if (value > UINT32_MAX) return TOO_LARGE;
             c->words[i] = (uint32_t)value;
         }
-        c->word_count = 12; return OK;
+        c->word_count = 14; return OK;
     case 2: {
         REQUIRE(n >= 4);
         uint32_t predicates = w[2], atoms = w[3];
         const char *name = TEXT(0);
-        REQUIRE(name && predicates && predicates <= c->max_predicates && atoms <= 256 &&
+        REQUIRE(name && predicates && predicates <= c->max_predicates && atoms <= c->max_policy_atoms &&
+                atoms <= (UINT32_MAX - 4) / 2 &&
                 predicates <= (UINT32_MAX - 4 - atoms * 2) / 4 && n == 4 + predicates * 4 + atoms * 2);
         maelys_datalog_predicate_t *defs = c->scratch;
         const char **strings = (const char **)(defs + c->max_predicates);
@@ -412,6 +418,20 @@ static int dispatch(maelys_js_context *c, uint32_t op, const uint32_t *w, uint32
         TRY(maelys_datalog_result_derived_fact_count(h->result, &count));
         if (count > UINT32_MAX) return TOO_LARGE;
         c->words[0] = (uint32_t)count; c->word_count = 1; return OK;
+    }
+    case 21: {
+        REQUIRE(n == 2); HANDLE(h, w[0], POLICY);
+        const maelys_datalog_policy_stat_t keys[] = {
+            MAELYS_DATALOG_POLICY_PREDICATE_COUNT, MAELYS_DATALOG_POLICY_FACT_COUNT,
+            MAELYS_DATALOG_POLICY_RULE_COUNT
+        };
+        for (unsigned i = 0; i < 3; ++i) {
+            size_t value;
+            TRY(maelys_datalog_policy_stat_get(h->p.policy, w[1], keys[i], &value));
+            if (value > UINT32_MAX) return TOO_LARGE;
+            c->words[i] = (uint32_t)value;
+        }
+        c->word_count = 3; return OK;
     }
     default: return INVALID;
     }

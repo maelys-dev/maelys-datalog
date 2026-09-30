@@ -11,7 +11,7 @@ const INT64_MIN = -(1n << 63n), INT64_MAX = (1n << 63n) - 1n;
 const UINT32_MAX = 0xffffffff, FACT_WORDS = 15;
 const LIMITS = ['maxSymbols', 'stringPoolBytes', 'maxPredicates', 'maxRules',
   'maxArity', 'maxBodyLiterals', 'maxDepth', 'maxEdbFacts', 'maxIdbFacts',
-  'maxFactsPerPred', 'maxStringBytes', 'inputEdbTextBytes'];
+  'maxFactsPerPred', 'maxStringBytes', 'inputEdbTextBytes', 'maxPolicyAtoms', 'maxPolicyAtomBytes'];
 
 function utf8(value) {
   if (typeof value !== 'string') throw new TypeError('Expected a string');
@@ -191,6 +191,7 @@ class EngineBase {
     const version = invoke(this, 'transport version', 0).words;
     if (version[0] !== 1 || version[1] !== 2) throw new Error('Incompatible engine transport');
     const limits = invoke(this, 'limits', 1).words;
+    if (limits.length !== LIMITS.length) throw new Error('Incompatible engine introspection transport');
     states.get(this).limits = Object.freeze(Object.fromEntries(LIMITS.map((name, i) => [name, limits[i]])));
     Object.freeze(this);
   }
@@ -198,7 +199,7 @@ class EngineBase {
   registerDomain(name, predicates, atoms = []) {
     const s = live(this, 'Engine'), pool = strings();
     if (!Array.isArray(predicates) || !Array.isArray(atoms)) throw new TypeError('Expected predicate and atom arrays');
-    if (predicates.length > s.limits.maxPredicates || atoms.length > 256) throw new RangeError('Domain exceeds build limits');
+    if (predicates.length > s.limits.maxPredicates || atoms.length > s.limits.maxPolicyAtoms) throw new RangeError('Domain exceeds build limits');
     const words = [...pool.add(name), predicates.length, atoms.length];
     for (const p of predicates) words.push(...pool.add(p.name), u32(p.arity, 'arity'), u32(p.flags, 'flags'));
     for (const atom of atoms) words.push(...pool.add(atom));
@@ -232,6 +233,12 @@ class EngineBase {
   [Symbol.dispose]() { this.close(); }
 }
 class Ruleset {
+  programCounts(policyIndex = 0) {
+    const s = live(this, 'Ruleset');
+    const [predicates, facts, rules] = invoke(s.engine, 'programCounts', 21,
+      [s.id, u32(policyIndex, 'policyIndex')]).words;
+    return Object.freeze({ predicates, facts, rules });
+  }
   constructor(token, engine, id) { initialize(this, token, 'Ruleset', engine, id, 1); }
   get policyCount() { const s = live(this, 'Ruleset'); return invoke(s.engine, 'policyCount', 7, [s.id]).words[0]; }
   get fingerprint() { const s = live(this, 'Ruleset'); return invoke(s.engine, 'fingerprint', 11, [1, s.id]).text; }

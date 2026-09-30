@@ -17,6 +17,12 @@ async function main() {
  const engine=await Engine.create({profile:'small'});
  engine.registerDomain('types',[Predicate.edb('e',1),Predicate.idbQuery('q',1)]);
  const rules=engine.loadInlineRuleset('types','p','q(X) :- e(X).');
+ const counts:import('@maelys-dev/datalog').ProgramCounts=rules.programCounts();
+ const atomBytes:number=engine.limits.maxPolicyAtomBytes; void atomBytes;
+ // @ts-expect-error program counts are immutable
+ counts.rules=0;
+ // @ts-expect-error policy index must be numeric
+ rules.programCounts('0');
  const edb=rules.edb({factCapacity:2,textCapacity:64}); edb.addFact('e',[1n]);
  const session=rules.prepare({capacities:new SessionCapacities({inputFacts:2}),requiredCapabilities:Capability.POSITIVE,explanations:ExplanationKind.TRUE});
  const result=session.solve(edb); const rows:Value[][]=result.enumeratePredicateFacts('q',1);

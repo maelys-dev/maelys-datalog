@@ -140,6 +140,10 @@ install(FILES vendor/yyjson/LICENSE DESTINATION licenses/yyjson
 include(CTest)
 if(BUILD_TESTING)
     find_package(Threads REQUIRED)
+    add_executable(test_consumer_introspection tests/test_maelys_datalog_consumer_introspection.c)
+    target_compile_options(test_consumer_introspection PRIVATE -Wall -Wextra -Werror)
+    target_link_libraries(test_consumer_introspection PRIVATE maelys_datalog)
+    add_test(NAME consumer_introspection COMMAND test_consumer_introspection)
     add_executable(test_maelys_datalog_public_api
         tests/test_maelys_datalog_public_api.c
         tests/helpers/test_framework.c
