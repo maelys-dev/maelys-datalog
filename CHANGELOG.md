@@ -23,6 +23,13 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
   Ordinary sessions keep their behavior and identity; the opt-in contract has
   a distinct execution fingerprint. No incremental derivation algorithm or
   growing input dictionary is introduced.
+- Add an explicitly selected, separately typed ABI 7 input-transaction provider
+  descriptor. Providers receive replacement or add/remove views, with base and
+  next-generation tokens, instead of a compulsory public snapshot conversion.
+  Complete IDB emission and commit/abort/explanation leases are unchanged;
+  ABI 5/6 providers retain snapshot delivery. Native canonical EDB materialization
+  still occurs. A public projection-only conformance fixture exercises the
+  protocol; no private incremental solver or language capability is added.
 
 ## 0.15.0 — 2026-09-30
 

@@ -1,6 +1,9 @@
 /* SPDX-License-Identifier: MPL-2.0 */
 /* Installed public SDK only; software counts, never a latency benchmark. */
 #include <maelys/datalog_transactions.h>
+#ifdef INPUT_DELIVERY_BENCH
+#include "input_provider.h"
+#endif
 #include <assert.h>
 #include <inttypes.h>
 #include <stdio.h>
@@ -43,7 +46,17 @@ static void fixture(const char *path,size_t n,int symbols,int project,size_t cha
     maelys_datalog_policy_t *policy=NULL;
     const char *source=project?"out0(X) :- in0(X). out1(X) :- in1(X). out2(X) :- in2(X). out3(X) :- in3(X).":"\n";
     OK(maelys_datalog_policy_load_inline("retained_bench","fixture",source,strlen(source),&policy,NULL));
-    maelys_datalog_session_t *s=NULL;OK(maelys_datalog_session_create(policy,0,&s));
+    maelys_datalog_session_t *s=NULL;
+#ifdef INPUT_DELIVERY_BENCH
+    maelys_datalog_session_config_t *config=NULL;OK(maelys_datalog_session_config_create(&config));
+    if(!strcmp(path,"delta7"))OK(maelys_datalog_session_config_set_backend_v7(config,input_fixture_transactions()));
+    else OK(maelys_datalog_session_config_set_backend_v6(config,input_fixture_snapshot()));
+    OK(maelys_datalog_session_create_configured(policy,0,config,&s));OK(maelys_datalog_session_config_free(config));
+    int snapshot=!strcmp(path,"snapshot6"),delta=!snapshot;
+#else
+    OK(maelys_datalog_session_create(policy,0,&s));
+    int snapshot=!strcmp(path,"snapshot"),delta=!strcmp(path,"delta");
+#endif
     maelys_datalog_fact_t facts[2][256],add[2][256],remove[2][256];
     const char *vocabulary[512];for(size_t i=0;i<2*n;++i)vocabulary[i]=text[i];
     for(size_t bank=0;bank<2;++bank)for(size_t i=0;i<n;++i) {
@@ -56,7 +69,7 @@ static void fixture(const char *path,size_t n,int symbols,int project,size_t cha
         add[bank][i]=facts[bank][n-changed+i];remove[bank][i]=facts[1-bank][n-changed+i];
     }
     maelys_datalog_session_inputs_t *h=NULL;void *storage=NULL;
-    if(strcmp(path,"snapshot")) {
+    if(!snapshot) {
         maelys_datalog_input_options_t o=MAELYS_DATALOG_INPUT_OPTIONS_INIT;
         o.fact_capacity=n;o.addition_capacity=n;o.removal_capacity=n;
         if(symbols){o.symbols=vocabulary;o.symbol_count=2*n;}
@@ -76,7 +89,7 @@ static void fixture(const char *path,size_t n,int symbols,int project,size_t cha
         CALLGRIND_TOGGLE_COLLECT;
         if(h) {
             OK(maelys_datalog_session_inputs_base(h,&base));
-            if(!strcmp(path,"delta"))OK(maelys_datalog_session_inputs_apply(h,base,add[bank],changed,remove[bank],changed,&r,NULL));
+            if(delta)OK(maelys_datalog_session_inputs_apply(h,base,add[bank],changed,remove[bank],changed,&r,NULL));
             else OK(maelys_datalog_session_inputs_replace(h,base,facts[bank],n,&r,NULL));
         } else OK(maelys_datalog_session_solve(s,facts[bank],n,&r,NULL));
         CALLGRIND_TOGGLE_COLLECT;
@@ -90,7 +103,11 @@ static void fixture(const char *path,size_t n,int symbols,int project,size_t cha
     OK(maelys_datalog_session_free(s));OK(maelys_datalog_policy_free(policy));
 }
 int main(int argc,char **argv) {
+#ifdef INPUT_DELIVERY_BENCH
+    if(argc!=2 || (strcmp(argv[1],"snapshot6")&&strcmp(argv[1],"delta6")&&strcmp(argv[1],"delta7")))return 2;
+#else
     if(argc!=2 || (strcmp(argv[1],"snapshot")&&strcmp(argv[1],"replace")&&strcmp(argv[1],"delta")))return 2;
+#endif
     for(size_t i=0;i<512;++i)snprintf(text[i],sizeof(text[i]),"s%04zu",i);
     maelys_datalog_domain_t d={"retained_bench",predicates,8,NULL,0};OK(maelys_datalog_domain_register(&d));
     puts("case,transactions,digest");

@@ -12,6 +12,7 @@
 #include "common/maelys_sha256.h"
 #include "maelys/datalog_resources.h"
 #include "maelys/datalog_transactions.h"
+#include "maelys/datalog_backend_transactions.h"
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdarg.h>
@@ -28,6 +29,7 @@ struct maelys_datalog_session_config {
     char backend_name[64], backend_semantic_id[128];
     int custom_backend;
     maelys_datalog_backend_v6_t backend_v6;
+    maelys_datalog_backend_transaction_solve_t transaction_solve;
     int use_v6;
     int canonical_reference;
     maelys_datalog_session_resource_request_t resources;
@@ -188,12 +190,15 @@ struct maelys_datalog_session {
     maelys_datalog_internal_fact_t explanation_query; /* Result-scoped canonical values. */
     int pending_commit; /* Runtime-only candidate; no flag inserted into the retained payload. */
     maelys_datalog_session_inputs_t *retained_inputs;
+    maelys_datalog_backend_transaction_solve_t transaction_solve;
     /* Same allocation as the session, reserved only when !borrows_inputs.
      * Every live entry is initialized before an external solve callback. */
     struct backend_payload solve_scratch[];
 };
 static void retained_commit(maelys_datalog_session_inputs_t *);
 static void retained_abort(maelys_datalog_session_inputs_t *);
+static maelys_datalog_status_t retained_deliver(maelys_datalog_session_inputs_t *,
+    maelys_datalog_backend_output_t *, void **, maelys_datalog_diagnostic_t *);
 static int retained_conflict(const maelys_datalog_session_inputs_t *,const void *,size_t);
 static maelys_datalog_status_t retained_candidate(maelys_datalog_session_inputs_t *,
     const maelys_datalog_fact_t *, size_t, maelys_datalog_result_t **,
@@ -571,7 +576,7 @@ maelys_datalog_status_t maelys_datalog_session_solve(maelys_datalog_session_t *s
     { maelys_datalog_status_t ds = maelys_datalog_diagnostic_clear(diag); if (ds) return ds; }
     if (!s || !out)
         return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
-    if (s->busy || s->active || s->retained_inputs)
+    if (s->busy || s->active || s->retained_inputs || s->transaction_solve)
         return MAELYS_DATALOG_STATUS_INVALID_STATE;
     if (!facts && count)
         return solve_input_error(diag, MAELYS_DATALOG_STATUS_INVALID_ARGUMENT,
@@ -627,7 +632,7 @@ static maelys_datalog_status_t session_solve_materialized(maelys_datalog_session
     maelys_datalog_result_t **out, maelys_datalog_diagnostic_t *diag) {
     maelys_datalog_status_t status = MAELYS_DATALOG_STATUS_OK;
     /* Canonical public facts exist for external backends only. */
-    size_t canonical_count = s->borrows_inputs ? 0 : s->inputs->edb.fact_set.count;
+    size_t canonical_count = (s->borrows_inputs || s->transaction_solve) ? 0 : s->inputs->edb.fact_set.count;
     maelys_datalog_fact_t *canonical =
         canonical_count ? s->canonical : NULL;
     if (canonical_count) memset(canonical, 0, canonical_count * sizeof(*canonical));
@@ -645,8 +650,9 @@ static maelys_datalog_status_t session_solve_materialized(maelys_datalog_session
         maelys_datalog_fact_set_init(&result->derived, s->emitted, s->resources.derived_facts);
     maelys_datalog_backend_output_t output = {.result=result};
     s->busy = 1;
-    status = maelys_datalog_callback_status(
-        s->backend.solve(s->state, canonical, canonical_count, &output, &result->state, diag));
+    status = maelys_datalog_callback_status(s->transaction_solve
+        ? retained_deliver(s->retained_inputs, &output, &result->state, diag)
+        : s->backend.solve(s->state, canonical, canonical_count, &output, &result->state, diag));
     if (output.error)
         status = output.error;
     if (status == MAELYS_DATALOG_STATUS_OK && !s->borrows_inputs)
@@ -1143,7 +1149,7 @@ maelys_datalog_status_t maelys_datalog_session_config_set_backend(
     if (!c) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
     if (!b) {
         maelys_datalog_context_release(c->context); c->context = NULL;
-        c->custom_backend = 0; c->use_v6 = 0; return MAELYS_DATALOG_STATUS_OK;
+        c->custom_backend = 0; c->use_v6 = 0; c->transaction_solve = NULL; return MAELYS_DATALOG_STATUS_OK;
     }
     if (!maelys_datalog_backend_descriptor_valid(b)) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
     if (strlen(b->name) >= sizeof(c->backend_name) || strlen(b->semantic_id) >= sizeof(c->backend_semantic_id))
@@ -1153,6 +1159,7 @@ maelys_datalog_status_t maelys_datalog_session_config_set_backend(
     strcpy(c->backend_name, b->name); strcpy(c->backend_semantic_id, b->semantic_id);
     c->backend.name = c->backend_name; c->backend.semantic_id = c->backend_semantic_id;
     c->custom_backend = 1; c->use_v6 = 0;
+    c->transaction_solve = NULL;
     c->canonical_reference = b == maelys_datalog_backend_reference();
     return MAELYS_DATALOG_STATUS_OK;
 }
@@ -1308,6 +1315,7 @@ maelys_datalog_status_t maelys_datalog_session_config_set_context(
     maelys_datalog_context_retain(context);
     maelys_datalog_context_release(c->context);
     c->context = context; c->custom_backend = 0; c->use_v6 = 0;
+    c->transaction_solve = NULL;
     strcpy(c->context_backend_name, name ? name : "");
     return MAELYS_DATALOG_STATUS_OK;
 }

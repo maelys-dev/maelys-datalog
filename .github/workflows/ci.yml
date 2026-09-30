@@ -82,6 +82,8 @@ jobs:
         run: |
           python3 tools/check_input_transaction_mutations.py --profile SMALL --output "$RUNNER_TEMP/input-transactions-small"
           python3 tools/check_input_transaction_mutations.py --profile LARGE --output "$RUNNER_TEMP/input-transactions-large"
+          python3 tools/check_backend_input_mutations.py --profile SMALL --output "$RUNNER_TEMP/backend-input-small"
+          python3 tools/check_backend_input_mutations.py --profile LARGE --output "$RUNNER_TEMP/backend-input-large"
 
       - name: Preserve retained-input negative controls
         if: always() && runner.os == 'Linux'
@@ -93,6 +95,9 @@ jobs:
             ${{ runner.temp }}/input-transactions-*/results.json
             ${{ runner.temp }}/input-transactions-*/**/*.log
             ${{ runner.temp }}/input-transactions-*/**/*.patch
+            ${{ runner.temp }}/backend-input-*/**/*.log
+            ${{ runner.temp }}/backend-input-*/**/*.patch
+            ${{ runner.temp }}/backend-input-*/results.json
 
       - name: Preserve fixed-resource mutation evidence
         if: always() && runner.os == 'Linux'

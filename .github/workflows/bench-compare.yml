@@ -16,6 +16,11 @@ on:
         required: false
         default: false
         type: boolean
+      backend_inputs:
+        description: Count public conformance provider with snapshot6, delta6 and delta7 on head (no timings)
+        required: false
+        default: false
+        type: boolean
 
       diagnostic_original:
         description: Optional original candidate SHA for LARGE Callgrind and layout diagnosis
@@ -60,20 +65,22 @@ jobs:
       - name: Check comparison tooling
         run: python3 -m unittest discover -s bench -p 'test_compare*.py'
       - name: Prepare optional diagnostic tool
-        if: inputs.diagnostic_original != '' || inputs.session_diagnostics || inputs.session_layout || inputs.retained_inputs
+        if: inputs.diagnostic_original != '' || inputs.session_diagnostics || inputs.session_layout || inputs.retained_inputs || inputs.backend_inputs
         run: |
           if ! command -v valgrind >/dev/null; then
             sudo apt-get update
             sudo apt-get install -y valgrind
           fi
       - name: Check retained-input experiment identity and exclusive selection
-        if: inputs.retained_inputs
+        if: inputs.retained_inputs || inputs.backend_inputs
         env:
           HEAD_REF: ${{ inputs.head }}
           BASE_REF: ${{ inputs.base }}
           OTHER_DIAGNOSTIC: ${{ inputs.diagnostic_original != '' || inputs.session_diagnostics || inputs.session_layout || inputs.session_layout_original != '' }}
+          BOTH_INPUT_MODES: ${{ inputs.retained_inputs && inputs.backend_inputs }}
         run: |
           test "$OTHER_DIAGNOSTIC" = false
+          test "$BOTH_INPUT_MODES" = false
           test "$(git rev-parse HEAD)" = "$(git rev-parse "$HEAD_REF^{commit}")"
           git rev-parse "$BASE_REF^{commit}"
           git diff --exit-code
@@ -82,6 +89,11 @@ jobs:
         env:
           BASE_REF: ${{ inputs.base }}
         run: python3 bench/compare_retained_inputs.py "$RUNNER_TEMP/retained-inputs"
+      - name: Measure separately negotiated backend input delivery
+        if: inputs.backend_inputs
+        env:
+          BASE_REF: ${{ inputs.base }}
+        run: python3 bench/compare_retained_inputs.py "$RUNNER_TEMP/retained-inputs" --backend-delivery
       - name: Build every session layout variant before measurements
         if: inputs.session_layout
         env:
@@ -98,7 +110,7 @@ jobs:
           HEAD_REF: ${{ inputs.head }}
         run: bash bench/diagnose_solver_layout.sh "$BASE_REF" "$ORIGINAL_REF" "$HEAD_REF" "$RUNNER_TEMP/bench-diagnostic"
       - name: Compare immutable revisions
-        if: '!inputs.retained_inputs'
+        if: '!inputs.retained_inputs && !inputs.backend_inputs'
         env:
           BASE_REF: ${{ inputs.base }}
           HEAD_REF: ${{ inputs.head }}
