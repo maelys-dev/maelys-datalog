@@ -272,6 +272,24 @@ maelys_datalog_status_t maelys_datalog_policy_count(
     return MAELYS_DATALOG_STATUS_OK;
 }
 
+maelys_datalog_status_t maelys_datalog_policy_stat_get(
+    const maelys_datalog_policy_t *policy, size_t policy_index,
+    maelys_datalog_policy_stat_t statistic, size_t *out_value) {
+    if (!policy || !out_value) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
+    if (policy->released) return MAELYS_DATALOG_STATUS_INVALID_STATE;
+    if (policy_index >= policy->set.policy_count) return MAELYS_DATALOG_STATUS_NOT_FOUND;
+    const maelys_datalog_internal_ruleset_t *r = &policy->set.policies[policy_index];
+    size_t value;
+    switch (statistic) {
+        case MAELYS_DATALOG_POLICY_PREDICATE_COUNT: value = r->registry.count; break;
+        case MAELYS_DATALOG_POLICY_FACT_COUNT: value = r->fact_count; break;
+        case MAELYS_DATALOG_POLICY_RULE_COUNT: value = r->rule_count; break;
+        default: return MAELYS_DATALOG_STATUS_UNSUPPORTED;
+    }
+    *out_value = value;
+    return MAELYS_DATALOG_STATUS_OK;
+}
+
 maelys_datalog_status_t maelys_datalog_policy_fingerprint(
     const maelys_datalog_policy_t *policy,
     char out_fingerprint[MAELYS_DATALOG_PUBLIC_FINGERPRINT_BYTES]) {

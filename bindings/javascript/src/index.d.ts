@@ -43,7 +43,11 @@ export interface Limits {
   maxRules: number; maxArity: number; maxBodyLiterals: number; maxDepth: number;
   maxEdbFacts: number; maxIdbFacts: number; maxFactsPerPred: number;
   maxStringBytes: number; inputEdbTextBytes: number;
+  maxPolicyAtoms: number; maxPolicyAtomBytes: number;
 }
+/** Compiled registry entries (including unused declarations), policy facts,
+ * and normalized rules (including separate OR alternatives). Not session quotas. */
+export interface ProgramCounts { readonly predicates: number; readonly facts: number; readonly rules: number }
 export interface Diagnostic {
   readonly status: number; readonly source: number; readonly code: number;
   readonly present: bigint; readonly phase: string; readonly message: string;
@@ -123,6 +127,8 @@ export class Engine implements Disposable {
 export class Ruleset implements Disposable {
   private constructor();
   readonly policyCount: number;
+  /** Read the selected compiled program without preparing a session. */
+  programCounts(policyIndex?: number): Readonly<ProgramCounts>;
   readonly fingerprint: string;
   /** Reserve a reusable input EDB with explicit or profile-default bounds. */
   edb(options?: EdbOptions): Edb;

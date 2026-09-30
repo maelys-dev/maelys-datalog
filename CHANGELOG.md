@@ -7,6 +7,14 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+
+- Extend loaded-library limit queries with policy atom count and byte bounds.
+  Add allocation-free scalar queries for a selected policy's compiled predicate,
+  fact and normalized rule counts, with Python and common JavaScript/TypeScript
+  accessors. Build ceilings, program counts and effective session quotas remain
+  separate. No solver, fingerprint or backend ABI change.
+
 ## 0.15.0 — 2026-09-30
 
 The common JavaScript/TypeScript binding replaces the retired WASM package.

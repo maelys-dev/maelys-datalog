@@ -5,6 +5,15 @@ One JavaScript/TypeScript consumer API, with two implementations:
 - `@maelys-dev/datalog/node`: a native Node-API addon with the engine compiled in.
 - `@maelys-dev/datalog/wasm`: WebAssembly for browsers, module workers, or Node.
 
+`engine.limits` queries the loaded SDK, including `maxPolicyAtoms` and
+`maxPolicyAtomBytes` (UTF-8 bytes excluding NUL). `ruleset.programCounts(index=0)`
+reads immutable compiled counts without preparing a session: `predicates`
+includes unused registry declarations, `facts` counts policy facts, and `rules`
+counts normalized rules, including expanded OR alternatives. These are distinct
+from `session.capacities` (effective quotas) and EDB/result occupancy. This source
+binding requires the consumer-introspection feature guard from its matching SDK;
+mixing it with a transport lacking those queries fails explicitly.
+
 The root import selects native Node in Node and WASM with the `browser` export
 condition. Browser code without a bundler uses the ESM WASM entry point. No
 runtime silently falls back to another backend. The native artifact targets

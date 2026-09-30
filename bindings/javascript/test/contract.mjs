@@ -127,7 +127,7 @@ for (const runtime of runtimes) {
   });
   test(`${runtime}: in-memory manifests verify hashes, flags and policy selection`, async t => {
     const { engine } = await basic(t);
-    const sources = ['allow(X) :- seed(X).', 'allow(X) :- seed(X), not(blocked(X)).'];
+    const sources = ['allow(X) :- seed(X).', 'hidden(X) :- seed(X). allow(X) :- hidden(X), not(blocked(X)).'];
     const policies = sources.map((source, i) => ({ policy_id: `policy-${i}`, domain: 'js_common', file: `policy-${i}.dl`,
       sha256: createHash('sha256').update(source).digest('hex'), mode: 'enforce', enabled: true,
       description: 'JS shared contract', queries: [{ name: 'allow', arity: 1 }] }));
@@ -136,6 +136,8 @@ for (const runtime of runtimes) {
     const bundle = sources.map((source, i) => ({ policyId: `policy-${i}`, source }));
     const load = () => engine.loadManifest({ text: JSON.stringify(manifest), policies: bundle });
     const rules = load(); assert.equal(rules.policyCount, 2);
+    assert.deepEqual(rules.programCounts(0), {predicates:4,facts:0,rules:1});
+    assert.deepEqual(rules.programCounts(1), {predicates:4,facts:0,rules:2});
     const edb = rules.edb(); edb.addFacts([f('seed', 'bob'), f('blocked', 'bob')]);
     assert.equal(rules.solve(edb, { policyIndex: 0 }).containsFact('allow', ['bob']), true);
     assert.equal(rules.solve(edb, { policyIndex: 1 }).containsFact('allow', ['bob']), false);
@@ -193,7 +195,9 @@ for (const runtime of runtimes) {
     assert.equal(limits.maxEdbFacts,profile==='large'?2048:1024);
     assert.equal(limits.maxStringBytes,1024);
     assert.ok(limits.inputEdbTextBytes>=limits.stringPoolBytes);
-    assert.equal(Object.keys(limits).length,12);
+    assert.equal(Object.keys(limits).length,14);
+    assert.equal(limits.maxPolicyAtoms,256);
+    assert.equal(limits.maxPolicyAtomBytes,63);
     edb.addFacts(Array.from({length:limits.maxEdbFacts},()=>f('seed','same')));
     const full=edb.usage;
     assert.throws(()=>edb.addFact('seed',['one-more']),RangeError);
@@ -214,6 +218,7 @@ for (const runtime of runtimes) {
     assert.throws(()=>engine.registerDomain('js_atoms',predicates,atoms),status(S.INVALID_FIELD));
     assert.throws(()=>engine.loadInlineRuleset('js_atoms','bad','base("red"). q(X) :- base(X).'));
     const rules=engine.loadInlineRuleset('js_atoms','good','base("blue"). q(X) :- base(X).');
+    assert.deepEqual(rules.programCounts(), {predicates:2,facts:1,rules:1});
     const result=rules.solve(rules.edb());
     assert.equal(result.containsFact('base',['blue']),true);
     assert.deepEqual(result.enumeratePredicateFacts('base',1),[]);
@@ -226,6 +231,20 @@ for (const runtime of runtimes) {
       const good=engine.loadInlineRuleset('js_stack','ok',padding+'q(X) :- e(X).');
       assert.equal(good.solve(good.edb()).derivedFactCount(),0); good.close();
     }
+  });
+  test(`${runtime}: normalized program counts are distinct from session quotas`, async t => {
+    const {engine} = await basic(t);
+    engine.registerDomain('js_counts',[P.edb('seed',1),P.policyFact('fixed',1),P.idbQuery('out',1),P.edb('unused',1)]);
+    const rules=engine.loadInlineRuleset('js_counts','counts','fixed(3). out(X) :- seed(X) or fixed(X).');
+    const counts=rules.programCounts(), fingerprint=rules.fingerprint;
+    assert.deepEqual(counts,{predicates:4,facts:1,rules:2});
+    assert.ok(Object.isFrozen(counts));
+    assert.equal(rules.prepare({capacities:{inputFacts:0}}).capacities.inputFacts,0);
+    assert.deepEqual(rules.programCounts(),counts);
+    assert.equal(rules.fingerprint,fingerprint);
+    assert.throws(()=>rules.programCounts(1),status(S.NOT_FOUND));
+    for(const index of [-1,true,0.5,2**32]) assert.throws(()=>rules.programCounts(index),RangeError);
+    rules.close(); assert.throws(()=>rules.programCounts(),status(S.INVALID_STATE));
   });
   test(`${runtime}: bounded solve diagnostics and successful retry`, async t => {
     const engine=await Engine.create({profile}); t.after(()=>engine.close());

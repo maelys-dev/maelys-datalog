@@ -77,6 +77,7 @@ extern "C" {
 /* API_VERSION tracks incompatible consumer contracts, not additive symbols.
  * Feature guards require matching headers AND libraries from one SDK build. */
 #define MAELYS_DATALOG_HAS_MANIFEST_BUFFER 1
+#define MAELYS_DATALOG_HAS_CONSUMER_INTROSPECTION 1
 #define MAELYS_DATALOG_PUBLIC_MAX_TERMS 4u
 #define MAELYS_DATALOG_PUBLIC_FINGERPRINT_BYTES 65u
 /* Independent optional manifest-loading permissions, combined with |.
@@ -160,8 +161,20 @@ typedef enum {
     MAELYS_DATALOG_LIMIT_MAX_IDB_FACTS,
     MAELYS_DATALOG_LIMIT_MAX_FACTS_PER_PRED,
     MAELYS_DATALOG_LIMIT_MAX_STRING_BYTES,
-    MAELYS_DATALOG_LIMIT_INPUT_EDB_TEXT_BYTES
+    MAELYS_DATALOG_LIMIT_INPUT_EDB_TEXT_BYTES,
+    MAELYS_DATALOG_LIMIT_MAX_POLICY_ATOMS,
+    MAELYS_DATALOG_LIMIT_MAX_POLICY_ATOM_BYTES
 } maelys_datalog_limit_t;
+
+/* Append-only immutable compiled-program statistics, not build ceilings or
+ * session quotas. RULE_COUNT counts normalized rules (OR alternatives may
+ * produce several); FACT_COUNT counts compiled policy facts, not runtime EDB;
+ * PREDICATE_COUNT includes the compiled registry, including unused declarations. */
+typedef enum {
+    MAELYS_DATALOG_POLICY_PREDICATE_COUNT = 1,
+    MAELYS_DATALOG_POLICY_FACT_COUNT,
+    MAELYS_DATALOG_POLICY_RULE_COUNT
+} maelys_datalog_policy_stat_t;
 
 /* Diagnostics own all text. Initialize before passing to ANY producer. A v1
  * producer requires sizeof(v1) and natural alignment; it refuses smaller sizes
@@ -348,6 +361,14 @@ MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_policy_load_manifest_b
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_policy_count(
     const maelys_datalog_policy_t *policy,
     size_t *out_count);
+/* Read one selected policy without preparing a session or allocating storage.
+ * policy_index follows manifest enabled-policy order, as session_create does.
+ * An invalid index returns NOT_FOUND; an unknown statistic returns UNSUPPORTED.
+ * A released handle retained by a session returns INVALID_STATE. As with other
+ * handle APIs, a freed pointer is invalid. Every failure leaves out_value intact. */
+MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_policy_stat_get(
+    const maelys_datalog_policy_t *policy, size_t policy_index,
+    maelys_datalog_policy_stat_t statistic, size_t *out_value);
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_policy_fingerprint(
     const maelys_datalog_policy_t *policy,
     char out_fingerprint[MAELYS_DATALOG_PUBLIC_FINGERPRINT_BYTES]);

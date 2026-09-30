@@ -120,6 +120,8 @@ class Limits:
     max_facts_per_pred: int
     max_string_bytes: int
     input_edb_text_bytes: int
+    max_policy_atoms: int
+    max_policy_atom_bytes: int
 
     @classmethod
     def _read(cls) -> Limits:
@@ -130,6 +132,19 @@ class Limits:
             _check(lib.maelys_datalog_limit_get(key, out), "read build limit")
             values[name] = int(out[0])
         return cls(**values)
+
+
+@dataclass(frozen=True)
+class ProgramCounts:
+    """Immutable compiled counts, distinct from build bounds and session quotas.
+
+    Predicates include unused declarations; facts are compiled policy facts;
+    rules are normalized rules, including separate OR alternatives.
+    """
+
+    predicates: int
+    facts: int
+    rules: int
 
 
 @dataclass(frozen=True)
@@ -412,6 +427,23 @@ class Ruleset:
         out = ffi.new("size_t *")
         _check(lib.maelys_datalog_policy_count(self._policy, out), "count policies")
         return int(out[0])
+
+    def program_counts(self, policy_index: int = 0) -> ProgramCounts:
+        """Read compiled counts without preparing a session."""
+        self._require_open()
+        if isinstance(policy_index, bool) or not isinstance(policy_index, int):
+            raise TypeError("policy_index must be an int")
+        if not 0 <= policy_index < self.policy_count:
+            raise IndexError("policy_index outside the loaded policy set")
+        out = ffi.new("size_t *")
+        values = []
+        for key in (lib.MAELYS_DATALOG_POLICY_PREDICATE_COUNT,
+                    lib.MAELYS_DATALOG_POLICY_FACT_COUNT,
+                    lib.MAELYS_DATALOG_POLICY_RULE_COUNT):
+            _check(lib.maelys_datalog_policy_stat_get(self._policy, policy_index, key, out),
+                   "read program counts")
+            values.append(int(out[0]))
+        return ProgramCounts(*values)
 
     @property
     def fingerprint(self) -> str:

@@ -14,6 +14,8 @@ with Engine() as engine:
                     'answers': [result.contains_fact(q['predicate'], q['terms']) for q in case['queries']],
                     'documents': [getattr(result, 'explain_' + q['kind'])(q['predicate'], q['terms']) for q in case['documents']],
                     'policy': rules.fingerprint,
+                    'counts': vars(rules.program_counts()),
+                    'policyAtomLimits': [engine.limits.max_policy_atoms, engine.limits.max_policy_atom_bytes],
                     'execution': result.execution_fingerprint,
                 }))
         finally:

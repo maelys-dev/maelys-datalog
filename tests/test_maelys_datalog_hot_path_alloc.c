@@ -374,6 +374,14 @@ int main(void) {
     maelys_datalog_diagnostic_t diag = MAELYS_DATALOG_DIAGNOSTIC_INIT;
     maelys_datalog_policy_t *policy = NULL;
     assert(maelys_datalog_policy_load_inline("hot_path", "hot", source, strlen(source), &policy, &diag) == 0);
+    forbidden = 1;
+    size_t introspection_total = total, introspection_value = 0;
+    assert(maelys_datalog_policy_stat_get(policy, 0, MAELYS_DATALOG_POLICY_RULE_COUNT, &introspection_value) == 0);
+    assert(introspection_value == 1);
+    assert(maelys_datalog_limit_get(MAELYS_DATALOG_LIMIT_MAX_POLICY_ATOMS, &introspection_value) == 0);
+    assert(introspection_value == MAELYS_DATALOG_PUBLIC_MAX_POLICY_ATOMS);
+    assert(total == introspection_total);
+    forbidden = 0;
     owned_release_does_not_clear();
     for (unsigned op=0;op<4;++op) aggregate_without_allocator(op);
     maelys_datalog_session_t *session = NULL, *second = NULL, *filtered = NULL;

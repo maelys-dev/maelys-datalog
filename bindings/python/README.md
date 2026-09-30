@@ -363,10 +363,18 @@ as a stable machine-readable grammar.
 using `maelys_datalog_limit_get()`. It reports `max_symbols`,
 `string_pool_bytes`, `max_predicates`, `max_rules`, `max_arity`,
 `max_body_literals`, `max_depth`, `max_edb_facts`, `max_idb_facts`,
-`max_facts_per_pred` and `max_string_bytes`. These are build capacities, not
+`max_facts_per_pred`, `max_string_bytes`, `input_edb_text_bytes`,
+`max_policy_atoms` and `max_policy_atom_bytes` (UTF-8 bytes excluding NUL).
+These are build capacities, not
 current occupancy. The total input count limit applies **before deduplication**;
 additional distinct-symbol, byte-pool and per-predicate bounds can reject a
 smaller batch.
+
+`ruleset.program_counts(policy_index=0)` returns immutable `ProgramCounts`:
+`predicates` (compiled registry including unused declarations), `facts`
+(compiled policy facts) and `rules` (normalized rules, including expanded OR
+alternatives). This does not prepare a session. Use `session.capacities` for
+effective E/D/S/T quotas and EDB/result accessors for runtime occupancy.
 
 `result.derived_fact_count()` calls
 `maelys_datalog_result_derived_fact_count()` without solving again. It counts
