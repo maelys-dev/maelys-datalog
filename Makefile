@@ -23,6 +23,8 @@ TEST_HELPER_SRCS = \
 
 TEST_SRCS = $(wildcard tests/test_*.c)
 TEST_BINS = $(TEST_SRCS:tests/%.c=$(BUILD_DIR)/tests/%)
+$(BUILD_DIR)/tests/test_maelys_datalog_backend_inputs: TEST_EXTRA_SRCS = sdk/conformance/input_provider.c
+$(BUILD_DIR)/tests/test_maelys_datalog_backend_inputs: TEST_CFLAGS += -Isdk/conformance -UNDEBUG
 TEST_CFLAGS = $(CFLAGS) -DMAELYS_TESTING
 $(BUILD_DIR)/tests/test_maelys_datalog_session_resources: TEST_CFLAGS += -DRESOURCE_ALLOCATION_TEST
 

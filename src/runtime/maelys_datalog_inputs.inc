@@ -9,6 +9,8 @@ struct maelys_datalog_session_inputs {
     maelys_datalog_internal_fact_t *live, *candidate, *added, *removed;
     size_t count, candidate_count;
     int pending;
+    uint32_t delivery_kind;
+    size_t delivered_additions, delivered_removals;
     maelys_datalog_symbol_id_t map[MAELYS_DATALOG_MAX_SYMBOLS]; /* Transient. */
 };
 static uint64_t input_incarnation; /* Protected by arena_lock; never wraps. */
@@ -213,7 +215,7 @@ static maelys_datalog_status_t retained_compose(maelys_datalog_session_inputs_t 
             h->candidate[--write]=h->candidate[--left];
         else h->candidate[--write]=h->added[--right];
     }
-    h->candidate_count=n+fresh;return MAELYS_DATALOG_STATUS_OK;
+    h->candidate_count=n+fresh;h->delivered_additions=fresh;return MAELYS_DATALOG_STATUS_OK;
 }
 static maelys_datalog_status_t retained_run(maelys_datalog_session_inputs_t *h,
     maelys_datalog_input_base_t base,int snapshot,int deferred,
@@ -235,6 +237,9 @@ static maelys_datalog_status_t retained_run(maelys_datalog_session_inputs_t *h,
     rc=retained_convert(h,added,na,0,snapshot?h->candidate:h->added,&a);
     if(!rc && !snapshot) rc=retained_convert(h,removed,nr,1,h->removed,&r);
     if(!rc) { if(snapshot) h->candidate_count=a; else rc=retained_compose(h,a,r); }
+    h->delivery_kind=snapshot?MAELYS_DATALOG_BACKEND_INPUT_REPLACE:MAELYS_DATALOG_BACKEND_INPUT_DELTA;
+    if(snapshot) h->delivered_additions=a;
+    h->delivered_removals=r;
     if(!rc) rc=(maelys_datalog_status_t)maelys_datalog_prepared_session_materialize_retained(
         s->inputs,h->candidate,h->candidate_count,&h->vocabulary,h->map);
     if(rc) return solve_input_error(diag,rc,"Input transaction rejected before publication.");
@@ -257,4 +262,58 @@ maelys_datalog_status_t maelys_datalog_session_inputs_apply(
 static maelys_datalog_status_t retained_candidate(maelys_datalog_session_inputs_t *h,
     const maelys_datalog_fact_t *f,size_t n,maelys_datalog_result_t **out,maelys_datalog_diagnostic_t *d) {
     return retained_run(h,h->base,1,1,f,n,NULL,0,out,d);
+}
+
+struct maelys_datalog_backend_input_view {
+    const maelys_datalog_session_inputs_t *owner;
+    const maelys_datalog_internal_fact_t *facts;
+    size_t count;
+};
+maelys_datalog_status_t maelys_datalog_backend_input_at(
+    const maelys_datalog_backend_input_view_t *view,size_t index,maelys_datalog_fact_t *out) {
+    if(!view || !out) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
+    if(index>=view->count) return MAELYS_DATALOG_STATUS_NOT_FOUND;
+    if(!view->owner->owner || !view->owner->owner->busy || !view->owner->pending)
+        return MAELYS_DATALOG_STATUS_INVALID_STATE;
+    maelys_datalog_fact_t value={0};
+    maelys_datalog_status_t rc=(maelys_datalog_status_t)maelys_datalog_export_fact(
+        view->owner->owner->inputs->prepared,&view->owner->vocabulary,&view->facts[index],&value);
+    if(!rc) *out=value;
+    return rc;
+}
+static maelys_datalog_status_t retained_deliver(maelys_datalog_session_inputs_t *h,
+    maelys_datalog_backend_output_t *out,void **result,maelys_datalog_diagnostic_t *diag) {
+    if(!h || !h->pending) return MAELYS_DATALOG_STATUS_INVALID_STATE;
+    maelys_datalog_backend_input_view_t additions={h,
+        h->delivery_kind==MAELYS_DATALOG_BACKEND_INPUT_REPLACE?h->candidate:h->added,h->delivered_additions};
+    maelys_datalog_backend_input_view_t removals={h,h->removed,h->delivered_removals};
+    maelys_datalog_backend_input_t packet={sizeof(packet),MAELYS_DATALOG_BACKEND_INPUT_VERSION,
+        h->delivery_kind,h->base,{h->base.incarnation,h->base.generation+1},
+        &additions,&removals,additions.count,removals.count};
+    return h->owner->transaction_solve(h->owner->state,&packet,out,result,diag);
+}
+/* Only used as a typed internal marker. The host never calls it as fallback. */
+static maelys_datalog_status_t transaction_only_solve(void *state,
+    const maelys_datalog_fact_t *facts,size_t n,maelys_datalog_backend_output_t *out,
+    void **result,maelys_datalog_diagnostic_t *diag) {
+    (void)state;(void)facts;(void)n;(void)out;(void)result;(void)diag;
+    return MAELYS_DATALOG_STATUS_UNSUPPORTED;
+}
+maelys_datalog_status_t maelys_datalog_session_config_set_backend_v7(
+    maelys_datalog_session_config_t *c,const maelys_datalog_backend_v7_t *b) {
+    if(!c) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
+    if(!b) return maelys_datalog_session_config_set_backend(c,NULL);
+    if(b->abi_version!=MAELYS_DATALOG_BACKEND_V7_ABI_VERSION) return MAELYS_DATALOG_STATUS_UNSUPPORTED;
+    if(b->struct_size<sizeof(*b) || !b->solve) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
+    /* Explicit named common callbacks; no layout cast and no ABI 6 solve. */
+    maelys_datalog_backend_v6_t common={.abi_version=MAELYS_DATALOG_BACKEND_V6_ABI_VERSION,
+        .struct_size=sizeof(common),.name=b->name,.semantic_id=b->semantic_id,
+        .capabilities=b->capabilities,.resource_features=b->resource_features,
+        .storage_requirements=b->storage_requirements,.prepare=b->prepare,.solve=transaction_only_solve,
+        .explanation_storage_requirements=b->explanation_storage_requirements,
+        .explanation_prepare=b->explanation_prepare,.explanation_write_text=b->explanation_write_text,
+        .commit=b->commit,.destroy_result=b->destroy_result,.destroy=b->destroy};
+    maelys_datalog_status_t rc=maelys_datalog_session_config_set_backend_v6(c,&common);
+    if(!rc) c->transaction_solve=b->solve;
+    return rc;
 }

@@ -226,6 +226,37 @@ manual comparison protocol above to changes in ordinary solve paths.
 
 ## Installed facade and SDK
 
+The ABI 7 delivery contract is in `docs/proposals/backend-input-delivery.md`.
+`backend_input_delivery` links every engine unit with allocator guards and a
+separately compiled public provider; the installed-SDK replay copies both source
+files outside the repository and links static/shared libraries independently.
+It compares 1,200 transactions per snapshot/delta mode with fresh reference
+snapshots (seed `0x741c2903`), complete typed IDB and canonical IDs. It exercises
+stale/cross-session bases, callback/ignored-output/work rejection, retry,
+no-op generation, explanation leases and late expiry aborts in both real windows.
+Twelve rebuilt ASan/UBSan controls cover delivery kind, removals, tokens,
+dictionary selection, view bounds, unwanted full export, identity/version,
+provider publication and sticky output failure. Old ABI 5/6 consumers still run.
+
+The fixture in `sdk/conformance/input_provider.c` is deliberately limited:
+at most eight identity projections from EDB, no constants/repeated variables,
+no compiled facts, input text at most 63 bytes. Other input is refused. It copies
+retained text into its bounded arena, emits the whole IDB and supplies a simple
+true-explanation witness; it is not a general solver or an incremental algorithm.
+Its counters are observations, not committed bytes; base and retained fact
+digests must survive abort unchanged. Snapshot and transaction variants use the
+same projection code, independently of the reference oracle.
+
+Manual `bench-compare.yml` mode `backend_inputs` measures `snapshot6`, `delta6`
+and `delta7` on the same installed candidate SDK, with 32 fixtures/profile and
+200 transactions/region. All builds precede six sequential collection processes
+per profile. The 192 region pairs must match in per-function Ir/Dr/Dw, totals,
+residuals and checked outputs. `provider_exclusive` contains named fixture
+functions only; `host_shared_and_driver` includes libc shared with the provider,
+inlined work and driver code. It is not a perfectly separated host phase. Raw
+per-function counts and residuals remain available. No timings, hardware
+counters, private-provider support or whole-request O(delta) are claimed.
+
 The opt-in retained-input contract is declared in
 `maelys/datalog_transactions.h` and specified in
 `proposals/session-input-transactions.md`. The public-only consumer test replays

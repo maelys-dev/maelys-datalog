@@ -115,6 +115,7 @@ install(FILES include/maelys/datalog_advanced.h include/maelys/datalog_details.h
     include/maelys/datalog_program.h include/maelys/datalog_backend.h include/maelys/datalog_extension.h
     include/maelys/datalog_window.h include/maelys/datalog_resources.h
     include/maelys/datalog_transactions.h
+    include/maelys/datalog_backend_transactions.h
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/maelys COMPONENT sdk)
 install(FILES LICENSE DESTINATION ${CMAKE_INSTALL_DATADIR}/maelys-datalog COMPONENT sdk)
 install(FILES sdk/conformance/maelys_conformance.h sdk/conformance/README.md
@@ -149,6 +150,11 @@ if(BUILD_TESTING)
     target_compile_options(test_input_transactions PRIVATE -UNDEBUG -Wall -Wextra -Werror)
     target_link_libraries(test_input_transactions PRIVATE maelys_datalog)
     add_test(NAME retained_input_transactions COMMAND test_input_transactions)
+    add_executable(test_backend_inputs tests/test_maelys_datalog_backend_inputs.c sdk/conformance/input_provider.c)
+    target_include_directories(test_backend_inputs PRIVATE sdk/conformance)
+    target_compile_options(test_backend_inputs PRIVATE -UNDEBUG -Wall -Wextra -Werror)
+    target_link_libraries(test_backend_inputs PRIVATE maelys_allocation_guard)
+    add_test(NAME backend_input_delivery COMMAND test_backend_inputs)
     add_executable(test_maelys_datalog_public_api
         tests/test_maelys_datalog_public_api.c
         tests/helpers/test_framework.c

@@ -110,6 +110,7 @@ maelys_datalog_status_t maelys_datalog_session_config_set_backend_v6(
     strcpy(c->backend_name, b->name); strcpy(c->backend_semantic_id, b->semantic_id);
     c->backend_v6.name = c->backend_name; c->backend_v6.semantic_id = c->backend_semantic_id;
     c->custom_backend = 1; c->use_v6 = 1;
+    c->transaction_solve = NULL;
     c->canonical_reference = b == maelys_datalog_backend_reference_v6();
     return MAELYS_DATALOG_STATUS_OK;
 }
@@ -122,6 +123,7 @@ maelys_datalog_status_t maelys_datalog_session_config_set_context_backend_v6(
         return maelys_datalog_context_backend(ctx, name) ? MAELYS_DATALOG_STATUS_UNSUPPORTED : MAELYS_DATALOG_STATUS_NOT_FOUND;
     maelys_datalog_context_retain(ctx); maelys_datalog_context_release(c->context);
     c->context = ctx; c->use_v6 = 1; c->custom_backend = 0;
+    c->transaction_solve = NULL;
     strcpy(c->context_backend_name, name ? name : "");
     return MAELYS_DATALOG_STATUS_OK;
 }
@@ -210,7 +212,9 @@ static maelys_datalog_status_t fixed_plan(const maelys_datalog_policy_t *policy,
         _Alignof(max_align_t), workspace);
     if (!policy->owns_storage) { HOST(1, sizeof(*rules), _Alignof(max_align_t), snapshot); }
     if (!p->borrows) {
-        HOST(p->resources.input_facts, sizeof(maelys_datalog_fact_t), _Alignof(maelys_datalog_fact_t), canonical);
+        if (!c || !c->transaction_solve) {
+            HOST(p->resources.input_facts, sizeof(maelys_datalog_fact_t), _Alignof(maelys_datalog_fact_t), canonical);
+        }
         HOST(p->resources.derived_facts, sizeof(maelys_datalog_internal_fact_t), _Alignof(maelys_datalog_internal_fact_t), emitted);
     }
 #undef HOST
@@ -353,6 +357,7 @@ static maelys_datalog_status_t fixed_init(void *arena, size_t bytes,
     s->program.ruleset = rules; s->program.prepared_inputs = s->inputs;
     s->resources = p->resources; s->work_limit = p->work_limit;
     s->borrows_inputs = p->borrows; s->reference_backend = p->reference;
+    s->transaction_solve = config ? config->transaction_solve : NULL;
     s->canonical = (void *)(base+p->canonical); s->emitted = (void *)(base+p->emitted);
     const maelys_datalog_backend_v6_t *b = p->backend;
     strcpy(s->name,b->name); strcpy(s->semantic_id,b->semantic_id);
@@ -378,6 +383,11 @@ static maelys_datalog_status_t fixed_init(void *arena, size_t bytes,
             v->memory_mode,(unsigned long long)v->required_features);
         if (n<0 || (size_t)n>=sizeof(identity) || maelys_sha256_hex((const unsigned char *)identity,(size_t)n,s->execution_fingerprint))
             rc=MAELYS_DATALOG_STATUS_INTERNAL;
+    }
+    if (!rc && s->transaction_solve) {
+        n=snprintf(identity,sizeof(identity),"maelys-backend-input-v1/abi7\n%s\n",s->execution_fingerprint);
+        if (n<0 || (size_t)n>=sizeof(identity) || maelys_sha256_hex(
+            (const unsigned char *)identity,(size_t)n,s->execution_fingerprint)) rc=MAELYS_DATALOG_STATUS_INTERNAL;
     }
     if (!rc && explanation_bytes) {
         maelys_datalog_session_config_t c=*config;

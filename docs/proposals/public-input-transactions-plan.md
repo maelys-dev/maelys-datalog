@@ -72,6 +72,10 @@ is authorized by this plan.
   Thirty-two suites pass in SMALL/LARGE and under ASan/UBSan; 15 rebuilt
   mutations are detected in each profile. The instruction experiment compares
   three public entries on the same SDK, not different solver revisions.
-- Stage 3: queued after retained input; separate descriptor negotiation review.
+- Stage 3: implementation on `feat/backend-input-delivery`, stacked on #152.
+  Explicit ABI 7 direct configuration, callback-scoped typed input views and a
+  separately compiled public conformance provider. Thirty-three CMake suites
+  and twelve rebuilt protocol/provider mutations qualify the delivery path;
+  hosted instruction evidence and full CI remain necessary before readiness.
 - #140 is an existing, unmerged experiment. Its measured algorithm decision is
   usable design evidence; this plan does not merge it or modify its old report.
