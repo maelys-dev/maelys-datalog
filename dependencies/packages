@@ -8,6 +8,8 @@ clang
 jq
 cmake
 python3
+binutils
+curl
 
 [macos]
 cmake

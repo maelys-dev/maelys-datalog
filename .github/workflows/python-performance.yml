@@ -7,6 +7,10 @@ on:
     branches: [main]
   workflow_dispatch:
     inputs:
+      javascript_diagnostic:
+        description: 'Investigate fixed #147 Python observations using original binaries and identical labels'
+        type: boolean
+        default: false
       comparison_base:
         description: 'Optional full SHA for an additional complete comparison (not release evidence)'
         type: string
@@ -59,7 +63,7 @@ jobs:
   evidence:
     name: Python performance evidence
     runs-on: ubuntu-24.04
-    timeout-minutes: ${{ inputs.prepared_diagnostic == true && 90 || 60 }}
+    timeout-minutes: ${{ (inputs.javascript_diagnostic == true || inputs.prepared_diagnostic == true) && 90 || 60 }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -68,6 +72,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12.12'
+      - name: Reject ambiguous JavaScript release diagnostic selection
+        if: inputs.javascript_diagnostic == true && (inputs.prepared_span_counts == true || inputs.prepared_diagnostic == true || inputs.comparison_base != '' || inputs.span_report_sha256 != '' || inputs.allocator_diagnostic == true || inputs.tail_diagnostic == true || inputs.instruction_diagnostic == true || inputs.release_diagnostic == true || inputs.release_process_control == true)
+        run: exit 1
       - name: Reject ambiguous span count selection
         if: (inputs.prepared_span_counts == true && (inputs.prepared_diagnostic == true || inputs.comparison_base != '' || inputs.allocator_diagnostic == true || inputs.tail_diagnostic == true || inputs.instruction_diagnostic == true || inputs.release_diagnostic == true || inputs.release_process_control == true)) || (inputs.prepared_span_counts != true && inputs.span_report_sha256 != '')
         run: exit 1
@@ -77,7 +84,7 @@ jobs:
           sudo apt-get install -y clang-18 cmake
           python -m pip install -r bench/python-perf-requirements.txt
       - name: Measure candidate, previous release and durable v0.11.1 reference
-        if: inputs.prepared_span_counts != true && inputs.prepared_diagnostic != true && inputs.allocator_diagnostic != true && inputs.tail_diagnostic != true && inputs.instruction_diagnostic != true && inputs.release_diagnostic != true && inputs.release_process_control != true
+        if: inputs.javascript_diagnostic != true && inputs.prepared_span_counts != true && inputs.prepared_diagnostic != true && inputs.allocator_diagnostic != true && inputs.tail_diagnostic != true && inputs.instruction_diagnostic != true && inputs.release_diagnostic != true && inputs.release_process_control != true
         env:
           GH_TOKEN: ${{ github.token }}
           COMPARISON_BASE: ${{ inputs.comparison_base }}
@@ -175,11 +182,20 @@ jobs:
           gh run download 36566987207 --name python-performance-adf2cf3d112efc95fbb9be0a5386346d630fb0bc --dir span-evidence
           python -m unittest discover -s tests/tooling -p 'test_python_perf*.py' -v
           python bench/python_prepared_diagnostic.py --span-evidence span-evidence --report-sha256 "$REPORT_SHA256" --output evidence
+      - name: Investigate the fixed JavaScript release Python observations
+        if: inputs.javascript_diagnostic == true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          sudo apt-get install -y valgrind
+          gh run download 36678625484 --name python-performance-b0cffed82bfa56f090870172777496fd7a0e1f45 --dir original-evidence
+          python -m unittest discover -s tests/tooling -p 'test_python_perf*.py' -v
+          python bench/python_javascript_diagnostic.py --evidence original-evidence --output evidence
       - name: Preserve every measurement
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ inputs.prepared_span_counts == true && 'python-prepared-span-counts' || inputs.prepared_diagnostic == true && 'python-prepared-diagnostic' || inputs.allocator_diagnostic == true && 'python-allocator-control' || inputs.release_process_control == true && 'python-release-process-control' || inputs.release_diagnostic == true && 'python-release-instructions' || inputs.instruction_diagnostic == true && 'python-tail-instructions' || inputs.tail_diagnostic == true && 'python-tail-diagnostic' || 'python-performance' }}-${{ github.sha }}
+          name: ${{ inputs.javascript_diagnostic == true && 'python-javascript-diagnostic' || inputs.prepared_span_counts == true && 'python-prepared-span-counts' || inputs.prepared_diagnostic == true && 'python-prepared-diagnostic' || inputs.allocator_diagnostic == true && 'python-allocator-control' || inputs.release_process_control == true && 'python-release-process-control' || inputs.release_diagnostic == true && 'python-release-instructions' || inputs.instruction_diagnostic == true && 'python-tail-instructions' || inputs.tail_diagnostic == true && 'python-tail-diagnostic' || 'python-performance' }}-${{ github.sha }}
           path: evidence/
           if-no-files-found: error
           retention-days: 90

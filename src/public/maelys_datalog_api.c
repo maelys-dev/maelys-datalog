@@ -10,6 +10,7 @@
 #include "src/core/maelys_datalog_solver.h"
 #include "src/core/maelys_datalog_symbol_table.h"
 #include "src/manifest/maelys_datalog_manifest.h"
+#include "src/manifest/maelys_datalog_manifest_buffer_internal.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -304,7 +305,7 @@ maelys_datalog_status_t maelys_datalog_policy_free(maelys_datalog_policy_t *poli
     return MAELYS_DATALOG_STATUS_OK;
 }
 
-static maelys_datalog_status_t load_manifest_text(void *storage, size_t bytes,
+static maelys_datalog_status_t load_manifest_text(void *storage, size_t bytes, const char *expected_profile,
     const char *json, size_t length, const maelys_datalog_policy_bundle_entry_t *bundle,
     size_t count, unsigned flags, maelys_datalog_policy_t **out,
     maelys_datalog_diagnostic_t *diag) {
@@ -318,8 +319,11 @@ static maelys_datalog_status_t load_manifest_text(void *storage, size_t bytes,
     ds = storage ? policy_storage(storage, bytes, out, &policy) : allocate_policy(out, &policy);
     if (ds) return ds;
     maelys_datalog_internal_diagnostic_t detail = {0};
-    maelys_result_t rc = maelys_datalog_manifest_load_from_text(json, length, bundle, count,
-        flags, &policy->set, &detail);
+    maelys_result_t rc = expected_profile
+        ? maelys_datalog_manifest_load_from_text_expected_profile(json, length, bundle, count,
+            flags, expected_profile, &policy->set, &detail)
+        : maelys_datalog_manifest_load_from_text(json, length, bundle, count,
+            flags, &policy->set, &detail);
     if (rc) {
         maelys_datalog_copy_load_diagnostic(diag, &detail, rc);
         discard_policy(policy);
@@ -372,10 +376,16 @@ maelys_datalog_status_t maelys_datalog_policy_load_manifest_text_in(void *storag
     unsigned flags, maelys_datalog_policy_t **out, maelys_datalog_diagnostic_t *diag) {
     if (out) *out = NULL;
     if (!storage) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
-    return load_manifest_text(storage, bytes, json, length, bundle, count, flags, out, diag);
+    return load_manifest_text(storage, bytes, NULL, json, length, bundle, count, flags, out, diag);
 }
 maelys_datalog_status_t maelys_datalog_policy_load_manifest_text(
     const char *json, size_t length, const maelys_datalog_policy_bundle_entry_t *bundle, size_t count,
     unsigned flags, maelys_datalog_policy_t **out, maelys_datalog_diagnostic_t *diag) {
-    return load_manifest_text(NULL, 0, json, length, bundle, count, flags, out, diag);
+    return load_manifest_text(NULL, 0, NULL, json, length, bundle, count, flags, out, diag);
+}
+
+maelys_datalog_status_t maelys_datalog_policy_load_manifest_buffer(
+    const char *json, size_t length, const maelys_datalog_policy_bundle_entry_t *bundle, size_t count,
+    unsigned flags, maelys_datalog_policy_t **out, maelys_datalog_diagnostic_t *diag) {
+    return load_manifest_text(NULL, 0, "enforce", json, length, bundle, count, flags, out, diag);
 }

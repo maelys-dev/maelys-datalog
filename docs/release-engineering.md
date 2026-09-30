@@ -48,8 +48,7 @@ target on an Ubuntu runner, not a separate job.
 | Artifact | Targets | Contents |
 |---|---|---|
 | `maelys-datalog-X.Y.Z-<target>.tar.gz` | linux-x86_64, linux-arm64, macos-arm64 | `lib/libmaelys_datalog.a` (SMALL), `include/maelys/*.h`, SDK conformance kit/MIT starters and licenses under `share/maelys-datalog/`, `LICENSE`, `CHANGELOG.md`, `licenses/yyjson/LICENSE` |
-| `maelys-datalog-X.Y.Z-wasm-small.tar.gz` | wasm32 (profile `small`) | `maelys_datalog_dynamic.js`, `maelys_datalog_dynamic.wasm`, `maelys_playground.js`, `maelys_playground.d.ts` |
-| `maelys-datalog-X.Y.Z-wasm-large.tar.gz` | wasm32 (profile `large`, `-DMAELYS_DATALOG_PROFILE_LARGE`) | same layout |
+| `maelys-datalog-X.Y.Z-javascript-<target>.tar.gz` | all four targets | Common JS/TS sources plus SMALL and LARGE native prebuilds or WASM modules |
 
 Native staging uses the `sdk` and `sdk-static` CMake install components;
 CMake is the only install list for public headers and SDK support files. The
@@ -79,6 +78,35 @@ macOS Intel is intentionally not shipped (same policy as mcp-runtime).
 Windows is out of scope (untested toolchain, no CI runner budget for it).
 
 ## D2 — WASM reproducibility
+
+### JavaScript native compatibility
+
+The additional `javascript-<target>` archives carry the unified package's two
+profiles. Their native static SDKs are independent Release/PIC builds; this
+does not change the historical native SDK archive's Debug configuration.
+`tools/javascript-build.json` pins Node 22.23.3, macOS 13.5 and a maximum glibc
+symbol requirement of 2.34. The release script downloads the exact official Node
+distribution (including headers), verifies the hashes committed in
+`tools/javascript-node-sha256.txt`, and uses that Node for both compilation and
+runtime tests. Runner Node packages and ambient PATH do not select this version.
+Development builds may fetch their selected Node version's headers from
+nodejs.org and verify its official SHASUMS256.txt; there is no install-time hook.
+
+The final native addons must be stripped and export exactly
+`napi_register_module_v1` and `node_api_module_get_api_version_v1`. Engine and
+transport symbols are hidden. Packaging invokes
+`tools/check_javascript_binary.py` on the binary it archives: ELF version needs
+must stay at or below GLIBC_2.34, while Mach-O must declare deployment target
+13.5. A new runner/compiler that introduces a newer dependency fails packaging;
+it does not silently raise the consumer floor. These binary checks do not claim
+execution coverage of every supported OS. Rehearse the declared Linux runners
+with the pinned socle, and preserve actual CI results separately from local runs.
+
+Only the `npm-javascript` channel publishes the common package. The first release
+retires the legacy `npm` channel, wrapper and archives together; historical tags
+remain immutable. See `bindings/javascript/README.md` for caller migration.
+
+### Emscripten pin
 
 The equivalent of mcp-runtime's SHA-pinned jansson is the **pinned emsdk**:
 
@@ -168,7 +196,7 @@ channels.
 | Channel | First tooled release | Rationale |
 |---|---|---|
 | GitHub Release tarballs + attestation | **yes** | the base layer |
-| npm `@maelys-dev/datalog-wasm` on **GitHub Packages** | **yes**, dist-tag `next` while `0.x` | cheapest channel, platform-independent artifact, direct continuation of the playground; declared `[channels] npm github-packages` and published by the socle's channel job after the Release, through `scripts/publish-channel.sh` on the Release's own downloaded assets, authenticated by the run's `GITHUB_TOKEN` (`packages: write`). No long-lived registry secret and no trusted-publisher setup; in exchange the scope must be the repository owner's, consumers must authenticate even for a public package, and `npm publish --provenance` is unavailable — provenance stays on the tarball attestations |
+| npm `@maelys-dev/datalog` on **GitHub Packages** | **yes**, dist-tag `next` while `0.x` | Declared `[channels] npm-javascript github-packages`; assembled from the four receipt-bound release archives, published with `--ignore-scripts` by the tagged workflow after the release gate. Authenticated consumers need `read:packages`; provenance remains on the archive attestations. |
 | Homebrew tap (lib + header formula) | **no** (decided 2026-09-13) | the product is a static library and headers; the audience is narrow until a command exists. The formula the alpha mechanism had pushed, `maelys-datalog` at v0.1.0-alpha.3, was withdrawn from `maelys-dev/homebrew-tap` on that date rather than left three alpha versions behind. When a command exists, the formula returns under the socle's name, `packaging/homebrew/libmaelys-datalog.rb.in`, rendered and pushed by the socle's tap job — with a `make install PREFIX=` the formula can call |
 | PyPI wheels | **no** | cibuildwheel matrix is a dedicated cycle; PyPI is irreversible and the cffi API is not frozen. Immediate actions only: reserve the name, add `pyproject.toml` for editable installs |
 

@@ -111,11 +111,11 @@ changelog entry) and pushes. The push triggers `release.yml`.
 4. The publish job (`contents: write`, compiles nothing) verifies every
    `.sha256`, writes `SHA256SUMS` over the archives and the receipts, and
    creates the GitHub Release with them.
-5. The channel job publishes `@maelys-dev/datalog-wasm` to GitHub Packages
-   through `scripts/publish-channel.sh vX.Y.Z npm`, from the Release's own
-   downloaded assets, then attaches `channel-npm.json` to the Release — the
+5. The channel job publishes `@maelys-dev/datalog` to GitHub Packages
+   through `scripts/publish-channel.sh vX.Y.Z npm-javascript`, from the Release's own
+   downloaded assets, then attaches `channel-npm-javascript.json` to the Release — the
    observation that it published, never written by a build. It asks for no
-   approval of its own (`npm github-packages none`): the approval of step 3
+   approval of its own (`npm-javascript github-packages none`): the approval of step 3
    covers it, and it starts as soon as the Release exists.
 
 A run that failed for a reason outside the code — a cancelled job, an
@@ -139,10 +139,10 @@ Per release, attached to the GitHub Release:
 | File | Produced by |
 |---|---|
 | `maelys-datalog-X.Y.Z-<target>.tar.gz` + `.sha256` for the three native targets | `package-release.sh <target>` — `lib/libmaelys_datalog.a`, the public headers, `LICENSE`, `licenses/yyjson/LICENSE`, `CHANGELOG.md`, the conformance kit |
-| `maelys-datalog-X.Y.Z-wasm-small.tar.gz`, `-wasm-large.tar.gz` + `.sha256` | `package-release.sh wasm32` — `maelys_datalog_dynamic.{js,wasm}`, `maelys_playground.js` |
+| `maelys-datalog-X.Y.Z-javascript-<target>.tar.gz` + `.sha256` for all four targets | Common package files plus both profiles of the target runtime |
 | `release-receipt-<target>.json`, one per target | `package-release.sh`; immutable: name, version, tag, commit, date, target, `emsdk_version` (`null` on native targets), artifacts with their sha256 |
 | `SHA256SUMS` | the socle's publish job, over every archive and receipt |
-| `channel-npm.json` | the socle's channel job, after the npm publication succeeded |
+| `channel-npm-javascript.json` | the socle's channel job, after the npm publication succeeded |
 
 Provenance: `gh attestation verify <file> --repo maelys-dev/maelys-datalog`.
 
@@ -151,7 +151,7 @@ Provenance: `gh attestation verify <file> --repo maelys-dev/maelys-datalog`.
 ```bash
 scripts/package-release.sh              # native, target detected from uname
 scripts/package-release.sh wasm32       # both WASM profiles
-scripts/build-npm-package.sh dist/      # assemble the npm package (pack only)
+python3 scripts/build-javascript-package.py dist/      # assemble the npm package (pack only)
 ```
 
 `wasm32` needs emsdk `3.1.61` (pinned in `package-release.sh`): an `emcc` of
@@ -161,7 +161,7 @@ other target than the four above is refused.
 
 `maelys-release rehearse . linux-arm64` replays the socle's Linux build job in
 Docker — the closest thing to the workflow without a tag. Before cutting a
-release, `maelys-release rehearse . --channel npm --tag vX.Y.Z` (the previous
+release, `maelys-release rehearse . --channel npm-javascript --tag vX.Y.Z` (the previous
 tag, with `NODE_AUTH_TOKEN` set to a token carrying `read:packages`) runs
 `scripts/publish-channel.sh` the way the channel job does, on the release's
 own assets, with `CHANNEL_DRY_RUN=1`: the script then takes its real path up
@@ -174,7 +174,20 @@ channel failed on the other one with a green rehearsal.
 
 ## The npm package
 
-`@maelys-dev/datalog-wasm` is published to **GitHub Packages**
+The unified `@maelys-dev/datalog` package is assembled by
+`scripts/build-javascript-package.py dist/` from the four receipt-bound
+`javascript-<target>` archives, and published by the `npm-javascript` channel.
+The build-time Node pin, native export/strip checks and OS compatibility floors
+are documented in [release engineering](docs/release-engineering.md#javascript-native-compatibility).
+Assembly checks that all receipts name the same source commit as the assembly
+checkout and that all common package files agree byte-for-byte. It never builds
+or runs a package script. Native addon installation needs no compiler or download.
+
+The first release of this package retires the old package and archives in one
+cutover, as specified in [the migration contract](bindings/javascript/README.md#sdk-compatibility-and-migration).
+Historical releases remain immutable; no legacy archive or channel is built anew.
+
+`@maelys-dev/datalog` is published to **GitHub Packages**
 (`npm.pkg.github.com`), not to npmjs.com, by the socle's channel job with the
 run's `GITHUB_TOKEN`; the dist-tag is `next` while the version is `0.x`,
 `latest` from `1.0.0`. Consumers point the scope at that registry and

@@ -21,7 +21,14 @@ for component in sdk sdk-static; do
   cmake --install "$build" --prefix "$scratch/install" --component "$component"
 done
 mkdir "$scratch/extracted"
-tar -xzf "$archive" -C "$scratch/extracted"
+# Use the same format reader as the raw-member guard below. GNU tar 1.35 can
+# fail with ENOSYS under linux/amd64 emulation on an ARM64 Docker host.
+python3 - "$archive" "$scratch/extracted" <<'PYEXTRACT'
+import sys
+import tarfile
+with tarfile.open(sys.argv[1], "r:gz") as archive:
+    archive.extractall(sys.argv[2], filter="data")
+PYEXTRACT
 prefix="$scratch/extracted"
 # BSD tar can absorb AppleDouble metadata on extraction. Inspect raw members
 # too: no file or duplicate entry may disappear from the extracted inventory.

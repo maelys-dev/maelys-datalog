@@ -107,7 +107,7 @@ engaged even though no reader arrives at them from the README:
 
 - [`docs/validation.md`](docs/validation.md) — named in
   [`CHANGELOG.md`](CHANGELOG.md), which travels inside every released tarball,
-  and in [`bindings/wasm/README.md`](bindings/wasm/README.md). A reader of a
+  and in [`bindings/javascript/README.md`](bindings/javascript/README.md). A reader of a
   shipped changelog must find it here.
 - [`docs/release-engineering.md`](docs/release-engineering.md) — cited by
   [`scripts/package-release.sh`](scripts/package-release.sh), which builds

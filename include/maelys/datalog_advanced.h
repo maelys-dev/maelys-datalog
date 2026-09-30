@@ -7,13 +7,9 @@
 extern "C" {
 #endif
 
-/* Same policy handle as inline/file loading. Sources are borrowed for this call
- * only; the compiled policy owns its content. No compatibility wrapper types. */
-typedef struct {
-    const char *policy_id;
-    const char *src;
-    size_t src_len;
-} maelys_datalog_policy_bundle_entry_t;
+/* Historical memory manifest contract: default_profile=MAELYS-DATALOG-v2.
+ * Sources are borrowed for the call. For file-loader/Python semantics, use the
+ * stable policy_load_manifest_buffer entry point (default_profile=enforce). */
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_policy_load_manifest_text(
     const char *, size_t, const maelys_datalog_policy_bundle_entry_t *, size_t,
     unsigned flags, maelys_datalog_policy_t **, maelys_datalog_diagnostic_t *);

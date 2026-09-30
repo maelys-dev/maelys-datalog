@@ -402,56 +402,34 @@ The single Python binding’s build/test commands, migration table and lifecycle
 examples are in its [README](../bindings/python/README.md); test SMALL and LARGE.
 
 The WASM C boundary and JavaScript wrapper live together in
-[`bindings/wasm/`](../bindings/wasm/README.md). Generated modules remain under `build/wasm` and `build/wasm-large`. The gate
-copies the built wrapper and tests outside the checkout before execution.
+[`bindings/javascript/`](../bindings/javascript/README.md). Its two runtimes
+share the same contract suite, declaration, and C transport. The first common
+package release removes the former wrapper and its build/channel paths.
 
-After each profile’s CMake build, run the isolated installed-SDK Python gate:
+The native allocation probe `test_maelys_datalog_javascript_transport.c`
+checks partial initialization cleanup, transactional malformed batches,
+prepared append/solve/query/enumeration/release without allocator calls, and
+handle leases in both profiles and sanitizer matrices. JavaScript conversion,
+WASM transport frames and explanation text still allocate.
 
-```sh
-python3 -m venv build/validation-venv
-build/validation-venv/bin/python -m pip install cffi setuptools pytest
-bash tools/check_python_binding.sh "$PWD/build/cmake" build/validation-venv/bin/python small
-bash tools/check_python_binding.sh "$PWD/build/cmake-large" build/validation-venv/bin/python large
-```
-
-The gate installs a fresh SDK, copies binding/tests outside the checkout, clears
-ambient C include/library search paths and compiles CFFI using only that prefix.
-Only `libmaelys_datalog_shared` is copied next to the extension; the native-object
-shim is removed. Each profile starts fresh Python processes and checks loaded
-limits through `MAELYS_DATALOG_EXPECT_PROFILE`. New inodes avoid stale Mach-O
-signature pages when switching builds. Ground-query origins, exact Why-true
-text, truncation, raw-term ownership, domain conflict/reuse, and intentional V1
-API/lifecycle changes are covered alongside the former Python-next suite.
-`test_sdk_admission.py` preserves the current layouts but changes the SDK API
-version to 1 or 3 in independent copies: compilation must fail at the explicit
-API 2 guard. Removing that guard makes both negative controls fail.
+`bindings/javascript/test/contract.mjs` checks exact int64 values, UTF-16,
+capacity boundaries, domain atoms, ownership, structured diagnostics, all
+aggregates, stack-safe large-source loads, WASM exports, transport allocation
+failures and refreshed memory views. `python-parity.mjs` compares decisions,
+fingerprints and full/truncated explanation bytes with Python in both profiles
+and workspace modes. The browser probe includes module workers.
 
 ```sh
 for profile in small large; do
-  make -B -f Makefile.wasm maelys_datalog_dynamic.js WASM_PROFILE="$profile" EM_CACHE="$PWD/build/emscripten-cache"
-  bash tools/check_wasm_binding.sh "$profile"
-  EM_CACHE="$PWD/build/emscripten-cache" bash tools/check_wasm_extensions.sh "$profile"
+  tools/build_javascript_binding.sh native "$profile" build/javascript-package
+  tools/build_javascript_binding.sh wasm "$profile" build/javascript-package
+  MAELYS_PROFILE="$profile" node --test bindings/javascript/test/contract.mjs
+  bash tools/check_wasm_extensions.sh "$profile"
 done
 ```
 
-These run actual compiled Wasm under Node, not a browser. No backend selector
-is added to either binding by this validation work.
-The extension check separately links each C example and the C host into the same
-WASM module. It runs all five conformance executables under Node; it does not use
-side modules or alter the shipped JavaScript wrapper.
-
-CI runs both profiles with Emscripten 3.1.61 (the release toolchain) and
-4.0.14. The builder installs an Emscripten static SDK in a fresh prefix and
-compiles the adapter outside the source tree using only its public headers.
-API 1/3 and private-header negative controls must fail. A separate C consumer
-compares results and canonical explanation bytes with the public SDK; native
-ASan/UBSan and allocation guards also exercise malformed frames, rollback,
-int64 extremes, short-output retry, close and reuse. The actual Wasm export
-table must contain the binding allowlist and no historical native exports.
-Node tests cover typed inputs, all aggregate operators, atom authority, result
-leases, structured capacity diagnostics, both explanation kinds/truncation,
-exact int64, copied values, multi-predicate atomicity and memory-view growth.
-No timing or whole-binding zero-allocation claim follows from these tests.
+The WASM CI matrix runs the common package with Emscripten 3.1.61 and 4.0.14.
+The independent installed-SDK extension conformance probe remains supported.
 
 ## Bounded robustness smoke and guards
 

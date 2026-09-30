@@ -674,3 +674,43 @@ default / 93 integers; +150/-2,804/+142 for SMALL Release / 93 integers;
 work. These mixed software counts neither explain nor erase the complete
 Python timing alerts. The runtime proposal retains that tradeoff for review;
 no general speedup, timing exception or release approval follows.
+
+
+## #147 common JavaScript binding: bounded Python investigation
+
+The optional `javascript_diagnostic` dispatch consumes the original installed
+consumers of run `36678625484`, report SHA-256
+`671c0431ffe4272fddd53876f210dc48a0da5ccade8e6ea6b758e48fb791c2e4`.
+It compares published v0.14.0 (`9700d38`) with measured candidate `b0cffed`.
+`bench/python_javascript_diagnostic.py` verifies that report, every selected
+binary/header/binding hash, the unchanged complete-request harness and the
+Python/dependency versions. No measured SDK is rebuilt. The socle adoption
+and subsequent diagnostic changes do not alter those runtime/binding bytes.
+
+Four fixtures are declared before measurement: LARGE default / 93-integer-solve
+(the original +78.61% p95), LARGE default / 7-integer-prepared, LARGE Release /
+93-symbol-prepared, and SMALL default / 93-integer-prepared (input and solve
+phase alerts in both original rounds). Each has four independent process
+labels: base, head, base_copy and head_copy; each copy uses exactly the same
+installed path and bytes as its original. Two A/A pairs per label precede eight
+counterbalanced rounds, each label occupying each position twice. Preserve all
+192 process outputs, 501 complete requests and 501 separately measured phase
+requests per process, CPU/resource/GC records and adjacent calibration. Never
+pair total and phase loops by index or normalize latency with telemetry.
+
+After all timings, 16 separate Callgrind processes count complete requests at
+indices 0, 100, 320, 403, 412, 436, 449 and 500: two reversed-order repetitions
+for each fixture/revision, 128 regions. The indices include the original tail
+region but do not replay its execution state. Preparation, clocks and checks
+remain outside each count scope; the ctypes/client-request boundary remains
+explicit. Retain per-function Ir/Dr/Dw, unresolved names, summary residuals,
+original linked layouts and all hashes. Valgrind timings are unused. Only the
+counter helper is built, before any timing begins.
+
+Independent identical-binary labels characterize process variation, not binary
+placement. Equal software counts cannot establish equal cycles or attribute a
+historical tail. A later quiet process cannot erase the original observations.
+This diagnostic retains all A/A classifications and is ineligible for release
+approval: the complete original schema-4 report and maintainer review remain
+required. No engine, allocator policy, benchmark tolerance or positive-control
+amplitude changes as part of this investigation.

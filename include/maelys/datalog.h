@@ -74,6 +74,9 @@ extern "C" {
 #endif
 
 #define MAELYS_DATALOG_PUBLIC_API_VERSION 2u
+/* API_VERSION tracks incompatible consumer contracts, not additive symbols.
+ * Feature guards require matching headers AND libraries from one SDK build. */
+#define MAELYS_DATALOG_HAS_MANIFEST_BUFFER 1
 #define MAELYS_DATALOG_PUBLIC_MAX_TERMS 4u
 #define MAELYS_DATALOG_PUBLIC_FINGERPRINT_BYTES 65u
 /* Independent optional manifest-loading permissions, combined with |.
@@ -322,6 +325,24 @@ MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_policy_load_manifest(
     const char *manifest_path,
     unsigned flags,
     maelys_datalog_policy_t **out_policy,
+    maelys_datalog_diagnostic_t *out_diagnostic);
+
+/* In-memory equivalent of policy_load_manifest: same schema, permissions,
+ * default_profile=enforce, SHA-256 checks and query-whitelist semantics.
+ * Policy file fields remain required metadata; no files are read. Enabled
+ * sources are found by policy_id in bundle. All input bytes are borrowed for
+ * the call only. Missing sources fail with NOT_FOUND; no partial set escapes.
+ * manifest_length and src_len are authoritative (no NUL terminator required).
+ * Existing advanced manifest_text retains its historical profile contract. */
+typedef struct {
+    const char *policy_id;
+    const char *src;
+    size_t src_len;
+} maelys_datalog_policy_bundle_entry_t;
+MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_policy_load_manifest_buffer(
+    const char *manifest_json, size_t manifest_length,
+    const maelys_datalog_policy_bundle_entry_t *bundle, size_t bundle_count,
+    unsigned flags, maelys_datalog_policy_t **out_policy,
     maelys_datalog_diagnostic_t *out_diagnostic);
 
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_policy_count(

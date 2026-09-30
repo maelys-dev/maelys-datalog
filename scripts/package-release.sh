@@ -2,9 +2,8 @@
 #
 # Build and package the release artifacts of maelys-datalog for ONE target:
 #   - linux-x86_64, linux-arm64, macos-arm64 : lib/libmaelys_datalog.a + the
-#     public headers, one tarball
-#   - wasm32 : maelys_datalog_dynamic.{js,wasm} + the JS wrapper/types, one
-#     tarball per memory profile (small, large)
+#     public headers plus a common JavaScript archive with both native profiles
+#   - wasm32 : one common JavaScript archive with both WASM profiles
 #
 # One command, used both locally and by the build job of maelys-release,
 # which runs `scripts/package-release.sh TARGET` on one runner per target
@@ -123,9 +122,6 @@ if [ "$target" != wasm32 ]; then
 fi
 
 # ---------------------------------------------------------------------------
-# WASM artifacts (D1 wasm-small / wasm-large rows, D2 pinned emsdk).
-# ---------------------------------------------------------------------------
-# ---------------------------------------------------------------------------
 # WASM artifacts (D1 wasm32 row: small and large profiles, D2 pinned emsdk).
 # ---------------------------------------------------------------------------
 # The first run of a freshly activated emcc prints its cache notices before
@@ -167,45 +163,23 @@ ensure_pinned_emsdk() {
 if [ "$target" = wasm32 ]; then
   ensure_pinned_emsdk
 
-  dts_path="bindings/wasm/maelys_playground.d.ts"
-  if [ ! -f "$dts_path" ]; then
-    echo "error: the Wasm SDK requires its TypeScript declarations" >&2
-    exit 1
-  fi
-
-  build_wasm_profile() {  # $1 = small|large, $2 = WASM_BUILD_DIR
-    local profile="$1" build_dir="$2"
-    echo "==> wasm profile: ${profile} (${build_dir})"
-    rm -f "$build_dir/maelys_datalog_dynamic.js" "$build_dir/maelys_datalog_dynamic.wasm"
-    make -f Makefile.wasm maelys_datalog_dynamic.js WASM_PROFILE="$profile" WASM_BUILD_DIR="$build_dir"
-  }
-
-  stage_wasm() {  # $1 = small|large (tarball suffix), $2 = WASM_BUILD_DIR
-    local suffix="$1" build_dir="$2"
-    local stage
-    stage="$(mktemp -d)"
-    cp "$build_dir/maelys_datalog_dynamic.js" "$stage/"
-    cp "$build_dir/maelys_datalog_dynamic.wasm" "$stage/"
-    cp "$build_dir/maelys_playground.js" "$stage/"
-    cp "$build_dir/maelys_playground.d.ts" "$stage/"
-
-    local name="maelys-datalog-${version}-wasm-${suffix}.tar.gz"
-    tar -czf "$dist/${name}" -C "$stage" .
-    ( cd "$dist" && sha256 "${name}" > "${name}.sha256" )
-    rm -rf "$stage"
-
-    echo "packaged ${name}"
-    artifacts+=("$name")
-  }
-
-  build_wasm_profile small build/wasm
-  stage_wasm small build/wasm
-
-  build_wasm_profile large build/wasm-large
-  stage_wasm large build/wasm-large
-
   emsdk_recorded="$EMSDK_VERSION"
 fi
+
+# Both runtimes and profiles belong to the one supported JavaScript package.
+# Compile and test here, before any publish job.
+js_stage="$(mktemp -d)"
+trap 'rm -rf -- "$js_stage"' EXIT
+if [ "$target" = wasm32 ]; then js_runtime=wasm; else js_runtime=native; fi
+bash tools/with_javascript_release_node.sh bash tools/build_javascript_release.sh "$js_runtime" "$js_stage/package"
+js_name="maelys-datalog-${version}-javascript-${target}.tar.gz"
+# BSD tar otherwise adds AppleDouble files for macOS extended attributes.
+# They are not package payloads and disagree with archives built on Linux.
+COPYFILE_DISABLE=1 tar -czf "$dist/$js_name" -C "$js_stage/package" .
+( cd "$dist" && sha256 "$js_name" > "$js_name.sha256" )
+artifacts+=("$js_name")
+rm -rf -- "$js_stage"
+trap - EXIT
 
 # ---------------------------------------------------------------------------
 # Release receipt (D3): one per target, immutable, listed by SHA256SUMS.

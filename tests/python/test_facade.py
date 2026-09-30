@@ -195,6 +195,7 @@ class FacadeTest(unittest.TestCase):
             "domain_register": "Engine.register_domain",
             "policy_load_inline": "Engine.load_inline_ruleset",
             "policy_load_manifest": "Engine.load_manifest",
+            "policy_load_manifest_buffer": "CFFI memory-bundle alternative; Engine uses the file loader",
             "policy_count": "Ruleset.policy_count", "policy_fingerprint": "Ruleset.fingerprint",
             "policy_free": "Ruleset.close", "session_create": "Ruleset.prepare defaults",
             "session_config_create": "Ruleset.prepare",

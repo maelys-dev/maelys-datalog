@@ -1,0 +1,5 @@
+{
+  "nodeVersion": "22.23.3",
+  "macosMinimum": "13.5",
+  "glibcMaximum": "2.34"
+}

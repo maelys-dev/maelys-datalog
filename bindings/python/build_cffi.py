@@ -38,6 +38,7 @@ def build(sdk_prefix: Path) -> None:
     builder.cdef(
         """
 #define MAELYS_DATALOG_PUBLIC_API_VERSION ...
+#define MAELYS_DATALOG_HAS_MANIFEST_BUFFER ...
 #define MAELYS_DATALOG_PUBLIC_MAX_TERMS ...
 #define MAELYS_DATALOG_PUBLIC_ALLOW_NONE ...
 #define MAELYS_DATALOG_PUBLIC_ALLOW_TEST_ONLY ...
@@ -205,6 +206,14 @@ int maelys_datalog_policy_free(maelys_datalog_policy_t *policy);
 int maelys_datalog_policy_load_manifest(
     const char *, unsigned, maelys_datalog_policy_t **,
     maelys_datalog_diagnostic_t *);
+typedef struct {
+    const char *policy_id;
+    const char *src;
+    size_t src_len;
+} maelys_datalog_policy_bundle_entry_t;
+int maelys_datalog_policy_load_manifest_buffer(
+    const char *, size_t, const maelys_datalog_policy_bundle_entry_t *, size_t,
+    unsigned, maelys_datalog_policy_t **, maelys_datalog_diagnostic_t *);
 int maelys_datalog_policy_count(const maelys_datalog_policy_t *, size_t *);
 int maelys_datalog_policy_fingerprint(const maelys_datalog_policy_t *, char[65]);
 int maelys_datalog_session_fingerprint(const maelys_datalog_session_t *, char[65]);
@@ -284,6 +293,9 @@ int maelys_datalog_result_explain_false_text(
         "maelys_datalog._maelys_cffi",
         "#include <maelys/datalog.h>\n"
         "#include <maelys/datalog_resources.h>\n"
+        '#if !defined(MAELYS_DATALOG_HAS_MANIFEST_BUFFER) || !MAELYS_DATALOG_HAS_MANIFEST_BUFFER\n'
+        '#error "This CFFI surface requires the post-v0.13.0 manifest-buffer SDK"\n'
+        '#endif\n'
         '_Static_assert(MAELYS_DATALOG_PUBLIC_API_VERSION == 2u, "Consumer API 2 required");',
         include_dirs=[str(sdk_prefix / "include")],
         library_dirs=[str(PACKAGE)],
