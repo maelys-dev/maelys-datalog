@@ -7,6 +7,16 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## 0.16.0 — 2026-09-30
+
+Consumer API 2 and program ABI 2 remain unchanged. Backend ABI 7 is negotiated
+separately; ABI 5/6 retain their existing snapshot and resource contracts.
+Retained inputs and backend transaction delivery are explicit opt-ins. The
+reference solver may still recompute the complete IDB; this release does not
+add a private incremental algorithm or elastic allocation.
+The Python performance decision must be recorded in the changelog pull request
+before the release cut; it has not yet been accepted.
+
 ### Added
 
 - Extend loaded-library limit queries with policy atom count and byte bounds.
@@ -30,6 +40,40 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
   ABI 5/6 providers retain snapshot delivery. Native canonical EDB materialization
   still occurs. A public projection-only conformance fixture exercises the
   protocol; no private incremental solver or language capability is added.
+
+### Validation and performance review
+
+- The three feature PRs (#151, #152 and #153) each passed 31 checks on their
+  final heads. Merged main `6be1e1e46854487fc502a8982c83eab834baf752`
+  has the same complete tree as qualified `23e7c2e1ba9b87dc26063c95ecdd40b38ff2a7d5`.
+  Validation includes installed C consumers, SMALL/LARGE, allocation guards,
+  sanitizers, seeded differential transactions, separately compiled ABI 5/6/7
+  providers, window commit/abort paths and rebuilt negative controls.
+- The scoped hosted instruction experiments retain both improvements and
+  regressions: small supplied deltas can avoid host conversion work, while
+  large add/remove batches and the conformance provider's linear searches can
+  cost more than snapshot delivery. Full native EDB materialization and complete
+  IDB output remain in the accounting. Software instruction counts do not
+  establish latency or whole-request O(delta) behavior.
+- The original [Python run 36716930598](https://github.com/maelys-dev/maelys-datalog/actions/runs/36716930598)
+  on `88718e3a8fccd968c50df05e099f133b2635ad2a` remains `review_required`:
+  55 statistic rows require review, including ten complete-request rows
+  against v0.15.0, three beyond the matching null envelope in both rounds.
+  Retain the isolated SMALL/Release seven-symbol convenience p95 of +16.26%
+  in round two. The later test-brace fix and squash merges do not change the
+  measured runtime, bindings, build or benchmark code.
+- The automatic [main Python run 36748769040](https://github.com/maelys-dev/maelys-datalog/actions/runs/36748769040)
+  on `6be1e1e46854487fc502a8982c83eab834baf752` also remains
+  `review_required`: 73 statistic rows require review, including eighteen
+  complete-request rows against v0.15.0. Five exceed the matching null envelope
+  in both rounds: SMALL/default prepared seven-integer p95 (+4.95%/+3.68%),
+  prepared 93-symbol median (+2.02%/+1.57%) and p95 (+3.23%/+1.49%), and
+  convenience 93-symbol median (+1.39%/+1.07%) and p95 (+2.08%/+1.72%).
+  Both reports have valid positive controls; all raw classifications and
+  informative cold observations are retained. The second report does not
+  replace the first. These latency observations remain unattributed; nearly
+  equal native instruction counts do not exclude a latency effect or identify
+  a placement, process or allocator mechanism.
 
 ## 0.15.0 — 2026-09-30
 
