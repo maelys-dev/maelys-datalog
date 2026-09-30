@@ -11,6 +11,11 @@ on:
         description: Candidate branch, tag or commit SHA
         required: true
         type: string
+      retained_inputs:
+        description: Compare public snapshot, retained replacement and supplied delta instructions on head (no timings)
+        required: false
+        default: false
+        type: boolean
 
       diagnostic_original:
         description: Optional original candidate SHA for LARGE Callgrind and layout diagnosis
@@ -55,12 +60,28 @@ jobs:
       - name: Check comparison tooling
         run: python3 -m unittest discover -s bench -p 'test_compare*.py'
       - name: Prepare optional diagnostic tool
-        if: inputs.diagnostic_original != '' || inputs.session_diagnostics || inputs.session_layout
+        if: inputs.diagnostic_original != '' || inputs.session_diagnostics || inputs.session_layout || inputs.retained_inputs
         run: |
           if ! command -v valgrind >/dev/null; then
             sudo apt-get update
             sudo apt-get install -y valgrind
           fi
+      - name: Check retained-input experiment identity and exclusive selection
+        if: inputs.retained_inputs
+        env:
+          HEAD_REF: ${{ inputs.head }}
+          BASE_REF: ${{ inputs.base }}
+          OTHER_DIAGNOSTIC: ${{ inputs.diagnostic_original != '' || inputs.session_diagnostics || inputs.session_layout || inputs.session_layout_original != '' }}
+        run: |
+          test "$OTHER_DIAGNOSTIC" = false
+          test "$(git rev-parse HEAD)" = "$(git rev-parse "$HEAD_REF^{commit}")"
+          git rev-parse "$BASE_REF^{commit}"
+          git diff --exit-code
+      - name: Measure retained-input software instructions
+        if: inputs.retained_inputs
+        env:
+          BASE_REF: ${{ inputs.base }}
+        run: python3 bench/compare_retained_inputs.py "$RUNNER_TEMP/retained-inputs"
       - name: Build every session layout variant before measurements
         if: inputs.session_layout
         env:
@@ -77,6 +98,7 @@ jobs:
           HEAD_REF: ${{ inputs.head }}
         run: bash bench/diagnose_solver_layout.sh "$BASE_REF" "$ORIGINAL_REF" "$HEAD_REF" "$RUNNER_TEMP/bench-diagnostic"
       - name: Compare immutable revisions
+        if: '!inputs.retained_inputs'
         env:
           BASE_REF: ${{ inputs.base }}
           HEAD_REF: ${{ inputs.head }}
@@ -95,5 +117,6 @@ jobs:
             ${{ runner.temp }}/bench-comparison/
             ${{ runner.temp }}/bench-diagnostic/
             ${{ runner.temp }}/session-layout/
+            ${{ runner.temp }}/retained-inputs/
           if-no-files-found: warn
           retention-days: 30

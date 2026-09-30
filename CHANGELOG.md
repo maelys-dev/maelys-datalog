@@ -14,6 +14,15 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
   fact and normalized rule counts, with Python and common JavaScript/TypeScript
   accessors. Build ceilings, program counts and effective session quotas remain
   separate. No solver, fingerprint or backend ABI change.
+- Add explicit fixed-vocabulary retained session inputs in
+  `maelys/datalog_transactions.h`: caller-owned storage, independently bounded
+  raw add/remove batches, add-wins linear composition, snapshot replacement,
+  incarnation/generation validation and atomic publication. ABI 5/6 providers
+  continue receiving complete snapshots. Existing window adapters use each
+  bank's replacement entry; result/explanation leases still govern publication.
+  Ordinary sessions keep their behavior and identity; the opt-in contract has
+  a distinct execution fingerprint. No incremental derivation algorithm or
+  growing input dictionary is introduced.
 
 ## 0.15.0 — 2026-09-30
 

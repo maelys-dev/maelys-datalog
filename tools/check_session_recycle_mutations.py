@@ -19,7 +19,7 @@ MUTATIONS=[
     ("evicted_block_leaked",CACHE,"            if (old) free(old);","            (void)old;","warm_and_live"),
     ("oversized_block_retained",CACHE,"bytes <= maelys_datalog_session_recycle_bound()","bytes != 0","oversized_provider"),
     ("caller_storage_retained",UNIT,"if (!s->planned || s->owns_arena) session_storage_release(s, s->arena_bytes);","session_storage_release(s, s->arena_bytes);","sized_and_caller"),
-    ("live_result_recycled",UNIT,"if (s->active || s->busy)\n        return MAELYS_DATALOG_STATUS_INVALID_STATE;\n    s->busy = 1;","if (s->busy)\n        return MAELYS_DATALOG_STATUS_INVALID_STATE;\n    s->busy = 1;","warm_and_live"),
+    ("live_result_recycled",UNIT,"if (s->active || s->busy || s->retained_inputs)\n        return MAELYS_DATALOG_STATUS_INVALID_STATE;\n    s->busy = 1;","if (s->busy || s->retained_inputs)\n        return MAELYS_DATALOG_STATUS_INVALID_STATE;\n    s->busy = 1;","warm_and_live"),
     ("provider_not_destroyed",UNIT,"    s->backend.destroy(s->state);\n    resource_session_unlink(s);","    resource_session_unlink(s);","reentrancy"),
 ]
 

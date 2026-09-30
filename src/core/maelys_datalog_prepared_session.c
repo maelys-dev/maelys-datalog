@@ -435,6 +435,54 @@ maelys_result_t maelys_datalog_prepared_session_materialize_inputs_diagnosed(
     return MAELYS_OK;
 }
 
+maelys_result_t maelys_datalog_prepared_session_materialize_retained(
+    maelys_datalog_internal_prepared_session_t *s,
+    const maelys_datalog_internal_fact_t *facts, size_t count,
+    const maelys_datalog_symbol_table_t *vocabulary, maelys_datalog_symbol_id_t *map) {
+    if (!s || !vocabulary || !map || (!facts && count)) return MAELYS_ERR_INVALID_ARGUMENT;
+    if (s->active_result) return MAELYS_ERR_INVALID_STATE;
+    if (count > s->input_capacity || count > s->pool_capacity) return MAELYS_ERR_PAYLOAD_TOO_LARGE;
+    s->quota_field = NULL;
+    MAELYS_DATALOG_COUNT_PIPELINE(materializations);
+    maelys_result_t rc = reset_transaction_state(s, 0);
+    if (rc) return rc;
+    memset(map, 0, MAELYS_DATALOG_MAX_SYMBOLS * sizeof(*map));
+    size_t symbols = 0;
+    for (size_t i=0;i<count;++i) for (size_t t=0;t<facts[i].arity;++t) {
+        if (facts[i].terms[t].kind != MAELYS_DATALOG_TERM_SYMBOL) continue;
+        maelys_datalog_symbol_id_t id = facts[i].terms[t].as.symbol;
+        if (!maelys_datalog_symbol_id_is_valid(vocabulary,id))
+            return reject_transaction(s,MAELYS_ERR_INVALID_STATE);
+        if (!map[id-1u]) {
+            map[id-1u]=1;
+            s->symbol_inputs[symbols++]=maelys_datalog_symbol_text(vocabulary,id);
+        }
+    }
+    rc=intern_input_symbols(s,symbols,NULL,0,NULL,0);
+    if (rc) return reject_transaction(s,rc);
+    for (size_t i=0;i<vocabulary->count;++i) if (map[i]) {
+        int found=0;
+        const char *text=maelys_datalog_symbol_text(vocabulary,(maelys_datalog_symbol_id_t)(i+1));
+        rc=maelys_datalog_symbol_lookup_readonly(&s->symbols,text,strlen(text),&map[i],&found);
+        if (rc || !found) return reject_transaction(s,MAELYS_ERR_INVALID_STATE);
+    }
+    for (size_t i=0;i<count;++i) {
+        const maelys_datalog_internal_fact_t *in=&facts[i];
+        if (in->predicate_id >= MAELYS_DATALOG_MAX_PREDICATES ||
+            ++s->edb.facts_per_pred[in->predicate_id] > MAELYS_DATALOG_MAX_FACTS_PER_PRED)
+            return reject_transaction(s,MAELYS_ERR_PAYLOAD_TOO_LARGE);
+        s->fact_pool[i]=*in;
+        for (size_t t=0;t<in->arity;++t)
+            if (in->terms[t].kind==MAELYS_DATALOG_TERM_SYMBOL)
+                s->fact_pool[i].terms[t].as.symbol=map[in->terms[t].as.symbol-1u];
+    }
+    s->edb.fact_count=count;
+    s->edb.fact_set.count=count;
+    s->edb.fact_set.sorted=0; /* Remapping canonical IDs may change order. */
+    rc=maelys_datalog_edb_finalize(&s->edb);
+    return rc ? reject_transaction(s,rc) : MAELYS_OK;
+}
+
 maelys_result_t maelys_datalog_prepared_session_solve_ex(
     maelys_datalog_internal_prepared_session_t *session,
     const maelys_datalog_fact_t *facts, size_t fact_count,

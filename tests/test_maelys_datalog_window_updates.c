@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: MPL-2.0 */
 /* Installed-SDK consumer: independent snapshots exercise both adapter models. */
 #include <maelys/datalog_window.h>
+#include <maelys/datalog_transactions.h>
 #include <assert.h>
 #define OPTIONS(n) (&(maelys_datalog_window_options_t){sizeof(maelys_datalog_window_options_t),(n),0})
 #include <stdio.h>
@@ -23,7 +24,16 @@ typedef struct {
     maelys_datalog_window_t *w;
     maelys_datalog_group_window_t *g;
     void *storage;
+    maelys_datalog_session_inputs_t *inputs[2];
+    void *input_storage[2];
 } fixture;
+static int retained;
+static void bases(fixture *f,maelys_datalog_input_base_t b[2]) {
+    if(retained) for(size_t i=0;i<2;++i) OK(maelys_datalog_session_inputs_base(f->inputs[i],&b[i]));
+}
+static void same_bases(fixture *f,const maelys_datalog_input_base_t b[2]) {
+    if(retained) { maelys_datalog_input_base_t after[2];bases(f,after);assert(!memcmp(after,b,sizeof(after))); }
+}
 static maelys_datalog_result_t *result(fixture *f) {
     maelys_datalog_result_t *r=NULL;
     if(f->g) OK(maelys_datalog_group_window_result(f->g,&r)); else OK(maelys_datalog_window_result(f->w,&r));
@@ -77,6 +87,17 @@ static void setup(fixture *f,int grouped,uint32_t flags,uint32_t first) {
     OK(maelys_datalog_session_create(p,0,&f->a));OK(maelys_datalog_session_create(p,0,&f->b));
     OK(maelys_datalog_session_create(p,0,&f->oracle));OK(maelys_datalog_policy_free(p));
     size_t bytes,alignment;
+    if(retained) {
+        maelys_datalog_session_t *sessions[]={f->a,f->b};
+        const char *symbols[]={"zebra"};
+        maelys_datalog_input_options_t o=MAELYS_DATALOG_INPUT_OPTIONS_INIT;
+        o.fact_capacity=16;o.symbols=symbols;o.symbol_count=1;
+        for(size_t i=0;i<2;++i) {
+            OK(maelys_datalog_session_inputs_storage_requirements(sessions[i],&o,&bytes,&alignment));
+            f->input_storage[i]=malloc(bytes);assert(f->input_storage[i]);
+            OK(maelys_datalog_session_inputs_init(sessions[i],&o,f->input_storage[i],bytes,&f->inputs[i]));
+        }
+    }
     maelys_datalog_group_window_capacities_t c={2,4,8,64};
     maelys_datalog_window_options_t options={sizeof(options),4,flags};
     if(grouped) OK(maelys_datalog_group_window_storage_requirements_configured(&c, &options,&bytes,&alignment));
@@ -92,6 +113,7 @@ static void setup(fixture *f,int grouped,uint32_t flags,uint32_t first) {
 }
 static void close_fixture(fixture *f) {
     if(f->g) OK(maelys_datalog_group_window_free(f->g)); else OK(maelys_datalog_window_free(f->w));
+    if(retained) for(size_t i=0;i<2;++i) { OK(maelys_datalog_session_inputs_free(f->inputs[i]));free(f->input_storage[i]); }
     OK(maelys_datalog_session_free(f->a));OK(maelys_datalog_session_free(f->b));OK(maelys_datalog_session_free(f->oracle));
     assert(replace(f,NULL,0)==MAELYS_DATALOG_STATUS_INVALID_STATE);
     const maelys_datalog_fact_t *v=NULL;size_t n=123;
@@ -175,7 +197,9 @@ static void timed_updates(int grouped) {
     void *arena=malloc(bytes);assert(arena);maelys_datalog_prepared_explanation_t *e=NULL;maelys_datalog_value_t v=integer(7);
     OK(maelys_datalog_result_prepare_explanation(old,MAELYS_DATALOG_EXPLAIN_TRUE,"allow",&v,1,arena,bytes,&e));
     OK(expire(&f,9,&expired));assert(expired==0&&result(&f)==old);
+    maelys_datalog_input_base_t before[2];bases(&f,before);
     expired=123;assert(expire(&f,10,&expired)==MAELYS_DATALOG_STATUS_INVALID_STATE&&expired==123);watermark(&f,9,1);
+    same_bases(&f,before);
     assert(result(&f)==old);cursor(&f,2,2);compare(&f,expected,3);
     char text[8192];OK(maelys_datalog_prepared_explanation_write_text(e,text,sizeof(text)));assert(strstr(text,"permission"));
     OK(maelys_datalog_prepared_explanation_release(e));free(arena);
@@ -273,5 +297,8 @@ int main(void) {
     assert(maelys_datalog_window_storage_requirements_configured(1,32,&invalid,&bytes,&alignment)==MAELYS_DATALOG_STATUS_INVALID_ARGUMENT&&bytes==123&&alignment==456);
     invalid.flags=0;invalid.struct_size=0;
     assert(maelys_datalog_group_window_storage_requirements_configured(&c,&invalid,&bytes,&alignment)==MAELYS_DATALOG_STATUS_INVALID_ARGUMENT&&bytes==123&&alignment==456);
-    static_updates(0);static_updates(1);timed_updates(0);timed_updates(1);empty_timed_group();grouped_expiry_slices();expiry_sequence(0);expiry_sequence(1);puts("transactional static inputs and explicit expiry PASS");return 0;
+    for(retained=0;retained<2;++retained) {
+        static_updates(0);static_updates(1);timed_updates(0);timed_updates(1);empty_timed_group();grouped_expiry_slices();expiry_sequence(0);expiry_sequence(1);
+    }
+    puts("transactional static inputs and explicit expiry: snapshots and retained inputs PASS");return 0;
 }

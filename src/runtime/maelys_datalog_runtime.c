@@ -11,6 +11,7 @@
 #include "src/core/maelys_datalog_query_internal.h"
 #include "common/maelys_sha256.h"
 #include "maelys/datalog_resources.h"
+#include "maelys/datalog_transactions.h"
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdarg.h>
@@ -186,10 +187,19 @@ struct maelys_datalog_session {
     maelys_datalog_prepared_explanation_t *explanation_cache;
     maelys_datalog_internal_fact_t explanation_query; /* Result-scoped canonical values. */
     int pending_commit; /* Runtime-only candidate; no flag inserted into the retained payload. */
+    maelys_datalog_session_inputs_t *retained_inputs;
     /* Same allocation as the session, reserved only when !borrows_inputs.
      * Every live entry is initialized before an external solve callback. */
     struct backend_payload solve_scratch[];
 };
+static void retained_commit(maelys_datalog_session_inputs_t *);
+static void retained_abort(maelys_datalog_session_inputs_t *);
+static int retained_conflict(const maelys_datalog_session_inputs_t *,const void *,size_t);
+static maelys_datalog_status_t retained_candidate(maelys_datalog_session_inputs_t *,
+    const maelys_datalog_fact_t *, size_t, maelys_datalog_result_t **,
+    maelys_datalog_diagnostic_t *);
+static maelys_datalog_status_t session_solve_materialized(maelys_datalog_session_t *,
+    maelys_datalog_result_t **, maelys_datalog_diagnostic_t *);
 #include "src/runtime/maelys_datalog_recycle.inc"
 struct maelys_datalog_backend_output {
     maelys_datalog_result_t *result;
@@ -523,7 +533,7 @@ maelys_datalog_session_execution_fingerprint(const maelys_datalog_session_t *s, 
 maelys_datalog_status_t maelys_datalog_session_free(maelys_datalog_session_t *s) {
     if (!s)
         return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
-    if (s->active || s->busy)
+    if (s->active || s->busy || s->retained_inputs)
         return MAELYS_DATALOG_STATUS_INVALID_STATE;
     s->busy = 1;
     s->backend.destroy(s->state);
@@ -561,7 +571,7 @@ maelys_datalog_status_t maelys_datalog_session_solve(maelys_datalog_session_t *s
     { maelys_datalog_status_t ds = maelys_datalog_diagnostic_clear(diag); if (ds) return ds; }
     if (!s || !out)
         return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
-    if (s->busy || s->active)
+    if (s->busy || s->active || s->retained_inputs)
         return MAELYS_DATALOG_STATUS_INVALID_STATE;
     if (!facts && count)
         return solve_input_error(diag, MAELYS_DATALOG_STATUS_INVALID_ARGUMENT,
@@ -611,6 +621,11 @@ maelys_datalog_status_t maelys_datalog_session_solve(maelys_datalog_session_t *s
     }
     if (status != MAELYS_DATALOG_STATUS_OK)
         return status;
+    return session_solve_materialized(s, out, diag);
+}
+static maelys_datalog_status_t session_solve_materialized(maelys_datalog_session_t *s,
+    maelys_datalog_result_t **out, maelys_datalog_diagnostic_t *diag) {
+    maelys_datalog_status_t status = MAELYS_DATALOG_STATUS_OK;
     /* Canonical public facts exist for external backends only. */
     size_t canonical_count = s->borrows_inputs ? 0 : s->inputs->edb.fact_set.count;
     maelys_datalog_fact_t *canonical =
@@ -656,7 +671,10 @@ maelys_datalog_status_t maelys_datalog_session_solve(maelys_datalog_session_t *s
     }
     ++s->result_generation; /* Cache is cleared on release, including at wrap. */
     s->active = result;
-    if (!s->pending_commit) s->backend.commit(s->state, result->state);
+    if (!s->pending_commit) {
+        s->backend.commit(s->state, result->state);
+        retained_commit(s->retained_inputs);
+    }
     s->busy = 0;
     *out = result;
     return MAELYS_DATALOG_STATUS_OK;
@@ -664,6 +682,8 @@ maelys_datalog_status_t maelys_datalog_session_solve(maelys_datalog_session_t *s
 maelys_datalog_status_t maelys_datalog_session_solve_candidate(maelys_datalog_session_t *s,
     const maelys_datalog_fact_t *facts, size_t count, maelys_datalog_result_t **out,
     maelys_datalog_diagnostic_t *diag) {
+    if (s && s->retained_inputs)
+        return retained_candidate(s->retained_inputs, facts, count, out, diag);
     if (!s || s->busy || s->active)
         return maelys_datalog_session_solve(s, facts, count, out, diag);
     s->pending_commit = 1;
@@ -687,6 +707,7 @@ void maelys_datalog_result_commit(maelys_datalog_result_t *result) {
     s->busy = 1;
     s->pending_commit = 0;
     s->backend.commit(s->state, result->state);
+    retained_commit(s->retained_inputs);
     s->busy = 0;
 }
 static maelys_datalog_status_t query_predicate(const maelys_datalog_result_t *result,
@@ -1109,6 +1130,7 @@ maelys_datalog_status_t maelys_datalog_result_free(maelys_datalog_result_t *resu
     clear_explanation_cache(s);
     s->busy = 1;
     s->backend.destroy_result(s->state, result->state);
+    if (s->pending_commit) retained_abort(s->retained_inputs);
     s->active = NULL;
     s->pending_commit = 0;
     s->busy = 0;
@@ -1292,3 +1314,4 @@ maelys_datalog_status_t maelys_datalog_session_config_set_context(
 
 /* Creation-only resource normalization and arena ownership. */
 #include "src/runtime/maelys_datalog_resources.inc"
+#include "src/runtime/maelys_datalog_inputs.inc"
