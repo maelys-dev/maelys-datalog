@@ -152,8 +152,12 @@ static void windows(int grouped) {
     maelys_datalog_fact_t record=fact(8);uint32_t id=99;
     if(grouped)OK(maelys_datalog_group_window_replace_static(g,&record,1,NULL));else OK(maelys_datalog_window_replace_static(w,&record,1,NULL));
     maelys_datalog_value_t value={.kind=MAELYS_DATALOG_VALUE_INTEGER,.as.integer=7};
-    if(grouped)OK(maelys_datalog_group_window_push_until(g,&record,1,10,&id,NULL));
-    else OK(maelys_datalog_window_push_until(w,"event",&value,1,10,&id,NULL));assert(id==0);
+    if(grouped) {
+        OK(maelys_datalog_group_window_push_until(g,&record,1,10,&id,NULL));
+    } else {
+        OK(maelys_datalog_window_push_until(w,"event",&value,1,10,&id,NULL));
+    }
+    assert(id==0);
     maelys_datalog_result_t *r=NULL;if(grouped)OK(maelys_datalog_group_window_result(g,&r));else OK(maelys_datalog_window_result(w,&r));
     size_t ebytes;OK(maelys_datalog_result_explanation_storage_requirements(r,MAELYS_DATALOG_EXPLAIN_TRUE,&ebytes,&alignment));
     void *earea=malloc(ebytes);assert(earea);maelys_datalog_prepared_explanation_t *explanation=NULL;
