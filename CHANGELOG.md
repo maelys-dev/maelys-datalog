@@ -7,6 +7,14 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## 0.15.0 — 2026-09-30
+
+The common JavaScript/TypeScript binding replaces the retired WASM package.
+The optional backend allocator and input-delta API remain separate proposals.
+Consumer API 2, program ABI 2 and backend ABI 5/6 are unchanged.
+Python performance review and release approval are recorded in the changelog
+pull request before the release cut.
+
 ### Added
 
 - Add one JavaScript/TypeScript consumer API with native Node-API and WASM
@@ -22,6 +30,13 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
   with stripped addons exporting only Node-API registration. Release packaging
   uses a checksummed Node distribution and rejects binary compatibility drift.
   Python parity constructs its own clean SDK; Node CI includes 22, 24 and 26.
+
+### Changed
+
+- Adopt maelys-release v0.62.2 through its generator, pinning commit
+  `5148671abf3a1b437025881d10fd768efb9de5b3` for CI, release and registry channel
+  workflows. Artifact construction and the product runtime are unchanged by
+  this adoption.
 
 ## 0.14.0 — 2026-09-29
 
