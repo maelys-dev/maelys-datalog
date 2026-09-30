@@ -56,6 +56,13 @@ maelys_result_t maelys_datalog_prepared_session_materialize_inputs_diagnosed(
     maelys_datalog_internal_prepared_session_t *, const maelys_datalog_fact_t *, size_t,
     char *message, size_t message_capacity);
 
+/* Validated, unique dynamic facts in a frozen private vocabulary. map has
+ * MAX_SYMBOLS entries and belongs to the caller's transient scratch. */
+maelys_result_t maelys_datalog_prepared_session_materialize_retained(
+    maelys_datalog_internal_prepared_session_t *,
+    const maelys_datalog_internal_fact_t *, size_t,
+    const maelys_datalog_symbol_table_t *, maelys_datalog_symbol_id_t *map);
+
 /* Execute the already canonicalized EDB and acquire its result lease. */
 maelys_result_t maelys_datalog_prepared_session_solve_materialized_ex(
     maelys_datalog_internal_prepared_session_t *, maelys_datalog_internal_solve_result_t **,

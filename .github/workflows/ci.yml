@@ -19,6 +19,7 @@ jobs:
           python-version: '3.12.12'
       - run: python -m unittest discover -s tests/tooling -p 'test_python_perf*.py' -v
       - run: python -m unittest discover -s bench -p 'test_report_host_delta.py' -v
+      - run: python -m unittest discover -s bench -p 'test_compare_retained_inputs.py' -v
 
   # The shared CI of the socle: make check on the three release targets and
   # the conventions drift, from the declarations in maelys-release.conf. Its
@@ -75,6 +76,23 @@ jobs:
         run: |
           python3 tools/check_session_recycle_lifecycle.py --output "$RUNNER_TEMP/session-recycle-unload-small"
           python3 tools/check_session_recycle_lifecycle.py --large --output "$RUNNER_TEMP/session-recycle-unload-large"
+
+      - name: Check retained-input transaction negative controls
+        if: runner.os == 'Linux'
+        run: |
+          python3 tools/check_input_transaction_mutations.py --profile SMALL --output "$RUNNER_TEMP/input-transactions-small"
+          python3 tools/check_input_transaction_mutations.py --profile LARGE --output "$RUNNER_TEMP/input-transactions-large"
+
+      - name: Preserve retained-input negative controls
+        if: always() && runner.os == 'Linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: retained-input-mutations
+          path: |
+            ${{ runner.temp }}/input-transactions-*/*.log
+            ${{ runner.temp }}/input-transactions-*/results.json
+            ${{ runner.temp }}/input-transactions-*/**/*.log
+            ${{ runner.temp }}/input-transactions-*/**/*.patch
 
       - name: Preserve fixed-resource mutation evidence
         if: always() && runner.os == 'Linux'

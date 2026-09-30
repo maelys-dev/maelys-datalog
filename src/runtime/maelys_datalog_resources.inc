@@ -323,6 +323,7 @@ static maelys_datalog_status_t fixed_init(void *arena, size_t bytes,
                 resource_conflict(ranges[i],sizes[i],
                     live->planned ? live->reserved_explanation : live->explanation_storage,
                     live->planned ? live->reserved_explanation_bytes : live->explanation_bytes) ||
+                retained_conflict(live->retained_inputs,ranges[i],sizes[i]) ||
                 (!live->planned && live->inputs && (resource_conflict(ranges[i],sizes[i],live->inputs,
                     maelys_datalog_prepared_session_storage_bytes(live->resources.input_facts,live->inputs->pool_capacity)) ||
                     resource_conflict(ranges[i],sizes[i],live->inputs->result_workspace,

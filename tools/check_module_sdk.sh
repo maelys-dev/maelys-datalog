@@ -41,6 +41,7 @@ cp "$root/tests/test_maelys_datalog_window.c" "$scratch/"
 cp "$root/tests/test_maelys_datalog_group_window.c" "$scratch/"
 cp "$root/tests/test_maelys_datalog_window_updates.c" "$scratch/"
 cp "$root/tests/test_maelys_datalog_consumer_introspection.c" "$scratch/"
+cp "$root/tests/test_maelys_datalog_input_transactions.c" "$scratch/"
 cp "$root/examples/multi_fact_window.c" "$scratch/"
 for mapping in filter:exact_match frontend:arrow_frontend backend:naive_backend; do
   cp "$root/sdk/examples/${mapping%:*}/src/extension.c" "$scratch/${mapping#*:}.c"
@@ -148,6 +149,8 @@ for linkage in "${linkages[@]}"; do
   "$cc" "${flags[@]}" -UNDEBUG test_maelys_datalog_group_window.c "${libs[@]}" -o group-window
   ./group-window
   "$cc" "${flags[@]}" -UNDEBUG test_maelys_datalog_window_updates.c "${libs[@]}" -o window-updates
+  "$cc" "${flags[@]}" -UNDEBUG test_maelys_datalog_input_transactions.c "${libs[@]}" -o input-transactions
+  ./input-transactions
   ./window-updates
   "$cc" "${flags[@]}" multi_fact_window.c "${libs[@]}" -o group-example
   ./group-example

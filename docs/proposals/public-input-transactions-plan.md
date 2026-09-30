@@ -66,8 +66,12 @@ is authorized by this plan.
 
 ## Progress
 
-- Stage 1: implementation in progress on `feat/consumer-introspection`.
-- Stage 2: queued after the introspection interface; contract before code.
+- Stage 1: PR #151, signed `fb8c41bf508525c7e785a843a925546bc7a787e3`,
+  ready for review after all 31 checks of run 36709791297 passed.
+- Stage 2: implemented on `feat/session-input-transactions`, stacked on #151.
+  Thirty-two suites pass in SMALL/LARGE and under ASan/UBSan; 15 rebuilt
+  mutations are detected in each profile. The instruction experiment compares
+  three public entries on the same SDK, not different solver revisions.
 - Stage 3: queued after retained input; separate descriptor negotiation review.
 - #140 is an existing, unmerged experiment. Its measured algorithm decision is
   usable design evidence; this plan does not merge it or modify its old report.

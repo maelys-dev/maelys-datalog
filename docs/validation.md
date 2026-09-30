@@ -226,6 +226,39 @@ manual comparison protocol above to changes in ordinary solve paths.
 
 ## Installed facade and SDK
 
+The opt-in retained-input contract is declared in
+`maelys/datalog_transactions.h` and specified in
+`proposals/session-input-transactions.md`. The public-only consumer test replays
+1,200 seeded transactions against fresh reference snapshots with each of the
+reference, ABI 5 and ABI 6 paths. Its two external fixture providers implement
+the fixture's projection, negation and count directly from the delivered facts;
+they do not call the reference solver. Values, enumeration and canonical IDs
+are compared. The same source is compiled outside the tree against the installed
+static and shared SDKs. The allocation guard covers init, apply, replace, result
+release, solver rejection, candidate abort, retry and generation exhaustion;
+committed dictionary/facts/base are compared byte for byte. Transient scratch
+is explicitly outside that rollback promise.
+
+The two real window adapters replay their static replacement, shared-fact,
+expiry and late explanation-lease rejection fixtures with retained inputs
+attached independently to both sessions. The late expiry rejection preserves
+both input bases. `tools/check_input_transaction_mutations.py` rebuilds fifteen
+negative controls under ASan/UBSan, preserving baseline, patches and logs outside
+Git. Build failures do not count as detected mutations.
+
+`bench/compare_retained_inputs.py` compares ordinary snapshot input, explicit
+retained replacement and supplied delta in the same candidate SDK, SMALL and
+LARGE. Its 32 cases per profile declare four EDB predicates, inert/projection
+policies, integer/symbol terms, 64/256 total facts and empty/one/four/full changes.
+Each region includes 200 complete input/solve/commit/release operations. Output
+checks are outside Callgrind collection; all three paths must agree. Two
+separate processes per path must repeat Ir/Dr/Dw exactly, including per-function
+counts and attribution residuals. The manual workflow's `retained_inputs` mode
+selects this experiment exclusively; all SDKs/drivers finish building before
+collection. No timing, old-revision speedup or whole-request O(delta) claim
+follows from these software counts. A new Python performance report remains
+required on the final release candidate.
+
 The diagnostic `tools/session_storage_inventory.sh SMALL|LARGE` reports current
 private layout sizes/offsets and session allocation payload sums, without timing
 or solving. It is not part of the installed SDK. The

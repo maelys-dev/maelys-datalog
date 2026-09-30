@@ -72,6 +72,9 @@ $(BUILD_DIR)/tests/test_maelys_datalog_hot_path_alloc $(BUILD_DIR)/tests/test_ma
 $(BUILD_DIR)/tests/test_maelys_datalog_session_explanations: tests/test_maelys_datalog_session_explanations.c tests/fixtures/allocation_guard.h $(SRCS) $(ENGINE_HEADERS) | $(BUILD_DIR)/tests
 	$(CC) $(TEST_CFLAGS) -UNDEBUG -include tests/fixtures/allocation_guard.h $(filter-out src/runtime/maelys_datalog_runtime.c,$(SRCS)) $< -o $@
 
+$(BUILD_DIR)/tests/test_maelys_datalog_input_transactions_alloc: tests/test_maelys_datalog_input_transactions_alloc.c tests/fixtures/allocation_guard.h $(SRCS) $(ENGINE_HEADERS) | $(BUILD_DIR)/tests
+	$(CC) $(TEST_CFLAGS) -UNDEBUG -include tests/fixtures/allocation_guard.h $(filter-out src/runtime/maelys_datalog_runtime.c,$(SRCS)) $< -o $@
+
 $(BUILD_DIR)/tests/test_maelys_datalog_group_window_alloc: tests/test_maelys_datalog_group_window_alloc.c tests/fixtures/allocation_guard.h $(SRCS) $(ENGINE_HEADERS) | $(BUILD_DIR)/tests
 	$(CC) $(TEST_CFLAGS) -UNDEBUG -include tests/fixtures/allocation_guard.h $(filter-out src/runtime/maelys_datalog_group_window.c,$(SRCS)) $< -o $@
 
