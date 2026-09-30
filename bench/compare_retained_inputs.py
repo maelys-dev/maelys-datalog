@@ -27,7 +27,7 @@ def report(root):
             directory=root/profile/label
             with (directory/"receipts.csv").open() as stream: receipts=list(csv.DictReader(stream))
             rows={}
-            for path in sorted(directory.glob("counts*")):
+            for path in sorted(directory.glob("counts.*")):
                 row=counts(path)
                 if row:
                     key=row["label"].split("/",1)[1]

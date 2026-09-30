@@ -11,6 +11,7 @@ class RetainedReport(unittest.TestCase):
         for profile in ("SMALL", "LARGE"):
             for label in ORDER:
                 path=root/profile/label;path.mkdir(parents=True)
+                (path/"counts").write_text("desc: Trigger: Program termination\nsummary: 0\ntotals: 0\n")
                 with (path/"receipts.csv").open("w") as stream:
                     writer=csv.writer(stream);writer.writerow(("case","transactions","digest"))
                     for index,case in enumerate(CASES):
