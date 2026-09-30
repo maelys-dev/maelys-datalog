@@ -22,10 +22,23 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
   with stripped addons exporting only Node-API registration. Release packaging
   uses a checksummed Node distribution and rejects binary compatibility drift.
   Python parity constructs its own clean SDK; Node CI includes 22, 24 and 26.
+
+## 0.14.0 — 2026-09-29
+
+Performance tradeoff accepted by David on 2026-09-29; publication follows the
+normal release checks.
+Consumer API 2 and program ABI 2 remain unchanged. Backend ABI 6 is additive;
+ABI 5 remains available under its existing default resource contract.
+
+### Added
+
 - Fixed session capacities E/D/S/T and a separate backend ABI 6 resource
   contract. E/D payload reservations are sized; S/T are exact admission limits,
   but lowering S/T does not yet reduce the profile-sized dictionary reservation.
-  ABI 5 remains available with unchanged default program bounds and identity.
+  Quotas are normalized separately from program/build bounds and passed to both
+  ABI 6 sizing and preparation. Unsupported nondefault ABI 5 combinations and
+  reserved elastic/allocator modes are refused explicitly. Default behavior
+  and execution identity are preserved.
 
 ### Changed
 
@@ -33,9 +46,9 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
   allocation and can reuse one bounded equal-sized idle block after close.
   Caller-owned storage and active result leases are excluded. Retained memory
   is additional to live-session reservations and is released at native library
-  teardown; no malloc tuning or public API is added. See the
+  teardown; no malloc tuning or public API is added. Reuse is conditional on
+  size and availability; Python/CFFI still allocate. See the
   [ownership and qualification limits](docs/validation/session-recycling.md).
-  Complete Python performance review remains required before 0.14.0.
 
 - Disposable `solve_once` workspaces use `malloc` plus metadata initialization
   instead of zeroing the complete reservation with `calloc`. Used facts, proof
@@ -45,36 +58,31 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
   and hosted timing evidence and qualification limits in
   [session resources validation](docs/validation/session-resources.md).
 
-### Qualification pending
+### Performance review and accepted limits
 
-- Recycling candidate `646ac3d` passes 17 CI checks, allocator/sanitizer and
-  installed-consumer qualification. Its two complete default-glibc Python
-  reports cover 7/93 facts and prepared sessions with valid positive controls.
-  Against merged #142, convenience medians improve by 5.93–56.20% across the
-  measured cases. The ordinary v0.13.0 comparison still requires review:
-  SMALL/93 integer prepared medians are 1.84–4.29% higher in both rounds,
-  and one SMALL/7 symbol prepared round is 21.75% higher. All remaining phase
-  and tail alerts, report links, measured revisions and SHA-256 values are
-  retained in [session recycling validation](docs/validation/session-recycling.md).
-  These observations are not attributed to a mechanism. Recycling merge and
-  David's decision on the concrete reports remain prerequisites for 0.14.0;
-  no release acceptance follows from workflow success.
-
-- Signed candidate `f2372725` passes the installed-SDK compatibility matrix
-  and downstream replay, but its [Python lifecycle report](https://github.com/maelys-dev/maelys-datalog/actions/runs/36504178509)
-  requires review: SMALL seven-fact convenience-request medians are
-  58.70–67.48% higher than v0.13.0 across both build modes and comparison rounds,
-  beyond the A/A and matching null controls. The fixed positive control passes
-  throughout. A [bounded allocator-policy control](https://github.com/maelys-dev/maelys-datalog/actions/runs/36535239421)
-  reproduces and removes the seven-integer cost on the original binaries under
-  explicit glibc settings, together with the repeated page faults. This leaves
-  production defaults and original classifications unchanged; it does not
-  qualify every other alert or prove complete-request instruction parity.
-  David accepts this documented tradeoff for merging #142 only, not for
-  release. The 0.14.0 cut waits for a separate, qualified session-storage
-  recycling change and a complete default-glibc Python replay, including
-  93-fact and prepared-session cases. The validation note records both report
-  SHA-256 values and attribution limits.
+- Merged main `9260b2ded45cc0a4595c4ad1a444b638f46005ed` passes all 17 CI checks.
+  The complete default-glibc [Python run 36610272911](https://github.com/maelys-dev/maelys-datalog/actions/runs/36610272911)
+  has valid positive controls in all 32 case/configuration pairs, but remains
+  `review_required`. Compared with v0.13.0, SMALL/default prepared requests
+  retain three complete-request alerts beyond the matching null envelope:
+  seven-symbol medians +1.78% / +2.18% in the two rounds, and 93-integer median
+  +2.06% and p95 +2.56% in round two (round one indeterminate). These observations
+  are not attributed to an engine mechanism. The report also retains 39 warm
+  phase triggers and informative cold findings.
+- In that same run, convenience-request medians are lower beyond their A/A
+  floors in both rounds by 10.45–16.02% for SMALL/7 facts, 57.73–62.96% for
+  LARGE/7 and 15.20–21.49% for LARGE/93. These comparisons include multiple
+  changes and do not attribute the whole improvement to recycling. They do
+  not cancel the prepared-session observations.
+- The [named release review](docs/validation/v0.14-release-review.md) records
+  immutable revisions, report SHA-256, raw verification, controls, all remaining
+  findings and attribution limits. Earlier reports, including 93-integer
+  prepared +1.84–4.29% and the isolated seven-symbol +21.75% median event,
+  remain preserved in [session recycling validation](docs/validation/session-recycling.md).
+  David explicitly accepted this named report's documented tradeoff for 0.14.0
+  publication on 2026-09-29, including these unresolved observations. The
+  decision is separate from earlier merge-only approvals and does not claim
+  absence of regressions or an explanation of the remaining latency events.
 
 ## 0.13.0 — 2026-09-27
 

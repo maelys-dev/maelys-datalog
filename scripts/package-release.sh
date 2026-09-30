@@ -2,9 +2,8 @@
 #
 # Build and package the release artifacts of maelys-datalog for ONE target:
 #   - linux-x86_64, linux-arm64, macos-arm64 : lib/libmaelys_datalog.a + the
-#     public headers, one tarball
-#   - wasm32 : maelys_datalog_dynamic.{js,wasm} + the JS wrapper/types, one
-#     tarball per memory profile (small, large)
+#     public headers plus a common JavaScript archive with both native profiles
+#   - wasm32 : one common JavaScript archive with both WASM profiles
 #
 # One command, used both locally and by the build job of maelys-release,
 # which runs `scripts/package-release.sh TARGET` on one runner per target
@@ -122,9 +121,6 @@ if [ "$target" != wasm32 ]; then
   artifacts+=("$native_name")
 fi
 
-# ---------------------------------------------------------------------------
-# WASM artifacts (D1 wasm-small / wasm-large rows, D2 pinned emsdk).
-# ---------------------------------------------------------------------------
 # ---------------------------------------------------------------------------
 # WASM artifacts (D1 wasm32 row: small and large profiles, D2 pinned emsdk).
 # ---------------------------------------------------------------------------

@@ -144,12 +144,12 @@ verify its official checksum. Downloads happen during build, never installation.
 ## SDK compatibility and migration
 
 Consumer API 2 identifies the incompatible-contract generation, not every
-additive symbol. This binding requires the post-v0.13.0 SDK containing
+additive symbol. This binding requires the post-v0.14.0 SDK containing
 `maelys_datalog_policy_load_manifest_buffer` and tests the
 `MAELYS_DATALOG_HAS_MANIFEST_BUFFER` header feature guard at compilation.
 Always use headers and libraries installed from the same revision and profile;
-an API 2 SDK from an older release is insufficient. The first release carrying
-this binding will supply that SDK and its matching prebuilds together. Python's
+an API 2 SDK from v0.14.0 or an older release is insufficient. The first release
+carrying this binding will supply that SDK and its matching prebuilds together. Python's
 `Engine.load_manifest` still uses the stable file loader. Its CFFI surface also
 declares the memory-bundle function to preserve complete stable-C coverage, and
 checks the same header feature guard when building that extension.
