@@ -73,7 +73,7 @@ and its provider service in `datalog_backend.h`.
   and release. These are software counts using the public conformance provider,
   not latency or private-backend performance. The report SHA-256 is
   `6cbf70ec11f1d89c87185c5e11ffec856796e8a3459507baa694426f9c9ab75e`.
-- Python performance review for 0.18.0 is pending. The post-window
+- Python performance review for 0.18.0 was accepted by David on 2026-10-01. The post-window
   [run 36896136426](https://github.com/maelys-dev/maelys-datalog/actions/runs/36896136426)
   measured `4b997c4658764d25e75bc9dc758c03162cba9bf8`; its report SHA-256 is
   `eafe3b679393a675e0426d8c74ecbbdeddce1cad97fcd2b3f8dc44a79ab2c037`.
@@ -96,10 +96,18 @@ and its provider service in `datalog_backend.h`.
   +54.30/+29.92%; separately sampled phase loops do not attribute total latency.
   Neither run replaces the other. All 6,754,272 CSV samples and 22,848 raw
   process records across both reports were independently checked, reproducing
-  every comparison, control and classification. Details and pending decision
+  every comparison, control and classification. Details and the decision
   are in `docs/validation/v0.18-release-review.md`.
-  The 0.17.0 decision does not approve these reports or the new wheel binary
-  configuration. Publication awaits a recorded maintainer decision.
+- On 2026-10-01, David explicitly accepted both concrete Python reports,
+  runs 36896136426 and 36906281900, for 0.18.0 and authorized the cut and
+  publication after the checks and release gate. David reports identical
+  ordinary native instruction counts between v0.17.0 and `a279e6a`; the
+  Python `engine.py` implementation is unchanged. For this release decision,
+  the alerts are treated as unattributed measurement variability. Their raw
+  `review_required` classifications and all observations remain unchanged;
+  equal software work does not establish equal cycles or identify a mechanism.
+  No performance claim is made for the precompiled wheels. Later changes in
+  this release preparation are documentation/version only.
 
 ## 0.17.0 — 2026-10-01
 
