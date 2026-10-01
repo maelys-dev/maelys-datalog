@@ -33,7 +33,11 @@ try {
           const rules = engine.loadInlineRuleset('browser', 'main', 'answer(X) :- seed(X).');
           const edb = rules.edb(); edb.addFact('seed', [9223372036854775807n]);
           const result = rules.solve(edb, { explanations: 1 });
-          return { values: result.enumeratePredicateFacts('answer', 1).map(row => row.map(String)),
+          const tx=rules.prepare().inputs({factCapacity:2});
+          tx.replace(tx.base,[{predicate:'seed',terms:[1n]}]).close();
+          const changed=tx.apply(tx.base,{added:[{predicate:'seed',terms:[9223372036854775807n]}],removed:[{predicate:'seed',terms:[1n]}]});
+          const transaction=changed.enumeratePredicateFacts('answer',1).map(row=>row.map(String));
+          return { transaction, values: result.enumeratePredicateFacts('answer', 1).map(row => row.map(String)),
             text: result.explainTrue('answer', [9223372036854775807n]), limit: engine.limits.maxEdbFacts };
         } finally { engine.close(); }
       };
@@ -51,6 +55,7 @@ try {
     }, profile);
     assert.deepEqual(actual.direct, actual.background);
     assert.deepEqual(actual.direct.values, [['9223372036854775807']]);
+    assert.deepEqual(actual.direct.transaction, actual.direct.values);
     assert.match(actual.direct.text, /status=complete/);
     console.log(`browser + module worker ${profile}: same API, int64 and canonical explanation PASS`);
   }

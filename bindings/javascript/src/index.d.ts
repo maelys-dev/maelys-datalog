@@ -36,6 +36,32 @@ export interface SessionOptions {
 }
 /** Bounds for the reusable input buffer; independent of session quotas. */
 export interface EdbOptions { factCapacity?: number; textCapacity?: number }
+/** Fixed retained-input storage, opt-in before a session's first solve.
+ * Omitted factCapacity defaults to E; omitted batch capacities to factCapacity.
+ * symbols extends the immutable program vocabulary. Zero capacities are legal. */
+export interface InputOptions {
+  factCapacity?: number; additionCapacity?: number; removalCapacity?: number;
+  symbols?: Iterable<string>;
+}
+/** Exact unsigned 64-bit token. Old or foreign bases are rejected by the engine. */
+export class InputBase {
+  constructor(incarnation: bigint | number, generation: bigint | number);
+  readonly incarnation: bigint; readonly generation: bigint;
+}
+/** Retained dynamic input; compiled policy facts remain separate. */
+export class SessionInputs implements Disposable {
+  private constructor();
+  readonly base: InputBase;
+  /** Replace the whole input. Failure preserves its committed facts and base. */
+  replace(base: InputBase, facts: Iterable<Fact>): SolveResult;
+  /** Independent raw batch bounds apply before deduplication. Additions win.
+   * Absent removals (including unknown symbols) are no-ops after validation.
+   * Every success, including a set no-op, advances base and leases a result. */
+  apply(base: InputBase, changes?: { added?: Iterable<Fact>; removed?: Iterable<Fact> }): SolveResult;
+  /** Refused while a result is live. Closing the parent closes result first. */
+  close(): void;
+  [Symbol.dispose](): void;
+}
 /** Current EDB occupancy, including interned text terminators. */
 export interface EdbUsage { readonly facts: number; readonly textBytes: number; readonly textCapacity: number }
 export interface Limits {
@@ -160,6 +186,9 @@ export class Session implements Disposable {
   readonly capacities: Readonly<Required<CapacityOptions>>;
   readonly fingerprint: string;
   readonly executionFingerprint: string;
+  /** Attach retained input before the first successful solve. Ordinary solve
+   * is unavailable while attached. Storage is allocated by the binding. */
+  inputs(options?: InputOptions): SessionInputs;
   /** Solve an EDB from the same ruleset; release the previous result first. */
   solve(edb: Edb): SolveResult;
   close(): void;

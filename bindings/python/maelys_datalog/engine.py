@@ -17,6 +17,7 @@ PRED_IDB = int(lib.MAELYS_DATALOG_PREDICATE_IDB)
 PRED_QUERY = int(lib.MAELYS_DATALOG_PREDICATE_QUERY)
 PRED_POLICY_FACT = int(lib.MAELYS_DATALOG_PREDICATE_POLICY_FACT)
 _REGISTRY_LOCK = threading.RLock()
+_INPUTS_TOKEN = object()
 _INT64_MIN = -(1 << 63)
 _INT64_MAX = (1 << 63) - 1
 
@@ -560,6 +561,8 @@ class Session:
         self._session = session
         self._closed = False
         self._active: SolveResult | None = None
+        self._inputs: SessionInputs | None = None
+        self._busy = False
         self._explanations = ExplanationKind(explanations)
 
     def __del__(self) -> None:
@@ -600,8 +603,29 @@ class Session:
                "execution fingerprint")
         return _text(out)
 
+    def inputs(self, *, fact_capacity: int | None = None,
+               addition_capacity: int | None = None, removal_capacity: int | None = None,
+               symbols: Iterable[str] = ()) -> SessionInputs:
+        """Attach fixed-vocabulary retained input before the first successful solve.
+
+        Each omitted batch capacity defaults to fact_capacity; its default is E.
+        This binding allocates the aligned attachment; native transactions do not.
+        """
+        self._require_open()
+        if self._busy or self._inputs is not None or self._active is not None:
+            raise RuntimeError("Session is busy or already has retained input")
+        self._busy = True
+        try:
+            inputs = SessionInputs(self, fact_capacity, addition_capacity, removal_capacity, symbols, _token=_INPUTS_TOKEN)
+            self._inputs = inputs
+            return inputs
+        finally:
+            self._busy = False
+
     def solve(self, edb: Edb) -> SolveResult:
         self._require_open()
+        if self._busy:
+            raise RuntimeError("Session input is being staged")
         if self._active is not None:
             raise RuntimeError("Close the current result before reusing this Session")
         if not isinstance(edb, Edb) or edb.ruleset is not self.ruleset or edb._closed:
@@ -622,16 +646,180 @@ class Session:
         self.ruleset.engine._require_thread()
         if self._closed:
             return
+        if self._busy:
+            raise RuntimeError("Session input is being staged")
         if self._active is not None:
             # Prevent recursion for a convenience session owned by its result.
             self._active._owns_session = False
             self._active.close()
+        if self._inputs is not None:
+            self._inputs.close()
         _check(lib.maelys_datalog_session_free(self._session), "free session")
         self._session = ffi.NULL
         self._closed = True
         self.ruleset._sessions.remove(self)
 
     def __enter__(self) -> Session:
+        self._require_open()
+        return self
+
+    def __exit__(self, *_exc) -> None:
+        self.close()
+
+
+@dataclass(frozen=True)
+class InputBase:
+    """Exact uint64 attachment incarnation and committed input generation."""
+
+    incarnation: int
+    generation: int
+
+    def __post_init__(self) -> None:
+        for value in (self.incarnation, self.generation):
+            if isinstance(value, bool) or not isinstance(value, int):
+                raise TypeError("Input base fields must be integers")
+            if not 0 <= value < (1 << 64):
+                raise ValueError("Input base fields must fit uint64")
+
+
+class SessionInputs:
+    """Retained dynamic facts. Create with Session.inputs(); close before the session.
+
+    replace/apply require an explicit current base and return an ordinary result
+    lease. Failure preserves committed input and base. Python/CFFI staging still
+    allocates; the fixed native transaction has no engine allocation fallback.
+    """
+
+    def __init__(self, session: Session, fact_capacity, addition_capacity,
+                 removal_capacity, symbols, *, _token=None) -> None:
+        if _token is not _INPUTS_TOKEN:
+            raise TypeError("SessionInputs is created by Session.inputs()")
+        self.session = session
+        self._closed = True
+        if fact_capacity is None:
+            fact_capacity = session.capacities.input_facts
+        capacities = (fact_capacity,
+                      fact_capacity if addition_capacity is None else addition_capacity,
+                      fact_capacity if removal_capacity is None else removal_capacity)
+        for value in capacities:
+            if isinstance(value, bool) or not isinstance(value, int):
+                raise TypeError("Input capacities must be integers")
+            if not 0 <= value < (1 << (8 * ffi.sizeof("size_t"))):
+                raise ValueError("Input capacities must fit size_t")
+        if isinstance(symbols, (str, bytes)):
+            raise TypeError("symbols must be an iterable of strings")
+        keepers = []
+        for symbol in symbols:
+            if len(keepers) >= session.ruleset.engine.limits.max_symbols:
+                raise ValueError("Too many vocabulary entries")
+            if not isinstance(symbol, str):
+                raise TypeError("Vocabulary entries must be strings")
+            _terms([symbol])
+            keepers.append(ffi.new("char[]", symbol.encode("utf-8")))
+        options = ffi.new("maelys_datalog_input_options_t *")
+        options.struct_size = ffi.sizeof("maelys_datalog_input_options_t")
+        options.contract_version = lib.MAELYS_DATALOG_INPUT_CONTRACT_VERSION
+        options.fact_capacity, options.addition_capacity, options.removal_capacity = capacities
+        pointers = ffi.new("const char *[]", keepers) if keepers else ffi.NULL
+        options.symbols, options.symbol_count = pointers, len(keepers)
+        size, align = ffi.new("size_t *"), ffi.new("size_t *")
+        _check(lib.maelys_datalog_session_inputs_storage_requirements(
+            session._session, options, size, align), "size retained input")
+        owner = ffi.new("char[]", int(size[0] + align[0] - 1))
+        address = int(ffi.cast("uintptr_t", owner))
+        storage = ffi.cast("void *", (address + int(align[0]) - 1) & -int(align[0]))
+        out = ffi.new("maelys_datalog_session_inputs_t **")
+        _check(lib.maelys_datalog_session_inputs_init(
+            session._session, options, storage, size[0], out), "attach retained input")
+        self._storage, self._inputs = owner, out[0]
+        self._capacities = capacities
+        self._closed = False
+
+    def _require_open(self) -> None:
+        self.session._require_open()
+        if self._closed:
+            raise RuntimeError("SessionInputs is closed")
+
+    @property
+    def base(self) -> InputBase:
+        self._require_open()
+        out = ffi.new("maelys_datalog_input_base_t *")
+        _check(lib.maelys_datalog_session_inputs_base(self._inputs, out), "read input base")
+        return InputBase(int(out.incarnation), int(out.generation))
+
+    @staticmethod
+    def _stage(facts, capacity):
+        staged, keepers = [], []
+        for item in facts:
+            if len(staged) >= capacity:
+                raise MaelysDatalogError(int(Status.PAYLOAD_TOO_LARGE),
+                    "Input batch exceeds its raw capacity", "No input was committed.")
+            if isinstance(item, (str, bytes)) or not isinstance(item, Sequence) or len(item) != 2:
+                raise TypeError("each fact must be a (predicate, terms) pair")
+            predicate, terms = item
+            staged.append((_name(predicate, "predicate"), _terms(terms)))
+        native = ffi.new("maelys_datalog_fact_t[]", len(staged)) if staged else ffi.NULL
+        for i, (predicate, terms) in enumerate(staged):
+            name = ffi.new("char[]", predicate); keepers.append(name)
+            native[i].predicate, native[i].arity = name, len(terms)
+            for j, term in enumerate(terms):
+                _fill_value(native[i].terms[j], term, keepers)
+        return native, len(staged), keepers
+
+    def replace(self, base: InputBase, facts: Iterable[tuple[str, Sequence[object]]]) -> SolveResult:
+        """Replace the complete dynamic input; raw bound applies before deduplication."""
+        return self._transact(base, facts, (), replace=True)
+
+    def apply(self, base: InputBase, *, added: Iterable[tuple[str, Sequence[object]]] = (),
+              removed: Iterable[tuple[str, Sequence[object]]] = ()) -> SolveResult:
+        """Apply a supplied delta atomically. Additions win; absent removals do nothing."""
+        return self._transact(base, added, removed, replace=False)
+
+    def _transact(self, base, added, removed, *, replace):
+        self._require_open()
+        session = self.session
+        if session._busy or session._active is not None:
+            raise RuntimeError("Close the current result before reusing this Session")
+        if not isinstance(base, InputBase):
+            raise TypeError("base must be InputBase")
+        session._busy = True
+        try:
+            a, na, owners_a = self._stage(added, self._capacities[0 if replace else 1])
+            r, nr, owners_r = self._stage(removed, self._capacities[2])
+            self._require_open()
+            native_base = ffi.new("maelys_datalog_input_base_t *", (base.incarnation, base.generation))
+            result_out = ffi.new("maelys_datalog_result_t **")
+            diagnostic = ffi.new("maelys_datalog_diagnostic_t *")
+            lib.maelys_datalog_diagnostic_init(diagnostic, ffi.sizeof("maelys_datalog_diagnostic_t"))
+            if replace:
+                status = lib.maelys_datalog_session_inputs_replace(
+                    self._inputs, native_base[0], a, na, result_out, diagnostic)
+            else:
+                status = lib.maelys_datalog_session_inputs_apply(
+                    self._inputs, native_base[0], a, na, r, nr, result_out, diagnostic)
+            # Keep borrowed text alive across the complete native call.
+            del owners_a, owners_r
+            _check(status, "replace inputs" if replace else "apply inputs", diagnostic)
+            result = SolveResult(session.ruleset, session, result_out[0])
+            session._active = result
+            session.ruleset._results.append(result)
+            return result
+        finally:
+            session._busy = False
+
+    def close(self) -> None:
+        self.session.ruleset.engine._require_thread()
+        if self._closed:
+            return
+        if self.session._busy:
+            raise RuntimeError("Session input is being staged")
+        _check(lib.maelys_datalog_session_inputs_free(self._inputs), "release retained input")
+        self._inputs = ffi.NULL
+        self._closed = True
+        self.session._inputs = None
+        ffi.release(self._storage)
+
+    def __enter__(self) -> SessionInputs:
         self._require_open()
         return self
 

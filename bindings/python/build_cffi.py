@@ -38,6 +38,7 @@ def build(sdk_prefix: Path) -> None:
     builder.cdef(
         """
 #define MAELYS_DATALOG_PUBLIC_API_VERSION ...
+#define MAELYS_DATALOG_INPUT_CONTRACT_VERSION ...
 #define MAELYS_DATALOG_HAS_MANIFEST_BUFFER ...
 #define MAELYS_DATALOG_PUBLIC_MAX_TERMS ...
 #define MAELYS_DATALOG_PUBLIC_ALLOW_NONE ...
@@ -232,6 +233,27 @@ int maelys_datalog_session_solve(
     maelys_datalog_result_t **out_result,
     maelys_datalog_diagnostic_t *out_diagnostic);
 int maelys_datalog_session_free(maelys_datalog_session_t *session);
+typedef struct maelys_datalog_session_inputs maelys_datalog_session_inputs_t;
+typedef struct {
+    size_t struct_size;
+    uint32_t contract_version, reserved;
+    size_t fact_capacity, addition_capacity, removal_capacity;
+    const char *const *symbols;
+    size_t symbol_count;
+} maelys_datalog_input_options_t;
+typedef struct { uint64_t incarnation, generation; } maelys_datalog_input_base_t;
+int maelys_datalog_session_inputs_storage_requirements(
+    const maelys_datalog_session_t *, const maelys_datalog_input_options_t *, size_t *, size_t *);
+int maelys_datalog_session_inputs_init(maelys_datalog_session_t *,
+    const maelys_datalog_input_options_t *, void *, size_t, maelys_datalog_session_inputs_t **);
+int maelys_datalog_session_inputs_base(const maelys_datalog_session_inputs_t *, maelys_datalog_input_base_t *);
+int maelys_datalog_session_inputs_replace(maelys_datalog_session_inputs_t *, maelys_datalog_input_base_t,
+    const maelys_datalog_fact_t *, size_t, maelys_datalog_result_t **, maelys_datalog_diagnostic_t *);
+int maelys_datalog_session_inputs_apply(maelys_datalog_session_inputs_t *, maelys_datalog_input_base_t,
+    const maelys_datalog_fact_t *, size_t, const maelys_datalog_fact_t *, size_t,
+    maelys_datalog_result_t **, maelys_datalog_diagnostic_t *);
+int maelys_datalog_session_inputs_free(maelys_datalog_session_inputs_t *);
+
 int maelys_datalog_input_edb_create(maelys_datalog_input_edb_t **);
 int maelys_datalog_input_edb_storage_requirements(size_t, size_t, size_t *, size_t *);
 int maelys_datalog_input_edb_init(void *, size_t, size_t, size_t, maelys_datalog_input_edb_t **);
@@ -299,6 +321,7 @@ int maelys_datalog_result_explain_false_text(
         "maelys_datalog._maelys_cffi",
         "#include <maelys/datalog.h>\n"
         "#include <maelys/datalog_resources.h>\n"
+        "#include <maelys/datalog_transactions.h>\n"
         '#if !defined(MAELYS_DATALOG_HAS_MANIFEST_BUFFER) || !MAELYS_DATALOG_HAS_MANIFEST_BUFFER\n'
         '#error "This CFFI surface requires the post-v0.13.0 manifest-buffer SDK"\n'
         '#endif\n'

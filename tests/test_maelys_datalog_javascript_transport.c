@@ -58,11 +58,69 @@ int main(void) {
     assert(maelys_js_call(c,12,reset,2,NULL,0)==0);
     assert(maelys_js_call(c,14,&edb,1,NULL,0)==0 && maelys_js_words(c)[0]==0);
     assert(calls==0); forbidden=0;
+    /* New attachment storage and staging fail independently without leaks or
+     * attaching half an owner. The same session remains usable after each. */
+    assert(maelys_js_call(c,9,prepare,12,NULL,0)==0);
+    session=maelys_js_words(c)[0];
+    uint32_t attach[]={session,2,3,3,1,9,4};
+    for(size_t i=1;i<=4;++i) {
+        size_t before=live; calls=0; fail_at=i;
+        assert(maelys_js_call(c,22,attach,7,text,sizeof(text))==-8);
+        assert(live==before);
+    }
+    fail_at=0;
+    assert(maelys_js_call(c,22,attach,7,text,sizeof(text))==0);
+    uint32_t input=maelys_js_words(c)[0], tx[37]={input};
+    assert(maelys_js_call(c,23,&input,1,NULL,0)==0);
+    memcpy(tx+1,maelys_js_words(c),4*sizeof(uint32_t));
+    uint32_t original[4];memcpy(original,tx+1,sizeof(original));
+    calls=0;forbidden=1;
+    tx[5]=1;tx[6]=9;tx[7]=4;tx[8]=1;tx[9]=2;tx[10]=42;
+    assert(maelys_js_call(c,24,tx,21,text,sizeof(text))==0);
+    result=maelys_js_words(c)[0];
+    release[0]=5;release[1]=input;
+    assert(maelys_js_call(c,6,release,2,NULL,0)==-13);
+    release[0]=4;release[1]=result;
+    assert(maelys_js_call(c,6,release,2,NULL,0)==0);
+    assert(maelys_js_call(c,24,tx,21,text,sizeof(text))==-13); /* stale */
+    assert(maelys_js_call(c,23,&input,1,NULL,0)==0);
+    memcpy(tx+1,maelys_js_words(c),4*sizeof(uint32_t));
+    assert(tx[1]==original[0] && tx[2]==original[1] && tx[3]==1 && tx[4]==0);
+    uint32_t current[4];memcpy(current,tx+1,sizeof(current));
+    /* Bad removed record must not publish the valid addition preceding it. */
+    memset(tx+5,0,32*sizeof(uint32_t));tx[5]=1;tx[6]=1;
+    tx[7]=9;tx[8]=4;tx[9]=1;tx[10]=2;tx[11]=43;
+    memcpy(tx+22,tx+7,15*sizeof(uint32_t));tx[25]=99;
+    assert(maelys_js_call(c,25,tx,37,text,sizeof(text))==-1);
+    assert(maelys_js_call(c,23,&input,1,NULL,0)==0);
+    assert(!memcmp(current,maelys_js_words(c),sizeof(current)));
+    /* A no-op yields the original committed set and advances the base. */
+    tx[5]=tx[6]=0;
+    assert(maelys_js_call(c,25,tx,7,NULL,0)==0); result=maelys_js_words(c)[0];
+    query[0]=result;query[5]=42;
+    assert(maelys_js_call(c,16,query,16,text,sizeof(text))==0 && maelys_js_words(c)[0]==1);
+    query[5]=43;
+    assert(maelys_js_call(c,16,query,16,text,sizeof(text))==0 && maelys_js_words(c)[0]==0);
+    release[1]=result;assert(maelys_js_call(c,6,release,2,NULL,0)==0);
+    /* Read/base, delta, queries and release allocate nothing, repeatedly. */
+    for(unsigned i=0;i<8;++i) {
+        assert(maelys_js_call(c,23,&input,1,NULL,0)==0);
+        memcpy(tx+1,maelys_js_words(c),4*sizeof(uint32_t));
+        tx[5]=tx[6]=1;tx[25]=2;tx[26]=42;
+        assert(maelys_js_call(c,25,tx,37,text,sizeof(text))==0);
+        release[1]=maelys_js_words(c)[0];assert(maelys_js_call(c,6,release,2,NULL,0)==0);
+    }
+    assert(calls==0);forbidden=0;
+    /* Destroying an engine with an attachment AND its result must close the
+     * result first, regardless of the native handle-list insertion order. */
+    assert(maelys_js_call(c,23,&input,1,NULL,0)==0);
+    memcpy(tx+1,maelys_js_words(c),4*sizeof(uint32_t));tx[5]=tx[6]=0;
+    assert(maelys_js_call(c,25,tx,7,NULL,0)==0);
     maelys_js_destroy(c);
 #if (defined(__GNUC__) || defined(__clang__)) && !defined(__EMSCRIPTEN__)
     /* Native execution retains one idle arena; WASM deliberately does not. */
     assert(live==1);
 #endif
     maelys_datalog_session_recycle_purge(); assert(live==0);
-    puts("PASS: shared JS transport partial initialization, atomic rollback, prepared allocation contract and leases");
+    puts("PASS: shared JS transport partial initialization, atomic rollback, retained transactions, allocation contract and leases");
 }

@@ -2,7 +2,9 @@
 
 Backend ABI 5 preparation/acceptance ships in 0.11.0. This binding
 exposes no backend descriptors. The fixed-capacity API additionally uses the
-installed `<maelys/datalog_resources.h>` contract (0.14.0 development).
+installed `<maelys/datalog_resources.h>` contract (0.14.0). Retained input uses the installed
+`<maelys/datalog_transactions.h>` contract (0.16.0); build this source binding
+against its matching SDK, not an older library with consumer API 2 alone.
 
 `maelys_datalog` is the single Python binding. From the 0.10.0 migration onward,
 it uses the implementation developed as `python-next`, directly through public
@@ -37,6 +39,64 @@ fingerprint. Only FIXED is exposed; there is no allocator or elastic mode.
 Python objects, conversions and CFFI still allocate. The actual native storage
 plan includes fixed dictionary/index/provenance reservations as well as sized
 E/D payloads; smaller S/T do not currently shrink those reservations.
+
+## Retained input transactions (0.17.0)
+
+Attach once to a prepared session **before its first successful solve**:
+
+```python
+with ruleset.prepare(explanations=3) as session:
+    with session.inputs(fact_capacity=64, addition_capacity=8,
+                        removal_capacity=8, symbols=["alice", "bob"]) as inputs:
+        base = inputs.base
+        with inputs.replace(base, [("seed", ["alice"])]) as result:
+            print(result.contains_fact("allow", ["alice"]))
+        # Use the committed base, after releasing the preceding result.
+        with inputs.apply(inputs.base, added=[("seed", ["bob"])],
+                          removed=[("seed", ["alice"])]) as result:
+            print(result.contains_fact("allow", ["bob"]))
+```
+
+The example assumes a domain with EDB `seed/1`, query IDB `allow/1`, and rule
+`allow(X) :- seed(X).`. `SessionInputs.replace(base, facts)` supplies the complete
+dynamic input. `apply(base, *, added=(), removed=())` supplies changes to the
+committed set; additions win over removals of the same fact, duplicate facts
+collapse and removing an absent fact does nothing. Compiled policy facts remain
+separate. Every successful call, even an empty delta, returns a leased result and
+advances the generation. These are immediate solve-and-commit operations, not a
+multi-call builder with a later commit.
+
+`InputBase(incarnation, generation)` is an immutable pair of exact unsigned
+64-bit integers. Pass the base from which you computed the batch. A stale or
+foreign token fails with `INVALID_STATE`; the binding never substitutes a fresh
+token or retries. `inputs.base` is read-only. Attachments with the same options
+have the same execution fingerprint, but different incarnations. The fingerprint
+includes the capacities and vocabulary, not the changing input or base.
+
+`fact_capacity` defaults to the session's input quota E; the two batch capacities
+default to `fact_capacity`. Zero is an exact bound. Replacement and batch bounds
+count raw entries before deduplication; the committed set must fit the fact
+capacity and the session quotas. Explicit add/remove capacities can exceed E up
+to the loaded build's input ceiling. No bound grows or falls back to the heap.
+Vocabulary consists of program symbols plus `symbols`, frozen at attachment;
+empty strings are permitted. Unknown added/replacement symbols are rejected;
+an unknown removed symbol denotes an absent fact, after record validation.
+
+Both batches are converted before calling C. Conversion, capacity, domain,
+solver and stale-base failures preserve committed facts and the base. Release
+the preceding result before another transaction or `inputs.close()`; copied
+explanation strings need no further release. Closing the session closes its
+result, then attachment. Ordinary `session.solve(edb)` is unavailable while
+attached. Detaching restores the execution fingerprint, but does not reset the
+session's successful-solve history; prepare a new session to attach again after
+a successful transaction. The session's existing thread confinement applies.
+
+The binding owns an aligned attachment allocation until close. Python/CFFI
+batch arrays, text conversions, results and explanation strings still allocate.
+The native attachment operation and prepared transaction path use fixed storage;
+this does not make Python allocation-free or the reference solver incremental.
+See [the binding transaction contract](../../docs/binding-input-transactions.md)
+for the shared semantics and qualification scope.
 
 ## Build
 

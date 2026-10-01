@@ -7,6 +7,18 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+
+- Expose retained session input transactions in Python and the common
+  JavaScript/TypeScript binding (native Node and WASM): explicit uint64 bases,
+  bounded add/remove batches, complete replacement, frozen vocabulary and the
+  existing result/explanation lifetimes. Both batches are staged before native
+  publication; stale bases and failed operations preserve committed input.
+  Bindings own attachment storage; conversions still allocate. No public C or
+  backend ABI change, allocator service or incremental solver is introduced.
+  See `docs/binding-input-transactions.md`. A new complete Python performance
+  report and maintainer decision are required before the 0.17.0 release.
+
 ## 0.16.0 — 2026-10-01
 
 Consumer API 2 and program ABI 2 remain unchanged. Backend ABI 7 is negotiated

@@ -2,6 +2,7 @@
 #include "transport.h"
 #include <maelys/datalog.h>
 #include <maelys/datalog_resources.h>
+#include <maelys/datalog_transactions.h>
 #include <stdlib.h>
 #include <string.h>
 #include <limits.h>
@@ -22,7 +23,7 @@ _Static_assert(MAELYS_DATALOG_PUBLIC_MAX_TERMS == 4u, "Review transport arity");
 #define INTERNAL MAELYS_DATALOG_STATUS_INTERNAL
 #define MAELYS_JS_FACT_WORDS 15u
 
-enum { POLICY = 1, EDB, SESSION, RESULT };
+enum { POLICY = 1, EDB, SESSION, RESULT, INPUTS };
 typedef struct handle {
     struct handle *next;
     uint32_t id, parent, kind, result_id;
@@ -30,6 +31,10 @@ typedef struct handle {
     union { maelys_datalog_policy_t *policy; maelys_datalog_input_edb_t *edb;
             maelys_datalog_session_t *session; } p;
     maelys_datalog_result_t *result;
+    maelys_datalog_session_inputs_t *inputs;
+    void *input_storage;
+    maelys_datalog_fact_t *input_facts;
+    size_t fact_capacity, addition_capacity, removal_capacity;
 } handle;
 struct maelys_js_context {
     handle *handles;
@@ -80,7 +85,16 @@ static int drop(maelys_js_context *c, uint32_t id, uint32_t kind) {
         rc = maelys_datalog_policy_free(h->p.policy);
     } else if (kind == SESSION) {
         if (h->result && (rc = drop(c, h->result_id, RESULT))) return rc;
+        for (;;) {
+            handle *child = c->handles;
+            while (child && child->parent != id) child = child->next;
+            if (!child) break;
+            if ((rc = drop(c, child->id, child->kind))) return rc;
+        }
         rc = maelys_datalog_session_free(h->p.session);
+    } else if (kind == INPUTS) {
+        rc = maelys_datalog_session_inputs_free(h->inputs);
+        if (!rc) { free(h->input_storage); free(h->input_facts); }
     } else if (kind == EDB) rc = maelys_datalog_input_edb_free(h->p.edb);
     if (rc) return rc;
     handle **link = &c->handles;
@@ -119,7 +133,14 @@ void maelys_js_destroy(maelys_js_context *c) {
     if (!c) return;
     while (c->handles) {
         /* Engine-owned objects have no external borrowers in this adapter. */
-        if (drop(c, c->handles->id, c->handles->kind)) abort();
+        handle *root = c->handles;
+        while (root->parent) {
+            handle *parent = c->handles;
+            while (parent && parent->id != root->parent) parent = parent->next;
+            if (!parent) abort();
+            root = parent;
+        }
+        if (drop(c, root->id, root->kind)) abort();
     }
     free(c->owned_text); free(c->scratch); free(c->words); free(c);
 }
@@ -131,12 +152,12 @@ static const char *span(const char *text, uint32_t bytes, uint32_t offset, uint3
         memchr(text + offset, '\0', length)) return NULL;
     return text + offset;
 }
-static int decode(maelys_js_context *c, const uint32_t *words, uint32_t word_count, uint32_t count,
+static int decode_into(maelys_datalog_fact_t *facts, size_t capacity,
+                  const uint32_t *words, uint32_t word_count, uint32_t count,
                   const char *text, uint32_t text_bytes) {
-    if (count > c->max_facts) return TOO_LARGE;
+    if (count > capacity) return TOO_LARGE;
     if (count > UINT32_MAX / MAELYS_JS_FACT_WORDS || word_count != count * MAELYS_JS_FACT_WORDS ||
         (!words && count)) return INVALID;
-    maelys_datalog_fact_t *facts = c->scratch;
     for (uint32_t i = 0; i < count; ++i) {
         const uint32_t *w = words + i * MAELYS_JS_FACT_WORDS;
         maelys_datalog_fact_t *f = &facts[i];
@@ -164,6 +185,10 @@ static int decode(maelys_js_context *c, const uint32_t *words, uint32_t word_cou
         }
     }
     return OK;
+}
+static int decode(maelys_js_context *c, const uint32_t *words, uint32_t word_count,
+                  uint32_t count, const char *text, uint32_t text_bytes) {
+    return decode_into(c->scratch, c->max_facts, words, word_count, count, text, text_bytes);
 }
 uint32_t maelys_js_scalar(maelys_js_context *c, uint32_t field) {
     switch (field) {
@@ -219,7 +244,7 @@ static int dispatch(maelys_js_context *c, uint32_t op, const uint32_t *w, uint32
     REQUIRE((w || !n) && (text || !bytes));
     switch (op) {
     case 0:
-        REQUIRE(n == 0); c->words[0] = 1; c->words[1] = MAELYS_DATALOG_PUBLIC_API_VERSION;
+        REQUIRE(n == 0); c->words[0] = 2; c->words[1] = MAELYS_DATALOG_PUBLIC_API_VERSION;
         c->word_count = 2; return OK;
     case 1:
         REQUIRE(n == 0);
@@ -284,7 +309,7 @@ static int dispatch(maelys_js_context *c, uint32_t op, const uint32_t *w, uint32
         commit(c, h); return OK;
     }
     case 6:
-        REQUIRE(n == 2 && w[0] >= POLICY && w[0] <= RESULT);
+        REQUIRE(n == 2 && w[0] >= POLICY && w[0] <= INPUTS);
         return drop(c, w[1], w[0]);
     case 7: {
         REQUIRE(n == 1); HANDLE(h, w[0], POLICY);
@@ -432,6 +457,75 @@ static int dispatch(maelys_js_context *c, uint32_t op, const uint32_t *w, uint32
             c->words[i] = (uint32_t)value;
         }
         c->word_count = 3; return OK;
+    }
+    case 22: { /* Attach retained input before the first successful solve. */
+        REQUIRE(n >= 5); HANDLE(session, w[0], SESSION);
+        size_t max_symbols;
+        TRY(maelys_datalog_limit_get(MAELYS_DATALOG_LIMIT_MAX_SYMBOLS, &max_symbols));
+        if (w[4] > max_symbols) return TOO_LARGE;
+        REQUIRE(w[4] <= (UINT32_MAX - 5u) / 2u && n == 5u + 2u*w[4]);
+        const char **symbols = w[4] ? malloc((size_t)w[4] * sizeof(*symbols)) : NULL;
+        if (w[4] && !symbols) return INTERNAL;
+        for (uint32_t i = 0; i < w[4]; ++i) {
+            symbols[i] = TEXT(5u + 2u*i);
+            if (!symbols[i]) { free(symbols); return INVALID; }
+        }
+        maelys_datalog_input_options_t options = MAELYS_DATALOG_INPUT_OPTIONS_INIT;
+        options.fact_capacity = w[1]; options.addition_capacity = w[2];
+        options.removal_capacity = w[3]; options.symbols = symbols; options.symbol_count = w[4];
+        size_t size, alignment;
+        int rc = maelys_datalog_session_inputs_storage_requirements(session->p.session, &options, &size, &alignment);
+        if (rc) { free(symbols); return rc; }
+        size_t count = options.addition_capacity + options.removal_capacity;
+        if (count < options.addition_capacity) { free(symbols); return TOO_LARGE; }
+        if (count < options.fact_capacity) count = options.fact_capacity;
+        if (count > SIZE_MAX / sizeof(maelys_datalog_fact_t) || alignment > _Alignof(max_align_t)) {
+            free(symbols); return TOO_LARGE;
+        }
+        handle *h = reserve(c, INPUTS, session->id);
+        if (!h) { free(symbols); return INTERNAL; }
+        h->input_storage = malloc(size);
+        h->input_facts = count ? malloc(count * sizeof(*h->input_facts)) : NULL;
+        if (!h->input_storage || (count && !h->input_facts)) rc = INTERNAL;
+        else rc = maelys_datalog_session_inputs_init(session->p.session, &options,
+            h->input_storage, size, &h->inputs);
+        free(symbols);
+        if (rc) { free(h->input_storage); free(h->input_facts); free(h); return rc; }
+        h->fact_capacity = options.fact_capacity; h->addition_capacity = options.addition_capacity;
+        h->removal_capacity = options.removal_capacity;
+        commit(c, h); return OK;
+    }
+    case 23: {
+        REQUIRE(n == 1); HANDLE(h, w[0], INPUTS);
+        maelys_datalog_input_base_t base;
+        TRY(maelys_datalog_session_inputs_base(h->inputs, &base));
+        c->words[0] = (uint32_t)base.incarnation; c->words[1] = (uint32_t)(base.incarnation >> 32);
+        c->words[2] = (uint32_t)base.generation; c->words[3] = (uint32_t)(base.generation >> 32);
+        c->word_count = 4; return OK;
+    }
+    case 24: case 25: {
+        const uint32_t prefix = op == 24 ? 6u : 7u;
+        REQUIRE(n >= prefix); HANDLE(h, w[0], INPUTS); HANDLE(session, h->parent, SESSION);
+        if (session->result) return CLOSED;
+        if (c->serial == UINT32_MAX) return TOO_LARGE;
+        uint32_t added = w[5], removed = op == 24 ? 0 : w[6];
+        size_t capacity = op == 24 ? h->fact_capacity : h->addition_capacity;
+        if (added > capacity || removed > h->removal_capacity) return TOO_LARGE;
+        if (added > (UINT32_MAX-prefix)/MAELYS_JS_FACT_WORDS ||
+            removed > (UINT32_MAX-prefix-added*MAELYS_JS_FACT_WORDS)/MAELYS_JS_FACT_WORDS) return INVALID;
+        REQUIRE(n == prefix + (added + removed)*MAELYS_JS_FACT_WORDS);
+        maelys_datalog_fact_t *a = h->input_facts;
+        maelys_datalog_fact_t *r = removed ? h->input_facts + added : NULL;
+        TRY(decode_into(a, capacity, w + prefix, added*MAELYS_JS_FACT_WORDS, added, text, bytes));
+        TRY(decode_into(r, h->removal_capacity, w + prefix + added*MAELYS_JS_FACT_WORDS,
+            removed*MAELYS_JS_FACT_WORDS, removed, text, bytes));
+        maelys_datalog_input_base_t base = {wide(w + 1), wide(w + 3)};
+        int rc = op == 24
+            ? maelys_datalog_session_inputs_replace(h->inputs, base, a, added, &session->result, &c->diagnostic)
+            : maelys_datalog_session_inputs_apply(h->inputs, base, a, added, r, removed, &session->result, &c->diagnostic);
+        if (rc) return rc;
+        session->result_id = ++c->serial;
+        c->words[0] = session->result_id; c->word_count = 1; return OK;
     }
     default: return INVALID;
     }

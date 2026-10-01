@@ -22,6 +22,102 @@ for (const runtime of runtimes) {
     const rules = engine.loadInlineRuleset('js_common', 'test', 'allow(X) :- seed(X), not(blocked(X)).');
     return { engine, rules, edb: rules.edb(options) };
   }
+  test(`${runtime}: retained input exact values, bases, leases and set semantics`, async t => {
+    const { rules, edb } = await basic(t), session=rules.prepare({explanations:3});
+    const fingerprint=session.executionFingerprint;
+    const inputs=session.inputs({factCapacity:16,symbols:['','1','é🙂']});
+    const base=inputs.base;
+    assert.ok(base instanceof api.InputBase && Object.isFrozen(base));
+    assert.notEqual(session.executionFingerprint,fingerprint);
+    const values=[-(1n<<63n),(1n<<63n)-1n,9007199254740993n,true,false,'','1','é🙂'];
+    let result=inputs.replace(base,values.map(v=>f('seed',v)));
+    for(const v of values) assert.equal(result.containsFact('allow',[v]),true);
+    assert.equal(result.derivedFactCount(),values.length);
+    assert.match(result.explainTrue('allow',['é🙂']),/status=complete/);
+    assert.throws(()=>inputs.close(),status(S.INVALID_STATE));
+    assert.throws(()=>inputs.apply(inputs.base),status(S.INVALID_STATE));
+    assert.throws(()=>session.solve(edb),status(S.INVALID_STATE)); result.close();
+    assert.deepEqual(inputs.base,new api.InputBase(base.incarnation,base.generation+1n));
+    assert.throws(()=>inputs.apply(base),status(S.INVALID_STATE));
+    const current=inputs.base;
+    for(const forged of [new api.InputBase(current.incarnation,current.generation+(1n<<32n)),new api.InputBase(current.incarnation+(1n<<32n),current.generation)]){
+      assert.throws(()=>inputs.apply(forged),status(S.INVALID_STATE));assert.deepEqual(inputs.base,current);
+    }
+    result=inputs.apply(inputs.base,{added:[f('seed','é🙂'),f('seed','é🙂')],removed:[f('seed','é🙂'),f('seed','unknown')]});
+    assert.equal(result.containsFact('allow',['é🙂']),true); result.close();
+    result=inputs.apply(inputs.base,{added:[f('blocked','é🙂')]});
+    assert.equal(result.containsFact('allow',['é🙂']),false); result.close();
+    result=inputs.apply(inputs.base,{removed:[f('blocked','é🙂')]});
+    assert.equal(result.containsFact('allow',['é🙂']),true); result.close();
+    inputs.close(); assert.equal(session.executionFingerprint,fingerprint);
+  });
+  test(`${runtime}: retained input stages both batches and recovers every rejection`, async t => {
+    const {rules}=await basic(t), session=rules.prepare({capacities:{inputFacts:2}});
+    const inputs=session.inputs({additionCapacity:3,removalCapacity:3,symbols:['known']});
+    inputs.replace(inputs.base,[f('seed',1)]).close(); const base=inputs.base;
+    for(const changes of [
+      {added:[f('seed',2),f('seed',{})]}, {added:[f('seed',2)],removed:[f('seed',{})]},
+      {added:[f('seed','unknown')]}, {added:[f('seed',2),f('seed',3)]},
+      {added:[f('missing',1)]}, {removed:[f('missing','unknown')]},
+      {added:Array(4).fill(f('seed',1))},
+    ]) { assert.throws(()=>inputs.apply(base,changes)); assert.deepEqual(inputs.base,base); }
+    const result=inputs.apply(base,{added:[f('seed',2)],removed:[f('seed',1)]});
+    assert.equal(result.containsFact('allow',[1]),false); assert.equal(result.containsFact('allow',[2]),true);
+    session.close(); inputs.close(); result.close(); assert.throws(()=>inputs.base,status(S.INVALID_STATE));
+  });
+  test(`${runtime}: retained input reentrancy, incarnation, zero bounds and bounded iteration`, async t => {
+    const {rules,edb}=await basic(t), session=rules.prepare();
+    assert.throws(()=>new api.SessionInputs(),TypeError);
+    for(const v of [-1,1.5,true,Number.MAX_SAFE_INTEGER+1,1n<<64n]) assert.throws(()=>new api.InputBase(v,0));
+    assert.equal(new api.InputBase((1n<<64n)-1n,0).incarnation,(1n<<64n)-1n);
+    assert.throws(()=>session.inputs({get symbols(){session.close();}}),status(S.INVALID_STATE));
+    const inputs=session.inputs({factCapacity:2}), base=inputs.base;
+    assert.throws(()=>session.inputs(),status(S.INVALID_STATE));
+    for(const action of [()=>session.close(),()=>inputs.close(),()=>inputs.apply(base),()=>rules.close()]) {
+      function* facts(){yield f('seed',1); action();}
+      assert.throws(()=>inputs.replace(base,facts()),status(S.INVALID_STATE)); assert.deepEqual(inputs.base,base);
+    }
+    assert.throws(()=>inputs.apply(base,{get removed(){inputs.close();}}),status(S.INVALID_STATE));
+    let n=0; function* infinite(){while(true){++n;yield f('seed',1);}}
+    assert.throws(()=>inputs.replace(base,infinite()),RangeError); assert.equal(n,3);
+    inputs.close(); const other=session.inputs({factCapacity:0});
+    assert.notEqual(other.base.incarnation,base.incarnation);
+    assert.throws(()=>other.apply(base),status(S.INVALID_STATE));
+    other.replace(other.base,[]).close(); assert.throws(()=>other.apply(other.base,{added:[f('seed',1)]}));
+    session.close();
+    const ordinary=rules.prepare(); ordinary.solve(rules.edb()).close();
+    assert.throws(()=>ordinary.inputs(),status(S.INVALID_STATE));
+  });
+  test(`${runtime}: generated retained deltas versus complete snapshots (seed 170017)`, async t => {
+    const {rules,edb}=await basic(t), session=rules.prepare(), oracle=rules.prepare();
+    const inputs=session.inputs({factCapacity:32,additionCapacity:16,removalCapacity:16});
+    let seed=170017, committed=new Map(); const next=()=>seed=(Math.imul(seed,1664525)+1013904223)>>>0;
+    for(let turn=0;turn<80;++turn){
+      const added=Array.from({length:7},()=>f((next()>>>16)%2?'seed':'blocked',next()%12));
+      const removed=Array.from({length:7},()=>f((next()>>>16)%2?'seed':'blocked',next()%12));
+      const key=x=>JSON.stringify(x); for(const x of removed)committed.delete(key(x)); for(const x of added)committed.set(key(x),x);
+      const result=turn%9===0?inputs.replace(inputs.base,committed.values()):inputs.apply(inputs.base,{added,removed});
+      edb.reset(); edb.addFacts(committed.values()); const reference=oracle.solve(edb);
+      assert.deepEqual(result.enumeratePredicateFacts('allow',1),reference.enumeratePredicateFacts('allow',1));
+      result.close();reference.close();
+    }
+  });
+  test(`${runtime}: retained input solver diagnostics match the ordinary solve on rejection`, async t => {
+    const {engine}=await basic(t);
+    engine.registerDomain('js_tx_sum',[P.edb('ev',2),P.idbQuery('total',1)]);
+    const rules=engine.loadInlineRuleset('js_tx_sum','main','total(N) :- sum(V,ev(_,V),N).');
+    const session=rules.prepare(), inputs=session.inputs({factCapacity:4}), edb=rules.edb();
+    inputs.replace(inputs.base,[f('ev',1,2147483647)]).close(); const base=inputs.base;
+    for(const value of [1,-1]){
+      edb.reset();edb.addFacts([f('ev',1,2147483647),f('ev',2,value)]);
+      let expected; assert.throws(()=>rules.solve(edb),e=>{expected=e.diagnostic;return e.status===S.INVALID_FIELD;});
+      assert.throws(()=>inputs.apply(base,{added:[f('ev',2,value)]}),e=>{
+        assert.deepEqual(e.diagnostic,expected); return e.status===S.INVALID_FIELD;
+      }); assert.deepEqual(inputs.base,base);
+    }
+    const result=inputs.apply(base,{added:[f('ev',2,1)],removed:[f('ev',1,2147483647)]});
+    assert.equal(result.containsFact('total',[1]),true);
+  });
   test(`${runtime}: exact values, copied inputs and independently owned objects`, async t => {
     const { engine, rules, edb } = await basic(t);
     const values = [-(1n << 63n), (1n << 63n) - 1n, 9007199254740993n, 0n, 1, true, false, '1', '', 'é🙂'];

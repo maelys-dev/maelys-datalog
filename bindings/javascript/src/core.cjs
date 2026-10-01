@@ -128,13 +128,17 @@ function close(object) {
   const s = states.get(object);
   if (!s) throw new TypeError('Invalid receiver');
   if (s.closed || s.closing) return;
+  if (s.busy) throw invalidState('Object is being staged');
+  if (s.type === 'SessionInputs' && states.get(s.parent).busy) throw invalidState('Session input is being staged');
   s.closing = true;
   try {
+    if (s.type === 'Session' && s.result) close(s.result);
     for (const child of s.children) close(child);
     if (s.type === 'Engine') s.transport.close();
     else invoke(s.engine, 'close', 6, [s.kind, s.id]);
     s.closed = true;
     if (s.parent) states.get(s.parent).children.delete(object);
+    if (s.type === 'SessionInputs') states.get(s.parent).inputs = undefined;
     if (s.type === 'SolveResult') {
       const session = states.get(s.parent);
       session.result = undefined;
@@ -189,7 +193,7 @@ class EngineBase {
     if (token !== secret) throw new TypeError('Use Engine.create()');
     states.set(this, { type: 'Engine', transport, children: new Set(), closed: false });
     const version = invoke(this, 'transport version', 0).words;
-    if (version[0] !== 1 || version[1] !== 2) throw new Error('Incompatible engine transport');
+    if (version[0] !== 2 || version[1] !== 2) throw new Error('Incompatible engine transport');
     const limits = invoke(this, 'limits', 1).words;
     if (limits.length !== LIMITS.length) throw new Error('Incompatible engine introspection transport');
     states.get(this).limits = Object.freeze(Object.fromEntries(LIMITS.map((name, i) => [name, limits[i]])));
@@ -307,12 +311,73 @@ class Session {
   }
   get fingerprint() { const s = live(this, 'Session'); return invoke(s.engine, 'fingerprint', 11, [2, s.id]).text; }
   get executionFingerprint() { const s = live(this, 'Session'); return invoke(s.engine, 'executionFingerprint', 11, [3, s.id]).text; }
+  inputs(options = {}) {
+    const s = live(this, 'Session');
+    if (s.busy || s.inputs || s.result) throw invalidState('Session is busy or already has retained input');
+    s.busy = true;
+    try {
+      const factCapacity = u32(options.factCapacity ?? this.capacities.inputFacts, 'factCapacity');
+      const additionCapacity = u32(options.additionCapacity ?? factCapacity, 'additionCapacity');
+      const removalCapacity = u32(options.removalCapacity ?? factCapacity, 'removalCapacity');
+      const symbols = options.symbols ?? [], pool = strings(), vocabulary = [];
+      if (typeof symbols === 'string') throw new TypeError('symbols must be an iterable of strings');
+      let count = 0;
+      for (const symbol of symbols) {
+        if (++count > s.engine.limits.maxSymbols) throw new RangeError('Too many vocabulary entries');
+        vocabulary.push(...pool.add(symbol));
+      }
+      live(this, 'Session');
+      const id = invoke(s.engine, 'attach retained input', 22,
+        [s.id, factCapacity, additionCapacity, removalCapacity, count, ...vocabulary], pool.finish()).words[0];
+      const inputs = new SessionInputs(secret, this, id);
+      states.get(inputs).capacities = [factCapacity, additionCapacity, removalCapacity];
+      s.inputs = inputs; return inputs;
+    } finally { s.busy = false; }
+  }
   solve(edb) {
     const s = live(this, 'Session'), input = live(edb, 'Edb');
+    if (s.busy) throw invalidState('Session input is being staged');
     if (input.parent !== s.parent) throw new TypeError('EDB belongs to another ruleset');
     if (input.busy) throw invalidState('EDB is being staged');
     const id = invoke(s.engine, 'solve', 15, [s.id, input.id]).words[0];
     const result = new SolveResult(secret, this, id); s.result = result; input.frozen = true; return result;
+  }
+  close() { close(this); }
+  [Symbol.dispose]() { this.close(); }
+}
+class InputBase {
+  constructor(incarnation, generation) {
+    uint64(incarnation, 'incarnation'); uint64(generation, 'generation');
+    this.incarnation = BigInt(incarnation); this.generation = BigInt(generation);
+    Object.freeze(this);
+  }
+}
+class SessionInputs {
+  constructor(token, session, id) { initialize(this, token, 'SessionInputs', session, id, 5); }
+  get base() {
+    const s = live(this, 'SessionInputs'), w = invoke(s.engine, 'input base', 23, [s.id]).words;
+    return new InputBase(BigInt(w[0]) | BigInt(w[1]) << 32n, BigInt(w[2]) | BigInt(w[3]) << 32n);
+  }
+  replace(base, facts) { return this._transact(base, facts, [], true); }
+  apply(base, changes = {}) {
+    // Read user getters only while the session's reentrancy guard is held.
+    return this._transact(base, changes, undefined, false);
+  }
+  _transact(base, first, second, replace) {
+    const s = live(this, 'SessionInputs'), session = live(s.parent, 'Session');
+    if (session.busy || session.result) throw invalidState('Session is busy or has a live result');
+    session.busy = true;
+    try {
+      if (!(base instanceof InputBase)) throw new TypeError('base must be InputBase');
+      const prefix = [s.id, ...uint64(base.incarnation, 'incarnation'), ...uint64(base.generation, 'generation')];
+      const pool = strings(), added = replace ? first : (first.added ?? []), removed = replace ? second : (first.removed ?? []);
+      const a = factWords(added, pool, s.capacities[replace ? 0 : 1]);
+      const r = factWords(removed, pool, s.capacities[2]);
+      live(this, 'SessionInputs'); live(s.parent, 'Session');
+      const id = invoke(s.engine, replace ? 'replace inputs' : 'apply inputs', replace ? 24 : 25,
+        [...prefix, a.count, ...(replace ? [] : [r.count]), ...a.words, ...r.words], pool.finish()).words[0];
+      const result = new SolveResult(secret, s.parent, id); session.result = result; return result;
+    } finally { session.busy = false; }
   }
   close() { close(this); }
   [Symbol.dispose]() { this.close(); }
@@ -355,7 +420,7 @@ class SolveResult {
   close() { close(this); }
   [Symbol.dispose]() { this.close(); }
 }
-const api = { Predicate, SessionCapacities, Ruleset, Edb, Session, SolveResult, ResultTerm,
+const api = { Predicate, SessionCapacities, Ruleset, Edb, Session, SessionInputs, InputBase, SolveResult, ResultTerm,
   Capability, ExplanationKind, Status, MaelysDatalogError, PRED_EDB, PRED_IDB, PRED_QUERY, PRED_POLICY_FACT };
 function binding(createTransport) {
   class Engine extends EngineBase {
