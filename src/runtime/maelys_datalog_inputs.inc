@@ -264,31 +264,76 @@ static maelys_datalog_status_t retained_candidate(maelys_datalog_session_inputs_
     return retained_run(h,h->base,1,1,f,n,NULL,0,out,d);
 }
 
+/* Callback-local merge cursors. No new persistent reservation: a window's
+ * set difference can exceed the caller's raw apply-lot capacities. Both source
+ * sets are already sorted, unique and expressed in the same frozen vocabulary.
+ * Sequential access is linear; an arbitrary backward read restarts the merge. */
+typedef struct { size_t source, excluded, ordinal; } retained_view_cursor;
 struct maelys_datalog_backend_input_view {
     const maelys_datalog_session_inputs_t *owner;
     const maelys_datalog_internal_fact_t *facts;
     size_t count;
+    const maelys_datalog_internal_fact_t *excluded;
+    size_t source_count, excluded_count;
+    retained_view_cursor *cursor;
 };
+static const maelys_datalog_internal_fact_t *retained_view_fact(
+    const maelys_datalog_backend_input_view_t *view,size_t index) {
+    if(!view->cursor) return &view->facts[index];
+    retained_view_cursor *c=view->cursor;
+    if(index<c->ordinal) *c=(retained_view_cursor){0};
+    while(c->source<view->source_count) {
+        const maelys_datalog_internal_fact_t *fact=&view->facts[c->source++];
+        while(c->excluded<view->excluded_count &&
+              maelys_datalog_fact_cmp(&view->excluded[c->excluded],fact)<0) ++c->excluded;
+        if(c->excluded<view->excluded_count &&
+           !maelys_datalog_fact_cmp(&view->excluded[c->excluded],fact)) continue;
+        if(c->ordinal++==index) return fact;
+    }
+    return NULL; /* Inconsistent counted view, never an out-of-bounds read. */
+}
 maelys_datalog_status_t maelys_datalog_backend_input_at(
     const maelys_datalog_backend_input_view_t *view,size_t index,maelys_datalog_fact_t *out) {
     if(!view || !out) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
     if(index>=view->count) return MAELYS_DATALOG_STATUS_NOT_FOUND;
     if(!view->owner->owner || !view->owner->owner->busy || !view->owner->pending)
         return MAELYS_DATALOG_STATUS_INVALID_STATE;
+    const maelys_datalog_internal_fact_t *fact=retained_view_fact(view,index);
+    if(!fact) return MAELYS_DATALOG_STATUS_INTERNAL;
     maelys_datalog_fact_t value={0};
     maelys_datalog_status_t rc=(maelys_datalog_status_t)maelys_datalog_export_fact(
-        view->owner->owner->inputs->prepared,&view->owner->vocabulary,&view->facts[index],&value);
+        view->owner->owner->inputs->prepared,&view->owner->vocabulary,fact,&value);
     if(!rc) *out=value;
     return rc;
 }
 static maelys_datalog_status_t retained_deliver(maelys_datalog_session_inputs_t *h,
     maelys_datalog_backend_output_t *out,void **result,maelys_datalog_diagnostic_t *diag) {
     if(!h || !h->pending) return MAELYS_DATALOG_STATUS_INVALID_STATE;
-    maelys_datalog_backend_input_view_t additions={h,
-        h->delivery_kind==MAELYS_DATALOG_BACKEND_INPUT_REPLACE?h->candidate:h->added,h->delivered_additions};
-    maelys_datalog_backend_input_view_t removals={h,h->removed,h->delivered_removals};
+    maelys_datalog_backend_input_view_t additions={.owner=h,.facts=
+        h->delivery_kind==MAELYS_DATALOG_BACKEND_INPUT_REPLACE?h->candidate:h->added,
+        .count=h->delivered_additions};
+    maelys_datalog_backend_input_view_t removals={.owner=h,.facts=h->removed,.count=h->delivered_removals};
+    uint32_t kind=h->delivery_kind;
+    retained_view_cursor add_cursor={0},remove_cursor={0};
+    if(h->owner->pending_commit) {
+        /* Window candidate: catch up THIS session from ITS last committed set,
+         * never from the other bank or from the evicted event's contributions.
+         * Initial probes and rejected transactions do not advance that base. */
+        size_t old=0,next=0,common=0;
+        while(old<h->count && next<h->candidate_count) {
+            int order=maelys_datalog_fact_cmp(&h->live[old],&h->candidate[next]);
+            if(order<=0) ++old;
+            if(order>=0) ++next;
+            if(!order) ++common;
+        }
+        kind=MAELYS_DATALOG_BACKEND_INPUT_DELTA;
+        additions=(maelys_datalog_backend_input_view_t){h,h->candidate,h->candidate_count-common,
+            h->live,h->candidate_count,h->count,&add_cursor};
+        removals=(maelys_datalog_backend_input_view_t){h,h->live,h->count-common,
+            h->candidate,h->count,h->candidate_count,&remove_cursor};
+    }
     maelys_datalog_backend_input_t packet={sizeof(packet),MAELYS_DATALOG_BACKEND_INPUT_VERSION,
-        h->delivery_kind,h->base,{h->base.incarnation,h->base.generation+1},
+        kind,h->base,{h->base.incarnation,h->base.generation+1},
         &additions,&removals,additions.count,removals.count};
     return h->owner->transaction_solve(h->owner->state,&packet,out,result,diag);
 }

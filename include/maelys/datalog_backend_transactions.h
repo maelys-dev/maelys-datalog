@@ -38,7 +38,7 @@ typedef maelys_datalog_status_t (*maelys_datalog_backend_transaction_solve_t)(
  * removals then additions (additions win, absent removals are no-ops). The host
  * may suppress redundant additions. Compiled facts remain in the program.
  * First base is empty at generation zero; adopt next only in commit. Check
- * every subsequent base, including replacement catch-up of a window bank.
+ * every subsequent base, including delta catch-up of a window bank.
  * All packet/view pointers are callback-scoped. No reentry except SDK program,
  * input-view and output functions. No implicit snapshot fallback. */
 typedef struct {

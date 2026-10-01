@@ -199,3 +199,13 @@ void input_fixture_observe(const void *storage,input_fixture_observation *out) {
     }
     out->digest=digest;
 }
+
+size_t input_fixture_committed(const void *storage,void *out,size_t capacity) {
+    const input_fixture_state *s=storage;
+    size_t bytes=sizeof(s->base)+s->count*sizeof(*s->live);
+    if(out && capacity>=bytes) {
+        memcpy(out,&s->base,sizeof(s->base));
+        memcpy((unsigned char *)out+sizeof(s->base),s->live,s->count*sizeof(*s->live));
+    }
+    return bytes;
+}
