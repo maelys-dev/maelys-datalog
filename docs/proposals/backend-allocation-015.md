@@ -109,9 +109,11 @@ A = sum of outstanding charged provider requests
 R = H + B + A <= C
 ```
 
-Count configured explanations and retained private policy snapshots in H, whether
-their required slices are internal or externally supplied. Count each slice
-once; unused caller buffer excess is excluded. Shared policy storage, compilation,
+H+B equals the fixed plan's `total_execution_bytes`, including inter-slice
+alignment padding: H here is not merely the plan's `host_bytes` member. Count
+configured explanations and retained private policy snapshots in H, whether
+their required slices are internal or externally supplied. Count each slice once;
+unused caller buffer excess is excluded. Shared policy storage, compilation,
 configuration handles, caller inputs, window adapter storage, stack and binding
 objects are separate. C is not total application memory or RSS and excludes
 allocator-internal overhead, which these callbacks cannot observe.
@@ -307,10 +309,12 @@ requires equal normalized E/D/S/T, mode/features and configured C in both banks.
 Each bank owns its cap and service: equal C is not a shared pool, a transferable
 balance or half an implicit total. Their current/peak charges may differ during
 alternation without changing identity. A mismatched cap is refused before any
-provider preparation or publication. Total window planning reports adapter
-storage plus both fixed reservations and both caps, without double-counting
-assigned slices. A shared caller allocator may fail while either bank is below
-its cap; this is still recoverable NULL, not borrowing from the other bank.
+provider preparation or publication. For adapter storage W,
+report fixed reservation W+(H0+B0)+(H1+B1), current reservation W+R0+R1 and
+configured bound W+C0+C1 separately. Never add H/B again to a cap that already
+includes them; shared dependencies and other exclusions remain separate. A
+shared caller allocator may fail while either bank is below its cap; this is
+still recoverable NULL, not borrowing from the other bank.
 
 Real last-N/group qualification must exercise alternation, duplicate facts with
 several event/static supports, replacement, expiry and negation-induced growth.
