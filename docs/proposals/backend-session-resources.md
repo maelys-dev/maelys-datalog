@@ -250,13 +250,15 @@ descriptor ABI number.
 Before implementation is accepted, publish exact encoding vectors and window
 compatibility tests; capability bits alone are not an execution identity.
 
-## 7. Reserved extension and additive 0.15.0 delivery
+## 7. Reserved extension and deferred additive delivery
 
 Reserve the BACKEND_ELASTIC mode and allocator feature identity without an
 implemented path or supported-capability claim. Both are refused in 0.14.0.
-The [0.15.0 allocation specification](backend-allocation-015.md) retains the
+The [revised allocation proposal](backend-allocation-015.md) retains the
 service, cap accounting, phases, acquisition failure replay, native fixture and
-negative controls. None is a condition of the fixed-capacity delivery.
+negative controls. Its historical filename does not imply shipped allocator
+support: v0.15.0 delivered the common JavaScript binding. None is a condition of
+the fixed-capacity delivery.
 
 The service will extend versioned resource records behind the unchanged prefix
 and required-feature mask. It must not require another ABI 6 callback parameter,
