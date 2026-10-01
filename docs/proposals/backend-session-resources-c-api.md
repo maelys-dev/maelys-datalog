@@ -11,8 +11,9 @@ They become an SDK contract only with a separately reviewed implementation.
 0.14.0 is FIXED-only. No allocator types, callbacks, setter, cap, service pointer
 or elastic execution path are declared. No delta entry is declared here. The
 reserved elastic mode and allocator bit are rejected even by a provider that
-claims to support them. Their implementation/qualification belongs to
-[0.15.0](backend-allocation-015.md).
+claims to support them. Their implementation/qualification remains in the
+[deferred allocation proposal](backend-allocation-015.md); its historical 0.15.0
+filename does not name a delivered feature or a current release commitment.
 
 ## 1. Declaration inventory and existing interfaces
 
@@ -282,5 +283,5 @@ as a separate engine test. Neither this header's syntax nor that mock certifies
 an XLARGE engine or raises its current internal index limits.
 
 Review these declarations and encoding before moving them into installed headers
-or writing execution code. The allocation service matrix remains in 0.15.0;
+or writing execution code. The allocation service matrix remains in that deferred proposal;
 no extra growth qualification is introduced through this step-1 proposal.
