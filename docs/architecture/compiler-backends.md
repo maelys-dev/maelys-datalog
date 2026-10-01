@@ -52,7 +52,7 @@ and its bounded proof snapshots remain unchanged in `src/core/`.
 
 ## Frontend contract
 
-Include `maelys/datalog_program.h`. Implement a descriptor with ABI version,
+Include `maelys/datalog_frontend.h`. Implement a descriptor with ABI version,
 exact struct size, name, semantic ID and `lower`. Select it explicitly with
 `maelys_datalog_policy_load_frontend`; NULL selects standard Datalog. Existing
 inline and manifest loading remain standard Datalog.

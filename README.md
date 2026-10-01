@@ -344,10 +344,10 @@ Complete integration guides and API documentation are available at
 The MPL core remains usable on its own, with the reference solver and all three
 standard string filters. The versioned [module SDK](include/maelys/datalog_module.h)
 lets separately compiled modules provide new string filters and choose safe join
-candidates. The [program SDK](include/maelys/datalog_program.h) adds explicit
+candidates. The [frontend SDK](include/maelys/datalog_frontend.h) adds explicit
 language frontends lowering into a core-validated representation, and the
-[backend SDK](include/maelys/datalog_backend.h) selects an independent solver per
-session. All use public types; validation, input normalization, output limits,
+[backend SDK](include/maelys/datalog_backend.h) defines independent solver
+callbacks. All use public types; validation, input normalization, output limits,
 query permissions and result ownership remain in the core.
 
 The [extension envelope](include/maelys/datalog_extension.h) groups all four kinds

@@ -11,6 +11,11 @@ migrate their callbacks. Existing consumer entrypoints remain
 available. Internal/legacy ruleset POD consumers must rebuild; use opaque handles
 for new integrations.
 
+The [current header map](../sdk-headers.md) separates registration from descriptor
+definitions: `datalog_extension.h` exposes pointers to incomplete types. Authors
+of descriptor arrays must also include `datalog_frontend.h`, `datalog_backend.h`
+or `datalog_module.h`, as applicable.
+
 ## One declaration, four typed components
 
 `maelys_datalog_extension_t` describes one package with a name, semantic ID and

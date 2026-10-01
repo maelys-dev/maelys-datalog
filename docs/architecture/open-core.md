@@ -26,7 +26,7 @@ private to the engine. A directory's name says which of the three it is.
 | String provider | Validate a constant pattern, bound cost, evaluate bytes | `maelys_datalog_filter_module_t` |
 | Planner provider | Choose the next candidate from a core-validated safe set | `maelys_datalog_planner_module_t` |
 | Standard providers | Existing `starts_with`, `ends_with`, `contains` semantics | Same module SDK |
-| Frontend | Lower a selected source language into validated facts/rules | `maelys/datalog_program.h` |
+| Frontend | Lower a selected source language into validated facts/rules | `maelys/datalog_frontend.h` |
 | Backend | Prepare and fully materialize a validated program | `maelys/datalog_backend.h` |
 
 The planner interface permits different reference-engine heuristics. Independent
