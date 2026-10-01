@@ -27,6 +27,8 @@ jobs:
     with:
       product: maelys-datalog
       tag: ${{ inputs.tag || github.ref_name }}
+      dependency_checkout: |
+        sh scripts/checkout-dependencies.sh "$RUNNER_TEMP/dependencies" >>"$GITHUB_ENV"
       verify_command: bash scripts/verify-release.sh TARGET
       linux_packages: build-essential dpkg-dev file rpm clang jq cmake python3 binutils curl
       macos_packages: cmake python@3.12

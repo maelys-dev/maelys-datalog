@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object", "additionalProperties": false,
+  "required": ["policyFingerprint", "executionFingerprint", "derivedFactCount", "queries"],
+  "properties": {
+    "policyFingerprint": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "executionFingerprint": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "derivedFactCount": {"type": "integer", "minimum": 0},
+    "queries": {"type": "array", "items": {
+      "type": "object", "additionalProperties": false,
+      "required": ["predicate", "arity", "facts"],
+      "properties": {
+        "predicate": {"type": "string"},
+        "arity": {"type": "integer", "minimum": 0, "maximum": 4},
+        "facts": {"type": "array", "items": {"type": "array", "items": {
+          "oneOf": [
+            {"type": "object", "required": ["kind", "value"], "properties": {
+              "kind": {"const": "symbol"}, "value": {"type": "string"}}, "additionalProperties": false},
+            {"type": "object", "required": ["kind", "value"], "properties": {
+              "kind": {"const": "integer"}, "value": {"type": "integer"}}, "additionalProperties": false},
+            {"type": "object", "required": ["kind", "value"], "properties": {
+              "kind": {"const": "boolean"}, "value": {"type": "boolean"}}, "additionalProperties": false}
+          ]
+        }}}
+      }
+    }}
+  }
+}

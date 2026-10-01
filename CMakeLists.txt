@@ -56,6 +56,70 @@ if(MAELYS_DATALOG_PROFILE_LARGE)
     target_compile_definitions(maelys_datalog PUBLIC MAELYS_DATALOG_PROFILE_LARGE)
 endif()
 
+# Opt-in application target. SDK archives and their install components stay
+# independent of the pinned CLI framework and JSON reader.
+option(MAELYS_DATALOG_CLI "Build the standalone maelys-datalog command" OFF)
+if(MAELYS_DATALOG_CLI)
+    if(NOT DEFINED ENV{MAELYS_DEPENDENCIES_DIR} OR "$ENV{MAELYS_DEPENDENCIES_DIR}" STREQUAL "")
+        message(FATAL_ERROR "MAELYS_DEPENDENCIES_DIR is required for MAELYS_DATALOG_CLI")
+    endif()
+    find_program(MAELYS_MAKE_PROGRAM NAMES gmake make)
+    if(NOT MAELYS_MAKE_PROGRAM)
+        message(FATAL_ERROR "make is required for MAELYS_DATALOG_CLI dependencies")
+    endif()
+    set(_cli_dep "$ENV{MAELYS_DEPENDENCIES_DIR}/maelys-cli")
+    set(_json_dep "$ENV{MAELYS_DEPENDENCIES_DIR}/maelys-json")
+    set(_cli_build "${CMAKE_CURRENT_BINARY_DIR}/cli-deps/maelys-cli")
+    set(_json_build "${CMAKE_CURRENT_BINARY_DIR}/cli-deps/maelys-json")
+    set(_cli_lib "${_cli_build}/lib/libmaelys_cli.a")
+    set(_json_lib "${_json_build}/lib/libmaelys-json.a")
+    add_custom_command(OUTPUT "${_cli_lib}"
+        COMMAND "${MAELYS_MAKE_PROGRAM}" -C "${_cli_dep}" CPPFLAGS=
+                "BUILD=${_cli_build}" "${_cli_lib}"
+        VERBATIM)
+    add_custom_command(OUTPUT "${_json_lib}"
+        COMMAND "${MAELYS_MAKE_PROGRAM}" -C "${_json_dep}" CPPFLAGS=
+                "BUILD=${_json_build}" "${_json_lib}"
+        VERBATIM)
+    add_custom_target(maelys_datalog_cli_dependencies DEPENDS "${_cli_lib}" "${_json_lib}")
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/cli-generated")
+    set(_schemas
+        "datalog_check_schema=${CMAKE_CURRENT_SOURCE_DIR}/cli/schemas/check.json"
+        "datalog_explain_schema=${CMAKE_CURRENT_SOURCE_DIR}/cli/schemas/explain.json"
+        "datalog_fingerprint_schema=${CMAKE_CURRENT_SOURCE_DIR}/cli/schemas/fingerprint.json"
+        "datalog_solve_schema=${CMAKE_CURRENT_SOURCE_DIR}/cli/schemas/solve.json")
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/cli/schemas/check.json"
+        "${CMAKE_CURRENT_SOURCE_DIR}/cli/schemas/explain.json"
+        "${CMAKE_CURRENT_SOURCE_DIR}/cli/schemas/fingerprint.json"
+        "${CMAKE_CURRENT_SOURCE_DIR}/cli/schemas/solve.json")
+    execute_process(COMMAND "${_cli_dep}/tools/maelys-cli-embed" ${_schemas}
+        OUTPUT_FILE "${CMAKE_CURRENT_BINARY_DIR}/cli-generated/datalog_schemas.c"
+        RESULT_VARIABLE _cli_schema_result)
+    if(NOT _cli_schema_result EQUAL 0)
+        message(FATAL_ERROR "maelys-cli-embed failed for CLI schema source")
+    endif()
+    execute_process(COMMAND "${_cli_dep}/tools/maelys-cli-embed" --header ${_schemas}
+        OUTPUT_FILE "${CMAKE_CURRENT_BINARY_DIR}/cli-generated/datalog_schemas.h"
+        RESULT_VARIABLE _cli_schema_result)
+    if(NOT _cli_schema_result EQUAL 0)
+        message(FATAL_ERROR "maelys-cli-embed failed for CLI schema header")
+    endif()
+    add_executable(maelys_datalog_cli cli/main.c cli/domain.c cli/facts.c
+        "${CMAKE_CURRENT_BINARY_DIR}/cli-generated/datalog_schemas.c")
+    add_dependencies(maelys_datalog_cli maelys_datalog_cli_dependencies)
+    target_include_directories(maelys_datalog_cli PRIVATE
+        "${_cli_dep}/include" "${_json_dep}/include"
+        "${CMAKE_CURRENT_BINARY_DIR}/cli-generated")
+    target_compile_options(maelys_datalog_cli PRIVATE -Wall -Wextra -Werror)
+    target_compile_definitions(maelys_datalog_cli PRIVATE
+        "DATALOG_CLI_VERSION=\"${MAELYS_DATALOG_RELEASE_VERSION}\"")
+    target_link_libraries(maelys_datalog_cli PRIVATE maelys_datalog
+        "${_cli_lib}" "${_json_lib}")
+    set_target_properties(maelys_datalog_cli PROPERTIES OUTPUT_NAME maelys-datalog
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/bin")
+endif()
+
 add_library(maelys_datalog_shared SHARED ${ENGINE_SRCS} ${COMMON_SRCS})
 target_include_directories(maelys_datalog_shared PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
     PUBLIC

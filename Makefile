@@ -117,6 +117,99 @@ check-c11-fact-builders:
 
 check: test check-version-header check-c11-fact-builders
 
+# The SDK remains the default goal. CLI dependencies are checked only by
+# targets that actually build or verify the standalone command.
+MAELYS_CLI_DIR = $(MAELYS_DEPENDENCIES_DIR)/maelys-cli
+MAELYS_JSON_DIR = $(MAELYS_DEPENDENCIES_DIR)/maelys-json
+MAELYS_SPEC_DIR = $(MAELYS_DEPENDENCIES_DIR)/agent-cli-spec
+CLI_BUILD = $(BUILD_DIR)/cli
+CLI_BINARY = $(BUILD_DIR)/bin/maelys-datalog
+CLI_LIB = $(abspath $(BUILD_DIR))/deps/maelys-cli/lib/libmaelys_cli.a
+JSON_LIB = $(abspath $(BUILD_DIR))/deps/maelys-json/lib/libmaelys-json.a
+CLI_SCHEMA_SRCS = $(wildcard cli/schemas/*.json)
+CLI_SCHEMA_SYMBOLS = $(foreach schema,$(CLI_SCHEMA_SRCS),datalog_$(basename $(notdir $(schema)))_schema=$(schema))
+CLI_SOURCES = cli/main.c cli/domain.c cli/facts.c
+CLI_OBJECTS = $(CLI_SOURCES:cli/%.c=$(CLI_BUILD)/%.o)
+CLI_CFLAGS = -std=c11 -Wall -Wextra -Werror -g -I$(MAELYS_CLI_DIR)/include \
+	-I$(MAELYS_JSON_DIR)/include -Iinclude -I$(BUILD_DIR)/generated \
+	-DDATALOG_CLI_VERSION='"$(shell cat VERSION)"' $(filter -DMAELYS_DATALOG_PROFILE_LARGE,$(CFLAGS))
+
+.PHONY: all check-cli-dependencies check-cli-contract check-json-contract \
+	check-spec-contract conformance-check cli-test cli-installed-check
+all: libmaelys_datalog.a $(CLI_BINARY)
+
+check-cli-dependencies:
+	@test -n "$(MAELYS_DEPENDENCIES_DIR)" || { \
+		echo "MAELYS_DEPENDENCIES_DIR is unset; run 'sh scripts/checkout-dependencies.sh DIR' and export the line it prints" >&2; exit 1; }
+
+check-cli-contract: check-cli-dependencies
+	@test "$$(git -C "$(MAELYS_CLI_DIR)" rev-parse HEAD)" = "$$(sed -n 2p dependencies/maelys-cli.pin)"
+	@test "$$(git -C "$(MAELYS_CLI_DIR)" rev-parse "$$(sed -n 1p dependencies/maelys-cli.pin)^{}")" = "$$(sed -n 2p dependencies/maelys-cli.pin)"
+	@git -C "$(MAELYS_CLI_DIR)" diff --quiet HEAD --
+	@git -C "$(MAELYS_CLI_DIR)" diff --cached --quiet HEAD --
+	@test -z "$$(git -C "$(MAELYS_CLI_DIR)" ls-files --others --exclude-standard)"
+	@grep -Fq '#define MAELYS_CLI_ABI 1' "$(MAELYS_CLI_DIR)/include/maelys/cli/version.h"
+	@grep -Fq '#define MAELYS_CLI_CONTRACT "agent-cli/v2"' "$(MAELYS_CLI_DIR)/include/maelys/cli/version.h"
+
+check-json-contract: check-cli-dependencies
+	@test "$$(git -C "$(MAELYS_JSON_DIR)" rev-parse HEAD)" = "$$(sed -n 2p dependencies/maelys-json.pin)"
+	@test "$$(git -C "$(MAELYS_JSON_DIR)" rev-parse "$$(sed -n 1p dependencies/maelys-json.pin)^{}")" = "$$(sed -n 2p dependencies/maelys-json.pin)"
+	@git -C "$(MAELYS_JSON_DIR)" diff --quiet HEAD --
+	@git -C "$(MAELYS_JSON_DIR)" diff --cached --quiet HEAD --
+	@test -z "$$(git -C "$(MAELYS_JSON_DIR)" ls-files --others --exclude-standard)"
+	@grep -Fq '#define MAELYS_JSON_ABI_VERSION 2u' "$(MAELYS_JSON_DIR)/include/maelys/json.h"
+	@cmp dependencies/maelys-json.pin "$(MAELYS_CLI_DIR)/dependencies/maelys-json.pin"
+
+check-spec-contract: check-cli-dependencies
+	@test "$$(git -C "$(MAELYS_SPEC_DIR)" rev-parse HEAD)" = "$$(sed -n 2p dependencies/agent-cli-spec.pin)"
+	@test "$$(git -C "$(MAELYS_SPEC_DIR)" rev-parse "$$(sed -n 1p dependencies/agent-cli-spec.pin)^{}")" = "$$(sed -n 2p dependencies/agent-cli-spec.pin)"
+	@git -C "$(MAELYS_SPEC_DIR)" diff --quiet HEAD --
+	@git -C "$(MAELYS_SPEC_DIR)" diff --cached --quiet HEAD --
+	@test -z "$$(git -C "$(MAELYS_SPEC_DIR)" ls-files --others --exclude-standard)"
+	@cmp dependencies/agent-cli-spec.pin "$(MAELYS_CLI_DIR)/dependencies/agent-cli-spec.pin"
+
+$(CLI_LIB): | check-cli-contract
+	$(MAKE) -C $(MAELYS_CLI_DIR) CPPFLAGS= BUILD=$(abspath $(BUILD_DIR))/deps/maelys-cli $@
+
+$(JSON_LIB): | check-json-contract
+	$(MAKE) -C $(MAELYS_JSON_DIR) CPPFLAGS= BUILD=$(abspath $(BUILD_DIR))/deps/maelys-json $@
+
+$(BUILD_DIR)/generated/datalog_schemas.c: $(CLI_SCHEMA_SRCS) | $(CLI_LIB)
+	@mkdir -p $(BUILD_DIR)/generated
+	$(MAELYS_CLI_DIR)/tools/maelys-cli-embed $(CLI_SCHEMA_SYMBOLS) > $(BUILD_DIR)/generated/datalog_schemas.c
+
+$(BUILD_DIR)/generated/datalog_schemas.h: $(CLI_SCHEMA_SRCS) | $(CLI_LIB)
+	@mkdir -p $(BUILD_DIR)/generated
+	$(MAELYS_CLI_DIR)/tools/maelys-cli-embed --header $(CLI_SCHEMA_SYMBOLS) > $(BUILD_DIR)/generated/datalog_schemas.h
+
+$(CLI_BUILD)/%.o: cli/%.c cli/reader.h $(BUILD_DIR)/generated/datalog_schemas.h | $(CLI_LIB) $(JSON_LIB)
+	@mkdir -p $(dir $@)
+	$(CC) $(CLI_CFLAGS) -c $< -o $@
+
+$(CLI_BUILD)/datalog_schemas.o: $(BUILD_DIR)/generated/datalog_schemas.c
+	@mkdir -p $(dir $@)
+	$(CC) $(CLI_CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/lib/libmaelys_datalog.a: $(OBJS)
+	@mkdir -p $(dir $@)
+	ar rcs $@ $^
+
+$(CLI_BINARY): $(CLI_OBJECTS) $(CLI_BUILD)/datalog_schemas.o $(BUILD_DIR)/lib/libmaelys_datalog.a $(CLI_LIB) $(JSON_LIB)
+	@mkdir -p $(dir $@)
+	$(CC) $^ -o $@
+
+conformance-check: $(CLI_BINARY) check-spec-contract
+	python3 $(MAELYS_SPEC_DIR)/conformance/run.py $(abspath $(CLI_BINARY))
+
+cli-test: $(CLI_BINARY) check-spec-contract
+	python3 cli/tests/test_cli.py $(abspath $(CLI_BINARY)) $(MAELYS_SPEC_DIR)
+
+cli-installed-check: $(CLI_BINARY)
+	PROFILE=$(if $(findstring -DMAELYS_DATALOG_PROFILE_LARGE,$(CFLAGS)),LARGE,SMALL) bash tools/check_cli.sh $(abspath $(BUILD_DIR))
+
+check: check-cli-contract check-json-contract check-spec-contract cli-test \
+	conformance-check cli-installed-check
+
 .PHONY: test_maelys_datalog_boundary
 test_maelys_datalog_boundary: $(BUILD_DIR)/tests/test_maelys_datalog_boundary
 	./$(BUILD_DIR)/tests/test_maelys_datalog_boundary

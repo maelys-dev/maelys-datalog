@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object", "additionalProperties": false,
+  "required": ["policyFingerprint", "executionFingerprint", "predicate", "present", "why", "document"],
+  "properties": {
+    "policyFingerprint": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "executionFingerprint": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "predicate": {"type": "string"},
+    "present": {"type": "boolean"},
+    "why": {"enum": ["true", "false"]},
+    "document": {"type": "string", "pattern": "^MAELYS-DATALOG-v2\\n"}
+  }
+}

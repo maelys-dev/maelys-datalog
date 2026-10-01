@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["valid"],
+  "properties": {
+    "valid": {"type": "boolean"},
+    "policyFingerprint": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "policyCount": {"type": "integer", "minimum": 1},
+    "normalizedRuleCount": {"type": "integer", "minimum": 0},
+    "policies": {
+      "type": "array",
+      "items": {
+        "type": "object", "required": ["index", "normalizedRuleCount"],
+        "properties": {
+          "index": {"type": "integer", "minimum": 0},
+          "normalizedRuleCount": {"type": "integer", "minimum": 0}
+        }, "additionalProperties": false
+      }
+    },
+    "domains": {
+      "type": "array",
+      "items": {
+        "type": "object", "required": ["name", "predicates", "atoms"],
+        "properties": {
+          "name": {"type": "string"},
+          "predicates": {
+            "type": "array", "items": {
+              "type": "object", "required": ["name", "arity", "role", "query"],
+              "properties": {
+                "name": {"type": "string"},
+                "arity": {"type": "integer", "minimum": 0, "maximum": 4},
+                "role": {"enum": ["edb", "idb", "policy_fact"]},
+                "query": {"type": "boolean"}
+              }, "additionalProperties": false
+            }
+          },
+          "atoms": {"type": "array", "items": {"type": "string"}}
+        }, "additionalProperties": false
+      }
+    },
+    "diagnostics": {
+      "type": "array", "minItems": 1,
+      "items": {
+        "type": "object", "required": ["code", "message"],
+        "properties": {
+          "code": {"type": "string"}, "message": {"type": "string"},
+          "status": {"type": "string"}, "source": {"type": "integer"},
+          "present": {"type": "integer", "minimum": 0},
+          "phase": {"type": "string"}, "hint": {"type": "string"},
+          "index": {"type": "integer", "minimum": 0},
+          "line": {"type": "integer", "minimum": 1},
+          "column": {"type": "integer", "minimum": 1},
+          "file": {"type": "string"}, "predicate": {"type": "string"},
+          "observedCount": {"type": "integer", "minimum": 0},
+          "limit": {"type": "integer", "minimum": 0},
+          "limitKind": {"type": "integer", "minimum": 0},
+          "arity": {"type": "integer", "minimum": 0},
+          "expectedArity": {"type": "integer", "minimum": 0},
+          "observedArity": {"type": "integer", "minimum": 0},
+          "depth": {"type": "integer", "minimum": 0},
+          "depthLimit": {"type": "integer", "minimum": 0},
+          "comparisonResult": {"type": "integer", "minimum": 0},
+          "expectedKind": {"type": "integer", "minimum": 0},
+          "lhsKind": {"type": "integer", "minimum": 0},
+          "rhsKind": {"type": "integer", "minimum": 0},
+          "comparisonOp": {"type": "integer", "minimum": 0},
+          "termIndex": {"type": "integer", "minimum": 0},
+          "aggregateLimit": {"type": "integer", "minimum": 0},
+          "ruleId": {"type": "integer", "minimum": 0},
+          "field": {"type": "string"}, "domain": {"type": "string"},
+          "token": {"type": "string"}
+        }, "additionalProperties": false
+      }
+    }
+  },
+  "allOf": [
+    {"if": {"properties": {"valid": {"const": true}}},
+     "then": {"required": ["policyFingerprint", "policyCount", "normalizedRuleCount", "policies", "domains"]},
+     "else": {"required": ["diagnostics"]}}
+  ],
+  "additionalProperties": false
+}
