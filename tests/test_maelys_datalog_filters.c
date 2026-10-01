@@ -1,3 +1,4 @@
+#include <maelys/datalog_module.h>
 #include "include/maelys_datalog.h"
 #include "src/core/maelys_datalog_filter.h"
 #include "tests/helpers/test_framework.h"

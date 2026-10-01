@@ -44,14 +44,14 @@ change; rebuilding against shared names alone is not proof of compatibility
 with such a change.
 
 
-## Advanced operations on the same objects
+## Additional operations on the same objects
 
-Include `maelys/datalog_advanced.h` for in-memory manifest bundles, caller-owned
-policy storage, domain builders, composed session configuration, structured
-explanations, filter statistics and the deny/reduce/allow decision helper. These
-operations take the same policy/session/result/prepared-explanation handles.
-The shared semantic enums and statistics record live in `datalog_details.h`;
-there is no second simple/advanced diagnostic or fact declaration.
+The [current header map](sdk-headers.md) separates these operations by audience.
+Use `datalog.h` for manifest bundles, shared semantic enums, filter statistics
+and decisions; `datalog_resources.h` for caller-owned storage;
+`datalog_explanations.h` for structured explanations; `datalog_module.h` for
+domain builders; and `datalog_extension.h` for composed backend selection.
+All use the same policy/session/result/prepared-explanation handles.
 
 A bundle has one `policy_bundle_entry_t` per source, matched by policy ID rather
 than array position. The loader validates hashes, permissions and query
@@ -154,9 +154,8 @@ solver's recursive frames.
 The coordinated A3/A4 follow-up replaces native-object Python/Wasm bindings
 with public-SDK consumers and closes the distributed header surface. In 0.10.0,
 native archives and CMake installations use one public install inventory.
-Include `maelys/datalog.h` for application operations, `maelys/datalog_advanced.h`
-for advanced operations on those handles, or the relevant `maelys/` extension
-header. The historical aggregator, version-macro header and private implementation
+Include `maelys/datalog.h` for application operations and the relevant
+[role-specific header](sdk-headers.md) for additional operations. The historical aggregator, version-macro header and private implementation
 headers are no longer shipped. Native implementation types are not replacements
 for the public values, facts and opaque handles. External consumers are built
 and run against both the installed prefix and an extracted archive before

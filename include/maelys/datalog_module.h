@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: MPL-2.0 */
 #ifndef MAELYS_DATALOG_MODULE_H
 #define MAELYS_DATALOG_MODULE_H
-#include "datalog.h"
+#include "datalog_extension.h"
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -29,7 +29,7 @@ typedef maelys_datalog_status_t (*maelys_datalog_filter_evaluate_fn)(const unsig
                                                                      const unsigned char *pattern,
                                                                      size_t pattern_length,
                                                                      int *out_matched);
-typedef struct {
+typedef struct maelys_datalog_filter_module_t {
     uint32_t abi_version;
     size_t struct_size;
     const char *name;        /* lower-case predicate identifier, max 63 bytes */
@@ -67,7 +67,7 @@ typedef struct {
 typedef maelys_datalog_status_t (*maelys_datalog_join_choose_fn)(
     const maelys_datalog_join_candidate_t *candidates, size_t candidate_count,
     size_t *out_candidate_index);
-typedef struct {
+typedef struct maelys_datalog_planner_module_t {
     uint32_t abi_version;
     size_t struct_size;
     const char *name;
@@ -79,6 +79,18 @@ MAELYS_DATALOG_API maelys_datalog_status_t
 maelys_datalog_register_filter_module(const maelys_datalog_filter_module_t *module);
 MAELYS_DATALOG_API maelys_datalog_status_t
 maelys_datalog_register_planner_module(const maelys_datalog_planner_module_t *module);
+
+/* Runs at policy loading, against a bounded candidate registry. A failure is
+ * sticky even if the callback ignores it; the loader discards that candidate.
+ * Registration copies declaration text; callback code must outlive all loads.
+ * Exactly one of domain.predicates and installer is provided. Domains remain
+ * global; contexts do not isolate them. Incompatible re-registration fails. */
+typedef struct maelys_datalog_domain_builder maelys_datalog_domain_builder_t;
+typedef maelys_datalog_status_t (*maelys_datalog_domain_installer_t)(maelys_datalog_domain_builder_t *);
+MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_domain_register_advanced(
+    const maelys_datalog_domain_t *, const char *description, maelys_datalog_domain_installer_t);
+MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_domain_builder_add(
+    maelys_datalog_domain_builder_t *, const maelys_datalog_predicate_t *);
 #ifdef __cplusplus
 }
 #endif

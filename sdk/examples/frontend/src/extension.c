@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: MPL-2.0 */
 /* Demonstration DSL, NOT Gitolite: one unary implication per line,
  * e.g. "allow <- member" means allow(X) :- member(X). */
+#include <maelys/datalog_frontend.h>
 #include <maelys/datalog_extension.h>
 #include <stdio.h>
 #include <string.h>

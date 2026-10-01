@@ -2,7 +2,7 @@
 #include "transport.h"
 #include <maelys/datalog.h>
 #include <maelys/datalog_resources.h>
-#include <maelys/datalog_transactions.h>
+#include <maelys/datalog_inputs.h>
 #include <stdlib.h>
 #include <string.h>
 #include <limits.h>

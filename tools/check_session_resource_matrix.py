@@ -55,6 +55,8 @@ def main():
         obj = out / (name + ".o")
         run(cc + ["-std=c11", "-O2", "-UNDEBUG", "-pedantic-errors", "-Wall", "-Wextra", "-Werror",
                   "-I" + str(prefixes[sdk] / "include")] +
+            (["-include", str(prefixes[sdk] / "include/maelys/datalog_advanced.h")]
+             if (prefixes[sdk] / "include/maelys/datalog_advanced.h").exists() else []) +
             (["-DOPTIONAL_TAIL"] if tail else []) +
             ["-c", sources / source, "-o", obj], name + "-compile")
         return obj

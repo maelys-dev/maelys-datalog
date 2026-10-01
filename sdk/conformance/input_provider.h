@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: MIT */
 #ifndef INPUT_PROVIDER_FIXTURE_H
 #define INPUT_PROVIDER_FIXTURE_H
-#include <maelys/datalog_backend_transactions.h>
+#include <maelys/datalog_backend.h>
 /* Bounded public-only conformance fixture, NOT a general Datalog backend.
  * Admits <=8 identity-projection rules over EDB, arity <=4, no constants or
  * repeated variables, no compiled facts; input text <=63 bytes (otherwise an

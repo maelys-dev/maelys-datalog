@@ -1,3 +1,4 @@
+#include <maelys/datalog_module.h>
 #include "src/core/maelys_datalog_domain_registry.h"
 
 #include <string.h>

@@ -5,7 +5,8 @@
 #undef realloc
 #undef free
 #undef memset
-#include "maelys/datalog_advanced.h"
+#include <maelys/datalog_explanations.h>
+#include <maelys/datalog_backend.h>
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>

@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: MPL-2.0 */
 /* Unchanged binary object is linked to old and new hosts, static and shared. */
-#include <maelys/datalog_advanced.h>
+#include <maelys/datalog_backend.h>
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>

@@ -5,7 +5,7 @@ introspection change. This contract is recorded before the implementation.
 
 ## Public surface and admission
 
-`maelys/datalog_transactions.h` introduces an opaque `session_inputs` attachment
+`maelys/datalog_inputs.h` introduces an opaque `session_inputs` attachment
 to an otherwise ordinary session. `session_inputs_storage_requirements` and
 `session_inputs_init` accept an explicit versioned options record and caller
 storage. The attachment must be initialized before that session's first solve.

@@ -37,6 +37,14 @@ is not part of any build or SDK installation. It uses native `size_t` byte count
 `offsetof`, not fixed LP64 constants. Its declarations are review material until
 a separately reviewed implementation makes them available.
 
+Target ownership follows the [SDK header map](../sdk-headers.md): caller
+allocator and session request declarations belong in `maelys/datalog_resources.h`;
+provider service, block inspection and normalized provider tail declarations
+belong in `maelys/datalog_backend.h`. `datalog_extension.h` retains only forward
+descriptor types and selection/registration. The review-only combined file below
+does not create an installed allocator API or add an application-to-provider
+include edge.
+
 `caller_allocator_t`, `allocation_service_t` and `allocation_budget_t` start with
 `struct_size`, `contract_version`, zero `reserved` and `required_features`.
 Version 1 requires the complete declared record and zero descriptor feature

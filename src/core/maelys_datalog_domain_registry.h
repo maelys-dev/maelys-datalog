@@ -3,7 +3,7 @@
 #define MAELYS_DATALOG_DOMAIN_REGISTRY_H
 
 #include <stddef.h>
-#include "maelys/datalog_advanced.h"
+#include <maelys/datalog_module.h>
 
 #include "src/core/maelys_datalog_predicate_registry.h"
 

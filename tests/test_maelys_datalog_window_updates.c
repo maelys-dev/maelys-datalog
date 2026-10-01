@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: MPL-2.0 */
 /* Installed-SDK consumer: independent snapshots exercise both adapter models. */
 #include <maelys/datalog_window.h>
-#include <maelys/datalog_transactions.h>
+#include <maelys/datalog_inputs.h>
 #include <assert.h>
 #define OPTIONS(n) (&(maelys_datalog_window_options_t){sizeof(maelys_datalog_window_options_t),(n),0})
 #include <stdio.h>

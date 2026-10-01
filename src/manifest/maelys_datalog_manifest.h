@@ -3,7 +3,7 @@
 #define MAELYS_DATALOG_MANIFEST_H
 
 #include "src/core/maelys_datalog_diagnostic.h"
-#include "maelys/datalog_advanced.h"
+#include <maelys/datalog.h>
 #include "src/core/maelys_datalog_predicate_registry.h"
 #include "src/core/maelys_datalog_ruleset.h"
 #include "src/core/maelys_datalog_types.h"

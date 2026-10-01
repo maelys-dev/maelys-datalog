@@ -1,7 +1,7 @@
 # Binding input transactions — 0.17.0
 
 Python and the common JavaScript/TypeScript binding consume the published
-`maelys/datalog_transactions.h` API. No engine source, consumer API version,
+`maelys/datalog_inputs.h` API. No engine source, consumer API version,
 backend ABI 5/6/7, window contract, allocator service or solver algorithm changes.
 The native reference path may recompute all derived facts.
 

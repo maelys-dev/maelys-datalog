@@ -1,6 +1,9 @@
 /* SPDX-License-Identifier: MPL-2.0 */
 #ifndef MAELYS_DATALOG_MODULES_INTERNAL_H
 #define MAELYS_DATALOG_MODULES_INTERNAL_H
+#include <maelys/datalog_module.h>
+#include <maelys/datalog_frontend.h>
+#include <maelys/datalog_backend.h>
 #include "maelys/datalog_extension.h"
 #include "maelys/datalog_resources.h"
 maelys_datalog_status_t maelys_datalog_backend_v6_validate(const maelys_datalog_backend_v6_t *);

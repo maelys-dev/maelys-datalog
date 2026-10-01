@@ -3,7 +3,8 @@
 This records steps 2 and 3 of the [reviewed 0.14.0 contract](../proposals/backend-session-resources.md),
 based on `9338993f5eb82e928ebec99c385bef3df546c67f`. It does not declare 0.14.0
 release qualification complete. The default ABI 5 declaration and callbacks stay
-available; the distinct ABI 6 descriptor is in `<maelys/datalog_resources.h>`.
+available; the distinct ABI 6 descriptor is now in `<maelys/datalog_backend.h>`
+(originally `datalog_resources.h`; see the [include migration](../sdk-headers.md)).
 
 ## Admission and ownership
 

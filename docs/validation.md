@@ -258,7 +258,7 @@ per-function counts and residuals remain available. No timings, hardware
 counters, private-provider support or whole-request O(delta) are claimed.
 
 The opt-in retained-input contract is declared in
-`maelys/datalog_transactions.h` and specified in
+`maelys/datalog_inputs.h` and specified in
 `proposals/session-input-transactions.md`. The public-only consumer test replays
 1,200 seeded transactions against fresh reference snapshots with each of the
 reference, ABI 5 and ABI 6 paths. Its two external fixture providers implement
@@ -402,7 +402,7 @@ in C11/C++17. The source public-header directory supplies the expected inventory
 so forgetting a new header in the sole CMake list also fails. Neither consumer
 build inherits ambient include/library search paths.
 
-Negative controls remove `datalog_details.h` and inject the historical aggregator
+Negative controls remove `datalog_explanations.h` and inject the historical aggregator
 into the extracted copy; both must make the validator fail, with the relevant
 filename in its diagnostic. A format-level check also compares raw tar members
 with extracted paths: BSD tar can silently absorb AppleDouble metadata, so its

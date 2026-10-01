@@ -1,20 +1,26 @@
 /* SPDX-License-Identifier: MPL-2.0 */
-/* Fixed session resources, ABI 6. See the installed advanced API and
- * docs/proposals/backend-session-resources-c-api.md for record evolution. */
 #ifndef MAELYS_DATALOG_RESOURCES_H
 #define MAELYS_DATALOG_RESOURCES_H
-#include <stddef.h>
-#include <stdint.h>
-#include "datalog_extension.h"
+#include "datalog.h"
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-/* Existing MAELYS_DATALOG_BACKEND_ABI_VERSION remains 5. */
-#define MAELYS_DATALOG_BACKEND_V6_ABI_VERSION 6u
+/* Caller-owned, aligned, immovable storage, disjoint from other live storage,
+ * inputs and outputs. The buffer lives through session destruction. The host
+ * copies this descriptor, never the buffer, and never accesses or frees its
+ * contents. NULL bytes is allowed only with size == 0 and zero requirements.
+ * alignment is a nonzero power of two <= alignof(max_align_t). */
+typedef struct {
+    size_t struct_size;
+    void *bytes;
+    size_t size;
+    size_t alignment;
+} maelys_datalog_backend_storage_t;
+
+
 #define MAELYS_DATALOG_RESOURCE_CONTRACT_VERSION 1u
 #define MAELYS_DATALOG_SESSION_PLAN_VERSION 1u
-#define MAELYS_DATALOG_EXTENSION_V2_ABI_VERSION 2u
 
 /* Separate namespace from MAELYS_DATALOG_CAP_* (language/execution features). */
 #define MAELYS_DATALOG_RESOURCE_SESSION_CAPACITIES (UINT64_C(1) << 0)
@@ -77,47 +83,6 @@ typedef struct {
     { MAELYS_DATALOG_RESOURCES_V1_SIZE, MAELYS_DATALOG_RESOURCE_CONTRACT_VERSION, \
       MAELYS_DATALOG_MEMORY_FIXED, UINT64_C(0), 0, 0, 0, 0 }
 
-/* Independent descriptor: never cast to/from maelys_datalog_backend_t (ABI 5).
- * resource_features must include SESSION_CAPACITIES; other bits are unsupported
- * in 0.14.0, including the known reserved allocator bit. The full V6 descriptor
- * is required. Compatible optional tails may follow; no callback insertion. */
-typedef struct {
-    uint32_t abi_version;
-    size_t struct_size;
-    const char *name;
-    const char *semantic_id;
-    uint64_t capabilities;
-    uint64_t resource_features;
-    maelys_datalog_status_t (*storage_requirements)(
-        const maelys_datalog_program_t *,
-        const maelys_datalog_session_resources_t *,
-        size_t *out_bytes, size_t *out_alignment);
-    maelys_datalog_status_t (*prepare)(
-        const maelys_datalog_program_t *,
-        const maelys_datalog_session_resources_t *,
-        const maelys_datalog_backend_storage_t *, void **out_state);
-    /* Snapshot solve, complete emission, explanation and commit/abort contracts
-     * retain their ABI 5 semantics and callback signatures. No delta callback. */
-    maelys_datalog_status_t (*solve)(
-        void *state, const maelys_datalog_fact_t *canonical_inputs,
-        size_t input_count, maelys_datalog_backend_output_t *,
-        void **out_result_state, maelys_datalog_diagnostic_t *);
-    maelys_datalog_status_t (*explanation_storage_requirements)(
-        void *state, void *result_state, maelys_datalog_explanation_kind_t,
-        size_t *out_bytes, size_t *out_alignment);
-    maelys_datalog_status_t (*explanation_prepare)(
-        void *state, void *result_state, maelys_datalog_explanation_kind_t,
-        const char *, const maelys_datalog_value_t *, size_t,
-        void *storage, size_t storage_bytes, size_t *out_text_size);
-    maelys_datalog_status_t (*explanation_write_text)(
-        void *state, void *result_state, maelys_datalog_explanation_kind_t,
-        const void *storage, char *text, size_t capacity);
-    void (*commit)(void *state, void *result_state);
-    void (*destroy_result)(void *state, void *result_state);
-    void (*destroy)(void *state);
-} maelys_datalog_backend_v6_t;
-#define MAELYS_DATALOG_BACKEND_V6_SIZE sizeof(maelys_datalog_backend_v6_t)
-
 /* No prepared state is allocated by requirements. The output is descriptive;
  * init recomputes the plan from policy/config, rather than trusting stale sizes.
  * The first four internal components sum to arena_bytes. External buffers are
@@ -154,11 +119,6 @@ maelys_datalog_session_config_set_resources(
 MAELYS_DATALOG_API maelys_datalog_status_t
 maelys_datalog_session_get_resources(
     const maelys_datalog_session_t *, maelys_datalog_session_resources_t *out);
-MAELYS_DATALOG_API const maelys_datalog_backend_v6_t *
-maelys_datalog_backend_reference_v6(void);
-MAELYS_DATALOG_API maelys_datalog_status_t
-maelys_datalog_session_config_set_backend_v6(
-    maelys_datalog_session_config_t *, const maelys_datalog_backend_v6_t *);
 
 /* Same backend-arena and explanation-storage setters as the existing config.
  * Explicit ABI 5 selections stay ABI 5; no automatic migration of a provider.
@@ -177,36 +137,19 @@ maelys_datalog_session_init_configured(
     const maelys_datalog_session_config_t *,
     maelys_datalog_session_t **out, maelys_datalog_diagnostic_t *);
 
-/* Additive extension registration. Existing extension_t/register remain ABI 1.
- * Other components retain their own current ABI. Arrays use exact base-type
- * strides/sizes; do not pass arrays of extended descriptors. No dynamic loader. */
-typedef struct {
-    uint32_t abi_version;
-    size_t struct_size;
-    const char *name;
-    const char *semantic_id;
-    const maelys_datalog_frontend_t *frontends;
-    size_t frontend_count;
-    const maelys_datalog_backend_t *backends_v5;
-    size_t backend_v5_count;
-    const maelys_datalog_backend_v6_t *backends_v6;
-    size_t backend_v6_count;
-    const maelys_datalog_planner_module_t *planners;
-    size_t planner_count;
-    const maelys_datalog_filter_module_t *filters;
-    size_t filter_count;
-} maelys_datalog_extension_v2_t;
-MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_context_register_v2(
-    maelys_datalog_context_t *, const maelys_datalog_extension_v2_t *);
-MAELYS_DATALOG_API maelys_datalog_status_t
-maelys_datalog_session_config_set_context_backend_v6(
-    maelys_datalog_session_config_t *, maelys_datalog_context_t *,
-    const char *backend_name); /* NULL selects the V6 reference */
-MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_context_backend_v6_count(
-    const maelys_datalog_context_t *, size_t *out);
-MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_context_backend_v6_info(
-    const maelys_datalog_context_t *, size_t, maelys_datalog_component_info_t *out);
 
+/* Caller-owned policy storage: fixed profile capacity (up to eight policies),
+ * no allocation for the policy object and no heap fallback. Loading itself may
+ * allocate in JSON parsing, contexts or extension callbacks: NOT a whole-loader
+ * zero-malloc guarantee. Storage must be unused, aligned, disjoint from inputs,
+ * outputs and diagnostics, and outlive the handle. Failure may overwrite it;
+ * *out remains NULL. Close before reuse. free closes but never frees this arena.
+ * The convenience loaders allocate exactly one policy object in addition to
+ * loader/callback allocations. Sessions make their own prepared program copy. */
+MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_policy_storage_requirements(size_t *, size_t *);
+MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_policy_load_manifest_text_in(
+    void *, size_t, const char *, size_t, const maelys_datalog_policy_bundle_entry_t *, size_t,
+    unsigned, maelys_datalog_policy_t **, maelys_datalog_diagnostic_t *);
 #ifdef __cplusplus
 }
 #endif

@@ -1,4 +1,5 @@
 /* SPDX-License-Identifier: MPL-2.0 */
+#include <maelys/datalog_frontend.h>
 #include "src/compiler/maelys_datalog_program_internal.h"
 #include "src/core/maelys_datalog_filter.h"
 #include "src/core/maelys_datalog_pipeline_testing.h"

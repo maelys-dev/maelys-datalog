@@ -2,6 +2,7 @@
 /* Independent, deliberately simple full-scan positive-Datalog fixed point.
  * A conformance example, not a performance product. Only the public SDK is
  * used; comparisons, negation, filters and explanations are rejected. */
+#include <maelys/datalog_backend.h>
 #include <maelys/datalog_extension.h>
 #include <stdlib.h>
 #include <string.h>
