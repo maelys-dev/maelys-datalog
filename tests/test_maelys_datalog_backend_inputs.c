@@ -29,9 +29,26 @@ static maelys_datalog_fact_t fact(size_t key) {
     else{f.terms[0].kind=MAELYS_DATALOG_VALUE_BOOLEAN;f.terms[0].as.boolean=(int)(key-16);}
     return f;
 }
+/* Exercise the opaque view's arbitrary-index contract, independently of the
+ * provider's sequential traversal. Borrowed strings remain callback-local. */
+static maelys_datalog_status_t inspecting_solve(void *state,const maelys_datalog_backend_input_t *packet,
+    maelys_datalog_backend_output_t *out,void **result,maelys_datalog_diagnostic_t *diag) {
+    for(size_t side=0;side<2;++side) {
+        const maelys_datalog_backend_input_view_t *v=side?packet->additions:packet->removals;
+        size_t n=side?packet->addition_count:packet->removal_count;
+        maelys_datalog_fact_t expected[32];assert(n<=32);
+        for(size_t i=0;i<n;++i)OK(maelys_datalog_backend_input_at(v,i,&expected[i]));
+        for(size_t i=n;i>0;--i)for(size_t repeat=0;repeat<2;++repeat) {
+            maelys_datalog_fact_t f;OK(maelys_datalog_backend_input_at(v,i-1,&f));
+            assert(!memcmp(&f,&expected[i-1],sizeof(f)));
+        }
+    }
+    return input_fixture_transactions()->solve(state,packet,out,result,diag);
+}
 static void setup(fixture *f,int delta) {
+    maelys_datalog_backend_v7_t inspecting=*input_fixture_transactions();if(delta==2)inspecting.solve=inspecting_solve;
     memset(f,0,sizeof(*f));maelys_datalog_session_config_t *c=NULL;OK(maelys_datalog_session_config_create(&c));
-    if(delta)OK(maelys_datalog_session_config_set_backend_v7(c,input_fixture_transactions()));
+    if(delta)OK(maelys_datalog_session_config_set_backend_v7(c,&inspecting));
     else OK(maelys_datalog_session_config_set_backend_v6(c,input_fixture_snapshot()));
     maelys_datalog_session_resource_request_t q=MAELYS_DATALOG_RESOURCE_REQUEST_INIT;
     q.capacity_mask=MAELYS_DATALOG_CAPACITY_INPUT_FACTS|MAELYS_DATALOG_CAPACITY_DERIVED_FACTS;
@@ -43,7 +60,7 @@ static void setup(fixture *f,int delta) {
     OK(maelys_datalog_session_config_set_backend_storage(c,&storage));
     OK(maelys_datalog_session_create_configured(policy,0,c,&f->session));OK(maelys_datalog_session_config_free(c));
     maelys_datalog_input_options_t o=MAELYS_DATALOG_INPUT_OPTIONS_INIT;
-    o.fact_capacity=32;o.addition_capacity=8;o.removal_capacity=8;o.symbols=words;o.symbol_count=8;
+    o.fact_capacity=32;o.addition_capacity=delta==2?0:8;o.removal_capacity=delta==2?0:8;o.symbols=words;o.symbol_count=8;
     size_t bytes,alignment;OK(maelys_datalog_session_inputs_storage_requirements(f->session,&o,&bytes,&alignment));
     f->storage=malloc(bytes);assert(f->storage);size_t before=allocations;
     forbidden=1;OK(maelys_datalog_session_inputs_init(f->session,&o,f->storage,bytes,&f->inputs));forbidden=0;assert(allocations==before);
@@ -163,21 +180,142 @@ static void windows(int grouped) {
     void *earea=malloc(ebytes);assert(earea);maelys_datalog_prepared_explanation_t *explanation=NULL;
     OK(maelys_datalog_result_prepare_explanation(r,MAELYS_DATALOG_EXPLAIN_TRUE,"out",record.terms,1,earea,ebytes,&explanation));
     input_fixture_observation before[2]={observation(&f[0]),observation(&f[1])};size_t expired=99;
+    unsigned char committed[2][32768],checked[32768];size_t committed_n[2];
+    for(size_t i=0;i<2;++i){committed_n[i]=input_fixture_committed(f[i].provider,committed[i],sizeof(committed[i]));assert(committed_n[i]<=sizeof(committed[i]));}
+    forbidden=1;
     int rc=grouped?maelys_datalog_group_window_expire(g,10,&expired,NULL):maelys_datalog_window_expire(w,10,&expired,NULL);
     assert(rc==MAELYS_DATALOG_STATUS_INVALID_STATE && expired==99);
     size_t aborts=0;
     for(size_t i=0;i<2;++i) {input_fixture_observation after=observation(&f[i]);assert(!memcmp(&after.base,&before[i].base,sizeof(after.base)) && after.digest==before[i].digest && after.commits==before[i].commits);aborts+=after.aborts-before[i].aborts;}
-    assert(aborts==1);OK(maelys_datalog_prepared_explanation_release(explanation));free(earea);
+    assert(aborts==1);
+    for(size_t i=0;i<2;++i){assert(input_fixture_committed(f[i].provider,checked,sizeof(checked))==committed_n[i]);assert(!memcmp(checked,committed[i],committed_n[i]));}
+    OK(maelys_datalog_prepared_explanation_release(explanation));forbidden=0;free(earea);forbidden=1;
     if(grouped)OK(maelys_datalog_group_window_expire(g,10,&expired,NULL));else OK(maelys_datalog_window_expire(w,10,&expired,NULL));assert(expired==1);
     if(grouped)OK(maelys_datalog_group_window_result(g,&r));else OK(maelys_datalog_window_result(w,&r));
     int present;OK(maelys_datalog_result_query(r,"out",record.terms,1,&present));assert(present); /* static supplier survives */
-    for(size_t i=0;i<2;++i){input_fixture_observation after=observation(&f[i]);assert(!after.deltas);}
-    if(grouped)OK(maelys_datalog_group_window_free(g));else OK(maelys_datalog_window_free(w));free(storage);close_fixture(&f[0]);close_fixture(&f[1]);
+    for(size_t i=0;i<2;++i){input_fixture_observation after=observation(&f[i]);assert(after.deltas && !after.snapshots);}
+    if(grouped)OK(maelys_datalog_group_window_free(g));else OK(maelys_datalog_window_free(w));forbidden=0;free(storage);close_fixture(&f[0]);close_fixture(&f[1]);
 }
+typedef struct { maelys_datalog_fact_t facts[4];size_t n;uint64_t deadline; } window_event;
+static int same_fact(const maelys_datalog_fact_t *a,const maelys_datalog_fact_t *b) {
+    if(strcmp(a->predicate,b->predicate) || a->arity!=b->arity)return 0;
+    for(size_t i=0;i<a->arity;++i) {
+        if(a->terms[i].kind!=b->terms[i].kind)return 0;
+        if(a->terms[i].kind==MAELYS_DATALOG_VALUE_SYMBOL) {if(strcmp(a->terms[i].as.symbol,b->terms[i].as.symbol))return 0;}
+        else if(a->terms[i].kind==MAELYS_DATALOG_VALUE_INTEGER) {if(a->terms[i].as.integer!=b->terms[i].as.integer)return 0;}
+        else if(!!a->terms[i].as.boolean!=!!b->terms[i].as.boolean)return 0;
+    }
+    return 1;
+}
+static int contains(const maelys_datalog_fact_t *set,size_t n,const maelys_datalog_fact_t *f) {
+    for(size_t i=0;i<n;++i) {
+        if(same_fact(&set[i],f)) return 1;
+    }
+    return 0;
+}
+static size_t unique_facts(maelys_datalog_fact_t *out,const maelys_datalog_fact_t *raw,size_t n) {
+    size_t count=0;for(size_t i=0;i<n;++i)if(!contains(out,count,&raw[i]))out[count++]=raw[i];return count;
+}
+static int window_action(maelys_datalog_window_t *w,maelys_datalog_group_window_t *g,int action,
+    const maelys_datalog_fact_t *facts,size_t n,uint64_t time,uint32_t *id,size_t *expired) {
+    if(action==0)return g?maelys_datalog_group_window_push_until(g,facts,n,time,id,NULL):
+        maelys_datalog_window_push_until(w,"event",facts[0].terms+1,1,time,id,NULL);
+    if(action==1)return g?maelys_datalog_group_window_replace_static(g,facts,n,NULL):
+        maelys_datalog_window_replace_static(w,facts,n,NULL);
+    return g?maelys_datalog_group_window_expire(g,time,expired,NULL):maelys_datalog_window_expire(w,time,expired,NULL);
+}
+static void window_sequence(int grouped,int abi7) {
+    fixture f[2];setup(&f[0],abi7?2:0);setup(&f[1],abi7?2:0);
+    maelys_datalog_session_t *oracle=NULL;OK(maelys_datalog_session_create(policy,0,&oracle));
+    maelys_datalog_window_t *w=NULL;maelys_datalog_group_window_t *g=NULL;
+    maelys_datalog_window_options_t o={sizeof(o),18,MAELYS_DATALOG_WINDOW_EXPIRATION};
+    maelys_datalog_group_window_capacities_t cap={3,12,30,1024};size_t bytes,alignment;
+    if(grouped)OK(maelys_datalog_group_window_storage_requirements_configured(&cap,&o,&bytes,&alignment));
+    else OK(maelys_datalog_window_storage_requirements_configured(3,1024,&o,&bytes,&alignment));
+    void *area=malloc(bytes);assert(area);
+    if(grouped)OK(maelys_datalog_group_window_init_configured(area,bytes,&cap,&o,0,f[0].session,f[1].session,&g,NULL));
+    else OK(maelys_datalog_window_init_configured(area,bytes,3,1024,&o,0,f[0].session,f[1].session,&w,NULL));
+    maelys_datalog_result_t *result=NULL;
+    if(grouped)OK(maelys_datalog_group_window_result(g,&result));else OK(maelys_datalog_window_result(w,&result));
+    size_t ebytes;OK(maelys_datalog_result_explanation_storage_requirements(result,MAELYS_DATALOG_EXPLAIN_TRUE,&ebytes,&alignment));
+    void *explain_area=malloc(ebytes);assert(explain_area);
+    window_event events[3]={0};size_t ne=0,ns=0,bank_n[2]={0};unsigned active=0;
+    maelys_datalog_fact_t statics[18],banks[2][32];uint32_t next=0,seed=UINT32_C(0x6ba72e91);uint64_t now=0;
+    size_t allocations_before=allocations,frees_before=frees;forbidden=1;
+    for(size_t tx=0;tx<240;++tx) {
+        seed=seed*1664525u+1013904223u;
+        int action=tx%10==4 || tx%10==8?1:(tx%10==5 || tx%10==9?2:0);
+        maelys_datalog_fact_t incoming[18],raw[32],expected[32];size_t n=0,expected_n=0,expired_count=0;
+        window_event proposed[3];memcpy(proposed,events,sizeof(events));size_t proposed_n=ne;
+        uint64_t time=action==2?now+1:now+1+(seed%4);
+        if(action==0) {
+            if(proposed_n==3){memmove(proposed,proposed+1,2*sizeof(*proposed));--proposed_n;}
+            n=grouped?4:1;
+            for(size_t i=0;i<n;++i)incoming[i]=fact(((seed>>8)+(i%3))%18); /* deliberate duplicate */
+            if(!grouped) {incoming[0].predicate="event";incoming[0].arity=2;incoming[0].terms[1]=incoming[0].terms[0];
+                incoming[0].terms[0]=(maelys_datalog_value_t){.kind=MAELYS_DATALOG_VALUE_INTEGER,.as.integer=next};}
+            proposed[proposed_n].n=n;proposed[proposed_n].deadline=time;
+            memcpy(proposed[proposed_n++].facts,incoming,n*sizeof(*incoming));
+        } else if(action==1) {
+            n=12;for(size_t i=0;i<n;++i)incoming[i]=fact((i+tx)%18);
+            if(ne)incoming[n++]=events[0].facts[0]; /* event + static support, also for occurrence windows */
+        } else {
+            proposed_n=0;for(size_t i=0;i<ne;++i)if(events[i].deadline>time)proposed[proposed_n++]=events[i];else ++expired_count;
+        }
+        size_t raw_n=action==1?n:ns;memcpy(raw,action==1?incoming:statics,raw_n*sizeof(*raw));
+        for(size_t i=0;i<proposed_n;++i){memcpy(raw+raw_n,proposed[i].facts,proposed[i].n*sizeof(*raw));raw_n+=proposed[i].n;}
+        expected_n=unique_facts(expected,raw,raw_n);
+        unsigned candidate=1-active;int invokes=action!=2 || expired_count;
+        input_fixture_observation before[2]={observation(&f[0]),observation(&f[1])};
+        maelys_datalog_input_base_t base_before[2]={base(&f[0]),base(&f[1])};
+        unsigned char image[2][32768],after_image[32768];size_t image_n[2];
+        for(size_t i=0;i<2;++i){image_n[i]=input_fixture_committed(f[i].provider,image[i],sizeof(image[i]));assert(image_n[i]<=sizeof(image[i]));}
+        /* Same candidate operation, rejected before publication, then retried. */
+        if(invokes && tx%7==0) {
+            uint32_t rejected_id=UINT32_MAX;size_t rejected_expired=SIZE_MAX;
+            input_fixture_fault(f[candidate].provider,1+(unsigned)(tx%3));
+            assert(window_action(w,g,action,incoming,n,time,&rejected_id,&rejected_expired)!=MAELYS_DATALOG_STATUS_OK);
+            assert(rejected_id==UINT32_MAX && rejected_expired==SIZE_MAX);
+            input_fixture_fault(f[candidate].provider,0);
+            for(size_t i=0;i<2;++i) {
+                assert(input_fixture_committed(f[i].provider,after_image,sizeof(after_image))==image_n[i]);
+                assert(!memcmp(image[i],after_image,image_n[i]));
+                maelys_datalog_input_base_t b=base(&f[i]);assert(!memcmp(&b,&base_before[i],sizeof(b)));
+            }
+            before[0]=observation(&f[0]);before[1]=observation(&f[1]);
+        }
+        uint32_t id=UINT32_MAX;size_t expired=SIZE_MAX;
+        OK(window_action(w,g,action,incoming,n,time,&id,&expired));
+        if(action==0){assert(id==next);++next;}
+        if(action==1){ns=n;memcpy(statics,incoming,n*sizeof(*statics));}
+        if(action==2){assert(expired==expired_count);now=time;}
+        ne=proposed_n;memcpy(events,proposed,sizeof(events));
+        if(invokes) {
+            size_t changed=0;
+            for(size_t i=0;i<expected_n;++i)changed+=!contains(banks[candidate],bank_n[candidate],&expected[i]);
+            for(size_t i=0;i<bank_n[candidate];++i)changed+=!contains(expected,expected_n,&banks[candidate][i]);
+            input_fixture_observation after=observation(&f[candidate]);
+            assert(after.delivered-before[candidate].delivered==(abi7?changed:expected_n));
+            assert(after.commits==before[candidate].commits+1);
+            if(abi7)assert(after.deltas==before[candidate].deltas+1 && !after.snapshots);
+            bank_n[candidate]=expected_n;memcpy(banks[candidate],expected,expected_n*sizeof(*expected));active=candidate;
+        } else for(size_t i=0;i<2;++i){input_fixture_observation after=observation(&f[i]);assert(!memcmp(&after,&before[i],sizeof(after)));}
+        maelys_datalog_result_t *old=result;
+        if(grouped)OK(maelys_datalog_group_window_result(g,&result));else OK(maelys_datalog_window_result(w,&result));
+        if(!invokes)assert(result==old);
+        compare(result,oracle,raw,raw_n);
+        for(size_t i=0;i<2;++i)assert(observation(&f[i]).retained==bank_n[i]);
+    }
+    if(grouped)OK(maelys_datalog_group_window_free(g));else OK(maelys_datalog_window_free(w));
+    forbidden=0;assert(allocations==allocations_before && frees==frees_before);
+    free(explain_area);free(area);OK(maelys_datalog_session_free(oracle));close_fixture(&f[0]);close_fixture(&f[1]);
+    printf("window oracle: grouped=%d ABI=%d seed=6ba72e91 transactions=240 PASS\n",grouped,abi7?7:6);
+}
+
 int main(void) {
     const maelys_datalog_domain_t d={"delivery",predicates,4,NULL,0};OK(maelys_datalog_domain_register(&d));
     const char *source="copy(I,X) :- event(I,X). out(X) :- record(X).";
     OK(maelys_datalog_policy_load_inline(d.name,"delivery",source,strlen(source),&policy,NULL));
-    negotiation();generated(0);generated(1);errors();windows(0);windows(1);OK(maelys_datalog_policy_free(policy));
+    negotiation();generated(0);generated(1);errors();windows(0);windows(1);for(int g=0;g<2;++g)for(int abi=0;abi<2;++abi)window_sequence(g,abi);OK(maelys_datalog_policy_free(policy));
     puts("backend input negotiation, complete outputs, bases, abort/retry, sticky errors, leases and both windows PASS");return 0;
 }

@@ -14,11 +14,17 @@ RESOURCES="src/runtime/maelys_datalog_resources.inc"
 PROVIDER="sdk/conformance/input_provider.c"
 TEST="tests/test_maelys_datalog_backend_inputs.c"
 MUTATIONS=[
+    ("window_stays_replacement",INPUTS,"if(h->owner->pending_commit) {","if(0) {"),
+    ("window_common_not_excluded",INPUTS,"if(!order) ++common;","if(0) ++common;"),
+    ("window_removal_uses_candidate",INPUTS,"{h,h->live,h->count-common,","{h,h->candidate,h->count-common,"),
+    ("view_backward_read_not_reset",INPUTS,"if(index<c->ordinal) *c=(retained_view_cursor){0};","if(0) *c=(retained_view_cursor){0};"),
+    ("view_common_fact_not_skipped",INPUTS,"!maelys_datalog_fact_cmp(&view->excluded[c->excluded],fact)) continue;","!maelys_datalog_fact_cmp(&view->excluded[c->excluded],fact)) { /* retain common */ }"),
+    ("window_abort_advances_base",INPUTS,"static void retained_abort(maelys_datalog_session_inputs_t *h) { if(h) h->pending=0; }","static void retained_abort(maelys_datalog_session_inputs_t *h) { if(h) {++h->base.generation;h->pending=0;} }"),
     ("delta_as_replacement",INPUTS,"h->delivery_kind=snapshot?MAELYS_DATALOG_BACKEND_INPUT_REPLACE:MAELYS_DATALOG_BACKEND_INPUT_DELTA;","h->delivery_kind=MAELYS_DATALOG_BACKEND_INPUT_REPLACE;"),
     ("removals_not_delivered",INPUTS,"h->delivered_removals=r;","h->delivered_removals=0;"),
     ("next_base_stale",INPUTS,"h->base.generation+1}","h->base.generation}"),
-    ("view_uses_current_dictionary",INPUTS,"&view->owner->vocabulary,&view->facts[index]","&view->owner->owner->inputs->symbols,&view->facts[index]"),
-    ("skip_first_view_fact",INPUTS,"&view->facts[index],&value","&view->facts[index?index:1],&value"),
+    ("view_uses_current_dictionary",INPUTS,"&view->owner->vocabulary,fact","&view->owner->owner->inputs->symbols,fact"),
+    ("skip_first_view_fact",INPUTS,"&view->owner->vocabulary,fact,&value","&view->owner->vocabulary,fact+1,&value"),
     ("snapshot_export_restored",RUNTIME,"(s->borrows_inputs || s->transaction_solve) ? 0 :","s->borrows_inputs ? 0 :"),
     ("delivery_identity_omitted",RESOURCES,"if (!rc && s->transaction_solve)","if (0)"),
     ("packet_version_ignored",INPUTS,"if(b->abi_version!=MAELYS_DATALOG_BACKEND_V7_ABI_VERSION)","if(0)"),

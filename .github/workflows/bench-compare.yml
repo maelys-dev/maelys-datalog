@@ -22,6 +22,11 @@ on:
         default: false
         type: boolean
 
+      window_inputs:
+        description: Compare complete window ABI 7 host/provider instructions on base and head (no timings)
+        required: false
+        default: false
+        type: boolean
       diagnostic_original:
         description: Optional original candidate SHA for LARGE Callgrind and layout diagnosis
         required: false
@@ -65,25 +70,31 @@ jobs:
       - name: Check comparison tooling
         run: python3 -m unittest discover -s bench -p 'test_compare*.py'
       - name: Prepare optional diagnostic tool
-        if: inputs.diagnostic_original != '' || inputs.session_diagnostics || inputs.session_layout || inputs.retained_inputs || inputs.backend_inputs
+        if: inputs.diagnostic_original != '' || inputs.session_diagnostics || inputs.session_layout || inputs.retained_inputs || inputs.backend_inputs || inputs.window_inputs
         run: |
           if ! command -v valgrind >/dev/null; then
             sudo apt-get update
             sudo apt-get install -y valgrind
           fi
       - name: Check retained-input experiment identity and exclusive selection
-        if: inputs.retained_inputs || inputs.backend_inputs
+        if: inputs.retained_inputs || inputs.backend_inputs || inputs.window_inputs
         env:
           HEAD_REF: ${{ inputs.head }}
           BASE_REF: ${{ inputs.base }}
           OTHER_DIAGNOSTIC: ${{ inputs.diagnostic_original != '' || inputs.session_diagnostics || inputs.session_layout || inputs.session_layout_original != '' }}
-          BOTH_INPUT_MODES: ${{ inputs.retained_inputs && inputs.backend_inputs }}
+          BOTH_INPUT_MODES: ${{ (inputs.retained_inputs && inputs.backend_inputs) || (inputs.window_inputs && (inputs.retained_inputs || inputs.backend_inputs)) }}
         run: |
           test "$OTHER_DIAGNOSTIC" = false
           test "$BOTH_INPUT_MODES" = false
           test "$(git rev-parse HEAD)" = "$(git rev-parse "$HEAD_REF^{commit}")"
           git rev-parse "$BASE_REF^{commit}"
           git diff --exit-code
+      - name: Measure complete ABI 7 window transactions
+        if: inputs.window_inputs
+        env:
+          BASE_REF: ${{ inputs.base }}
+          HEAD_REF: ${{ inputs.head }}
+        run: python3 bench/compare_window_inputs.py "$BASE_REF" "$HEAD_REF" "$RUNNER_TEMP/window-inputs"
       - name: Measure retained-input software instructions
         if: inputs.retained_inputs
         env:
@@ -110,7 +121,7 @@ jobs:
           HEAD_REF: ${{ inputs.head }}
         run: bash bench/diagnose_solver_layout.sh "$BASE_REF" "$ORIGINAL_REF" "$HEAD_REF" "$RUNNER_TEMP/bench-diagnostic"
       - name: Compare immutable revisions
-        if: '!inputs.retained_inputs && !inputs.backend_inputs'
+        if: '!inputs.retained_inputs && !inputs.backend_inputs && !inputs.window_inputs'
         env:
           BASE_REF: ${{ inputs.base }}
           HEAD_REF: ${{ inputs.head }}
@@ -130,5 +141,6 @@ jobs:
             ${{ runner.temp }}/bench-diagnostic/
             ${{ runner.temp }}/session-layout/
             ${{ runner.temp }}/retained-inputs/
+            ${{ runner.temp }}/window-inputs/
           if-no-files-found: warn
           retention-days: 30
