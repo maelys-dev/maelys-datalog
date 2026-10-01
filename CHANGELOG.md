@@ -7,6 +7,33 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## 0.18.0 — 2026-10-01
+
+This release reorganizes the installed C SDK include paths. Consumer API 2,
+program ABI 2 and backend ABIs 5/6/7 retain their declarations and contracts;
+source consumers must migrate the retired includes before rebuilding. See
+`docs/sdk-headers.md` for the complete map. The optional allocation service is
+still a proposal: its future caller descriptor belongs in `datalog_resources.h`
+and its provider service in `datalog_backend.h`.
+
+### Changed
+
+- Organize eleven installed headers by audience: applications, extension
+  integrators and component authors. Absorb `datalog_details.h` into the
+  facade; replace `datalog_transactions.h` with `datalog_inputs.h`; split
+  `datalog_advanced.h` into the existing resource/program headers and the new
+  explanation/frontend headers; consolidate ABI 5/6/7 provider declarations
+  in `datalog_backend.h`. All four old paths are removed without forwarding
+  shims. Integrators use incomplete descriptor types; only provider headers
+  define them. C++ descriptor type linkage is preserved. Both manifest text
+  and buffer loaders remain because their validation profiles differ.
+- Deliver per-bank input deltas to ABI 7 providers from both window adapters,
+  calculated against the candidate session's own committed base. Facts still
+  supported by static EDB or another event remain present. Alternation,
+  expiration, failed operations and retry preserve bases and leases. ABI 5/6
+  providers still receive snapshots. Full host snapshot materialization and
+  full provider result emission remain; no public API/ABI or allocator change.
+
 ### Added
 
 - Precompiled Python wheels as GitHub Release assets for Linux x86_64/ARM64
@@ -20,6 +47,47 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
   SHA256SUMS and provenance. No PyPI channel or historical release modification.
   This packaging change does not establish a performance gain or reuse a prior
   Python release decision for the new binary configuration.
+
+
+### Validation and performance review
+
+- Header reorganization [#162](https://github.com/maelys-dev/maelys-datalog/pull/162)
+  was qualified on signed `8593027451cb06538e392e61c0c47f77431436fc`
+  with 46/46 checks in [run 36901094831](https://github.com/maelys-dev/maelys-datalog/actions/runs/36901094831).
+  Signed squash `a279e6a30b186b1bc9071a225dc15e341d59a51d` has the identical
+  complete tree. Comparison preserves 230 declarations, 115 macro names,
+  45 public record layouts and six C++ type linkage names; 48 independently
+  compiled ABI 5/6/7 combinations pass. Native code-section bytes and all 365
+  exports match the pre-header base on the measured macOS ARM64 toolchain in
+  both profiles. This target-specific equality is not a latency guarantee.
+  Installed C/C++ consumers, bindings, archives and downstream migration were
+  replayed; see #162 for the separate window packet-test migration and the
+  downstream LARGE versus configured-capacity SMALL coverage.
+- The window [instruction campaign 36883123610](https://github.com/maelys-dev/maelys-datalog/actions/runs/36883123610)
+  measures 96 revision comparisons: 48 lower, 32 higher and 16 identical total
+  Ir counts. Rolling windows, shared support and expiry/replenishment decrease
+  by 9.62–41.03%; static replacement increases by 3.67–13.90%, and late rejected
+  replacement by 0.24–0.78%. No-op expiry is unchanged. All 192 repeated pairs
+  match in total and exclusive per-function Ir/Dr/Dw. The complete operation
+  includes host materialization, provider work, copying, publication or abort
+  and release. These are software counts using the public conformance provider,
+  not latency or private-backend performance. The report SHA-256 is
+  `6cbf70ec11f1d89c87185c5e11ffec856796e8a3459507baa694426f9c9ab75e`.
+- Python performance review for 0.18.0 is pending. The post-window
+  [run 36896136426](https://github.com/maelys-dev/maelys-datalog/actions/runs/36896136426)
+  measured `4b997c4658764d25e75bc9dc758c03162cba9bf8`; its report SHA-256 is
+  `eafe3b679393a675e0426d8c74ecbbdeddce1cad97fcd2b3f8dc44a79ab2c037`.
+  The positive control passes; 31 rows against v0.17.0 and nine against the
+  anchor require review, including seven and two complete-request statistics,
+  respectively. Recurring complete-request alerts against v0.17.0 include
+  LARGE/Release 93-integer convenience median (+2.59/+2.64%) and p95
+  (+2.25/+3.12%), and SMALL/Release seven-symbol convenience p95
+  (+78.33/+2.61%). The isolated SMALL/Release 93-integer prepared p95
+  (+61.76% in round one) is retained. These observations are unattributed.
+  The post-header report on `a279e6a` is being collected in
+  [run 36906281900](https://github.com/maelys-dev/maelys-datalog/actions/runs/36906281900).
+  The 0.17.0 decision does not approve these reports or the new wheel binary
+  configuration. Publication awaits review and a recorded maintainer decision.
 
 ## 0.17.0 — 2026-10-01
 
