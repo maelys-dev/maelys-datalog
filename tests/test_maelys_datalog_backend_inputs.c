@@ -208,7 +208,10 @@ static int same_fact(const maelys_datalog_fact_t *a,const maelys_datalog_fact_t 
     return 1;
 }
 static int contains(const maelys_datalog_fact_t *set,size_t n,const maelys_datalog_fact_t *f) {
-    for(size_t i=0;i<n;++i)if(same_fact(&set[i],f))return 1;return 0;
+    for(size_t i=0;i<n;++i) {
+        if(same_fact(&set[i],f)) return 1;
+    }
+    return 0;
 }
 static size_t unique_facts(maelys_datalog_fact_t *out,const maelys_datalog_fact_t *raw,size_t n) {
     size_t count=0;for(size_t i=0;i<n;++i)if(!contains(out,count,&raw[i]))out[count++]=raw[i];return count;
