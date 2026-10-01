@@ -7,15 +7,21 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
-## 0.16.0 — 2026-09-30
+## 0.16.0 — 2026-10-01
 
 Consumer API 2 and program ABI 2 remain unchanged. Backend ABI 7 is negotiated
 separately; ABI 5/6 retain their existing snapshot and resource contracts.
 Retained inputs and backend transaction delivery are explicit opt-ins. The
 reference solver may still recompute the complete IDB; this release does not
 add a private incremental algorithm or elastic allocation.
-The Python performance decision must be recorded in the changelog pull request
-before the release cut; it has not yet been accepted.
+On 2026-10-01, David accepted the documented Python latency tradeoff in runs
+36716930598 and 36748769040 and authorized 0.16.0 publication after the checks
+and release gate. This includes the five recurring SMALL/default median and
+p95 observations of +1.1% to +5.0%. The scoped ordinary native path's +0.003%
+instruction difference informed that decision; it does not establish a cause
+for the timing differences. Code layout remains a hypothesis, and the latency
+observations remain unattributed. The reports, hashes and explicit decision
+are preserved in changelog PR #154; their review classifications are unchanged.
 
 ### Added
 
