@@ -7,6 +7,8 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## 0.17.0 — 2026-10-01
+
 ### Added
 
 - Expose retained session input transactions in Python and the common
@@ -16,8 +18,39 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
   publication; stale bases and failed operations preserve committed input.
   Bindings own attachment storage; conversions still allocate. No public C or
   backend ABI change, allocator service or incremental solver is introduced.
-  See `docs/binding-input-transactions.md`. A new complete Python performance
-  report and maintainer decision are required before the 0.17.0 release.
+  See `docs/binding-input-transactions.md`.
+
+### Validation and performance review
+
+- [PR #156](https://github.com/maelys-dev/maelys-datalog/pull/156) qualifies
+  signed runtime/binding commit `a1f0c8efb1b4f40cc677ed853919d25bc51a82a7`:
+  31 CI checks, installed SMALL/LARGE SDKs, native/WASM/Python parity,
+  allocation guards, sanitizers, generated transactions and binding mutations.
+  The four receipt-bound candidate archives were assembled into an npm package,
+  installed and consumed, including CJS/ESM, TypeScript, browser and worker paths.
+- The complete [Python run 36858838002](https://github.com/maelys-dev/maelys-datalog/actions/runs/36858838002)
+  measured that commit against v0.16.0 and the v0.11.1 anchor. Its schema-4
+  `report.json` SHA-256 is
+  `8438cc96757a8dd24dac27cef02a0882b7dbdee4fa58829cf548d9dca8241d4e`.
+  The positive control is detected in every configuration and both rounds;
+  all 3,377,136 samples and the matched null controls are retained. The report
+  remains `review_required`: 42 statistic rows versus v0.16.0 and nine versus
+  the anchor. Four complete-request rows exceed their matched null envelope,
+  each in one round only (LARGE/Release prepared seven-symbol median/p95 and
+  prepared 93-integer median/p95). Three phase rows recur in both rounds:
+  LARGE/Release 93-symbol convenience close (+7.96%/+7.25%), SMALL/default
+  seven-integer convenience close (+5.23%/+7.36%), and SMALL/default
+  93-integer convenience solve (+1.75%/+1.25%). Informative cold observations
+  and every other phase alert remain in the original report.
+- On 2026-10-01, David accepted this concrete Python report for 0.17.0 and
+  authorized merging #156 and publishing after the checks and release gate.
+  The native engine is unchanged. David reports that an isolated binding
+  measurement against the same native library attributes the recurring close
+  and solve alerts to the added lifetime checks, at 50–90 ns per request.
+  This separately reported measurement is not a conversion of the complete
+  lifecycle phase timings and does not erase or reclassify their observations.
+  No speedup for the new transaction API is claimed. Subsequent changelog and
+  version-only changes do not alter the measured runtime, binding or harness.
 
 ## 0.16.0 — 2026-10-01
 
