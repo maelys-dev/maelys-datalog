@@ -44,3 +44,27 @@ for (const testcase of cases) for (const explanations of [0,3]) {
   for(const document of expected.documents) assert.match(document,new RegExp(`status=${state}`));
 }
 console.log('Python/native Node/WASM: decisions, fingerprints, complete and truncated explanations agree byte-for-byte (workspace off/on)');
+
+const pythonInputs=spawnSync(process.env.PYTHON||'python3',['bindings/javascript/test/python-inputs-oracle.py'],{encoding:'utf8'});
+assert.equal(pythonInputs.status,0,pythonInputs.stderr); const expectedInputs=JSON.parse(pythonInputs.stdout);
+for(const runtime of ['node','wasm']) {
+  const {Engine}=await import(pathToFileURL(resolve(root,`src/${runtime}.mjs`)));
+  const engine=await Engine.create({profile:process.env.MAELYS_PROFILE||'small'});
+  try {
+    engine.registerDomain('js_inputs_parity',[p('seed',1,1),p('blocked',1,1),p('allow',1,6)]);
+    const rules=engine.loadInlineRuleset('js_inputs_parity','main','allow(X) :- seed(X), not(blocked(X)).');
+    const inputs=rules.prepare({explanations:3}).inputs({factCapacity:8,additionCapacity:4,removalCapacity:4,symbols:['alice','bob']});
+    const trace=[],errors=[],initial=inputs.base;
+    const record=result=>{try{trace.push({generation:String(inputs.base.generation),answers:['alice','bob',(1n<<63n)-1n].map(v=>result.containsFact('allow',[v])),explanation:result.explainTrue('allow',['alice']),execution:result.executionFingerprint});}finally{result.close();}};
+    record(inputs.replace(initial,[f('seed','alice'),f('seed','bob'),f('seed',(1n<<63n)-1n)]));
+    record(inputs.apply(inputs.base,{added:[f('blocked','bob')],removed:[f('seed','never-interned')]}));
+    record(inputs.apply(inputs.base,{removed:[f('blocked','bob')],added:[f('seed','alice')]}));
+    for(const [base,added] of [[initial,[]],[inputs.base,[f('seed','unknown')]],[inputs.base,[f('missing',1)]]]) {
+      assert.throws(()=>inputs.apply(base,{added}),error=>{
+        const d=error.diagnostic;errors.push({status:error.status,present:String(d.present),code:d.code,field:d.context?.field||'',token:d.context?.token||'',message:d.message,hint:d.hint,generation:String(inputs.base.generation)});return true;
+      });
+    }
+    record(inputs.apply(inputs.base));assert.deepEqual({trace,errors},expectedInputs);
+  }finally{engine.close();}
+}
+console.log('Retained transactions: Python/native/WASM exact values, base generations, rejection diagnostics and explanations agree');

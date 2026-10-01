@@ -12,7 +12,7 @@ try {
   const tar = join(temporary,packed[0].filename);
   writeFileSync(join(temporary,'package.json'), JSON.stringify({private:true}));
   run('npm',['install','--ignore-scripts','--no-audit','--no-fund','--package-lock=false',tar]);
-  const fixture = `import {Engine,Predicate,ExplanationKind,Capability,SessionCapacities,ResultTerm, type Value} from '@maelys-dev/datalog';
+  const fixture = `import {Engine,Predicate,ExplanationKind,Capability,SessionCapacities,ResultTerm,InputBase,SessionInputs, type Value} from '@maelys-dev/datalog';
 async function main() {
  const engine=await Engine.create({profile:'small'});
  engine.registerDomain('types',[Predicate.edb('e',1),Predicate.idbQuery('q',1)]);
@@ -27,7 +27,18 @@ async function main() {
  const session=rules.prepare({capacities:new SessionCapacities({inputFacts:2}),requiredCapabilities:Capability.POSITIVE,explanations:ExplanationKind.TRUE});
  const result=session.solve(edb); const rows:Value[][]=result.enumeratePredicateFacts('q',1);
  const terms:ResultTerm[][]=result.enumerateRaw('q',1); result.resolveTerm(terms[0][0]);
- result.close(); engine[Symbol.dispose](); return rows;
+ result.close();
+ const prepared=rules.prepare(), input:SessionInputs=prepared.inputs({factCapacity:4,symbols:['known']});
+ const base:InputBase=input.base;
+ input.replace(base,[{predicate:'e',terms:[1n]}]).close();
+ input.apply(input.base,{added:[{predicate:'e',terms:[2n]}],removed:[{predicate:'e',terms:[1n]}]}).close();
+ // @ts-expect-error base is mandatory
+ input.replace([]);
+ // @ts-expect-error an exact uint64 pair, not a generation alone
+ input.apply(0n,{});
+ // @ts-expect-error bases are immutable
+ base.generation=0n;
+ input.close(); engine[Symbol.dispose](); return rows;
 }
 // @ts-expect-error input terms cannot contain objects
 const bad:import('@maelys-dev/datalog').InputValue = {};
@@ -46,7 +57,7 @@ export {main};
   for(const runtime of (process.env.MAELYS_JS_RUNTIMES||'node,wasm').split(',')) {
     for(const esm of [false,true]) {
       const imported=esm ? `const {Engine,Predicate}=await import('@maelys-dev/datalog/${runtime}');` : `const {Engine,Predicate}=require('@maelys-dev/datalog/${runtime}');`;
-      const code=`${imported} (async()=>{const engine=await Engine.create();try{engine.registerDomain('package',[Predicate.edb('e',1),Predicate.idbQuery('q',1)]);const r=engine.loadInlineRuleset('package','p','q(X) :- e(X).');const input=r.edb();input.addFact('e',[42n]);const result=r.solve(input);if(!result.containsFact('q',[42n]))throw new Error('bad packaged result');}finally{engine.close();}})().catch(e=>{console.error(e);process.exitCode=1;});`;
+      const code=`${imported} (async()=>{const engine=await Engine.create();try{engine.registerDomain('package',[Predicate.edb('e',1),Predicate.idbQuery('q',1)]);const r=engine.loadInlineRuleset('package','p','q(X) :- e(X).');const input=r.edb();input.addFact('e',[42n]);const result=r.solve(input);if(!result.containsFact('q',[42n]))throw new Error('bad packaged result');result.close();const tx=r.prepare().inputs({factCapacity:2});tx.replace(tx.base,[{predicate:'e',terms:[42n]}]).close();const updated=tx.apply(tx.base,{removed:[{predicate:'e',terms:[42n]}],added:[{predicate:'e',terms:[43n]}]});if(updated.containsFact('q',[42n])||!updated.containsFact('q',[43n]))throw new Error('bad packaged transaction');}finally{engine.close();}})().catch(e=>{console.error(e);process.exitCode=1;});`;
       run(process.execPath,[...(esm?['--input-type=module']:[]),'-e',code]);
     }
   }

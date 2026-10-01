@@ -90,6 +90,63 @@ and fact-capacity failures preserve the prior EDB. Conversion buffers, JavaScrip
 objects, returned strings and explanation text still allocate; the complete
 binding is not allocation-free. Explanation workspace is opt-in.
 
+## Retained input transactions (0.17.0)
+
+Node and WASM expose the same `SessionInputs` and immutable `InputBase`:
+
+```ts
+// Given seed/1 EDB and allow/1 query IDB, allow(X) :- seed(X).
+const session = rules.prepare({ explanations: 3 });
+const inputs = session.inputs({ factCapacity: 64, additionCapacity: 8,
+  removalCapacity: 8, symbols: ['alice', 'bob'] });
+try {
+  const first = inputs.replace(inputs.base, [{ predicate: 'seed', terms: ['alice'] }]);
+  try { console.log(first.containsFact('allow', ['alice'])); }
+  finally { first.close(); }
+  const next = inputs.apply(inputs.base, {
+    added: [{ predicate: 'seed', terms: ['bob'] }],
+    removed: [{ predicate: 'seed', terms: ['alice'] }],
+  });
+  try { console.log(next.containsFact('allow', ['bob'])); }
+  finally { next.close(); }
+} finally { session.close(); }
+```
+
+Attach before the first successful solve. While attached, ordinary `solve(edb)`
+is unavailable. `replace(base, facts)` supplies the complete dynamic input;
+`apply(base, {added, removed})` applies a delta to the committed set. Added facts
+win over removals, duplicates collapse and absent removals are no-ops. Each call
+solves and commits immediately; every success, even a no-op, returns a result
+lease and advances the generation. Close that result before reuse or detachment.
+Closing the session closes the result first, then its attachment.
+
+`inputs.base` returns an `InputBase` with `bigint` incarnation and generation.
+Its constructor accepts exact unsigned 64-bit integers; never coerce them through
+an inexact `number`. A stale or foreign base fails with `INVALID_STATE`. Pass the
+base used to compute the batch; there is no hidden base refresh or retry.
+
+`factCapacity` defaults to E; `additionCapacity` and `removalCapacity` default to
+it. Zero is an exact bound. The raw replacement and add/remove bounds apply before
+deduplication; the committed set must fit its own bound and the session quotas.
+Explicit add/remove bounds may exceed E up to the loaded build's input ceiling.
+Program symbols plus `symbols` form a fixed vocabulary, including empty strings.
+Unknown additions/replacements fail; unknown removed symbols denote absent facts
+after validation. Both batches are fully staged before C is called. Bad getters,
+iterators, types, capacity, domain and solve failures publish no partial input.
+Reentrant session mutation during staging is refused.
+
+The execution fingerprint binds capacities and vocabulary, not incarnation,
+generation or current facts. Detachment restores the original fingerprint;
+successful-solve history is not reset. Use a new session to attach again after a
+successful transaction. The binding reserves an arena and fact-conversion storage
+at attachment; the shared C transport allocates nothing during base reads,
+replace/apply, queries and result release. JS arrays, encoded text and copied
+outputs still allocate. Reference solving still recomputes IDB. The private wire
+protocol is version 2, so these sources reject an older transport explicitly.
+
+See [the shared contract](../../docs/binding-input-transactions.md). This feature
+does not expose window adapters or change any public C/backend ABI.
+
 ## Manifests and environment I/O
 
 Both runtimes accept the same manifest JSON, schema and permissions as Python:

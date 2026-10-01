@@ -219,6 +219,13 @@ class FacadeTest(unittest.TestCase):
             "input_edb_text_usage": "CFFI only: interned input text occupancy/capacity",
             "input_edb_clear": "Edb.clear", "input_edb_free": "Edb.close",
             "session_solve_edb": "Session.solve",
+            "session_inputs_storage_requirements": "Session.inputs aligned binding-owned storage",
+            "session_inputs_init": "Session.inputs",
+            "session_inputs_base": "SessionInputs.base",
+            "session_inputs_replace": "SessionInputs.replace",
+            "session_inputs_apply": "SessionInputs.apply",
+            "session_inputs_free": "SessionInputs.close",
+
             "session_free": "Session.close", "result_query": "SolveResult.contains_fact",
             "result_enumerate": "SolveResult.enumerate_raw",
             "result_derived_fact_count": "SolveResult.derived_fact_count",
@@ -237,7 +244,8 @@ class FacadeTest(unittest.TestCase):
         sdk = Path(os.environ["MAELYS_DATALOG_SDK_PREFIX"])
         header = sdk / "include/maelys/datalog.h"
         exports = set(re.findall(r"MAELYS_DATALOG_API\s+[^;]+?\b(maelys_datalog_\w+)\s*\(",
-                                 header.read_text(encoding="utf-8")))
+                                 (header.read_text(encoding="utf-8") +
+                                  (sdk / "include/maelys/datalog_transactions.h").read_text(encoding="utf-8"))))
         self.assertEqual(exports, {"maelys_datalog_" + name for name in coverage})
         for name in exports:
             self.assertTrue(callable(getattr(binding.lib, name)), name)
@@ -246,7 +254,7 @@ class FacadeTest(unittest.TestCase):
         builder = Path(__file__).resolve().parents[2] / "bindings/python/build_cffi.py"
         source = builder.read_text(encoding="utf-8")
         self.assertEqual(re.findall(r"#include\s+[<\"]([^>\"]+)[>\"]", source),
-                         ["maelys/datalog.h", "maelys/datalog_resources.h"])
+                         ["maelys/datalog.h", "maelys/datalog_resources.h", "maelys/datalog_transactions.h"])
         self.assertNotIn("MAELYS_DATALOG_BACKEND_ABI_VERSION", source)
         self.assertNotIn("maelys_datalog_session_options_t", source)
         self.assertNotIn("maelys_datalog_backend_v6_t", source)

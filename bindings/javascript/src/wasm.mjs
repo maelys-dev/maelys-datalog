@@ -6,5 +6,5 @@ const api = binding(async ({ profile = 'small', wasmFactory, wasmUrl } = {}) => 
   const factory = wasmFactory || (await import(`../wasm/${profile}/engine.mjs`)).default;
   return wasmTransport(await factory(wasmUrl ? { locateFile: file => file.endsWith('.wasm') ? String(wasmUrl) : file } : {}));
 });
-export const { Engine, Predicate, SessionCapacities, Ruleset, Edb, Session, SolveResult, ResultTerm,
+export const { Engine, Predicate, SessionCapacities, Ruleset, Edb, Session, SessionInputs, InputBase, SolveResult, ResultTerm,
   Capability, ExplanationKind, Status, MaelysDatalogError, PRED_EDB, PRED_IDB, PRED_QUERY, PRED_POLICY_FACT } = api;
