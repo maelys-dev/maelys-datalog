@@ -84,10 +84,22 @@ and its provider service in `datalog_backend.h`.
   (+2.25/+3.12%), and SMALL/Release seven-symbol convenience p95
   (+78.33/+2.61%). The isolated SMALL/Release 93-integer prepared p95
   (+61.76% in round one) is retained. These observations are unattributed.
-  The post-header report on `a279e6a` is being collected in
-  [run 36906281900](https://github.com/maelys-dev/maelys-datalog/actions/runs/36906281900).
+  The post-header [run 36906281900](https://github.com/maelys-dev/maelys-datalog/actions/runs/36906281900)
+  measured `a279e6a30b186b1bc9071a225dc15e341d59a51d`; its report SHA-256 is
+  `bc7965e2d7ef553895153a986b55afecc77a504e80ac999549315a16f8bf7ec6`.
+  Its positive control also passes. It retains 24 review rows against v0.17.0
+  and eleven against the anchor. Four complete-request rows require review,
+  each in one round only, including SMALL/default seven-integer convenience
+  p95 (+29.47/+0.39%). No complete-request row exceeds the null envelope in
+  both rounds of this run. Recurring input/query phase p95 alerts on
+  SMALL/Release seven-symbol prepared sessions reach +53.96/+16.19% and
+  +54.30/+29.92%; separately sampled phase loops do not attribute total latency.
+  Neither run replaces the other. All 6,754,272 CSV samples and 22,848 raw
+  process records across both reports were independently checked, reproducing
+  every comparison, control and classification. Details and pending decision
+  are in `docs/validation/v0.18-release-review.md`.
   The 0.17.0 decision does not approve these reports or the new wheel binary
-  configuration. Publication awaits review and a recorded maintainer decision.
+  configuration. Publication awaits a recorded maintainer decision.
 
 ## 0.17.0 — 2026-10-01
 
