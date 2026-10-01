@@ -7,6 +7,15 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+
+- Add the opt-in `maelys-datalog` command for domain and policy validation,
+  fingerprints, solving and explanations. Its strict domain JSON declaration
+  uses `maelys-json`; the command uses the installed consumer API and the
+  pinned `maelys-cli` framework. Add command schemas, product tests and a
+  separate CLI sanitizer target. This does not add a Homebrew formula or a
+  CLI binary to the SDK release archives.
+
 ## 0.16.0 — 2026-10-01
 
 Consumer API 2 and program ABI 2 remain unchanged. Backend ABI 7 is negotiated

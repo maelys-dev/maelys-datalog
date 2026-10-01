@@ -205,6 +205,29 @@ jobs:
         if: matrix.profile == 'LARGE'
         run: make -j4 -f Makefile.asan asan PROFILE=LARGE
 
+  cli:
+    name: CLI (${{ matrix.profile }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        profile: [SMALL, LARGE]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Materialize pinned CLI dependencies
+        run: sh scripts/checkout-dependencies.sh "$RUNNER_TEMP/dependencies" >>"$GITHUB_ENV"
+      - name: Verify command behavior and schemas
+        run: |
+          if [ '${{ matrix.profile }}' = LARGE ]; then
+            make -j4 cli-test conformance-check cli-installed-check \
+              BUILD_DIR=build/cli-large \
+              CFLAGS='-Wall -Wextra -g -I. -Iinclude -DMAELYS_DATALOG_PROFILE_LARGE'
+          else
+            make -j4 cli-test conformance-check cli-installed-check
+          fi
+      - name: Verify CLI with AddressSanitizer and UndefinedBehaviorSanitizer
+        run: make -j4 -f Makefile.asan asan-cli PROFILE=${{ matrix.profile }}
+
   bench:
     name: Single-pass benchmark
     runs-on: ubuntu-latest

@@ -1,0 +1,5 @@
+role("Leela", "admin").
+% Authorization rights are flattened at policy compilation time.
+right("Leela", "billing:read").
+allow(U, R) :- right(U, R).
+can_deliver(U) :- allow(U, "billing:read"), request(U, "billing:read").

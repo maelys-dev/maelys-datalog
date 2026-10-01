@@ -1,0 +1,8 @@
+{
+  "policyFingerprint": "<fingerprint>",
+  "executionFingerprint": "<fingerprint>",
+  "predicate": "can_deliver",
+  "present": false,
+  "why": "false",
+  "document": "MAELYS-DATALOG-v2\ndocument=why-false\nstatus=complete\nquery=\"can_deliver\"(\"Mallory\") origin=none\nsummary=none\nlimit-hits=none candidate-rules=2 substitutions=0 diagnostics=2 filter-cost=0\ndiagnostic=0 rule=1 depth=1 target=\"allow\"(\"Mallory\",\"billing:read\")\nbinding=17 value=\"billing:read\"\nbinding=20 value=\"Mallory\"\nobstacle=positive-no-match body=0 origin=none pattern=\"right\"(\"Mallory\",\"billing:read\")\ndiagnostic=1 rule=2 depth=0 target=\"can_deliver\"(\"Mallory\")\nbinding=20 value=\"Mallory\"\nobstacle=positive-no-match body=0 origin=none pattern=\"allow\"(\"Mallory\",\"billing:read\")\n"
+}

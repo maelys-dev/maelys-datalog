@@ -1,0 +1,12 @@
+{
+  "format": "maelys-datalog-domain-v1",
+  "name": "rbac_cli",
+  "predicates": [
+    {"name": "role", "arity": 2, "role": "policy_fact"},
+    {"name": "right", "arity": 2, "role": "policy_fact"},
+    {"name": "request", "arity": 2, "role": "edb"},
+    {"name": "allow", "arity": 2, "role": "idb", "query": true},
+    {"name": "can_deliver", "arity": 1, "role": "idb", "query": true}
+  ],
+  "atoms": ["Leela", "admin", "billing:read"]
+}

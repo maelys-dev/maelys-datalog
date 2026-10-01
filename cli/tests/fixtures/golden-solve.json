@@ -1,0 +1,35 @@
+{
+  "policyFingerprint": "<fingerprint>",
+  "executionFingerprint": "<fingerprint>",
+  "derivedFactCount": 2,
+  "queries": [
+    {
+      "predicate": "allow",
+      "arity": 2,
+      "facts": [
+        [
+          {
+            "kind": "symbol",
+            "value": "Leela"
+          },
+          {
+            "kind": "symbol",
+            "value": "billing:read"
+          }
+        ]
+      ]
+    },
+    {
+      "predicate": "can_deliver",
+      "arity": 1,
+      "facts": [
+        [
+          {
+            "kind": "symbol",
+            "value": "Leela"
+          }
+        ]
+      ]
+    }
+  ]
+}

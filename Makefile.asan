@@ -145,5 +145,64 @@ asan:
 	$(MAKE) -f Makefile.asan ASAN_RUN_ON_BUILD=0 asan-build
 	@set -e; for b in $(ASAN_TEST_SRCS:tests/%.c=$(BUILD_DIR)/%); do echo "--- $$b ---"; $(ASAN_ENV) ./$$b; done
 
+# CLI sanitizers are an independent target and build directory. The historical
+# `asan` inventory above never needs the three CLI dependency checkouts.
+CLI_ASAN_ROOT = build/asan-cli-$(PROFILE)
+CLI_DEPS = $(MAELYS_DEPENDENCIES_DIR)
+CLI_ASAN_LIB = $(abspath $(BUILD_DIR))/deps/maelys-cli/lib/libmaelys_cli.a
+JSON_ASAN_LIB = $(abspath $(BUILD_DIR))/deps/maelys-json/lib/libmaelys-json.a
+CLI_ASAN_HEADERS = $(BUILD_DIR)/generated/datalog_schemas.h
+CLI_ASAN_SCHEMA = $(BUILD_DIR)/generated/datalog_schemas.c
+CLI_ASAN_OBJECTS = $(patsubst cli/%.c,$(BUILD_DIR)/cli/%.o,cli/main.c cli/domain.c cli/facts.c)
+CLI_ASAN_BINARY = $(BUILD_DIR)/bin/maelys-datalog
+CLI_ASAN_CFLAGS = $(ASAN_CFLAGS) -std=c11 -Werror \
+	-I$(CLI_DEPS)/maelys-cli/include -I$(CLI_DEPS)/maelys-json/include \
+	-I$(BUILD_DIR)/generated -DDATALOG_CLI_VERSION='"$(shell cat VERSION)"'
+
+.PHONY: asan-cli asan-cli-run
+asan-cli:
+	@test -n "$(MAELYS_DEPENDENCIES_DIR)" || { \
+		echo "MAELYS_DEPENDENCIES_DIR is unset; run 'sh scripts/checkout-dependencies.sh DIR' and export the line it prints" >&2; exit 1; }
+	$(MAKE) -f Makefile.asan BUILD_DIR=$(CLI_ASAN_ROOT) PROFILE=$(PROFILE) asan-cli-run
+
+$(CLI_ASAN_LIB):
+	$(MAKE) -C $(CLI_DEPS)/maelys-cli CPPFLAGS= BUILD=$(abspath $(BUILD_DIR))/deps/maelys-cli \
+		CFLAGS='-O1 -g $(ASAN_FLAGS)' LDFLAGS='$(ASAN_FLAGS)' $@
+
+$(JSON_ASAN_LIB):
+	$(MAKE) -C $(CLI_DEPS)/maelys-json CPPFLAGS= BUILD=$(abspath $(BUILD_DIR))/deps/maelys-json \
+		CFLAGS='-O1 -g $(ASAN_FLAGS)' LDFLAGS='$(ASAN_FLAGS)' $@
+
+$(CLI_ASAN_HEADERS): cli/schemas/check.json cli/schemas/fingerprint.json cli/schemas/solve.json cli/schemas/explain.json | $(CLI_ASAN_LIB)
+	@mkdir -p $(dir $@)
+	$(CLI_DEPS)/maelys-cli/tools/maelys-cli-embed --header \
+		datalog_check_schema=cli/schemas/check.json \
+		datalog_explain_schema=cli/schemas/explain.json \
+		datalog_fingerprint_schema=cli/schemas/fingerprint.json \
+		datalog_solve_schema=cli/schemas/solve.json > $@
+
+$(CLI_ASAN_SCHEMA): cli/schemas/check.json cli/schemas/fingerprint.json cli/schemas/solve.json cli/schemas/explain.json | $(CLI_ASAN_LIB)
+	@mkdir -p $(dir $@)
+	$(CLI_DEPS)/maelys-cli/tools/maelys-cli-embed \
+		datalog_check_schema=cli/schemas/check.json \
+		datalog_explain_schema=cli/schemas/explain.json \
+		datalog_fingerprint_schema=cli/schemas/fingerprint.json \
+		datalog_solve_schema=cli/schemas/solve.json > $@
+
+$(BUILD_DIR)/cli/%.o: cli/%.c cli/reader.h $(CLI_ASAN_HEADERS) | $(CLI_ASAN_LIB) $(JSON_ASAN_LIB)
+	@mkdir -p $(dir $@)
+	$(CC) $(CLI_ASAN_CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/cli/datalog_schemas.o: $(CLI_ASAN_SCHEMA)
+	@mkdir -p $(dir $@)
+	$(CC) $(CLI_ASAN_CFLAGS) -c $< -o $@
+
+$(CLI_ASAN_BINARY): $(CLI_ASAN_OBJECTS) $(BUILD_DIR)/cli/datalog_schemas.o $(ASAN_OBJS) $(CLI_ASAN_LIB) $(JSON_ASAN_LIB)
+	@mkdir -p $(dir $@)
+	$(CC) $(ASAN_FLAGS) $^ -o $@
+
+asan-cli-run: $(CLI_ASAN_BINARY)
+	$(ASAN_ENV) python3 cli/tests/test_cli.py $(abspath $(CLI_ASAN_BINARY)) $(CLI_DEPS)/agent-cli-spec
+
 clean:
 	rm -rf $(BUILD_DIR)

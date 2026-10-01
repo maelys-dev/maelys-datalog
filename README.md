@@ -29,6 +29,38 @@ The solver does not allocate heap memory while evaluating rules. A successful
 solve creates one caller-owned result object that must be released through the
 public API.
 
+## Command line
+
+The opt-in C11 command builds with `make all` after the pinned dependency
+checkouts have been materialized by `sh scripts/checkout-dependencies.sh DIR`
+and its printed `MAELYS_DEPENDENCIES_DIR` has been exported. Plain `make`
+still builds the library. The binary is `build/bin/maelys-datalog`.
+
+```sh
+build/bin/maelys-datalog check --domain cli/tests/fixtures/rbac.domain.json \
+  cli/tests/fixtures/rbac.dl --format json
+build/bin/maelys-datalog solve --domain cli/tests/fixtures/rbac.domain.json \
+  --facts cli/tests/fixtures/rbac.facts.dl cli/tests/fixtures/rbac.dl --format json
+build/bin/maelys-datalog explain --domain cli/tests/fixtures/rbac.domain.json \
+  --facts cli/tests/fixtures/rbac.facts.dl --why false \
+  cli/tests/fixtures/rbac.dl can_deliver '"Mallory"' --format json
+```
+
+`check` accepts an inline policy or `--manifest FILE`; manifest checks can
+repeat `--domain` for policies in several domains. `fingerprint` returns the
+policy and execution identities. `solve` enumerates declared query predicates
+by default, or selected `--query PRED[/ARITY]` values, in the engine's order.
+`explain` returns the complete native MAELYS-DATALOG-v2 document as a JSON
+string. A rejected policy or domain contract under `check` exits 2 with a
+valid report; a negative `solve` decision still exits 0. Input, I/O and
+internal failures exit 1. See the [domain declaration specification](docs/specifications/maelys-datalog-domain-v1.md).
+
+Integers remain exact JSON decimal numbers, including both int64 limits;
+JavaScript clients should parse them with a precision-preserving reader,
+because ordinary `JSON.parse` numbers lose precision above 2^53. The command
+allocates memory; its allocations are outside the engine's allocation
+guarantees. The CLI has no formula or binary in release SDK archives yet.
+
 ## Count values per group (0.6.0)
 
 Register the ordinary predicates in your domain, then use the same language

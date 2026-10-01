@@ -1,0 +1,4 @@
+% one permitted request and one refused request
+request("Leela", "billing:read").
+/* The operation is deliberately absent from the policy's rights. */
+request("Mallory", "billing:write").

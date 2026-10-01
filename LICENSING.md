@@ -61,6 +61,10 @@ for software:
 Changing the specification's license removes the patent grant MPL-2.0 carried
 over its text. The engine's own code stays MPL-2.0, with that grant intact.
 
+The normative [`maelys-datalog-domain-v1`](docs/specifications/maelys-datalog-domain-v1.md)
+JSON declaration specification is also CC-BY-4.0. Its examples may be copied
+into implementations; the engine and CLI source remain MPL-2.0.
+
 ## SDK templates: MIT
 
 The copyable extension starters under `sdk/templates/` carry
