@@ -31,7 +31,7 @@ jobs:
       linux_packages: build-essential dpkg-dev file rpm clang jq cmake python3 binutils curl
       macos_packages: cmake python@3.12
       targets: '[{"target": "linux-x86_64"}, {"target": "linux-arm64"}, {"target": "macos-arm64"}, {"target": "wasm32", "runner": "ubuntu-26.04"}]'
-      manifest_patterns: '*.tar.gz *.deb *.rpm release-receipt-*.json'
+      manifest_patterns: '*.tar.gz *.deb *.rpm release-receipt-*.json *.whl'
 
   channel-npm-javascript:
     needs: release

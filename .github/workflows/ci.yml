@@ -295,6 +295,45 @@ jobs:
           path: dist/
           retention-days: 14
 
+  python-wheels:
+    name: Python wheel (${{ matrix.target }}, CPython ${{ matrix.python }})
+    needs: javascript-release
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.10', '3.11', '3.12', '3.13', '3.14']
+        os: [ubuntu-24.04, ubuntu-24.04-arm, macos-15]
+        include:
+          - { target: linux-x86_64, os: ubuntu-24.04 }
+          - { target: linux-arm64, os: ubuntu-24.04-arm }
+          - { target: macos-arm64, os: macos-15 }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: javascript-release-${{ matrix.target }}
+          path: build/python-wheel-artifacts
+      - name: Install pinned verification tools
+        run: |
+          python - <<'PY'
+          import json, pathlib, platform
+          p=json.load(open('tools/python-wheel-build.json'))
+          requirements=p['requirements'] + ([p['auditwheel']] if platform.system()=='Linux' else [])
+          pathlib.Path('build/wheel-tools.txt').write_text('\n'.join(requirements)+'\n')
+          PY
+          python -m pip install -r build/wheel-tools.txt
+      - name: Verify wheel rejection controls
+        run: python -m unittest discover -s tests/tooling -p test_python_wheels.py -v
+      - name: Consume the built wheel in fresh environments, both profiles
+        run: |
+          wheels=(build/python-wheel-artifacts/*.whl)
+          test "${#wheels[@]}" -eq 1
+          python tools/check_python_wheel.py "${wheels[0]}"
+
   javascript-parity:
     name: JavaScript native, WASM, Python and browser parity
     runs-on: ubuntu-24.04

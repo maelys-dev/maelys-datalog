@@ -1,0 +1,13 @@
+{
+  "pythonMinimum": "3.10",
+  "pythonMaximumExclusive": "3.15",
+  "pythonVersions": ["3.10", "3.11", "3.12", "3.13", "3.14"],
+  "macosMinimum": "13.0",
+  "linuxGlibcMaximum": "2.28",
+  "requirements": ["cffi==2.1.1", "setuptools==84.0.0", "wheel==0.48.0", "packaging==26.3", "abi3audit==0.0.26", "pytest==9.1.1"],
+  "auditwheel": "auditwheel==6.8.2",
+  "images": {
+    "linux-x86_64": "quay.io/pypa/manylinux_2_28_x86_64@sha256:c2261579b9c2e5d45aa93312f73e2a302182e3e977b558581a1838d6fed3d8e6",
+    "linux-arm64": "quay.io/pypa/manylinux_2_28_aarch64@sha256:acc4e63610fef1da3d687322793665205415c2b22c0d2e403f1a44eb834d63fc"
+  }
+}

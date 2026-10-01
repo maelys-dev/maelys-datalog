@@ -2,7 +2,8 @@
 #
 # Build and package the release artifacts of maelys-datalog for ONE target:
 #   - linux-x86_64, linux-arm64, macos-arm64 : lib/libmaelys_datalog.a + the
-#     public headers plus a common JavaScript archive with both native profiles
+#     public headers, a common JavaScript archive and a Python wheel,
+#     each binding with both native profiles
 #   - wasm32 : one common JavaScript archive with both WASM profiles
 #
 # One command, used both locally and by the build job of maelys-release,
@@ -180,6 +181,24 @@ COPYFILE_DISABLE=1 tar -czf "$dist/$js_name" -C "$js_stage/package" .
 artifacts+=("$js_name")
 rm -rf -- "$js_stage"
 trap - EXIT
+
+# Precompiled Python wheels are ordinary release assets, not a registry channel.
+# The builder validates the installed archive in both profiles before returning.
+if [ "$target" != wasm32 ]; then
+  python_stage="$(mktemp -d)"
+  trap 'rm -rf -- "$python_stage"' EXIT
+  bash tools/build_python_wheel.sh "$target" "$python_stage"
+  wheels=("$python_stage"/*.whl)
+  [ "${#wheels[@]}" -eq 1 ] && [ -f "${wheels[0]}" ] || {
+    echo 'error: exactly one Python wheel required per native target' >&2; exit 1;
+  }
+  wheel_name="$(basename "${wheels[0]}")"
+  cp "${wheels[0]}" "$dist/$wheel_name"
+  ( cd "$dist" && sha256 "$wheel_name" > "$wheel_name.sha256" )
+  artifacts+=("$wheel_name")
+  rm -rf -- "$python_stage"
+  trap - EXIT
+fi
 
 # ---------------------------------------------------------------------------
 # Release receipt (D3): one per target, immutable, listed by SHA256SUMS.

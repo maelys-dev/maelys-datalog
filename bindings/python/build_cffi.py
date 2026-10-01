@@ -15,24 +15,27 @@ from cffi import FFI
 PACKAGE = Path(__file__).resolve().parent / "maelys_datalog"
 
 
-def build(sdk_prefix: Path) -> None:
+def build(sdk_prefix: Path, *, package: Path = PACKAGE,
+          module: str = "maelys_datalog._maelys_cffi",
+          static_abi3: bool = False, work: Path | None = None) -> None:
     header = sdk_prefix / "include/maelys/datalog.h"
     if not header.is_file():
         raise SystemExit(f"Missing public facade header: {header}")
     suffix = ".dylib" if platform.system() == "Darwin" else ".so"
-    library_name = "libmaelys_datalog_shared" + suffix
+    library_name = "libmaelys_datalog.a" if static_abi3 else "libmaelys_datalog_shared" + suffix
     candidates = [sdk_prefix / directory / library_name for directory in ("lib", "lib64")]
     libraries = [path for path in candidates if path.is_file()]
     if len(libraries) != 1:
         raise SystemExit(f"Expected one installed {library_name} in {sdk_prefix}/lib or lib64")
     library = libraries[0]
-    PACKAGE.mkdir(parents=True, exist_ok=True)
+    package.mkdir(parents=True, exist_ok=True)
     # Replace the inode: overwriting a loaded Mach-O can leave stale signature
     # pages when testing SMALL/LARGE builds in successive Python processes.
-    with tempfile.TemporaryDirectory(prefix=".native-", dir=PACKAGE) as staging:
-        staged = Path(staging) / library_name
-        shutil.copy2(library, staged)
-        staged.replace(PACKAGE / library_name)
+    if not static_abi3:
+        with tempfile.TemporaryDirectory(prefix=".native-", dir=package) as staging:
+            staged = Path(staging) / library_name
+            shutil.copy2(library, staged)
+            staged.replace(package / library_name)
 
     builder = FFI()
     builder.cdef(
@@ -317,8 +320,20 @@ int maelys_datalog_result_explain_false_text(
 """
     )
     rpath = "-Wl,-rpath,@loader_path" if platform.system() == "Darwin" else "-Wl,-rpath,$ORIGIN"
+    linking = dict(library_dirs=[str(package)], libraries=["maelys_datalog_shared"],
+                   extra_link_args=[rpath])
+    if static_abi3:
+        # Only the wheel build opts in. The ordinary installed-shared-SDK
+        # consumer and its measurements retain their existing build path.
+        linking = dict(extra_objects=[str(library)], py_limited_api=True,
+                       define_macros=[("Py_LIMITED_API", "0x030A0000")],
+                       extra_compile_args=["-fvisibility=hidden"],
+                       extra_link_args=(["-Wl,-exported_symbol,_PyInit__maelys_cffi"]
+                                        if platform.system() == "Darwin" else
+                                        ["-Wl,--exclude-libs,ALL"]),
+                       libraries=[] if platform.system() == "Darwin" else ["dl", "pthread", "m"])
     builder.set_source(
-        "maelys_datalog._maelys_cffi",
+        module,
         "#include <maelys/datalog.h>\n"
         "#include <maelys/datalog_resources.h>\n"
         "#include <maelys/datalog_transactions.h>\n"
@@ -327,16 +342,19 @@ int maelys_datalog_result_explain_false_text(
         '#endif\n'
         '_Static_assert(MAELYS_DATALOG_PUBLIC_API_VERSION == 2u, "Consumer API 2 required");',
         include_dirs=[str(sdk_prefix / "include")],
-        library_dirs=[str(PACKAGE)],
-        libraries=["maelys_datalog_shared"],
-        extra_link_args=[rpath],
+        **linking,
     )
-    extension_suffix = sysconfig.get_config_var("EXT_SUFFIX") or ".so"
-    builder.compile(
-        tmpdir=str(Path(__file__).resolve().parent / "build"),
-        target=str(PACKAGE / ("_maelys_cffi" + extension_suffix)),
+    extension_suffix = ".abi3.so" if static_abi3 else sysconfig.get_config_var("EXT_SUFFIX") or ".so"
+    expected = package / ("_maelys_cffi" + extension_suffix)
+    compiled = Path(builder.compile(
+        tmpdir=str(work or Path(__file__).resolve().parent / "build"),
+        target=str(expected),
         verbose=True,
-    )
+    ))
+    # setuptools may choose its own limited-API suffix. Verify the compiled
+    # ABI separately; keep one canonical payload filename for the wheel.
+    if static_abi3 and compiled != expected:
+        compiled.replace(expected)
 
 
 if __name__ == "__main__":
