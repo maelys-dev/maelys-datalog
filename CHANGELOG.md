@@ -7,6 +7,20 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+
+- Precompiled Python wheels as GitHub Release assets for Linux x86_64/ARM64
+  (glibc 2.28+) and macOS ARM64 (13.0+), installable with pip from an asset URL
+  or file. One stable-ABI wheel per platform supports GIL CPython 3.10–3.14 and
+  embeds SMALL and LARGE Release/PIC engines, with SMALL selected by default.
+  The existing Python facade is unchanged; source builds keep their installed
+  shared-SDK path. No compiler or separate SDK is needed for wheel installation;
+  CFFI remains a runtime dependency. Both profiles are installed and tested,
+  symbols and ABI audited, and wheel bytes covered by target receipts,
+  SHA256SUMS and provenance. No PyPI channel or historical release modification.
+  This packaging change does not establish a performance gain or reuse a prior
+  Python release decision for the new binary configuration.
+
 ## 0.17.0 — 2026-10-01
 
 ### Added

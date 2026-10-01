@@ -17,6 +17,52 @@ extension descriptors are not part of its Python interface. The reference
 backend is selected by the native session API. Python/CFFI conversions and
 objects allocate; this is not a zero-malloc Python binding.
 
+## Install a precompiled release wheel
+
+Starting with the next release after 0.17.0, the GitHub Release assets include
+one `maelys_datalog-VERSION-cp310-abi3-PLATFORM.whl` per native platform.
+Download the wheel for your platform, keeping its filename, or copy its asset
+URL into `WHEEL_URL` and install it directly:
+
+```sh
+python3 -m venv .venv
+.venv/bin/python -m pip install --only-binary=:all: "$WHEEL_URL"
+# A downloaded .whl path works in place of "$WHEEL_URL".
+```
+
+Supported wheels: CPython 3.10–3.14 with the GIL, Linux x86_64/ARM64 with
+glibc 2.28 or newer, and macOS ARM64 13.0 or newer. PyPy, free-threaded Python,
+musl/Alpine, Windows and macOS Intel are not covered. The wheel filename and
+Python metadata make pip reject incompatible interpreters/platforms. Python's
+minor-version stable ABI (`abi3`) is audited and each declared CPython version
+installs the same wheel in CI. There is no install/import compilation, SDK
+search, download hook or fallback to another profile.
+
+Each wheel contains both SMALL and LARGE native engines, statically linked
+into isolated CFFI extensions. The existing `maelys_datalog` API is unchanged.
+SMALL is the default; select LARGE **before the first import**, once per
+interpreter:
+
+```sh
+MAELYS_DATALOG_PROFILE=large .venv/bin/python app.py
+```
+
+Changing the environment after import does not change the selected profile;
+loading the other private extension is refused. This keeps the existing
+one-profile-per-interpreter contract. The selector is specific to wheels;
+source builds still use their explicitly installed SDK profile.
+
+`cffi` remains a declared runtime dependency, which pip obtains as a binary
+wheel from its configured package index. For offline installation, download
+that dependency and its dependencies into a wheelhouse as well. The Maelys
+wheel itself is hosted on GitHub Releases; no PyPI account or package channel
+is needed. Release receipts, SHA256SUMS and provenance cover the `.whl` bytes.
+Historical releases, including 0.17.0, are not modified retroactively.
+
+The wheel builds fresh installed Release/PIC SDKs. This differs from the
+historical Debug native SDK archive and does not establish a performance gain.
+Python/CFFI conversions and objects still allocate.
+
 ## Fixed session capacities
 
 `ruleset.prepare(capacities=SessionCapacities(input_facts=16,
@@ -126,8 +172,9 @@ The SDK prefix must contain matching headers and library from one installation;
 `build_cffi.py` copies the installed shared library next to the Python module,
 using a fresh inode, and writes the extension into
 `bindings/python/maelys_datalog/`. Temporary C compilation files are under
-`bindings/python/build/`. This is a native source build, not a wheel publisher
-or a new package release mechanism.
+`bindings/python/build/`. This remains the native source-build path. The release
+wheel builder reuses the same CFFI declarations against installed static PIC
+SDKs, without changing the ordinary shared-SDK consumer or its measurements.
 
 CI uses `tools/check_python_binding.sh BUILD_DIR PYTHON small|large`. It installs
 into a fresh prefix, copies the Python package and tests outside the repository,

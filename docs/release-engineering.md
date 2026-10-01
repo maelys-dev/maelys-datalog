@@ -49,6 +49,7 @@ target on an Ubuntu runner, not a separate job.
 |---|---|---|
 | `maelys-datalog-X.Y.Z-<target>.tar.gz` | linux-x86_64, linux-arm64, macos-arm64 | `lib/libmaelys_datalog.a` (SMALL), `include/maelys/*.h`, SDK conformance kit/MIT starters and licenses under `share/maelys-datalog/`, `LICENSE`, `CHANGELOG.md`, `licenses/yyjson/LICENSE` |
 | `maelys-datalog-X.Y.Z-javascript-<target>.tar.gz` | all four targets | Common JS/TS sources plus SMALL and LARGE native prebuilds or WASM modules |
+| `maelys_datalog-X.Y.Z-cp310-abi3-<platform>.whl` | three native targets | Existing Python facade, wheel-only profile selector and two isolated, statically linked CFFI extensions |
 
 Native staging uses the `sdk` and `sdk-static` CMake install components;
 CMake is the only install list for public headers and SDK support files. The
@@ -73,9 +74,39 @@ index timestamp does not vary between installations. The previous environment
 is restored after that rule. No compiler or profile is inferred from
 objects left by another build.
 
-Every tarball ships with a `.sha256` sibling and a provenance attestation.
+Every archive, including a Python wheel, ships with a `.sha256` sibling and a provenance attestation.
 macOS Intel is intentionally not shipped (same policy as mcp-runtime).
 Windows is out of scope (untested toolchain, no CI runner budget for it).
+
+### Python wheel compatibility
+
+From the release after 0.17.0, each native target also produces a wheel from
+fresh installed SMALL and LARGE Release/PIC SDKs. The engine source and public
+API/ABI do not change; this binary configuration differs from the historical
+Debug SDK tarball. Only the selected profile is imported, once per interpreter
+(SMALL by default, `MAELYS_DATALOG_PROFILE=large` before import for LARGE).
+The original Python facade and CFFI declarations are reused without a second
+implementation. The source binding retains its installed shared-SDK path.
+
+`tools/python-wheel-build.json` pins the build/audit tools and immutable official
+manylinux_2_28 images for x86_64 and AArch64. macOS ARM64 targets 13.0. The
+`cp310-abi3` payload is audited with `abi3audit`; CPython 3.10–3.14 with the GIL
+installs the same platform wheel in CI. Free-threaded Python, PyPy, Windows,
+musl and macOS Intel are outside this matrix. Symbol/dependency audits enforce
+the OS floors and a single `PyInit__maelys_cffi` export per stripped extension;
+they do not claim execution on every oldest supported operating system.
+
+Ordinary installation/import requires neither a compiler nor a separately
+installed Maelys SDK. CFFI remains a binary runtime dependency obtained by pip
+from its configured index. Tests install and consume the archive outside the
+checkout in clean environments for both profiles. The build gate additionally
+compiles the source binding's two negative SDK admission controls using fresh
+installed SDKs. No install hook downloads or builds native code. The two private
+profile extensions refuse loading the opposite profile in the same interpreter.
+
+No Python registry channel is introduced: wheel hashes join the native target
+receipt and the socle's manifest/provenance. A candidate receipt is not proof
+of publication, and historical releases are not augmented retroactively.
 
 ## D2 — WASM reproducibility
 
@@ -198,7 +229,8 @@ channels.
 | GitHub Release tarballs + attestation | **yes** | the base layer |
 | npm `@maelys-dev/datalog` on **GitHub Packages** | **yes**, dist-tag `next` while `0.x` | Declared `[channels] npm-javascript github-packages`; assembled from the four receipt-bound release archives, published with `--ignore-scripts` by the tagged workflow after the release gate. Authenticated consumers need `read:packages`; provenance remains on the archive attestations. |
 | Homebrew tap (lib + header formula) | **no** (decided 2026-09-13) | the product is a static library and headers; the audience is narrow until a command exists. The formula the alpha mechanism had pushed, `maelys-datalog` at v0.1.0-alpha.3, was withdrawn from `maelys-dev/homebrew-tap` on that date rather than left three alpha versions behind. When a command exists, the formula returns under the socle's name, `packaging/homebrew/libmaelys-datalog.rb.in`, rendered and pushed by the socle's tap job — with a `make install PREFIX=` the formula can call |
-| PyPI wheels | **no** | cibuildwheel matrix is a dedicated cycle; PyPI is irreversible and the cffi API is not frozen. Immediate actions only: reserve the name, add `pyproject.toml` for editable installs |
+| Python wheels on GitHub Releases | **yes, from the release after 0.17.0** | ordinary receipt-bound assets in D1, installed by pip from a URL or file; no registry channel |
+| PyPI | **no** | no account, name reservation or publication required for direct wheel installation |
 
 **Channel rule (binding):** a channel exists only if it hangs off the tag
 ceremony and is fully automated inside the socle's `release.yml`, its

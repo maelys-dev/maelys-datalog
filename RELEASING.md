@@ -140,6 +140,7 @@ Per release, attached to the GitHub Release:
 |---|---|
 | `maelys-datalog-X.Y.Z-<target>.tar.gz` + `.sha256` for the three native targets | `package-release.sh <target>` — `lib/libmaelys_datalog.a`, the public headers, `LICENSE`, `licenses/yyjson/LICENSE`, `CHANGELOG.md`, the conformance kit |
 | `maelys-datalog-X.Y.Z-javascript-<target>.tar.gz` + `.sha256` for all four targets | Common package files plus both profiles of the target runtime |
+| `maelys_datalog-X.Y.Z-cp310-abi3-<platform>.whl` + `.sha256` for the three native targets | Existing Python binding with both statically linked native profiles; no SDK or compiler needed to install |
 | `release-receipt-<target>.json`, one per target | `package-release.sh`; immutable: name, version, tag, commit, date, target, `emsdk_version` (`null` on native targets), artifacts with their sha256 |
 | `SHA256SUMS` | the socle's publish job, over every archive and receipt |
 | `channel-npm-javascript.json` | the socle's channel job, after the npm publication succeeded |
@@ -171,6 +172,38 @@ registry read with the token — and stops there (not `npm publish
 its error text). Without the variable, on a held version, the script
 exits before `npm publish` and proves only the idempotent path; 0.3.0's npm
 channel failed on the other one with a green rehearsal.
+
+## The Python wheel assets
+
+The first release after 0.17.0 adds wheels to the ordinary GitHub Release,
+not to PyPI or a separate channel. Native packaging builds fresh installed
+SMALL/LARGE Release/PIC SDKs, audits the stable Python ABI and native OS
+dependencies, then installs the actual wheel into a fresh environment and runs
+both profiles' Python suites before writing its checksum and target receipt.
+CI downloads those same packaging outputs and repeats consumption on CPython
+3.10, 3.11, 3.12, 3.13 and 3.14. No compiler runs during ordinary wheel
+installation or import. Build-only negative SDK controls remain separate.
+
+The build inputs and container digests are in `tools/python-wheel-build.json`.
+Linux packaging requires Docker to run its native-architecture manylinux image;
+macOS packaging builds natively. To reproduce just a wheel locally:
+
+```sh
+bash tools/build_python_wheel.sh macos-arm64 /tmp/wheels
+# Or linux-x86_64 / linux-arm64 on the matching native Linux or Docker host.
+```
+
+The `.whl` is listed in `SHA256SUMS` through `[manifest]`, in the target's
+receipt and in provenance. Installation from its published asset URL is
+`python -m pip install --only-binary=:all: "$WHEEL_URL"`; pip also obtains the
+declared CFFI dependency from its configured index. Offline installation needs
+the dependency wheels too. See the [Python installation contract](bindings/python/README.md#install-a-precompiled-release-wheel)
+for supported interpreters, systems and profile selection.
+
+This new Release/static binary configuration does not inherit a performance
+approval from the previous shared-SDK binding. Follow the ordinary Python
+performance review before cutting its release; packaging tests prove behavior
+and compatibility, not speed. Published historical tags/assets are unchanged.
 
 ## The npm package
 
