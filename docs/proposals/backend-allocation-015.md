@@ -60,10 +60,14 @@ failed validation leaves the configuration unchanged.
 
 The corresponding normalized `session_allocation_resources_t` contains the
 unchanged effective resource record, finite cap and a session-bound host service.
-The full scalar policy and service descriptor are identical for requirements and
-prepare. Service calls are forbidden during requirements; H+B is not finalized
-until that phase finishes. Providers copy retained service members/scalars into
-their state, rather than retain the callback-scoped resource/descriptor pointers.
+The complete existing prefix and normalized scalar policy, including C, are
+identical for requirements and prepare. The new `allocation` member is NULL in
+requirements: H+B is not finalized and no session-bound service exists yet. In
+prepare it points to the initialized host service. This phase-specific borrowed
+handle is part of the new tail contract, not a change to any existing resource
+field; sizing cannot call or retain it. Providers copy retained service members/
+scalars into their state, rather than retain callback-scoped resource/descriptor
+pointers.
 The copied service context remains valid through final backend destruction and
 cleanup, including partial preparation. Raw caller callbacks are never exposed
 to the backend. No session getter exposes those callbacks to ordinary consumers.
@@ -179,6 +183,11 @@ internal heap state. No fit query can secretly increment an attempt counter.
 | Accepted result cleanup: destroy_result after commit | Never | Superseded or temporary blocks with no remaining reference/lease |
 | Explanations/query/enumeration | Never | Never |
 | Session destruction/failed prepare cleanup | Never | All remaining owned blocks |
+
+Successful preparation adopts its blocks when session initialization is accepted;
+no solve/commit callback is synthesized for it. If preparation or a later
+initialization check fails, failed-prepare destruction returns them all, including
+when no backend state was returned. No session is published.
 
 The ordinary growth sequence is acquire a new block during solve, construct a
 candidate while preserving the old block, install the candidate at commit and

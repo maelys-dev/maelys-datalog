@@ -94,8 +94,9 @@ typedef struct {
     sizeof(maelys_datalog_allocation_service_t)
 
 /* Existing normalized V1 resources stay at offset zero. Only elastic callers
- * receive this required tail. Requirements and prepare receive the same scalar
- * values and service descriptor; service operations are forbidden in sizing. */
+ * receive this required tail. Requirements and prepare receive the same prefix
+ * and scalar policy. allocation is NULL during requirements (no initialized
+ * session exists), then points to the session-bound service during prepare. */
 typedef struct {
     maelys_datalog_session_resources_t base;
     size_t execution_byte_cap;
