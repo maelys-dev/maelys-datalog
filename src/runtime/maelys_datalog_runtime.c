@@ -1,4 +1,5 @@
 /* SPDX-License-Identifier: MPL-2.0 */
+#include <maelys/datalog_explanations.h>
 #include "src/public/maelys_datalog_public_internal.h"
 #include "src/public/maelys_datalog_values_internal.h"
 #include "src/runtime/maelys_datalog_transaction_internal.h"
@@ -11,8 +12,8 @@
 #include "src/core/maelys_datalog_query_internal.h"
 #include "common/maelys_sha256.h"
 #include "maelys/datalog_resources.h"
-#include "maelys/datalog_transactions.h"
-#include "maelys/datalog_backend_transactions.h"
+#include "maelys/datalog_inputs.h"
+#include "maelys/datalog_backend.h"
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdarg.h>

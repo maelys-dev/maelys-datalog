@@ -1,4 +1,5 @@
 /* SPDX-License-Identifier: MIT */
+#include <maelys/datalog_module.h>
 #include "extension.h"
 #include <stdio.h>
 

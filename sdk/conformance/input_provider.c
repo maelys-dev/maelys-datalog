@@ -1,4 +1,5 @@
 /* SPDX-License-Identifier: MIT */
+#include <maelys/datalog_backend.h>
 #include "input_provider.h"
 #include <string.h>
 #include <stddef.h>

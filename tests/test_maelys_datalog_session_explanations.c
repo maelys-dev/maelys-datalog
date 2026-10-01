@@ -2,6 +2,7 @@
 /* White-box runtime test: instrument a canonical reference session's callback
  * after creation without pretending that a copied descriptor has a bound.
  * Link every other engine unit with allocation_guard, never a second runtime. */
+#include <maelys/datalog_backend.h>
 #include "tests/fixtures/allocation_guard.h"
 #include "src/runtime/maelys_datalog_runtime.c"
 #undef malloc

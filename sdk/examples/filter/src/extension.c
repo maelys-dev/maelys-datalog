@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: MPL-2.0 */
 /* Standalone SDK consumer: intentionally has no engine-internal includes. */
+#include <maelys/datalog_module.h>
 #include <maelys/datalog_extension.h>
 #include <string.h>
 

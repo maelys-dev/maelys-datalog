@@ -336,7 +336,7 @@ int maelys_datalog_result_explain_false_text(
         module,
         "#include <maelys/datalog.h>\n"
         "#include <maelys/datalog_resources.h>\n"
-        "#include <maelys/datalog_transactions.h>\n"
+        "#include <maelys/datalog_inputs.h>\n"
         '#if !defined(MAELYS_DATALOG_HAS_MANIFEST_BUFFER) || !MAELYS_DATALOG_HAS_MANIFEST_BUFFER\n'
         '#error "This CFFI surface requires the post-v0.13.0 manifest-buffer SDK"\n'
         '#endif\n'

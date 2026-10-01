@@ -3,7 +3,7 @@
 #define MAELYS_DATALOG_TYPES_H
 
 #include <stdbool.h>
-#include "maelys/datalog_details.h"
+#include "maelys/datalog.h"
 #include <stddef.h>
 #include <stdint.h>
 

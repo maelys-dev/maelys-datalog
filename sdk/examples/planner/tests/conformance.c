@@ -1,4 +1,5 @@
 /* SPDX-License-Identifier: MPL-2.0 */
+#include <maelys/datalog_module.h>
 #include "extension.h"
 #include "maelys_conformance.h"
 int main(void) {

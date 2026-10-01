@@ -3,7 +3,7 @@
 Backend ABI 5 preparation/acceptance ships in 0.11.0. This binding
 exposes no backend descriptors. The fixed-capacity API additionally uses the
 installed `<maelys/datalog_resources.h>` contract (0.14.0). Retained input uses the installed
-`<maelys/datalog_transactions.h>` contract (0.16.0); build this source binding
+`<maelys/datalog_inputs.h>` contract (0.16.0); build this source binding
 against its matching SDK, not an older library with consumer API 2 alone.
 
 `maelys_datalog` is the single Python binding. From the 0.10.0 migration onward,

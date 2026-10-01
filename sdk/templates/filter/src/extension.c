@@ -1,4 +1,5 @@
 /* SPDX-License-Identifier: MIT */
+#include <maelys/datalog_module.h>
 #include "extension.h"
 
 static maelys_datalog_status_t inspect_pattern(const unsigned char *pattern, size_t length)

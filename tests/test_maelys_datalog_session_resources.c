@@ -4,7 +4,7 @@
 #undef realloc
 #undef free
 #undef memset
-#include <maelys/datalog_advanced.h>
+#include <maelys/datalog_backend.h>
 #include <maelys/datalog_window.h>
 #include <stdio.h>
 #ifdef RESOURCE_ALLOCATION_TEST

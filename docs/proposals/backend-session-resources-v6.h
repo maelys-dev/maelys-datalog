@@ -5,9 +5,9 @@
 #define MAELYS_DATALOG_PROPOSED_SESSION_RESOURCES_V6_H
 #include <stddef.h>
 #include <stdint.h>
-#include <maelys/datalog_advanced.h>
+#include <maelys/datalog_backend.h>
 /* The reviewed declarations are now available in the installed SDK. Keep
- * this historical proposal compilable against both the old and new SDK. */
+ * this historical proposal compilable against the current SDK. */
 #ifndef MAELYS_DATALOG_RESOURCES_H
 #ifdef __cplusplus
 extern "C" {

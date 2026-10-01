@@ -102,7 +102,6 @@ typedef struct {
 } maelys_datalog_ir_rule_t;
 
 typedef struct maelys_datalog_program maelys_datalog_program_t;
-typedef struct maelys_datalog_program_builder maelys_datalog_program_builder_t;
 typedef struct {
     uint32_t abi_version;
     const char *policy_id;
@@ -130,33 +129,9 @@ maelys_datalog_program_fact(const maelys_datalog_program_t *, size_t, maelys_dat
 MAELYS_DATALOG_API maelys_datalog_status_t
 maelys_datalog_program_rule(const maelys_datalog_program_t *, size_t, maelys_datalog_ir_rule_t *);
 
-/* These are the only mutation operations given to a frontend. Inputs are
- * copied synchronously. The builder is callback-scoped; an error is sticky:
- * ignoring it cannot make a partially constructed program load successfully.
- * The domain is host-selected and cannot be extended by the frontend. */
-MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_program_add_fact(
-    maelys_datalog_program_builder_t *, const maelys_datalog_ir_atom_t *);
-MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_program_add_rule(
-    maelys_datalog_program_builder_t *, const maelys_datalog_ir_rule_t *);
 
-typedef struct {
-    uint32_t abi_version;
-    size_t struct_size;
-    const char *name;
-    const char *semantic_id;
-    maelys_datalog_status_t (*lower)(const char *, size_t, maelys_datalog_program_builder_t *,
-                                     maelys_datalog_diagnostic_t *);
-} maelys_datalog_frontend_t;
-
-/* Explicit per-load selection, not a mutable global grammar. Frontends are
- * trusted native code. They must not retain source/builder arguments or reenter
- * loading. Successful lowering is ALWAYS followed by core validation. */
-MAELYS_DATALOG_API const maelys_datalog_frontend_t *maelys_datalog_frontend_datalog(void);
-MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_policy_load_frontend(
-    const char *domain, const char *policy_id, const char *source, size_t source_length,
-    const maelys_datalog_frontend_t *, maelys_datalog_policy_t **,
-    maelys_datalog_diagnostic_t *);
-
+MAELYS_DATALOG_API maelys_datalog_status_t
+maelys_datalog_session_program(const maelys_datalog_session_t *, const maelys_datalog_program_t **);
 #ifdef __cplusplus
 }
 #endif

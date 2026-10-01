@@ -6,7 +6,7 @@
 #undef free
 #undef memset
 #include "maelys/datalog.h"
-#include "maelys/datalog_advanced.h"
+#include <maelys/datalog_backend.h>
 #include "src/core/maelys_datalog_solver.h"
 #include "src/core/maelys_datalog_domain_registry.h"
 #include "src/core/maelys_datalog_ruleset.h"

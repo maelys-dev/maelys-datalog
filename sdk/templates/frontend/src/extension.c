@@ -1,4 +1,5 @@
 /* SPDX-License-Identifier: MIT */
+#include <maelys/datalog_frontend.h>
 #include "extension.h"
 
 static maelys_datalog_status_t lower_source(

@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: MPL-2.0 */
 /* A fixed, complete one-rule projection, compiled against installed headers.
  * No private engine headers, allocation, delta callback, or retained input. */
+#include <maelys/datalog_backend.h>
 #include "host_delta_backend.h"
 #define NI __attribute__((noinline))
 static int delta_backend_equal(const char *, const char *);

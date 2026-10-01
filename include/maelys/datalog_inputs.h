@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: MPL-2.0 */
-#ifndef MAELYS_DATALOG_TRANSACTIONS_H
-#define MAELYS_DATALOG_TRANSACTIONS_H
+#ifndef MAELYS_DATALOG_INPUTS_H
+#define MAELYS_DATALOG_INPUTS_H
 #include <maelys/datalog.h>
 #ifdef __cplusplus
 extern "C" {

@@ -111,11 +111,12 @@ endif()
 install(TARGETS maelys_datalog_shared
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR} COMPONENT sdk-shared
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT sdk-shared)
-install(FILES include/maelys/datalog_advanced.h include/maelys/datalog_details.h include/maelys/datalog.h include/maelys/datalog_builders.h include/maelys/datalog_module.h
-    include/maelys/datalog_program.h include/maelys/datalog_backend.h include/maelys/datalog_extension.h
-    include/maelys/datalog_window.h include/maelys/datalog_resources.h
-    include/maelys/datalog_transactions.h
-    include/maelys/datalog_backend_transactions.h
+install(FILES include/maelys/datalog.h include/maelys/datalog_builders.h
+    include/maelys/datalog_window.h include/maelys/datalog_inputs.h
+    include/maelys/datalog_resources.h include/maelys/datalog_program.h
+    include/maelys/datalog_explanations.h include/maelys/datalog_extension.h
+    include/maelys/datalog_module.h include/maelys/datalog_frontend.h
+    include/maelys/datalog_backend.h
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/maelys COMPONENT sdk)
 install(FILES LICENSE DESTINATION ${CMAKE_INSTALL_DATADIR}/maelys-datalog COMPONENT sdk)
 install(FILES sdk/conformance/maelys_conformance.h sdk/conformance/README.md

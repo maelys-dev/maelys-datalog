@@ -2,6 +2,8 @@
 /* Small authorization DSL: permit "alice"
  * lowers to allow(X) :- candidate(X), exact_match(X, "alice").
  * This file is self-contained so the example can be copied outside the repo. */
+#include <maelys/datalog_module.h>
+#include <maelys/datalog_frontend.h>
 #include "extension.h"
 #include <stdio.h>
 #include <string.h>

@@ -1,4 +1,5 @@
 /* SPDX-License-Identifier: MPL-2.0 */
+#include <maelys/datalog_backend.h>
 #include "extension.h"
 #include "maelys_conformance.h"
 static maelys_datalog_fact_t pair(const char *predicate, const char *a, const char *b) {

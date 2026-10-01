@@ -1,3 +1,4 @@
+#include <maelys/datalog_frontend.h>
 #include "src/public/maelys_datalog_public_internal.h"
 #include "src/compiler/maelys_datalog_program_internal.h"
 

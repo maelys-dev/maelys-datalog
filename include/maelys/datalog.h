@@ -7,7 +7,72 @@
 
 #include <stddef.h>
 #include <stdint.h>
-#include "datalog_details.h"
+#define MAELYS_DATALOG_EXPLANATION_NO_STEP UINT16_MAX
+typedef enum {
+    MAELYS_DATALOG_EXPLANATION_PREMISE_POSITIVE_FACT = 1,
+    MAELYS_DATALOG_EXPLANATION_PREMISE_NEGATED_ABSENCE = 2,
+    MAELYS_DATALOG_EXPLANATION_PREMISE_COMPARISON_TRUE = 3,
+    MAELYS_DATALOG_EXPLANATION_PREMISE_FILTER_TRUE = 4,
+    MAELYS_DATALOG_EXPLANATION_PREMISE_COUNT = 5,
+    MAELYS_DATALOG_EXPLANATION_PREMISE_MIN = 6,
+    MAELYS_DATALOG_EXPLANATION_PREMISE_MAX = 7,
+    MAELYS_DATALOG_EXPLANATION_PREMISE_SUM = 8
+} maelys_datalog_explanation_premise_kind_t;
+
+typedef enum {
+    MAELYS_DATALOG_EXPLANATION_ORIGIN_POLICY_FACT = 1,
+    MAELYS_DATALOG_EXPLANATION_ORIGIN_EDB = 2,
+    MAELYS_DATALOG_EXPLANATION_ORIGIN_IDB = 3,
+    MAELYS_DATALOG_EXPLANATION_ORIGIN_NOT_APPLICABLE = 4
+} maelys_datalog_explanation_origin_t;
+
+typedef enum {
+    MAELYS_DATALOG_WHY_FALSE_STATUS_NOT_APPLICABLE = 1,
+    MAELYS_DATALOG_WHY_FALSE_STATUS_COMPLETE = 2,
+    MAELYS_DATALOG_WHY_FALSE_STATUS_TRUNCATED = 3
+} maelys_datalog_why_false_status_t;
+
+typedef enum {
+    MAELYS_DATALOG_WHY_FALSE_SUMMARY_NONE = 0,
+    MAELYS_DATALOG_WHY_FALSE_SUMMARY_NO_CANDIDATE_RULE = 1
+} maelys_datalog_why_false_summary_t;
+
+typedef enum {
+    MAELYS_DATALOG_WHY_FALSE_OBSTACLE_POSITIVE_NO_MATCH = 1,
+    MAELYS_DATALOG_WHY_FALSE_OBSTACLE_NEGATIVE_CONTRADICTED = 2,
+    MAELYS_DATALOG_WHY_FALSE_OBSTACLE_COMPARISON_FALSE = 3,
+    MAELYS_DATALOG_WHY_FALSE_OBSTACLE_RECURSIVE_NO_BASE_SUPPORT = 4,
+    MAELYS_DATALOG_WHY_FALSE_OBSTACLE_FILTER_FALSE = 5,
+    MAELYS_DATALOG_WHY_FALSE_OBSTACLE_COUNT_MISMATCH = 6,
+    MAELYS_DATALOG_WHY_FALSE_OBSTACLE_MIN_MISMATCH = 7,
+    MAELYS_DATALOG_WHY_FALSE_OBSTACLE_MAX_MISMATCH = 8,
+    MAELYS_DATALOG_WHY_FALSE_OBSTACLE_SUM_MISMATCH = 9,
+    MAELYS_DATALOG_WHY_FALSE_OBSTACLE_MIN_EMPTY = 10,
+    MAELYS_DATALOG_WHY_FALSE_OBSTACLE_MAX_EMPTY = 11
+} maelys_datalog_why_false_obstacle_kind_t;
+
+typedef enum {
+    MAELYS_DATALOG_WHY_FALSE_LIMIT_CANDIDATE_RULES = 1u << 0,
+    MAELYS_DATALOG_WHY_FALSE_LIMIT_SUBSTITUTIONS = 1u << 1,
+    MAELYS_DATALOG_WHY_FALSE_LIMIT_DEPTH = 1u << 2,
+    MAELYS_DATALOG_WHY_FALSE_LIMIT_DIAGNOSTICS = 1u << 3,
+    MAELYS_DATALOG_WHY_FALSE_LIMIT_FILTER_COST = 1u << 4
+} maelys_datalog_why_false_limit_t;
+
+typedef struct {
+    size_t evaluations;
+    size_t matches;
+    size_t non_matches;
+    size_t cost_units;
+} maelys_datalog_filter_statistics_t;
+
+typedef enum {
+    MAELYS_DATALOG_DECISION_DENY = 0,
+    MAELYS_DATALOG_DECISION_ALLOW = 1,
+    MAELYS_DATALOG_DECISION_REDUCED = 2,
+    MAELYS_DATALOG_DECISION_DENY_DEFAULT = 3,
+    MAELYS_DATALOG_DECISION_DENY_CONFLICT = 4
+} maelys_datalog_decision_t;
 
 /* Stable load diagnostic codes, shared with the legacy API. Append only. */
 typedef enum {
@@ -346,7 +411,7 @@ MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_policy_load_manifest(
  * sources are found by policy_id in bundle. All input bytes are borrowed for
  * the call only. Missing sources fail with NOT_FOUND; no partial set escapes.
  * manifest_length and src_len are authoritative (no NUL terminator required).
- * Existing advanced manifest_text retains its historical profile contract. */
+ * Existing manifest_text retains its historical profile contract. */
 typedef struct {
     const char *policy_id;
     const char *src;
@@ -357,6 +422,14 @@ MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_policy_load_manifest_b
     const maelys_datalog_policy_bundle_entry_t *bundle, size_t bundle_count,
     unsigned flags, maelys_datalog_policy_t **out_policy,
     maelys_datalog_diagnostic_t *out_diagnostic);
+
+/* Historical memory manifest contract: default_profile=MAELYS-DATALOG-v2.
+ * Sources are borrowed for the call. For file-loader/Python semantics, use the
+ * stable policy_load_manifest_buffer entry point (default_profile=enforce). */
+MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_policy_load_manifest_text(
+    const char *, size_t, const maelys_datalog_policy_bundle_entry_t *, size_t,
+    unsigned flags, maelys_datalog_policy_t **, maelys_datalog_diagnostic_t *);
+
 
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_policy_count(
     const maelys_datalog_policy_t *policy,
@@ -440,7 +513,7 @@ MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_session_config_free(
  * be changed, reused or freed immediately afterward, without affecting existing
  * sessions. Unsatisfied capabilities return UNSUPPORTED, never weaker execution.
  * On any failure a non-NULL out_session is cleared. Custom backend descriptors
- * remain in datalog_backend.h (session_create_ex). */
+ * remain in datalog_extension.h (session_create_ex). */
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_session_create_configured(
     const maelys_datalog_policy_t *policy, size_t policy_index,
     const maelys_datalog_session_config_t *config,
@@ -727,6 +800,13 @@ MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_prepared_explanation_w
     const maelys_datalog_prepared_explanation_t *, char *out_text, size_t capacity);
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_prepared_explanation_release(
     maelys_datalog_prepared_explanation_t *);
+
+/* Reference backend only; reports evaluations by solving, not Why-false search. */
+MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_result_filter_statistics(
+    const maelys_datalog_result_t *, maelys_datalog_filter_statistics_t *);
+/* Explicit facts of presence, no query side effect. Values must be 0 or 1. */
+MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_decision_from_presence(
+    int allow, int reduce, int deny, maelys_datalog_decision_t *);
 
 #ifdef __cplusplus
 }

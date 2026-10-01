@@ -5,7 +5,7 @@
  * Not installed or shipped in SDK archives since 0.10.0. Internal tests and
  * benchmarks may use it; application and extension code includes maelys/.
  * Use <maelys/datalog.h> and, for advanced operations on the same handles,
- * <maelys/datalog_advanced.h>. Implementation types are not an SDK contract.
+ * the role-specific <maelys/datalog_*.h> headers. Implementation types are not an SDK contract.
  */
 
 /* Version macros live in the generated header (single source: VERSION).

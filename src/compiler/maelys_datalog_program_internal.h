@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: MPL-2.0 */
 #ifndef MAELYS_DATALOG_PROGRAM_INTERNAL_H
 #define MAELYS_DATALOG_PROGRAM_INTERNAL_H
+#include <maelys/datalog_frontend.h>
 #include "maelys/datalog_backend.h"
 #include "src/core/maelys_datalog_ruleset.h"
 #include "src/core/maelys_datalog_diagnostic.h"

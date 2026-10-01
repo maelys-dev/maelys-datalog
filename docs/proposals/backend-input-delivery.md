@@ -5,7 +5,7 @@ Stage 3, based on the unmerged retained-input PR #152 at
 
 ## Negotiation and ownership
 
-`maelys/datalog_backend_transactions.h` defines a separately typed ABI 7
+`maelys/datalog_backend.h` defines a separately typed ABI 7
 descriptor and an explicit configuration setter. ABI 5/6 descriptors, registries
 and snapshot callbacks are unchanged. No language capability means delta input;
 no guessed descriptor tail, name-based upgrade or fallback is permitted. This

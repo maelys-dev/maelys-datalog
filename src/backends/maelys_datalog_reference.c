@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: MPL-2.0 */
 /* The reference backend borrows the runtime's prepared inputs. External
  * backends consume the same program and canonical facts through the public ABI. */
+#include <maelys/datalog_backend.h>
 #include "src/compiler/maelys_datalog_program_internal.h"
 #include "src/core/maelys_datalog_prepared_session_internal.h"
 #include "src/core/maelys_datalog_solver_internal.h"

@@ -1,5 +1,8 @@
 /* SPDX-License-Identifier: MPL-2.0 */
-#include "maelys/datalog_advanced.h"
+#include <maelys/datalog_explanations.h>
+#include <maelys/datalog_frontend.h>
+#include <maelys/datalog_module.h>
+#include <maelys/datalog_backend.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

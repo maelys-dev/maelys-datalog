@@ -1,4 +1,5 @@
 /* SPDX-License-Identifier: MPL-2.0 */
+#include <maelys/datalog_module.h>
 #include <maelys/datalog_extension.h>
 
 static maelys_datalog_status_t choose(const maelys_datalog_join_candidate_t *candidates,

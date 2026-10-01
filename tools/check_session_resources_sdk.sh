@@ -25,6 +25,7 @@ for linkage in static shared; do
 done
 cat > "$scratch/header.cpp" <<'EOF'
 #include <maelys/datalog_resources.h>
+#include <maelys/datalog_backend.h>
 #include <type_traits>
 static_assert(MAELYS_DATALOG_BACKEND_ABI_VERSION == 5u, "ABI 5 retained");
 static_assert(std::is_same<decltype(maelys_datalog_backend_t::solve),

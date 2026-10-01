@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: MPL-2.0 */
 /* Installed public SDK only; software counts, never a latency benchmark. */
-#include <maelys/datalog_transactions.h>
+#include <maelys/datalog_inputs.h>
 #ifdef INPUT_DELIVERY_BENCH
 #include "input_provider.h"
 #endif

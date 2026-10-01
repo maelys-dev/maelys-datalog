@@ -1,3 +1,4 @@
+#include <maelys/datalog_module.h>
 #include "src/core/maelys_datalog_ruleset.h"
 #include "src/compiler/maelys_datalog_program_internal.h"
 

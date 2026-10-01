@@ -245,16 +245,20 @@ class FacadeTest(unittest.TestCase):
         header = sdk / "include/maelys/datalog.h"
         exports = set(re.findall(r"MAELYS_DATALOG_API\s+[^;]+?\b(maelys_datalog_\w+)\s*\(",
                                  (header.read_text(encoding="utf-8") +
-                                  (sdk / "include/maelys/datalog_transactions.h").read_text(encoding="utf-8"))))
-        self.assertEqual(exports, {"maelys_datalog_" + name for name in coverage})
-        for name in exports:
+                                  (sdk / "include/maelys/datalog_inputs.h").read_text(encoding="utf-8"))))
+        # Moved from the former advanced header; this relocation does not add
+        # Python APIs or CFFI entry points for these existing native operations.
+        native_only = {"policy_load_manifest_text", "result_filter_statistics",
+                       "decision_from_presence"}
+        self.assertEqual(exports, {"maelys_datalog_" + name for name in coverage.keys() | native_only})
+        for name in {"maelys_datalog_" + name for name in coverage}:
             self.assertTrue(callable(getattr(binding.lib, name)), name)
 
     def test_bridge_depends_only_on_installed_consumer_resources(self):
         builder = Path(__file__).resolve().parents[2] / "bindings/python/build_cffi.py"
         source = builder.read_text(encoding="utf-8")
         self.assertEqual(re.findall(r"#include\s+[<\"]([^>\"]+)[>\"]", source),
-                         ["maelys/datalog.h", "maelys/datalog_resources.h", "maelys/datalog_transactions.h"])
+                         ["maelys/datalog.h", "maelys/datalog_resources.h", "maelys/datalog_inputs.h"])
         self.assertNotIn("MAELYS_DATALOG_BACKEND_ABI_VERSION", source)
         self.assertNotIn("maelys_datalog_session_options_t", source)
         self.assertNotIn("maelys_datalog_backend_v6_t", source)

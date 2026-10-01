@@ -5,6 +5,9 @@
  * Return 0 on success, 1 on a named contract failure. Callers supply fixtures
  * for their supported dialect/features; this does not prove arbitrary native
  * callbacks safe, bounded or semantically complete. */
+#include <maelys/datalog_module.h>
+#include <maelys/datalog_frontend.h>
+#include <maelys/datalog_backend.h>
 #include <maelys/datalog_extension.h>
 #include <stdio.h>
 #include <string.h>

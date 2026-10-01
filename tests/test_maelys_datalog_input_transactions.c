@@ -1,8 +1,7 @@
 /* SPDX-License-Identifier: MPL-2.0 */
 /* Public-only consumer: the oracle constructs fresh snapshots independently. */
-#include <maelys/datalog_transactions.h>
+#include <maelys/datalog_inputs.h>
 #include <maelys/datalog_backend.h>
-#include <maelys/datalog_advanced.h>
 #include <maelys/datalog_resources.h>
 #include <assert.h>
 #include <stdio.h>

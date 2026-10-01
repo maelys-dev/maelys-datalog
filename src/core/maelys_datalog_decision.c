@@ -1,5 +1,5 @@
 #include "src/core/maelys_datalog_decision.h"
-#include "maelys/datalog_advanced.h"
+#include <maelys/datalog.h>
 
 const char *maelys_datalog_decision_name(maelys_datalog_decision_t decision) {
     switch (decision) {

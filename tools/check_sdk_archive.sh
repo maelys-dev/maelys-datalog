@@ -95,12 +95,12 @@ cp "$root/tests/fixtures/sdk_profile.c" "$scratch/"
 
 # Mutation checks: fail early on the exact missing-header defect and on a
 # private-header leak, even if that private header would itself fail to compile.
-mv "$prefix/include/maelys/datalog_details.h" "$scratch/details.h"
+mv "$prefix/include/maelys/datalog_explanations.h" "$scratch/explanations.h"
 if bash "$root/tools/check_module_sdk.sh" --prefix "$prefix" --static-only > "$scratch/missing.log" 2>&1; then
-  echo 'FAIL: missing details header was accepted' >&2; exit 1
+  echo 'FAIL: missing explanations header was accepted' >&2; exit 1
 fi
-grep -q datalog_details.h "$scratch/missing.log"
-mv "$scratch/details.h" "$prefix/include/maelys/datalog_details.h"
+grep -q datalog_explanations.h "$scratch/missing.log"
+mv "$scratch/explanations.h" "$prefix/include/maelys/datalog_explanations.h"
 cp "$root/include/maelys_datalog.h" "$prefix/include/"
 if bash "$root/tools/check_module_sdk.sh" --prefix "$prefix" --static-only > "$scratch/private.log" 2>&1; then
   echo 'FAIL: private aggregation header was accepted' >&2; exit 1
@@ -117,7 +117,7 @@ with tarfile.open(sys.argv[1], "r:gz") as source, tarfile.open(sys.argv[2], "w:g
     duplicate = None
     for member in source:
         target.addfile(member, source.extractfile(member) if member.isfile() else None)
-        if member.name.endswith("/datalog_details.h"):
+        if member.name.endswith("/datalog_explanations.h"):
             duplicate = member
     assert duplicate is not None
     target.addfile(duplicate, source.extractfile(duplicate))
@@ -125,5 +125,5 @@ PY
 if check_raw_members "$scratch/duplicate.tar.gz" > "$scratch/duplicate.log" 2>&1; then
   echo 'FAIL: duplicate raw archive member was accepted' >&2; exit 1
 fi
-grep -q datalog_details.h "$scratch/duplicate.log"
+grep -q datalog_explanations.h "$scratch/duplicate.log"
 echo "SDK archive: install parity, external consumers, profile $limit, missing/private/duplicate member mutations PASS"

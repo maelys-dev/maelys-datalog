@@ -198,9 +198,9 @@ New integrations use the opaque, installed C API:
 #include <maelys/datalog.h>
 ```
 
-In 0.10.0, CMake installations and native SDK archives share the
-same public headers under `include/maelys/`. Advanced operations use
-`<maelys/datalog_advanced.h>` on the same opaque handles. The historical
+CMake installations and native SDK archives share eleven public headers under
+`include/maelys/`, organized for applications, integrators and component authors.
+See the [header map and source migration](docs/sdk-headers.md). The historical
 `maelys_datalog.h` umbrella, version-macro header and `src/`/`common/` headers
 are no longer distributed; they remain private to repository builds. There
 are no compatibility aliases for the concrete native representations.

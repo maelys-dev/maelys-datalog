@@ -63,7 +63,7 @@ done
 # Retired public headers and representative private includes must be absent,
 # not just unused by successful consumers. Inventory equality above also catches
 # a copied private file whose own dependencies would prevent it from compiling.
-for header in maelys/datalog_group_window.h maelys_datalog.h maelys_datalog_version.h src/core/maelys_datalog_types.h src/manifest/maelys_datalog_manifest.h common/maelys_errors.h; do
+for header in maelys/datalog_advanced.h maelys/datalog_details.h maelys/datalog_transactions.h maelys/datalog_backend_transactions.h maelys/datalog_group_window.h maelys_datalog.h maelys_datalog_version.h src/core/maelys_datalog_types.h src/manifest/maelys_datalog_manifest.h common/maelys_errors.h; do
   for language in c c++; do
     compiler="$cc"; standard=c11
     if [[ "$language" == c++ ]]; then compiler="$cxx"; standard=c++17; fi
@@ -77,6 +77,7 @@ for header in maelys/datalog_group_window.h maelys_datalog.h maelys_datalog_vers
   done
 done
 echo 'SDK boundary: public inventory matches; legacy/private includes rejected'
+python3 "$root/tools/check_sdk_headers.py" "$prefix"
 "$cxx" -std=c++17 -Wall -Wextra -Werror -pedantic-errors -I"$prefix/include" \
   -fsyntax-only cpp_fact_builders.cpp
 "$cc" "${flags[@]}" -Wvla -pedantic-errors explanation_storage.c -o storage-c
