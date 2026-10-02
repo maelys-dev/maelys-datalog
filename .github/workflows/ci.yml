@@ -70,6 +70,8 @@ jobs:
         run: |
           python3 tools/check_backend_allocation_mutations.py --profile SMALL --output "$RUNNER_TEMP/backend-allocation-small"
           python3 tools/check_backend_allocation_mutations.py --profile LARGE --output "$RUNNER_TEMP/backend-allocation-large"
+          python3 tools/check_backend_allocation_mutations.py --windows --profile SMALL --output "$RUNNER_TEMP/backend-allocation-windows-small"
+          python3 tools/check_backend_allocation_mutations.py --windows --profile LARGE --output "$RUNNER_TEMP/backend-allocation-windows-large"
 
       - name: Check idle-session storage negative controls and real unload
         if: runner.os == 'Linux'

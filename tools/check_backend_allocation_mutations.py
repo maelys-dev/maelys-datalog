@@ -29,15 +29,29 @@ MUTATIONS=[
     ("exact_fit_refused",ALLOCATION,"if (charge > a->cap-a->current)","if (charge >= a->cap-a->current)","exact_boundaries","initialize(&f,&d)"),
 ]
 
+WINDOW_MUTATIONS=[
+    ("window_unequal_caps_accepted","src/runtime/maelys_datalog_window.c","if (strcmp(fa, fb))","if (0)","all","open_window(&w,f,grouped)==BAD"),
+    ("group_unequal_caps_accepted","src/runtime/maelys_datalog_group_window.c","if (strcmp(fa, fb))","if (0)","all","open_window(&w,f,grouped)==BAD"),
+    ("negated_blocker_ignored",PROVIDER,"*yes=0;break;","*yes=1;break;","all","a==b"),
+    ("old_scratch_not_restored",PROVIDER,"memset(s->workspace,0,128);\n    s->staged=0;","memset(s->workspace,1,128);\n    s->staged=0;","all","allocation_fixture_scratch_valid(f->provider)"),
+    ("abort_provisional_adopted",RUNTIME,
+     "if (s->allocation) s->allocation->phase=s->pending_commit?ALLOCATION_ABORT:ALLOCATION_CLEANUP;",
+     "if (s->allocation) { if(s->pending_commit) allocation_adopt(s->allocation); s->allocation->phase=s->pending_commit?ALLOCATION_ABORT:ALLOCATION_CLEANUP; }",
+     "all","before[0].stats.current_bytes!=before[1].stats.current_bytes"),
+    ("abi7_reads_empty_base",PROVIDER,"s->candidate_count=s->count;","s->candidate_count=0;","all","a==b"),
+]
+
 def main():
     p=argparse.ArgumentParser(description=__doc__);p.add_argument("--output",type=Path,required=True)
-    p.add_argument("--profile",choices=("SMALL","LARGE"),default="SMALL");args=p.parse_args();out=args.output.resolve()
+    p.add_argument("--windows",action="store_true");p.add_argument("--profile",choices=("SMALL","LARGE"),default="SMALL");args=p.parse_args();out=args.output.resolve()
     if ROOT==out or ROOT in out.parents:p.error("evidence must stay outside Git")
     out.mkdir(parents=True,exist_ok=True)
     sources=[]
     for part in ("core","standard","native"):
         sources += [s for s in (ROOT/f"build-support/{part}-sources.txt").read_text().splitlines() if s and not s.startswith("#")]
-    sources += [PROVIDER,TEST]
+    test_source="tests/test_maelys_datalog_allocation_windows.c" if args.windows else TEST
+    mutations=WINDOW_MUTATIONS if args.windows else MUTATIONS
+    sources += [PROVIDER,test_source]
     flags=[os.environ.get("CC","clang"),"-std=c11","-D_POSIX_C_SOURCE=200809L","-O1","-g","-UNDEBUG",
            "-Wall","-Wextra","-Werror","-Wno-unused-function","-Wno-unused-variable","-fsanitize=address,undefined",
            "-fno-sanitize-recover=all","-fno-omit-frame-pointer",f"-DMAELYS_DATALOG_PROFILE_{args.profile}"]
@@ -50,7 +64,7 @@ def main():
         obj=directory/(source.replace("/","_")+".o")
         actual=directory/source if (directory/source).exists() else ROOT/source
         command=[*flags,"-I"+str(directory),"-I.","-Iinclude","-Isdk/conformance"]
-        if source!=TEST:command += ["-include","tests/fixtures/allocation_guard.h"]
+        if source!=test_source:command += ["-include","tests/fixtures/allocation_guard.h"]
         run([*command,"-c",str(actual),"-o",str(obj)],obj.with_suffix(".log"));return obj
     with ThreadPoolExecutor(max_workers=4) as pool:objects=list(pool.map(compile_one,sources))
     def link_run(directory,unit=None,obj=None,test="all"):
@@ -59,7 +73,7 @@ def main():
         return run([str(binary),test],directory/"run.log",False)
     if link_run(out):raise RuntimeError("baseline failed")
     print("baseline PASS",flush=True);results=[]
-    for name,file,old,new,test,assertion in MUTATIONS:
+    for name,file,old,new,test,assertion in mutations:
         directory=out/name;target=directory/file;target.parent.mkdir(parents=True,exist_ok=True)
         before=(ROOT/file).read_text()
         if not before.count(old):raise RuntimeError(f"missing mutation anchor: {name}")

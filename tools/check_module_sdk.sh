@@ -44,6 +44,7 @@ cp "$root/tests/test_maelys_datalog_consumer_introspection.c" "$scratch/"
 cp "$root/tests/test_maelys_datalog_input_transactions.c" "$scratch/"
 cp "$root/tests/test_maelys_datalog_backend_inputs.c" "$scratch/"
 cp "$root/tests/test_maelys_datalog_backend_allocation.c" "$scratch/"
+cp "$root/tests/test_maelys_datalog_allocation_windows.c" "$scratch/"
 cp "$prefix/share/maelys-datalog/conformance/allocation_provider.c" "$prefix/share/maelys-datalog/conformance/allocation_provider.h" "$scratch/"
 cp "$root/sdk/conformance/input_provider.c" "$root/sdk/conformance/input_provider.h" "$scratch/"
 cp "$root/examples/multi_fact_window.c" "$scratch/"
@@ -162,6 +163,8 @@ for linkage in "${linkages[@]}"; do
   ./backend-inputs
   "$cc" "${flags[@]}" -UNDEBUG test_maelys_datalog_backend_allocation.c allocation_provider.o "${libs[@]}" -o backend-allocation
   ./backend-allocation
+  "$cc" "${flags[@]}" -UNDEBUG test_maelys_datalog_allocation_windows.c allocation_provider.o "${libs[@]}" -o allocation-windows
+  ./allocation-windows
   ./window-updates
   "$cc" "${flags[@]}" multi_fact_window.c "${libs[@]}" -o group-example
   ./group-example

@@ -65,8 +65,9 @@ MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_window_init(
 /* Expire the oldest event if full, append, then solve on the other session.
  * Publish the new window/result/next ID together, only after success. On ANY
  * failure all previously committed entries/text, result and next ID remain
- * valid; candidate scratch may change. External callback side effects cannot
- * be rolled back. Inputs are copied before returning and must not overlap the
+ * valid; candidate scratch may change. Arbitrary callback side effects cannot
+ * be rolled back; blocks acquired through the optional backend allocation
+ * service follow its strict ownership/charge rollback. Inputs are copied before returning and must not overlap the
  * window's storage. out_occurrence is optional and unchanged on failure.
  *
  * IDs never wrap or recycle. After INT32_MAX is committed, further pushes fail
@@ -138,8 +139,10 @@ MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_window_init_configured
  * facts, events, text, result and cursor. Candidate work can run before rejection.
  * On success all borrowed views/results are invalidated, even for equal input.
  * Inputs must not overlap the adapter arena; they are copied before returning.
- * No allocation/free, growth or fallback. Callback side effects are not rolled
- * back. text_usage includes BOTH static and event text; events/state count ONLY
+ * No adapter allocation/free, growth or fallback. An explicitly elastic
+ * backend may call the caller allocator; its new provisional blocks are released
+ * on abort and each session retains its own charge. Other callback side effects
+ * are not rolled back. text_usage includes BOTH static and event text; events/state count ONLY
  * events. All original lifetime, serialization and session contracts apply. */
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_window_replace_static(
     maelys_datalog_window_t *window, const maelys_datalog_fact_t *facts, size_t fact_count,
@@ -167,7 +170,8 @@ MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_window_static_facts(
  * Otherwise successful expiry invalidates views just like a push/replacement.
  * Recompute may fail even on removal (e.g. aggregate overflow or derivation
  * growth after negation). Retry or change context; no event is silently removed.
- * Unsupported when deadline storage was not enabled. No allocation or fallback.
+ * Unsupported when deadline storage was not enabled. No adapter allocation or fallback; an opted-in elastic backend may acquire
+ * caller blocks during recomputation.
  * After ID exhaustion, expire and replace_static remain usable. */
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_window_push_until(
     maelys_datalog_window_t *window, const char *predicate,
@@ -259,7 +263,8 @@ MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_group_window_init(
  * Inputs are copied before success and must not overlap the window's arena.
  * EVERY failure preserves committed groups/contributions/text/union, the result
  * and cursor, byte-for-byte. Candidate scratch/session and diagnostics may change.
- * External callback side effects cannot be rolled back. Reentry -> INVALID_STATE.
+ * Arbitrary callback side effects cannot be rolled back. The optional backend
+ * allocation service preserves committed ownership and charge on abort. Reentry -> INVALID_STATE.
  * A prepared explanation may block publication after candidate work; release it
  * and retry. No rejected group consumes an ID. IDs never wrap/recycle; exhaustion
  * -> PAYLOAD_TOO_LARGE. Optional out_group_id is unchanged on failure. */
