@@ -14,7 +14,7 @@ ROOT=Path(__file__).resolve().parents[1]
 def main():
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument('--old',type=Path,required=True);p.add_argument('--new',type=Path,required=True)
-    p.add_argument('--output',type=Path,required=True);a=p.parse_args()
+    p.add_argument('--output',type=Path,required=True);p.add_argument('--profile',choices=('SMALL','LARGE'),default='SMALL');a=p.parse_args()
     out=a.output.resolve();out.mkdir(parents=True,exist_ok=False)
     sdk={'old':a.old.resolve(),'new':a.new.resolve()};commands=[]
     env=dict(os.environ)
@@ -53,7 +53,8 @@ def main():
     identities=[]
     for line in (out/'consumer-run.log').read_text().splitlines():
         if not line.startswith('IDENTITY '):continue
-        _,program,name,semantic,profile,caps,work,E,D,S,T,mode,features,cap,abi,actual=line.split()
+        _,program,name,semantic,caps,work,E,D,S,T,mode,features,cap,abi,actual=line.split()
+        profile=a.profile
         legacy=sha(f'maelys-execution-v1\n{program}\n{name}\n{semantic}\n{caps}\n{work}\n{profile}\n')
         sized=sha(f'maelys-execution-v2\n{legacy}\n{E}\n{D}\n{S}\n{T}\n{mode}\n{features}\n')
         elastic=sha(f'maelys-execution-elastic-v1\n{sized}\n{cap}\n')

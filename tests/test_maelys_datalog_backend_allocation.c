@@ -376,13 +376,8 @@ static void identity_records(void) {
         OK(maelys_datalog_session_program(f.session,&p));OK(maelys_datalog_program_info(p,&info));
         OK(maelys_datalog_program_fingerprint(p,program));OK(maelys_datalog_session_execution_fingerprint(f.session,actual));
         OK(maelys_datalog_session_get_resources(f.session,&r));
-        printf("IDENTITY %s %s %s %s %llu 1048576 %zu %zu %zu %zu %u %llu %zu %d %s\n",
+        printf("IDENTITY %s %s %s %llu 1048576 %zu %zu %zu %zu %u %llu %zu %d %s\n",
             program,allocation_fixture_snapshot()->name,allocation_fixture_snapshot()->semantic_id,
-#ifdef MAELYS_DATALOG_PROFILE_LARGE
-            "LARGE",
-#else
-            "SMALL",
-#endif
             (unsigned long long)info.required_capabilities,r.input_facts,r.derived_facts,r.symbols,r.text_bytes,
             r.memory_mode,(unsigned long long)r.required_features,cap,abi?7:6,actual);
         close_fixture(&f);

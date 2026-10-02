@@ -20,4 +20,4 @@ cmake --build "$out/base-build" --parallel 2 >> "$out/base-build.log" 2>&1
 cmake --install "$out/base-build" >> "$out/base-build.log" 2>&1
 cmake --install "$build" --prefix "$out/new-sdk" > "$out/new-install.log" 2>&1
 python3 "$root/tools/check_backend_allocation_sdk.py" --old "$out/old-sdk" \
-    --new "$out/new-sdk" --output "$out/matrix"
+    --new "$out/new-sdk" --profile "$profile" --output "$out/matrix"
