@@ -45,6 +45,23 @@ def main():
             run([*cc,*objs,lib,'-o',binary],host+'-'+name+'-link');run([binary,*args],host+'-'+name+'-run')
     binary=out/'installed-consumer';run([*cc,consumer,provider,sdk['new']/'lib/libmaelys_datalog.a','-o',binary],'consumer-link')
     run([binary],'consumer-run')
+    def sha(s):return hashlib.sha256(s.encode('ascii')).hexdigest()
+    v2=sha('maelys-execution-v2\n'+'0'*64+'\n16\n32\n32\n2048\n1\n3\n')
+    assert v2=='d39ef61f5de8de1d50f94a3f7188c7bf239263bd6a848f1a8b2c59a97f52a014'
+    expected=['ecdbd2975aa7afaf0b6aee802af34f84c7460539e2b5b019fba10f6a5131b729','d371145e31a9c60bdd605efb2b51988263a3df3a1b8855f5e514772e3c95bed6']
+    assert [sha(f'maelys-execution-elastic-v1\n{v2}\n{c}\n') for c in (1000000,1000001)]==expected
+    identities=[]
+    for line in (out/'consumer-run.log').read_text().splitlines():
+        if not line.startswith('IDENTITY '):continue
+        _,program,name,semantic,profile,caps,work,E,D,S,T,mode,features,cap,abi,actual=line.split()
+        legacy=sha(f'maelys-execution-v1\n{program}\n{name}\n{semantic}\n{caps}\n{work}\n{profile}\n')
+        sized=sha(f'maelys-execution-v2\n{legacy}\n{E}\n{D}\n{S}\n{T}\n{mode}\n{features}\n')
+        elastic=sha(f'maelys-execution-elastic-v1\n{sized}\n{cap}\n')
+        wanted=sha(f'maelys-backend-input-v1/abi7\n{elastic}\n') if abi=='7' else elastic
+        assert actual==wanted,(abi,cap,actual,wanted)
+        identities.append(dict(abi=abi,cap=cap,actual=actual))
+    assert len(identities)==4
+    (out/'identities.json').write_text(json.dumps(dict(synthetic=expected,installed=identities),indent=2)+'\n')
     hashes={str(x):hashlib.sha256(x.read_bytes()).hexdigest() for x in [*out.glob('*.o'),*(v/'lib/libmaelys_datalog.a' for v in sdk.values())]}
     (out/'sha256.json').write_text(json.dumps(hashes,indent=2)+'\n')
     print('Installed allocation SDK matrix: old fixed callers/providers, new opt-ins and ABI 6/7 refusals, full consumer PASS')

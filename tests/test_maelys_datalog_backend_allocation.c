@@ -366,12 +366,35 @@ static void forbidden_service(void) {
     allocation_fixture_hook(a.provider,NULL,NULL);close_fixture(&a);close_fixture(&b);
 }
 
+/* Public records for an independently computed Python SHA-256 oracle, also
+ * run after separate consumer/provider compilation against installed SDKs. */
+static void identity_records(void) {
+    for(int abi=0;abi<2;++abi)for(size_t cap=1000000;cap<=1000001;++cap) {
+        fixture f;setup(&f,abi);request(&f,cap);OK(initialize(&f,NULL));
+        const maelys_datalog_program_t *p;maelys_datalog_program_info_t info;char program[65],actual[65];
+        maelys_datalog_session_resources_t r=MAELYS_DATALOG_RESOURCES_INIT;
+        OK(maelys_datalog_session_program(f.session,&p));OK(maelys_datalog_program_info(p,&info));
+        OK(maelys_datalog_program_fingerprint(p,program));OK(maelys_datalog_session_execution_fingerprint(f.session,actual));
+        OK(maelys_datalog_session_get_resources(f.session,&r));
+        printf("IDENTITY %s %s %s %s %llu 1048576 %zu %zu %zu %zu %u %llu %zu %d %s\n",
+            program,allocation_fixture_snapshot()->name,allocation_fixture_snapshot()->semantic_id,
+#ifdef MAELYS_DATALOG_PROFILE_LARGE
+            "LARGE",
+#else
+            "SMALL",
+#endif
+            (unsigned long long)info.required_capabilities,r.input_facts,r.derived_facts,r.symbols,r.text_bytes,
+            r.memory_mode,(unsigned long long)r.required_features,cap,abi?7:6,actual);
+        close_fixture(&f);
+    }
+}
+
 int main(int argc,char **argv) {
     const maelys_datalog_predicate_t predicates[]={MAELYS_DATALOG_EDB("seed",1),MAELYS_DATALOG_IDB_QUERY("seen",1)};
     const maelys_datalog_domain_t domain={"allocation",predicates,2,NULL,0};OK(maelys_datalog_domain_register(&domain));
     const char *source="seen(X) :- seed(X).";OK(maelys_datalog_policy_load_inline("allocation","p",source,strlen(source),&policy,NULL));
     const char *which=argc==2?argv[1]:"all";
 #define RUN(name) do {if(!strcmp(which,"all") || !strcmp(which,#name)){name();puts(#name " PASS");}} while(0)
-    RUN(admission);RUN(preparation_failures);RUN(inspection);RUN(telemetry_and_identity);RUN(failures_and_reuse);RUN(abi7);RUN(exact_boundaries);RUN(leases);RUN(forbidden_service);
+    RUN(identity_records);RUN(admission);RUN(preparation_failures);RUN(inspection);RUN(telemetry_and_identity);RUN(failures_and_reuse);RUN(abi7);RUN(exact_boundaries);RUN(leases);RUN(forbidden_service);
     OK(maelys_datalog_policy_free(policy));return 0;
 }
