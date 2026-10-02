@@ -7,6 +7,70 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## 0.19.0 — 2026-10-02
+
+### Added
+
+- Optional caller-backed allocation service for external ABI 6/7 providers,
+  negotiated explicitly with BACKEND_ELASTIC and CALLER_ALLOCATOR. The host
+  enforces a finite per-session byte cap over fixed reservations and outstanding
+  blocks, exposes read-only accounting, and restores provisional ownership on
+  rejection. Inspection is side-effect free; acquisition failure is sticky.
+  Commit makes no allocator calls and accepted cleanup releases superseded
+  blocks. Both window banks require equal caps but retain independent charges.
+- Public bounded conformance provider and separately compiled installed-SDK
+  compatibility tests, including strict abort, output growth on negative expiry,
+  result/explanation leases and allocation-failure injection. The reference
+  provider and default sessions remain FIXED; host quotas do not grow. ABI 5,
+  realloc, uncapped allocation, over-alignment and Python/JavaScript allocator
+  configuration are unsupported. No new backend ABI is introduced.
+
+The allocator contract remains corrigible before a compatibility freeze. An
+independent consumer prototype against the installed SDK is still required;
+public conformance does not qualify the private backend. Instruction evidence
+and the complete Python lifecycle report are separate evidence, reviewed below.
+
+The [hosted instruction evidence](https://github.com/maelys-dev/maelys-datalog/actions/runs/36982088120)
+for `0d1688e` has 176 scoped regions and 120 exact repeated comparisons. The
+ordinary 93-symbol native path adds 25/32 Ir per prepared request (LARGE/SMALL)
+and 45/52 in convenience mode, fully localized by function. These are nonzero
+software costs, not latency or Python results; see
+`docs/backend-allocation-evidence.md` for the report digest and limitations.
+
+### Validation and performance review
+
+- The four allocator PRs (#165–#168) qualify the amended contract, service,
+  real-window rollback and complete-operation software counts. Service and
+  window mutation suites kill twelve and six rebuilt mutants, respectively,
+  in both profiles under ASan/UBSan. Installed old/new callers and ABI 6/7
+  providers are compiled separately. The final reviewed tree is
+  `9d2ba267ea32ef07cda3b9918ce9b1945c29f325`; its runtime, SDK, bindings,
+  build and measurement harness match measured signed
+  `0d1688e74abbcba2c9c55ec5fdee3394c9f7fa71`.
+- David explicitly accepted the complete [Python report 36982091628](https://github.com/maelys-dev/maelys-datalog/actions/runs/36982091628)
+  for 0.19.0 on 2026-10-02 and authorized publication after checks and the
+  release gate. The measured commit is `0d1688e74abbcba2c9c55ec5fdee3394c9f7fa71`;
+  report SHA-256: `f164100cff19574ced46bace7787aa80e66da3d077dc597fc3aa07a66518410c`.
+  Both profiles and build modes pass the positive control in both rounds;
+  independent null controls are complete. Offline verification covers 11,424
+  process records, 3,377,136 CSV samples and 248 installed file hashes and
+  reproduces all classifications. The report remains `review_required`: 30
+  warm rows against v0.18.0 and nine against the immutable v0.11.1 anchor,
+  including six and one complete-request statistics. No complete-request
+  alert exceeds its matching null envelope in both rounds. Twelve cold
+  alerts remain informative; no observation is discarded.
+- The sole recurring warm phase against v0.18.0 is SMALL/Release,
+  93-integer convenience `close`, minimum +5.2848%/+3.6079%, against a
+  2.9727% A/A floor and 3.5424% null envelope. David accepts this
+  microsecond-scale phase observation and the report's remaining limits.
+  The native FIXED path **adds**, rather than saves, 25/32 instructions per
+  prepared request (LARGE/SMALL) and 45/52 in convenience mode. This corrects
+  the direction and range in the authorization's summary without changing
+  its acceptance. The binding runtime is unchanged; small software-count
+  differences do not establish equal cycles or attribute the timing alerts
+  to placement, the runner or a particular engine mechanism. No precompiled
+  wheel performance is claimed. See `docs/validation/v0.19-release-review.md`.
+
 ## 0.18.0 — 2026-10-01
 
 This release reorganizes the installed C SDK include paths. Consumer API 2,
