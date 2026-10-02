@@ -8,7 +8,9 @@ static maelys_datalog_session_resources_t resource_defaults(void) {
 }
 static maelys_datalog_status_t resource_prefix(uint32_t version, uint32_t mode, uint64_t features) {
     return version != MAELYS_DATALOG_RESOURCE_CONTRACT_VERSION ||
-        mode != MAELYS_DATALOG_MEMORY_FIXED || (features & ~MAELYS_DATALOG_RESOURCE_SUPPORTED_014)
+        (features & ~MAELYS_DATALOG_RESOURCE_SUPPORTED) ||
+        (mode == MAELYS_DATALOG_MEMORY_FIXED ? !!(features & MAELYS_DATALOG_RESOURCE_CALLER_ALLOCATOR) :
+         mode != MAELYS_DATALOG_MEMORY_BACKEND_ELASTIC || !(features & MAELYS_DATALOG_RESOURCE_CALLER_ALLOCATOR))
         ? MAELYS_DATALOG_STATUS_UNSUPPORTED : MAELYS_DATALOG_STATUS_OK;
 }
 #define REQUEST_END(member) (offsetof(maelys_datalog_session_resource_request_t, member) + \
@@ -28,6 +30,7 @@ static maelys_datalog_status_t resource_request_copy(
         n != REQUEST_END(derived_facts) && n != REQUEST_END(symbols) && n != REQUEST_END(text_bytes))
         return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
     out->required_features = in->required_features;
+    out->memory_mode = in->memory_mode;
     if (n == MAELYS_DATALOG_RESOURCE_REQUEST_PREFIX_SIZE) return MAELYS_DATALOG_STATUS_OK;
     if (in->capacity_mask & ~MAELYS_DATALOG_CAPACITY_ALL) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
     out->capacity_mask = in->capacity_mask;
@@ -47,7 +50,26 @@ maelys_datalog_status_t maelys_datalog_session_config_set_resources(
     if (!c) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
     maelys_datalog_session_resource_request_t copy;
     maelys_datalog_status_t rc = resource_request_copy(in, &copy);
-    if (!rc) c->resources = in ? copy : (maelys_datalog_session_resource_request_t){0};
+    maelys_datalog_caller_allocator_t allocator = MAELYS_DATALOG_CALLER_ALLOCATOR_INIT;
+    size_t cap=0;
+    if (!rc && copy.memory_mode == MAELYS_DATALOG_MEMORY_BACKEND_ELASTIC) {
+        if (in->struct_size < MAELYS_DATALOG_ALLOCATION_REQUEST_V1_SIZE)
+            return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
+        const maelys_datalog_session_allocation_request_t *q=(const void *)in;
+        const maelys_datalog_caller_allocator_t *a=q->allocator;
+        if (!q->execution_byte_cap || !a || a->struct_size < MAELYS_DATALOG_CALLER_ALLOCATOR_PREFIX_SIZE)
+            return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
+        rc=allocation_record(a->struct_size,MAELYS_DATALOG_CALLER_ALLOCATOR_PREFIX_SIZE,
+            sizeof(*a),a->contract_version,a->reserved,a->required_features);
+        if (rc == MAELYS_DATALOG_STATUS_STORAGE_TOO_SMALL) rc=MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
+        if (rc) return rc;
+        if (!a->acquire || !a->release) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
+        allocator=*a; allocator.struct_size=sizeof(allocator); cap=q->execution_byte_cap;
+    }
+    if (!rc) {
+        c->resources = in ? copy : (maelys_datalog_session_resource_request_t){0};
+        c->execution_byte_cap=cap; c->allocator=allocator;
+    }
     return rc;
 }
 static maelys_datalog_status_t resource_failure(maelys_datalog_diagnostic_t *d,
@@ -70,6 +92,7 @@ static maelys_datalog_status_t normalize_resources(const maelys_datalog_internal
     if (c && c->resources.struct_size) {
         const maelys_datalog_session_resource_request_t *q = &c->resources;
         out->required_features = q->required_features;
+        out->memory_mode = q->memory_mode;
 #define NORMALIZE(member, bit) do { if (q->capacity_mask & (bit)) { \
     if (q->member > out->member) return resource_failure(diag, MAELYS_DATALOG_STATUS_UNSUPPORTED, \
         #member, q->member, out->member); \
@@ -132,7 +155,7 @@ typedef struct {
     maelys_datalog_session_storage_plan_t public;
     maelys_datalog_session_resources_t resources;
     const maelys_datalog_backend_v6_t *backend;
-    size_t prepared, workspace, snapshot, canonical, emitted, provider, explanation, pool;
+    size_t prepared, workspace, snapshot, canonical, emitted, provider, explanation, pool, allocation;
     size_t provider_bytes, provider_alignment;
     uint64_t required, work_limit;
     int borrows, reference;
@@ -191,8 +214,14 @@ static maelys_datalog_status_t fixed_plan(const maelys_datalog_policy_t *policy,
     p->reference = p->backend == maelys_datalog_backend_reference_v6() ||
         (c && c->custom_backend && c->canonical_reference);
     if (c && c->explanation_kinds && !p->reference) return MAELYS_DATALOG_STATUS_UNSUPPORTED;
+    maelys_datalog_session_allocation_resources_t extended={.base=p->resources};
+    int elastic=p->resources.memory_mode==MAELYS_DATALOG_MEMORY_BACKEND_ELASTIC;
+    if (elastic && p->borrows) return MAELYS_DATALOG_STATUS_UNSUPPORTED;
+    if (elastic) {
+        extended.base.struct_size=sizeof(extended); extended.execution_byte_cap=c->execution_byte_cap;
+    }
     rc = maelys_datalog_callback_status(p->backend->storage_requirements(
-        &program, &p->resources, &p->provider_bytes, &p->provider_alignment));
+        &program, elastic?&extended.base:&p->resources, &p->provider_bytes, &p->provider_alignment));
     if (rc) return rc;
     if (!backend_alignment_valid(p->provider_alignment)) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
     p->public.required_features = p->resources.required_features;
@@ -206,6 +235,7 @@ static maelys_datalog_status_t fixed_plan(const maelys_datalog_policy_t *policy,
     if (!plan_part(p, count, width, align, &p->off, &p->public.host_bytes)) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT
     if (!plan_part(p, 1, sizeof(maelys_datalog_session_t), _Alignof(maelys_datalog_session_t),
         &ignored, &p->public.host_bytes)) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
+    if (elastic) { HOST(1,sizeof(allocation_state_t),_Alignof(allocation_state_t),allocation); }
     HOST(1, maelys_datalog_prepared_session_storage_bytes(p->resources.input_facts, p->pool),
         _Alignof(max_align_t), prepared);
     HOST(1, maelys_datalog_solve_workspace_bytes(p->resources.derived_facts, 1),
@@ -250,6 +280,9 @@ static maelys_datalog_status_t fixed_plan(const maelys_datalog_policy_t *policy,
     total += p->public.external_backend_bytes;
     if (p->public.external_explanation_bytes > SIZE_MAX - total) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
     p->public.total_execution_bytes = total + p->public.external_explanation_bytes;
+    if (elastic && p->public.total_execution_bytes > c->execution_byte_cap)
+        return allocation_diagnose(diag,MAELYS_DATALOG_STATUS_PAYLOAD_TOO_LARGE,
+            "backend-admit","execution_byte_cap",p->public.total_execution_bytes,c->execution_byte_cap);
     return MAELYS_DATALOG_STATUS_OK;
 }
 maelys_datalog_status_t maelys_datalog_session_storage_requirements_configured(
@@ -260,7 +293,7 @@ maelys_datalog_status_t maelys_datalog_session_storage_requirements_configured(
     if (!out || out->struct_size < MAELYS_DATALOG_SESSION_PLAN_PREFIX_SIZE)
         return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
     if (out->plan_version != MAELYS_DATALOG_SESSION_PLAN_VERSION ||
-        (out->required_features & ~MAELYS_DATALOG_RESOURCE_SUPPORTED_014)) return MAELYS_DATALOG_STATUS_UNSUPPORTED;
+        (out->required_features & ~MAELYS_DATALOG_RESOURCE_SUPPORTED)) return MAELYS_DATALOG_STATUS_UNSUPPORTED;
     if (out->reserved) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
     if (out->struct_size < sizeof(*out)) return MAELYS_DATALOG_STATUS_STORAGE_TOO_SMALL;
     fixed_plan_t p;
@@ -289,6 +322,39 @@ static void resource_session_unlink(maelys_datalog_session_t *s) {
 }
 static int resource_conflict(const void *a, size_t n, const void *b, size_t m) {
     return n && m && a && b && explanation_overlap(a,n,b,m);
+}
+/* arena_lock also protects block-list membership during cross-session range
+ * checks. Caller callbacks never run under that lock. */
+static int allocation_blocks_conflict(const allocation_state_t *a, const void *p, size_t n) {
+    if (a) for (const allocation_block_t *b=a->blocks;b;b=b->next)
+        if (resource_conflict(p,n,b,b->charge)) return 1;
+    return 0;
+}
+static int allocation_link(allocation_state_t *a, allocation_block_t *block, size_t charge, void *payload) {
+    int conflict=0;
+    lock_arenas(); lock_workspaces();
+    for (maelys_datalog_session_t *s=resource_sessions;s && !conflict;s=s->arena_next) {
+        conflict=resource_conflict(block,charge,s,s->arena_bytes) ||
+            resource_conflict(block,charge,s->backend_bytes_start,s->backend_bytes) ||
+            resource_conflict(block,charge,s->planned?s->reserved_explanation:s->explanation_storage,
+                s->planned?s->reserved_explanation_bytes:s->explanation_bytes) ||
+            retained_conflict(s->retained_inputs,block,charge) ||
+            allocation_blocks_conflict(s->allocation,block,charge);
+        if (!s->planned && s->inputs) conflict |=
+            resource_conflict(block,charge,s->inputs,maelys_datalog_prepared_session_storage_bytes(
+                s->resources.input_facts,s->inputs->pool_capacity)) ||
+            resource_conflict(block,charge,s->inputs->result_workspace,
+                maelys_datalog_solve_workspace_bytes(s->resources.derived_facts,1)) ||
+            resource_conflict(block,charge,s->inputs->prepared,sizeof(*s->inputs->prepared));
+    }
+    if (!conflict) {
+        *block=(allocation_block_t){a->blocks,payload,charge,1}; a->blocks=block;
+    }
+    unlock_workspaces(); unlock_arenas(); return !conflict;
+}
+static void allocation_unlink(allocation_state_t *a, allocation_block_t **entry) {
+    (void)a;
+    lock_arenas(); *entry=(*entry)->next; unlock_arenas();
 }
 static maelys_datalog_status_t fixed_init(void *arena, size_t bytes,
     const maelys_datalog_policy_t *policy, size_t index, const maelys_datalog_session_config_t *config,
@@ -328,6 +394,7 @@ static maelys_datalog_status_t fixed_init(void *arena, size_t bytes,
                     live->planned ? live->reserved_explanation : live->explanation_storage,
                     live->planned ? live->reserved_explanation_bytes : live->explanation_bytes) ||
                 retained_conflict(live->retained_inputs,ranges[i],sizes[i]) ||
+                allocation_blocks_conflict(live->allocation,ranges[i],sizes[i]) ||
                 (!live->planned && live->inputs && (resource_conflict(ranges[i],sizes[i],live->inputs,
                     maelys_datalog_prepared_session_storage_bytes(live->resources.input_facts,live->inputs->pool_capacity)) ||
                     resource_conflict(ranges[i],sizes[i],live->inputs->result_workspace,
@@ -337,6 +404,10 @@ static maelys_datalog_status_t fixed_init(void *arena, size_t bytes,
             }
     memset(s,0,sizeof(*s));
     s->planned = 1; s->arena_bytes = p->public.arena_bytes;
+    if (p->resources.memory_mode==MAELYS_DATALOG_MEMORY_BACKEND_ELASTIC) {
+        s->allocation=(void *)(base+p->allocation);
+        allocation_init(s->allocation,s,&config->allocator,config->execution_byte_cap,p->public.total_execution_bytes);
+    }
     s->backend_bytes_start = provider; s->backend_bytes = p->provider_bytes;
     s->reserved_explanation = explanation;
     s->reserved_explanation_bytes = explanation_bytes;
@@ -384,6 +455,12 @@ static maelys_datalog_status_t fixed_init(void *arena, size_t bytes,
         if (n<0 || (size_t)n>=sizeof(identity) || maelys_sha256_hex((const unsigned char *)identity,(size_t)n,s->execution_fingerprint))
             rc=MAELYS_DATALOG_STATUS_INTERNAL;
     }
+    if (!rc && s->allocation) {
+        n=snprintf(identity,sizeof(identity),"maelys-execution-elastic-v1\n%s\n%zu\n",
+            s->execution_fingerprint,s->allocation->cap);
+        if (n<0 || (size_t)n>=sizeof(identity) || maelys_sha256_hex(
+            (const unsigned char *)identity,(size_t)n,s->execution_fingerprint)) rc=MAELYS_DATALOG_STATUS_INTERNAL;
+    }
     if (!rc && s->transaction_solve) {
         n=snprintf(identity,sizeof(identity),"maelys-backend-input-v1/abi7\n%s\n",s->execution_fingerprint);
         if (n<0 || (size_t)n>=sizeof(identity) || maelys_sha256_hex(
@@ -396,8 +473,24 @@ static maelys_datalog_status_t fixed_init(void *arena, size_t bytes,
     }
     if (!rc) {
         maelys_datalog_backend_storage_t storage={sizeof(storage),provider,p->provider_bytes,p->provider_alignment};
-        rc=maelys_datalog_callback_status(b->prepare(&s->program,&s->resources,&storage,&s->state));
-        if (rc) b->destroy(s->state);
+        maelys_datalog_session_allocation_resources_t extended={.base=s->resources};
+        if (s->allocation) {
+            extended.base.struct_size=sizeof(extended); extended.execution_byte_cap=s->allocation->cap;
+            extended.allocation=&s->allocation->service;
+            allocation_begin(s->allocation,ALLOCATION_PREPARE);
+        }
+        s->busy=1;
+        rc=maelys_datalog_callback_status(b->prepare(&s->program,
+            s->allocation?&extended.base:&s->resources,&storage,&s->state));
+        if (s->allocation && s->allocation->error) {
+            rc=s->allocation->error; allocation_copy_diagnostic(diag,&s->allocation->diagnostic);
+        }
+        if (rc) {
+            if (s->allocation) s->allocation->phase=ALLOCATION_DESTROY;
+            b->destroy(s->state);
+            if (s->allocation) allocation_sweep(s->allocation,1);
+        } else if (s->allocation) allocation_adopt(s->allocation);
+        s->busy=0;
     }
     if (rc) {
         destroy_explanation_workspace(s); maelys_datalog_prepared_session_destroy(s->inputs);

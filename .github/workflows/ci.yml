@@ -65,6 +65,12 @@ jobs:
           python3 tools/check_session_resource_mutations.py --profile SMALL --output "$RUNNER_TEMP/session-resources-small"
           python3 tools/check_session_resource_mutations.py --profile LARGE --output "$RUNNER_TEMP/session-resources-large"
 
+      - name: Check optional allocation service negative controls
+        if: runner.os == 'Linux'
+        run: |
+          python3 tools/check_backend_allocation_mutations.py --profile SMALL --output "$RUNNER_TEMP/backend-allocation-small"
+          python3 tools/check_backend_allocation_mutations.py --profile LARGE --output "$RUNNER_TEMP/backend-allocation-large"
+
       - name: Check idle-session storage negative controls and real unload
         if: runner.os == 'Linux'
         run: |
@@ -167,6 +173,11 @@ jobs:
           bash tools/check_session_resource_history.sh "$PWD/build/cmake" SMALL "$RUNNER_TEMP/resource-matrix-SMALL"
           bash tools/check_session_resource_history.sh "$PWD/build/cmake-large" LARGE "$RUNNER_TEMP/resource-matrix-LARGE"
 
+      - name: Compile allocation callers and providers against installed v0.18 and candidate SDKs
+        run: |
+          bash tools/check_backend_allocation_history.sh "$PWD/build/cmake" SMALL "$RUNNER_TEMP/allocation-matrix-SMALL"
+          bash tools/check_backend_allocation_history.sh "$PWD/build/cmake-large" LARGE "$RUNNER_TEMP/allocation-matrix-LARGE"
+
       - name: Preserve public resource compatibility evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -178,6 +189,10 @@ jobs:
             ${{ runner.temp }}/resource-matrix-*/matrix/commands.json
             ${{ runner.temp }}/resource-matrix-*/matrix/report.json
             ${{ runner.temp }}/resource-matrix-*/matrix/*.log
+            ${{ runner.temp }}/allocation-matrix-*/revisions.txt
+            ${{ runner.temp }}/allocation-matrix-*/*.log
+            ${{ runner.temp }}/allocation-matrix-*/matrix/*.json
+            ${{ runner.temp }}/allocation-matrix-*/matrix/*.log
           retention-days: 30
 
   # The socle's sanitizers job covers SMALL on Linux; the three other cells

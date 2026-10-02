@@ -20,6 +20,14 @@ class SessionResourcesTest(unittest.TestCase):
         self.rules = self.engine.load_inline_ruleset(
             "fixed_resources", "fixed", "aux(X) :- seed(X). seen(X) :- aux(X).")
 
+    def test_elastic_allocation_not_exposed(self):
+        for name, value in (("memory_mode", 1), ("allocator", object()),
+                            ("execution_byte_cap", 1024)):
+            with self.assertRaises(TypeError):
+                SessionCapacities(**{name: value})
+            with self.assertRaises(TypeError):
+                self.rules.prepare(**{name: value})
+
     def test_defaults_and_effective_identity(self):
         with self.rules.prepare() as default:
             fingerprint = default.execution_fingerprint

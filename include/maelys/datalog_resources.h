@@ -25,13 +25,16 @@ typedef struct {
 /* Separate namespace from MAELYS_DATALOG_CAP_* (language/execution features). */
 #define MAELYS_DATALOG_RESOURCE_SESSION_CAPACITIES (UINT64_C(1) << 0)
 #define MAELYS_DATALOG_RESOURCE_CALLER_ALLOCATOR   (UINT64_C(1) << 1)
-/* CALLER_ALLOCATOR is RESERVED AND UNSUPPORTED in 0.14.0. */
+/* Historical mask retained unchanged for separately compiled older consumers. */
 #define MAELYS_DATALOG_RESOURCE_SUPPORTED_014 \
     MAELYS_DATALOG_RESOURCE_SESSION_CAPACITIES
 
+#define MAELYS_DATALOG_RESOURCE_SUPPORTED \
+    (MAELYS_DATALOG_RESOURCE_SUPPORTED_014 | MAELYS_DATALOG_RESOURCE_CALLER_ALLOCATOR)
+
 /* uint32_t fields, not a profile-sized or compiler-sized enum in ABI records. */
 #define MAELYS_DATALOG_MEMORY_FIXED           UINT32_C(0)
-#define MAELYS_DATALOG_MEMORY_BACKEND_ELASTIC UINT32_C(1) /* reserved; reject */
+#define MAELYS_DATALOG_MEMORY_BACKEND_ELASTIC UINT32_C(1)
 #define MAELYS_DATALOG_CAPACITY_INPUT_FACTS   (UINT64_C(1) << 0)
 #define MAELYS_DATALOG_CAPACITY_DERIVED_FACTS (UINT64_C(1) << 1)
 #define MAELYS_DATALOG_CAPACITY_SYMBOLS       (UINT64_C(1) << 2)
@@ -82,6 +85,70 @@ typedef struct {
 #define MAELYS_DATALOG_RESOURCES_INIT \
     { MAELYS_DATALOG_RESOURCES_V1_SIZE, MAELYS_DATALOG_RESOURCE_CONTRACT_VERSION, \
       MAELYS_DATALOG_MEMORY_FIXED, UINT64_C(0), 0, 0, 0, 0 }
+
+#define MAELYS_DATALOG_CALLER_ALLOCATOR_VERSION 1u
+
+/* The host copies the known descriptor members. Context/code are borrowed
+ * through destruction and the last release, including failed preparation. */
+typedef struct {
+    size_t struct_size;
+    uint32_t contract_version;
+    uint32_t reserved; /* zero */
+    uint64_t required_features; /* zero in V1 */
+    void *context;
+    void *(*acquire)(void *context, size_t bytes, size_t alignment);
+    void (*release)(void *context, void *pointer, size_t bytes, size_t alignment);
+} maelys_datalog_caller_allocator_t;
+#define MAELYS_DATALOG_CALLER_ALLOCATOR_PREFIX_SIZE \
+    (offsetof(maelys_datalog_caller_allocator_t, required_features) + sizeof(uint64_t))
+#define MAELYS_DATALOG_CALLER_ALLOCATOR_V1_SIZE \
+    sizeof(maelys_datalog_caller_allocator_t)
+#define MAELYS_DATALOG_CALLER_ALLOCATOR_INIT \
+    { MAELYS_DATALOG_CALLER_ALLOCATOR_V1_SIZE, \
+      MAELYS_DATALOG_CALLER_ALLOCATOR_VERSION, UINT32_C(0), UINT64_C(0), \
+      NULL, NULL, NULL }
+
+/* Immutable V1 request prefix, then allocator extension. Set base.struct_size
+ * to this complete size, base.memory_mode to BACKEND_ELASTIC and require
+ * CALLER_ALLOCATOR. Older hosts reject this required feature before reading the tail. */
+typedef struct {
+    maelys_datalog_session_resource_request_t base;
+    size_t execution_byte_cap;
+    const maelys_datalog_caller_allocator_t *allocator;
+} maelys_datalog_session_allocation_request_t;
+#define MAELYS_DATALOG_ALLOCATION_REQUEST_V1_SIZE \
+    sizeof(maelys_datalog_session_allocation_request_t)
+#define MAELYS_DATALOG_ALLOCATION_REQUEST_PREFIX_SIZE MAELYS_DATALOG_RESOURCE_REQUEST_PREFIX_SIZE
+#define MAELYS_DATALOG_ALLOCATION_REQUEST_INIT \
+    { { MAELYS_DATALOG_ALLOCATION_REQUEST_V1_SIZE, MAELYS_DATALOG_RESOURCE_CONTRACT_VERSION, \
+        MAELYS_DATALOG_MEMORY_BACKEND_ELASTIC, MAELYS_DATALOG_RESOURCE_CALLER_ALLOCATOR, \
+        UINT64_C(0), 0, 0, 0, 0 }, 0, NULL }
+
+/* Read-only elastic accounting, no allocator callbacks or allocation. FIXED
+ * returns UNSUPPORTED with unchanged output, not a zero memory claim. Readable
+ * with a result/explanation lease, but not reentrantly during an operation.
+ * A solve starts the peak at current charge; abort/cleanup preserve that peak.
+ * Larger tails remain untouched; failed output validation writes nothing. */
+#define MAELYS_DATALOG_ALLOCATION_STATS_VERSION 1u
+typedef struct {
+    size_t struct_size;
+    uint32_t contract_version;
+    uint32_t reserved;
+    uint64_t required_features;
+    size_t cap_bytes;
+    size_t current_bytes;
+    size_t remaining_bytes;
+    size_t operation_peak_bytes;
+} maelys_datalog_session_allocation_stats_t;
+#define MAELYS_DATALOG_ALLOCATION_STATS_PREFIX_SIZE \
+    (offsetof(maelys_datalog_session_allocation_stats_t, required_features) + sizeof(uint64_t))
+#define MAELYS_DATALOG_ALLOCATION_STATS_V1_SIZE \
+    sizeof(maelys_datalog_session_allocation_stats_t)
+#define MAELYS_DATALOG_ALLOCATION_STATS_INIT \
+    { MAELYS_DATALOG_ALLOCATION_STATS_V1_SIZE, MAELYS_DATALOG_ALLOCATION_STATS_VERSION, \
+      UINT32_C(0), UINT64_C(0), 0, 0, 0, 0 }
+MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_session_get_allocation_stats(
+    const maelys_datalog_session_t *, maelys_datalog_session_allocation_stats_t *);
 
 /* No prepared state is allocated by requirements. The output is descriptive;
  * init recomputes the plan from policy/config, rather than trusting stale sizes.

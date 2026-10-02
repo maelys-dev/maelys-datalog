@@ -23,6 +23,8 @@ TEST_HELPER_SRCS = \
 
 TEST_SRCS = $(wildcard tests/test_*.c)
 TEST_BINS = $(TEST_SRCS:tests/%.c=$(BUILD_DIR)/tests/%)
+$(BUILD_DIR)/tests/test_maelys_datalog_backend_allocation: TEST_EXTRA_SRCS = sdk/conformance/allocation_provider.c
+$(BUILD_DIR)/tests/test_maelys_datalog_backend_allocation: TEST_CFLAGS += -Isdk/conformance -UNDEBUG
 $(BUILD_DIR)/tests/test_maelys_datalog_backend_inputs: TEST_EXTRA_SRCS = sdk/conformance/input_provider.c
 $(BUILD_DIR)/tests/test_maelys_datalog_backend_inputs: TEST_CFLAGS += -Isdk/conformance -UNDEBUG
 TEST_CFLAGS = $(CFLAGS) -DMAELYS_TESTING
@@ -56,6 +58,9 @@ $(BUILD_DIR)/tests/test_maelys_datalog_session_recycle: TEST_CFLAGS += -pthread
 $(BUILD_DIR)/tests/test_maelys_datalog_context: sdk/examples/frontend/src/extension.c sdk/examples/backend/src/extension.c
 $(BUILD_DIR)/tests/test_maelys_datalog_pipeline: TEST_EXTRA_SRCS = sdk/examples/frontend/src/extension.c
 $(BUILD_DIR)/tests/test_maelys_datalog_pipeline: sdk/examples/frontend/src/extension.c
+
+$(BUILD_DIR)/tests/test_maelys_datalog_backend_allocation: tests/test_maelys_datalog_backend_allocation.c sdk/conformance/allocation_provider.c sdk/conformance/allocation_provider.h tests/fixtures/allocation_guard.h $(SRCS) $(ENGINE_HEADERS) | $(BUILD_DIR)/tests
+	$(CC) $(TEST_CFLAGS) -include tests/fixtures/allocation_guard.h $(SRCS) sdk/conformance/allocation_provider.c $< -o $@
 
 # This test includes the EDB implementation with local allocator fault hooks.
 # Do not link a second copy of that translation unit into its executable.

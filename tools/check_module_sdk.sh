@@ -43,6 +43,8 @@ cp "$root/tests/test_maelys_datalog_window_updates.c" "$scratch/"
 cp "$root/tests/test_maelys_datalog_consumer_introspection.c" "$scratch/"
 cp "$root/tests/test_maelys_datalog_input_transactions.c" "$scratch/"
 cp "$root/tests/test_maelys_datalog_backend_inputs.c" "$scratch/"
+cp "$root/tests/test_maelys_datalog_backend_allocation.c" "$scratch/"
+cp "$prefix/share/maelys-datalog/conformance/allocation_provider.c" "$prefix/share/maelys-datalog/conformance/allocation_provider.h" "$scratch/"
 cp "$root/sdk/conformance/input_provider.c" "$root/sdk/conformance/input_provider.h" "$scratch/"
 cp "$root/examples/multi_fact_window.c" "$scratch/"
 for mapping in filter:exact_match frontend:arrow_frontend backend:naive_backend; do
@@ -105,6 +107,7 @@ for provider in exact_match arrow_frontend naive_backend; do
   "$cc" "${flags[@]}" -c "$provider.c" -o "$provider.o"
 done
 "$cc" "${flags[@]}" -c input_provider.c -o input_provider.o
+"$cc" "${flags[@]}" -c allocation_provider.c -o allocation_provider.o
 libdir="$prefix/lib"
 if [[ ! -f "$libdir/libmaelys_datalog.a" ]]; then libdir="$prefix/lib64"; fi
 # Test-only pipeline counters compile to nothing outside MAELYS_TESTING; the
@@ -157,6 +160,8 @@ for linkage in "${linkages[@]}"; do
   ./input-transactions
   "$cc" "${flags[@]}" -UNDEBUG test_maelys_datalog_backend_inputs.c input_provider.o "${libs[@]}" -o backend-inputs
   ./backend-inputs
+  "$cc" "${flags[@]}" -UNDEBUG test_maelys_datalog_backend_allocation.c allocation_provider.o "${libs[@]}" -o backend-allocation
+  ./backend-allocation
   ./window-updates
   "$cc" "${flags[@]}" multi_fact_window.c "${libs[@]}" -o group-example
   ./group-example

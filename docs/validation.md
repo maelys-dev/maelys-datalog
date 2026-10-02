@@ -607,3 +607,40 @@ no-op watermark progress, static suppliers, group slices, leases, backend failur
 negation-induced overflow, exhausted IDs and reuse. Deadline arrays are absent
 without the creation flag; allocation guards include both arrays in rollback
 snapshots and reject expiry/clock changes byte-for-byte on failure.
+
+
+## Optional external-provider allocation (0.19.0 candidate)
+
+The installed [version 1 contract](proposals/backend-allocation.md) is qualified
+separately from reference FIXED sessions. No Python or JavaScript allocator option
+is exposed. `MAELYS_DATALOG_RESOURCE_SUPPORTED_014` retains its historical value.
+The following names are executable cases of `test_backend_allocation`; all engine
+units use allocation traps, while the caller allocator has its own ledger.
+
+| Contract area | Named witness |
+| --- | --- |
+| Prefix, opt-in, ABI/refusal, ignored FIXED tail | `admission` |
+| Failed prepare at every acquisition ordinal, including no returned state | `preparation_failures` |
+| All alignments, exact K/padding, read-only inspect, fits followed by caller refusal | `inspection`, `preparation_failures` |
+| Current/peak, short and larger telemetry outputs, cap-dependent identity | `telemetry_and_identity` |
+| Old plus new coexistence, exact and one-byte-short cap | `exact_boundaries` |
+| Solve ordinal failures, ignored error, rejected output/work, host reclamation, retry | `failures_and_reuse` |
+| Result/explanation lease prevents old-block release | `leases` |
+| Arithmetic overflow, foreign session/pointer, premature old release, malformed diagnostic | `forbidden_service` |
+| Positive allocator and delta negotiation, accepted base unchanged on abort | `abi7` |
+
+The public conformance fixture implements bounded identity projections, not a
+production solver. Its 512-transaction trace uses seed `0x0a119019`, full typed
+results against the reference, and checks outstanding ownership after every
+transaction. It requests two blocks during preparation, a candidate and temporary
+block during solve, installs at commit and returns the superseded block only at
+result cleanup. Failed preparation deliberately returns no state so host cleanup
+is exercised. The independent consumer's recursive storage and generation tests
+remain a separate qualification; neither this fixture nor passing CI proves them.
+
+`tools/check_backend_allocation_mutations.py` rebuilds each negative control with
+ASan/UBSan, requires a passing baseline and a named failing assertion, and keeps
+build failures distinct from detections. Raw logs and measurements belong outside
+Git. Real two-window qualification and complete transaction software counts are
+separate follow-up changes; no performance conclusion or release approval is
+conferred by the session tests.

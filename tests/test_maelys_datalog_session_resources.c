@@ -144,7 +144,7 @@ static void agreement(void) {
     OK(maelys_datalog_session_free(a));OK(maelys_datalog_session_free(b));
     fail_prepare=1;unsigned d=destroys;
     CHECK(maelys_datalog_session_create_configured(policy,0,c,&a)==NO && !a && destroys==d+1);fail_prepare=0;
-    maelys_datalog_backend_v6_t wrong=provider;wrong.resource_features|=MAELYS_DATALOG_RESOURCE_CALLER_ALLOCATOR;
+    maelys_datalog_backend_v6_t wrong=provider;wrong.resource_features|=(UINT64_C(1)<<63);
     before=queries;CHECK(maelys_datalog_session_config_set_backend_v6(c,&wrong)==NO && queries==before);
     wrong=provider;wrong.resource_features=0;CHECK(maelys_datalog_session_config_set_backend_v6(c,&wrong)==NO);
     OK(maelys_datalog_session_config_free(c));
