@@ -11,6 +11,11 @@ on:
         description: Candidate branch, tag or commit SHA
         required: true
         type: string
+      allocation_counts:
+        description: Optional backend allocation and fixed v0.18 lifecycle software counts (no timings)
+        required: false
+        default: false
+        type: boolean
       retained_inputs:
         description: Compare public snapshot, retained replacement and supplied delta instructions on head (no timings)
         required: false
@@ -70,25 +75,39 @@ jobs:
       - name: Check comparison tooling
         run: python3 -m unittest discover -s bench -p 'test_compare*.py'
       - name: Prepare optional diagnostic tool
-        if: inputs.diagnostic_original != '' || inputs.session_diagnostics || inputs.session_layout || inputs.retained_inputs || inputs.backend_inputs || inputs.window_inputs
+        if: inputs.diagnostic_original != '' || inputs.session_diagnostics || inputs.session_layout || inputs.retained_inputs || inputs.backend_inputs || inputs.window_inputs || inputs.allocation_counts
         run: |
           if ! command -v valgrind >/dev/null; then
             sudo apt-get update
             sudo apt-get install -y valgrind
           fi
       - name: Check retained-input experiment identity and exclusive selection
-        if: inputs.retained_inputs || inputs.backend_inputs || inputs.window_inputs
+        if: inputs.retained_inputs || inputs.backend_inputs || inputs.window_inputs || inputs.allocation_counts
         env:
           HEAD_REF: ${{ inputs.head }}
           BASE_REF: ${{ inputs.base }}
+          ALLOCATION_CONFLICT: ${{ inputs.allocation_counts && (inputs.retained_inputs || inputs.backend_inputs || inputs.window_inputs) }}
           OTHER_DIAGNOSTIC: ${{ inputs.diagnostic_original != '' || inputs.session_diagnostics || inputs.session_layout || inputs.session_layout_original != '' }}
           BOTH_INPUT_MODES: ${{ (inputs.retained_inputs && inputs.backend_inputs) || (inputs.window_inputs && (inputs.retained_inputs || inputs.backend_inputs)) }}
         run: |
+          test "$ALLOCATION_CONFLICT" = false
           test "$OTHER_DIAGNOSTIC" = false
           test "$BOTH_INPUT_MODES" = false
           test "$(git rev-parse HEAD)" = "$(git rev-parse "$HEAD_REF^{commit}")"
           git rev-parse "$BASE_REF^{commit}"
           git diff --exit-code
+      - name: Measure optional backend allocation
+        if: inputs.allocation_counts
+        env:
+          BASE_REF: ${{ inputs.base }}
+          HEAD_REF: ${{ inputs.head }}
+        run: python3 bench/compare_backend_allocation.py "$BASE_REF" "$HEAD_REF" "$RUNNER_TEMP/backend-allocation"
+      - uses: actions/upload-artifact@v4
+        if: always() && inputs.allocation_counts
+        with:
+          name: backend-allocation-${{ github.sha }}
+          path: ${{ runner.temp }}/backend-allocation
+          retention-days: 30
       - name: Measure complete ABI 7 window transactions
         if: inputs.window_inputs
         env:
@@ -121,7 +140,7 @@ jobs:
           HEAD_REF: ${{ inputs.head }}
         run: bash bench/diagnose_solver_layout.sh "$BASE_REF" "$ORIGINAL_REF" "$HEAD_REF" "$RUNNER_TEMP/bench-diagnostic"
       - name: Compare immutable revisions
-        if: '!inputs.retained_inputs && !inputs.backend_inputs && !inputs.window_inputs'
+        if: '!inputs.retained_inputs && !inputs.backend_inputs && !inputs.window_inputs && !inputs.allocation_counts'
         env:
           BASE_REF: ${{ inputs.base }}
           HEAD_REF: ${{ inputs.head }}
