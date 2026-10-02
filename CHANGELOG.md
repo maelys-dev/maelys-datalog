@@ -7,6 +7,15 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Release policy handles loaded from manifests whose entries are all disabled.
+  Liveness is checked by the reference count rather than the number of enabled
+  policies, so successful empty loads no longer leak their policy allocation.
+  File, buffer and historical text loaders keep their existing return values;
+  caller-owned storage can still be released, reused and protected from a
+  second release while its memory remains valid.
+
 ## 0.19.0 — 2026-10-02
 
 ### Added
