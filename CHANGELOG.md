@@ -42,8 +42,9 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
   from the matching null envelope in at least one round; ten cold rows above
   their A/A floor remain informative only. The injected positive control and
   historical v0.11.0 control are detected. The report metadata says
-  `release_eligible`, but no maintainer performance decision or release approval
-  is implied here.
+  `release_eligible`. David authorized the 0.20.0 cut on 2026-10-02 after
+  reviewing this report. All `review_required` classifications and limitations
+  are preserved; this authorizes the cut stage only, not tagging or publication.
 
 ## 0.19.0 — 2026-10-02
 
