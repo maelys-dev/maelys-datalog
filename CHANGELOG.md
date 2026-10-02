@@ -7,6 +7,13 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+
+- Add `maelys_datalog_policy_id()` to read an enabled policy's identifier
+  directly from a loaded policy handle, without creating a session or
+  allocating storage. The returned identifier is borrowed for the handle's
+  lifetime.
+
 ### Fixed
 
 - Release policy handles loaded from manifests whose entries are all disabled.
