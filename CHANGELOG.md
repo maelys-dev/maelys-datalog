@@ -29,6 +29,13 @@ public conformance does not qualify the private backend. Instruction evidence
 and the final complete Python report are separate requirements. No performance
 tradeoff or publication is accepted by this unreleased entry.
 
+The [hosted instruction evidence](https://github.com/maelys-dev/maelys-datalog/actions/runs/36982088120)
+for `0d1688e` has 176 scoped regions and 120 exact repeated comparisons. The
+ordinary 93-symbol native path adds 25/32 Ir per prepared request (LARGE/SMALL)
+and 45/52 in convenience mode, fully localized by function. These are nonzero
+software costs, not latency or Python results; see
+`docs/backend-allocation-evidence.md` for the report digest and limitations.
+
 ## 0.18.0 — 2026-10-01
 
 This release reorganizes the installed C SDK include paths. Consumer API 2,

@@ -71,3 +71,48 @@ report, with positive and identical-binary controls, remains a separate requirem
 for the final candidate; a maintainer decision on that report must precede release.
 The allocator contract remains revisable before a compatibility freeze and awaits
 an independent installed-SDK consumer prototype after publication.
+
+## Hosted candidate evidence
+
+The [instruction run 36982088120](https://github.com/maelys-dev/maelys-datalog/actions/runs/36982088120)
+measured signed `0d1688e74abbcba2c9c55ec5fdee3394c9f7fa71` against
+v0.18.0 (`3173f87beb5eb99576bb9c55ff7c88facf180877`), with Clang 18.1.3,
+Release SDKs and an AMD EPYC 7763 runner. The artifact is
+`backend-allocation-0d1688e74abbcba2c9c55ec5fdee3394c9f7fa71`;
+`report.json` SHA-256:
+`7d9438f03d1d6b2f91e5db69fea1203f70fe520280afc1c6fe0d9127cb705a2c`.
+All 176 scoped regions are present: 96 FIXED and 80 elastic. The 120 repeated
+region comparisons agree exactly in receipts, Ir/Dr/Dw, exclusive functions and
+residuals. Rebuilding the report from downloaded raw data reproduces its bytes;
+eight binary hashes and all manifest source hashes were checked.
+
+| Profile | Mode | Extra Ir/request, both 7/93 facts | Extra Ir at 93 facts |
+| --- | --- | ---: | ---: |
+| SMALL | prepared | 32 | +0.002129% |
+| LARGE | prepared | 25 | +0.001652% |
+| SMALL | convenience | 52 | +0.003106% |
+| LARGE | convenience | 45 | +0.002569% |
+
+The extra work is not zero. Exclusive function deltas account for every extra
+instruction: `session_solve_materialized` +15 and `maelys_datalog_result_free` +10
+per request in both profiles. SMALL adds +7 in `__memset_avx2_unaligned_erms`,
+called from `solve_stratified_path`. Convenience adds +4 in
+`maelys_datalog_session_free` and +16 in `__memcpy_avx_unaligned_erms`, called
+from `maelys_datalog_prepared_session_init_sized`. These identify the executed
+paths, not a hardware mechanism or a latency effect. No fixed allocation/reset
+budget or instruction tolerance was widened.
+
+All forty elastic case/profile receipts return to their initial current charge.
+Each 200-operation region attempts 600 caller acquisitions: accepted and late
+window rejection paths perform 600 releases; refusal of the third acquisition
+per operation performs 400 releases because the refused request owns no block.
+For example SMALL ABI 6, 64 users in a group window, late expiry rejection has
+690,042 current bytes before/after and a 767,016-byte coexistence peak. Its 200
+attempts request 2,138,600 explicit copy bytes and 7,821,200 reset bytes in the
+separate telemetry build. The total is 251,989,436 Ir, including host, provider,
+caller allocation and cleanup; it is not a comparison with a FIXED provider.
+The ABI 7 fixture reserves a full-capacity candidate, a deliberate fixture choice,
+so these receipts are not a memory-efficiency ranking of ABI 6 and ABI 7.
+
+The complete Python run is separate and requires its own recorded review. Neither
+this report nor the successful CI approves a performance tradeoff or release.
