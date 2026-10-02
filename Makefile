@@ -77,7 +77,7 @@ $(BUILD_DIR)/tests/test_maelys_datalog_input_edb_alloc: tests/test_maelys_datalo
 $(BUILD_DIR)/tests/test_maelys_datalog_javascript_transport: tests/test_maelys_datalog_javascript_transport.c tests/fixtures/allocation_guard.h $(SRCS) bindings/javascript/native/transport.c bindings/javascript/native/transport.h $(ENGINE_HEADERS) | $(BUILD_DIR)/tests
 	$(CC) $(TEST_CFLAGS) -UNDEBUG -include tests/fixtures/allocation_guard.h $(SRCS) bindings/javascript/native/transport.c $< -o $@
 
-$(BUILD_DIR)/tests/test_maelys_datalog_hot_path_alloc $(BUILD_DIR)/tests/test_maelys_datalog_prepared_explanations $(BUILD_DIR)/tests/test_maelys_datalog_session_resources $(BUILD_DIR)/tests/test_maelys_datalog_session_recycle: $(BUILD_DIR)/tests/%: tests/%.c tests/fixtures/allocation_guard.h $(SRCS) $(ENGINE_HEADERS) | $(BUILD_DIR)/tests
+$(BUILD_DIR)/tests/test_maelys_datalog_program_queries $(BUILD_DIR)/tests/test_maelys_datalog_hot_path_alloc $(BUILD_DIR)/tests/test_maelys_datalog_prepared_explanations $(BUILD_DIR)/tests/test_maelys_datalog_session_resources $(BUILD_DIR)/tests/test_maelys_datalog_session_recycle: $(BUILD_DIR)/tests/%: tests/%.c tests/fixtures/allocation_guard.h $(SRCS) $(ENGINE_HEADERS) | $(BUILD_DIR)/tests
 	$(CC) $(TEST_CFLAGS) -UNDEBUG -include tests/fixtures/allocation_guard.h $(SRCS) $< -o $@
 
 $(BUILD_DIR)/tests/test_maelys_datalog_session_explanations: tests/test_maelys_datalog_session_explanations.c tests/fixtures/allocation_guard.h $(SRCS) $(ENGINE_HEADERS) | $(BUILD_DIR)/tests
