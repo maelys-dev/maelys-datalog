@@ -94,7 +94,8 @@ static void retained(fixture *f) {
 }
 static void close_fixture(fixture *f) {
     forbidden=1;if(f->inputs)OK(maelys_datalog_session_inputs_free(f->inputs));
-    if(f->session)OK(maelys_datalog_session_free(f->session));forbidden=0;
+    if(f->session) { OK(maelys_datalog_session_free(f->session)); }
+    forbidden=0;
     if(f->ledger.live)fprintf(stderr,"ledger leak: calls=%zu releases=%zu live=%zu bytes=%zu session=%p\n",f->ledger.calls,f->ledger.releases,f->ledger.live,f->ledger.bytes,(void *)f->session);
     CHECK(!f->ledger.live && !f->ledger.bytes);
     OK(maelys_datalog_session_config_free(f->config));free(f->provider);free(f->arena);free(f->inputs_arena);
