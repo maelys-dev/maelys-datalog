@@ -20,14 +20,14 @@ PROGRAM = "src/compiler/maelys_datalog_program.c"
 
 # name, compiled unit, edited file, exact anchor, replacement, witnessing case
 MUTATIONS = [
-    ("elastic_mode_accepted", RUNTIME, RESOURCES,
-     "mode != MAELYS_DATALOG_MEMORY_FIXED", "mode > MAELYS_DATALOG_MEMORY_BACKEND_ELASTIC", "records"),
-    ("reserved_requirement_accepted", RUNTIME, RESOURCES,
-     "(features & ~MAELYS_DATALOG_RESOURCE_SUPPORTED_014)",
-     "(features & ~(MAELYS_DATALOG_RESOURCE_SUPPORTED_014 | MAELYS_DATALOG_RESOURCE_CALLER_ALLOCATOR))", "records"),
+    ("elastic_without_feature_accepted", RUNTIME, RESOURCES,
+     "mode != MAELYS_DATALOG_MEMORY_BACKEND_ELASTIC || !(features & MAELYS_DATALOG_RESOURCE_CALLER_ALLOCATOR)",
+     "mode != MAELYS_DATALOG_MEMORY_BACKEND_ELASTIC", "records"),
+    ("allocator_feature_in_fixed_accepted", RUNTIME, RESOURCES,
+     "!!(features & MAELYS_DATALOG_RESOURCE_CALLER_ALLOCATOR)", "0", "records"),
     ("reserved_provider_feature_accepted", "src/registry/maelys_datalog_modules.c", "src/registry/maelys_datalog_modules.c",
-     "d->resource_features & ~MAELYS_DATALOG_RESOURCE_SUPPORTED_014",
-     "d->resource_features & ~(MAELYS_DATALOG_RESOURCE_SUPPORTED_014 | MAELYS_DATALOG_RESOURCE_CALLER_ALLOCATOR)", "agreement"),
+     "d->resource_features & ~MAELYS_DATALOG_RESOURCE_SUPPORTED",
+     "d->resource_features & ~(MAELYS_DATALOG_RESOURCE_SUPPORTED | (UINT64_C(1)<<63))", "agreement"),
     ("commit_after_rejection", RUNTIME, RUNTIME,
      "        s->backend.destroy_result(s->state, result->state);",
      "        s->backend.commit(s->state, result->state);\n        s->backend.destroy_result(s->state, result->state);", "agreement"),

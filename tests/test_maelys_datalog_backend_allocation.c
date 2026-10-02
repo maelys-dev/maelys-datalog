@@ -38,7 +38,8 @@ static void *caller_acquire(void *context,size_t n,size_t alignment) {
 }
 static void caller_release(void *context,void *p,size_t n,size_t alignment) {
     ledger *a=context;CHECK(alignment==_Alignof(max_align_t));size_t i=0;
-    while(i<32 && a->p[i]!=p)++i;CHECK(i<32 && a->n[i]==n);
+    while(i<32 && a->p[i]!=p) { ++i; }
+    CHECK(i<32 && a->n[i]==n);
     ++a->releases;--a->live;a->bytes-=n;a->p[i]=NULL;free(p);
 }
 static maelys_datalog_caller_allocator_t allocator(ledger *l) {
