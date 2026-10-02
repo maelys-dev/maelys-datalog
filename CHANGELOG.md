@@ -7,6 +7,28 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+
+- Optional caller-backed allocation service for external ABI 6/7 providers,
+  negotiated explicitly with BACKEND_ELASTIC and CALLER_ALLOCATOR. The host
+  enforces a finite per-session byte cap over fixed reservations and outstanding
+  blocks, exposes read-only accounting, and restores provisional ownership on
+  rejection. Inspection is side-effect free; acquisition failure is sticky.
+  Commit makes no allocator calls and accepted cleanup releases superseded
+  blocks. Both window banks require equal caps but retain independent charges.
+- Public bounded conformance provider and separately compiled installed-SDK
+  compatibility tests, including strict abort, output growth on negative expiry,
+  result/explanation leases and allocation-failure injection. The reference
+  provider and default sessions remain FIXED; host quotas do not grow. ABI 5,
+  realloc, uncapped allocation, over-alignment and Python/JavaScript allocator
+  configuration are unsupported. No new backend ABI is introduced.
+
+The allocator contract remains corrigible before a compatibility freeze. An
+independent consumer prototype against the installed SDK is still required;
+public conformance does not qualify the private backend. Instruction evidence
+and the final complete Python report are separate requirements. No performance
+tradeoff or publication is accepted by this unreleased entry.
+
 ## 0.18.0 — 2026-10-01
 
 This release reorganizes the installed C SDK include paths. Consumer API 2,
