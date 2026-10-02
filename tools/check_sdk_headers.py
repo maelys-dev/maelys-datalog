@@ -56,6 +56,9 @@ def check(prefix):
                 result = subprocess.run(command, capture_output=True, text=True)
                 assert (result.returncode == 0) == success, label + '\n' + result.stderr
             compile_probe(app + 'int main(void) { return 0; }', True, 'application')
+            compile_probe(app + 'int main(void) { maelys_datalog_caller_allocator_t a = MAELYS_DATALOG_CALLER_ALLOCATOR_INIT; maelys_datalog_session_allocation_stats_t s = MAELYS_DATALOG_ALLOCATION_STATS_INIT; (void)&maelys_datalog_session_get_allocation_stats; return (int)(a.reserved+s.reserved); }', True, 'application allocator and telemetry')
+            for private_type in ('allocation_service', 'allocation_budget', 'session_allocation_resources'):
+                compile_probe(app + f'maelys_datalog_{private_type}_t *service;', False, 'application allocation service leak')
             for descriptor in DESCRIPTORS:
                 typename = f'maelys_datalog_{descriptor}_t'
                 compile_probe(app + f'{typename} *provider;', False, 'application descriptor leak')

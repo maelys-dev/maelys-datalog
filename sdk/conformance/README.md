@@ -40,3 +40,13 @@ calls does not prove purity; a positive declared cost does not measure CPU time;
 a successful fixture does not prove memory safety. Validate callbacks with
 sanitizers, fuzzing and workload-specific measurements. The kit does not load
 shared libraries, inspect proprietary source or change production behavior.
+
+
+`allocation_provider.c` and `allocation_provider.h` are an external ABI 6/7
+conformance fixture for the optional allocation contract. They use only installed
+public headers. The admitted subset is stated in the header: identity projections
+over dynamic EDB, no compiled facts, bounded copied text. This is not a reference
+solver wrapper or production backend. The fixture exposes serial test controls
+for swallowed errors and incomplete provider cleanup; ordinary host rollback must
+still return every provisional block. Caller allocations and engine allocator
+traps are measured separately by `test_backend_allocation`.

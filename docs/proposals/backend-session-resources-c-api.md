@@ -12,7 +12,7 @@ They become an SDK contract only with a separately reviewed implementation.
 or elastic execution path are declared. No delta entry is declared here. The
 reserved elastic mode and allocator bit are rejected even by a provider that
 claims to support them. Their implementation/qualification remains in the
-[deferred allocation proposal](backend-allocation-015.md); its historical 0.15.0
+[deferred allocation proposal](backend-allocation.md); its historical 0.15.0
 filename does not name a delivered feature or a current release commitment.
 
 ## 1. Declaration inventory and existing interfaces

@@ -120,6 +120,7 @@ install(FILES include/maelys/datalog.h include/maelys/datalog_builders.h
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/maelys COMPONENT sdk)
 install(FILES LICENSE DESTINATION ${CMAKE_INSTALL_DATADIR}/maelys-datalog COMPONENT sdk)
 install(FILES sdk/conformance/maelys_conformance.h sdk/conformance/README.md
+    sdk/conformance/allocation_provider.h sdk/conformance/allocation_provider.c
     DESTINATION ${CMAKE_INSTALL_DATADIR}/maelys-datalog/conformance COMPONENT sdk)
 install(FILES vendor/yyjson/LICENSE DESTINATION ${CMAKE_INSTALL_DATADIR}/maelys-datalog/yyjson COMPONENT sdk)
 install(FILES sdk/templates/README.md
@@ -178,6 +179,11 @@ if(BUILD_TESTING)
     if(MAELYS_DATALOG_PROFILE_LARGE)
         target_compile_definitions(maelys_allocation_guard PUBLIC MAELYS_DATALOG_PROFILE_LARGE)
     endif()
+    add_executable(test_backend_allocation tests/test_maelys_datalog_backend_allocation.c sdk/conformance/allocation_provider.c)
+    target_include_directories(test_backend_allocation PRIVATE sdk/conformance)
+    target_compile_options(test_backend_allocation PRIVATE -UNDEBUG -Wall -Wextra -Werror)
+    target_link_libraries(test_backend_allocation PRIVATE maelys_allocation_guard)
+    add_test(NAME backend_allocation_contract COMMAND test_backend_allocation)
     add_executable(test_count tests/test_maelys_datalog_count.c
         tests/helpers/test_log.c tests/helpers/test_framework.c)
     target_include_directories(test_count PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})

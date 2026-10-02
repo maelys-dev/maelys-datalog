@@ -11,7 +11,7 @@ identically to backend storage requirements and preparation. Program/build
 limits keep their meaning. ABI 5 stays intact and separately dispatched.
 0.14.0 supports **FIXED only**; BACKEND_ELASTIC and the reserved allocator feature
 are refused everywhere. The allocation service is planned as an additive
-[0.15.0 delivery](backend-allocation-015.md), not an optional 0.14.0 deliverable.
+[0.15.0 delivery](backend-allocation.md), not an optional 0.14.0 deliverable.
 
 This extends the [sized-reference proposal](../architecture/sized-reference-sessions.md)
 to explicitly admitted external backends and narrows the broader
@@ -254,7 +254,7 @@ compatibility tests; capability bits alone are not an execution identity.
 
 Reserve the BACKEND_ELASTIC mode and allocator feature identity without an
 implemented path or supported-capability claim. Both are refused in 0.14.0.
-The [revised allocation proposal](backend-allocation-015.md) retains the
+The [revised allocation proposal](backend-allocation.md) retains the
 service, cap accounting, phases, acquisition failure replay, native fixture and
 negative controls. Its historical filename does not imply shipped allocator
 support: v0.15.0 delivered the common JavaScript binding. None is a condition of
@@ -301,7 +301,7 @@ window in #140 does not substitute for the real adapters' tests.
 
 This matrix covers the fixed-capacity delivery only. The allocator admission,
 acquisition failure, late rejection after growth and allocator lifecycle rows
-are in the [0.15.0 qualification matrix](backend-allocation-015.md#3-qualification-belonging-to-0150).
+are in the [0.15.0 qualification matrix](backend-allocation.md#6-implementation-and-independent-consumer-qualification).
 They do not block 0.14.0. Existing fixed rollback/lease guarantees remain required.
 Run the delivered capacity combinations in SMALL/LARGE using clean installed
 SDKs and static/shared linkage; record candidate/consumer revisions and commands.

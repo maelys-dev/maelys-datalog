@@ -22,6 +22,17 @@ for (const runtime of runtimes) {
     const rules = engine.loadInlineRuleset('js_common', 'test', 'allow(X) :- seed(X), not(blocked(X)).');
     return { engine, rules, edb: rules.edb(options) };
   }
+  test(`${runtime}: optional allocator service is not exposed by the binding`, async t => {
+    const {rules}=await basic(t);
+    const fixed=rules.prepare(), identity=fixed.executionFingerprint;
+    const options={memoryMode:1,executionByteCap:1024,
+      get allocator(){throw new Error('allocator must not be read');}};
+    assert.deepEqual(Object.keys(new api.SessionCapacities(options)),[]);
+    const session=rules.prepare(options);
+    assert.equal(session.executionFingerprint,identity);
+    assert.equal('allocationStats' in session,false);
+    session.close();fixed.close();
+  });
   test(`${runtime}: retained input exact values, bases, leases and set semantics`, async t => {
     const { rules, edb } = await basic(t), session=rules.prepare({explanations:3});
     const fingerprint=session.executionFingerprint;

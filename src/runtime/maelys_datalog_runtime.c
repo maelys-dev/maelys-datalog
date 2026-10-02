@@ -34,6 +34,8 @@ struct maelys_datalog_session_config {
     int use_v6;
     int canonical_reference;
     maelys_datalog_session_resource_request_t resources;
+    size_t execution_byte_cap;
+    maelys_datalog_caller_allocator_t allocator;
     maelys_datalog_context_t *context;
     char context_backend_name[64];
     maelys_datalog_backend_storage_t backend_storage;
@@ -194,6 +196,7 @@ struct maelys_datalog_session {
     maelys_datalog_backend_transaction_solve_t transaction_solve;
     /* Same allocation as the session, reserved only when !borrows_inputs.
      * Every live entry is initialized before an external solve callback. */
+    struct allocation_state *allocation; /* NULL on every FIXED path. */
     struct backend_payload solve_scratch[];
 };
 static void retained_commit(maelys_datalog_session_inputs_t *);
@@ -206,6 +209,7 @@ static maelys_datalog_status_t retained_candidate(maelys_datalog_session_inputs_
     maelys_datalog_diagnostic_t *);
 static maelys_datalog_status_t session_solve_materialized(maelys_datalog_session_t *,
     maelys_datalog_result_t **, maelys_datalog_diagnostic_t *);
+#include "src/runtime/maelys_datalog_allocation.inc"
 #include "src/runtime/maelys_datalog_recycle.inc"
 struct maelys_datalog_backend_output {
     maelys_datalog_result_t *result;
@@ -542,7 +546,9 @@ maelys_datalog_status_t maelys_datalog_session_free(maelys_datalog_session_t *s)
     if (s->active || s->busy || s->retained_inputs)
         return MAELYS_DATALOG_STATUS_INVALID_STATE;
     s->busy = 1;
+    if (s->allocation) s->allocation->phase=ALLOCATION_DESTROY;
     s->backend.destroy(s->state);
+    if (s->allocation) allocation_sweep(s->allocation,1);
     resource_session_unlink(s);
     maelys_datalog_prepared_session_destroy(s->inputs);
     destroy_explanation_workspace(s);
@@ -651,18 +657,25 @@ static maelys_datalog_status_t session_solve_materialized(maelys_datalog_session
         maelys_datalog_fact_set_init(&result->derived, s->emitted, s->resources.derived_facts);
     maelys_datalog_backend_output_t output = {.result=result};
     s->busy = 1;
+    if (s->allocation) allocation_begin(s->allocation,ALLOCATION_SOLVE);
     status = maelys_datalog_callback_status(s->transaction_solve
         ? retained_deliver(s->retained_inputs, &output, &result->state, diag)
         : s->backend.solve(s->state, canonical, canonical_count, &output, &result->state, diag));
     if (output.error)
         status = output.error;
+    if (s->allocation && s->allocation->error) {
+        status=s->allocation->error;
+        allocation_copy_diagnostic(diag,&s->allocation->diagnostic);
+    }
     if (status == MAELYS_DATALOG_STATUS_OK && !s->borrows_inputs)
         status = (maelys_datalog_status_t)maelys_datalog_fact_set_sort(&result->derived);
     if (status != MAELYS_DATALOG_STATUS_OK) {
-        if (output.derived_quota)
+        if (output.derived_quota && !(s->allocation && s->allocation->error))
             resource_failure(diag, status, "derived_facts", s->resources.derived_facts + 1u,
                              s->resources.derived_facts);
+        if (s->allocation) s->allocation->phase=ALLOCATION_ABORT;
         s->backend.destroy_result(s->state, result->state);
+        if (s->allocation) allocation_sweep(s->allocation,0);
         memset(result, 0, sizeof(*result));
         s->busy = 0;
         if (diag) diag->status = status;
@@ -679,9 +692,12 @@ static maelys_datalog_status_t session_solve_materialized(maelys_datalog_session
     ++s->result_generation; /* Cache is cleared on release, including at wrap. */
     s->active = result;
     if (!s->pending_commit) {
+        if (s->allocation) s->allocation->phase=ALLOCATION_COMMIT;
         s->backend.commit(s->state, result->state);
+        if (s->allocation) allocation_adopt(s->allocation);
         retained_commit(s->retained_inputs);
     }
+    if (s->allocation) s->allocation->phase=ALLOCATION_IDLE;
     s->busy = 0;
     *out = result;
     return MAELYS_DATALOG_STATUS_OK;
@@ -713,7 +729,9 @@ void maelys_datalog_result_commit(maelys_datalog_result_t *result) {
     if (!s->pending_commit) return;
     s->busy = 1;
     s->pending_commit = 0;
+    if (s->allocation) s->allocation->phase=ALLOCATION_COMMIT;
     s->backend.commit(s->state, result->state);
+    if (s->allocation) allocation_adopt(s->allocation);
     retained_commit(s->retained_inputs);
     s->busy = 0;
 }
@@ -1136,7 +1154,9 @@ maelys_datalog_status_t maelys_datalog_result_free(maelys_datalog_result_t *resu
         if (p != s->explanation_cache) return MAELYS_DATALOG_STATUS_INVALID_STATE;
     clear_explanation_cache(s);
     s->busy = 1;
+    if (s->allocation) s->allocation->phase=s->pending_commit?ALLOCATION_ABORT:ALLOCATION_CLEANUP;
     s->backend.destroy_result(s->state, result->state);
+    if (s->allocation) allocation_sweep(s->allocation,0);
     if (s->pending_commit) retained_abort(s->retained_inputs);
     s->active = NULL;
     s->pending_commit = 0;

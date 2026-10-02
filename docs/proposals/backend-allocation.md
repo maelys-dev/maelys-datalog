@@ -1,17 +1,12 @@
-# Optional backend allocation — revised contract proposal
+# Optional backend allocation — version 1 contract
 
-Status: documentation proposal, amended 2026-10-02 against the v0.18.0 SDK. Allocation
-is still unsupported. The filename records an earlier 0.15.0 schedule; that
-release shipped the common JavaScript binding. This revision does not commit to
-a release number, install a declaration, implement a service or change an ABI.
-
-The [fixed-capacity contract](backend-session-resources.md) remains in force:
-FIXED is the only admitted mode, and the reserved `CALLER_ALLOCATOR` feature and
-`BACKEND_ELASTIC` mode are rejected, even when a provider advertises them. The
-future service extends the unchanged ABI 6 resource prefix; adopting ABI 7 input
-delivery is a separate decision. Neither callback signature nor language
-capability changes. An ABI 7 provider would negotiate these same resources
-independently of its transaction packets; its base advances only on commit.
+Status: implementation candidate for 0.19.0, based on the v0.18.0 SDK.
+The service is optional and external-provider-only. The reference backend and
+all default sessions remain FIXED. Neither Python nor JavaScript exposes an
+elastic request. There is no new backend ABI or language capability: ABI 6 and
+ABI 7 negotiate the extended resource tail independently of input delivery.
+ABI 5 refuses elastic requests. This candidate is not a release or independent
+production-consumer qualification.
 
 This revision decides six prerequisites before implementation:
 
@@ -20,7 +15,7 @@ This revision decides six prerequisites before implementation:
 | Affordable growth before a sticky refusal | A side-effect-free inspection returns the exact charged size, current charge and remaining margin. It uses acquisition's arithmetic; sufficient margin does not promise allocator success. |
 | Abort and retained capacity | Strict abort returns every new provisional block and restores preexisting ownership/current charge. It cannot create a new cache. Previously retained idle blocks remain charged and may be reused. |
 | Cap and execution identity | The normalized finite cap enters an elastic fingerprint. Both window banks must therefore have equal configured caps, accounted independently. |
-| Caller/service declarations | [Review-only C records](backend-allocation-v1.h) define sizes, versions, stable prefixes and callback types. No installed header changes. |
+| Caller/service declarations | Installed application and provider headers define sizes, versions, stable prefixes and callback types. |
 | Growth lifetime | Acquire during prepare/solve, install at infallible commit, release superseded blocks at accepted result cleanup after all leases. The old plus new peak is charged. |
 | Refusal status | Cap exhaustion is `PAYLOAD_TOO_LARGE`; caller allocator NULL is `STORAGE_TOO_SMALL`, field `allocator`. The first acquisition failure is sticky. |
 
@@ -31,19 +26,16 @@ qualification nor a claim that a test provider proves all consumer behavior.
 
 ## 1. Versioned declarations and admission
 
-The [compilable proposal header](backend-allocation-v1.h) lives under `docs/` and
-is not part of any build or SDK installation. It uses native `size_t` byte counts,
-`uint32_t` versions and `uint64_t` feature masks; boundaries use `sizeof` and
-`offsetof`, not fixed LP64 constants. Its declarations are review material until
-a separately reviewed implementation makes them available.
+The installed records use native `size_t` byte counts, `uint32_t` versions and
+`uint64_t` feature masks. Boundaries use `sizeof` and `offsetof`, not fixed LP64
+constants. The historical `_SUPPORTED_014` mask is unchanged; the current
+`MAELYS_DATALOG_RESOURCE_SUPPORTED` mask includes the caller allocator bit.
 
 Target ownership follows the [SDK header map](../sdk-headers.md): caller
 allocator, session request and read-only session allocation statistics belong in `maelys/datalog_resources.h`;
 provider service, block inspection and normalized provider tail declarations
 belong in `maelys/datalog_backend.h`. `datalog_extension.h` retains only forward
-descriptor types and selection/registration. The review-only combined file below
-does not create an installed allocator API or add an application-to-provider
-include edge.
+descriptor types and selection/registration. There is no combined proposal header or application-to-provider include edge.
 
 `caller_allocator_t`, `allocation_service_t`, `allocation_budget_t` and
 `session_allocation_stats_t` start with
@@ -308,8 +300,7 @@ identity. Preserve every existing FIXED fingerprint exactly. Let R2 be the
 64-character lowercase SHA-256 from the existing
 [V2 encoding](backend-session-resources-c-api.md#5-execution-identity-encoding-and-examples),
 using normalized E/D/S/T, mode BACKEND_ELASTIC and the required allocator bit
-(plus any other admitted required resources). The future host permits this only
-after elastic admission; released hosts still reject it. The elastic identity
+(plus any other admitted required resources). The host permits this only after elastic admission; hosts through v0.18.0 reject it. The elastic identity
 is SHA-256 of these ASCII bytes, including the final LF:
 
 ```text
@@ -365,8 +356,7 @@ The modeled window in #140 is not evidence for these real adapters.
 
 ## 6. Implementation and independent consumer qualification
 
-Only after this documentation is reviewed does a separate service implementation
-begin. Keep fixed/default allocation and lease guarantees, installed-SDK ABI 5/6/7
+The amended contract and service are reviewed separately. Keep fixed/default allocation and lease guarantees, installed-SDK ABI 5/6/7
 consumers and language behavior unchanged. The host conformance provider can use
 ABI 6 snapshot solve. Also exercise a positive, separately compiled ABI 7
 provider with allocator negotiation and transactional input delivery: those are
@@ -412,5 +402,6 @@ residuals. Compare the ordinary fixed path against v0.18.0 in SMALL and LARGE,
 on 93-symbol and small fixtures including result release. Report exact count
 differences by function, with no invented “few instructions” tolerance. Reduced reservation or fewer allocator calls is not a speed claim.
 Only implementation plus host and consumer qualification can advertise the
-currently reserved feature; document any resulting contract correction before
-freezing it. A qualified 0.x contract does not require a 1.0 release.
+feature for an independent production consumer; document any resulting contract
+correction and migration before freezing it. Version 1 semantics are never
+silently changed, including during the 0.x series. A qualified 0.x contract does not require a 1.0 release.

@@ -141,7 +141,7 @@ static void negotiation(void) {
     b=*input_fixture_transactions();b.struct_size--;assert(maelys_datalog_session_config_set_backend_v7(c,&b)==MAELYS_DATALOG_STATUS_INVALID_ARGUMENT);
     b=*input_fixture_transactions();b.solve=NULL;assert(maelys_datalog_session_config_set_backend_v7(c,&b)==MAELYS_DATALOG_STATUS_INVALID_ARGUMENT);
     b=*input_fixture_transactions();b.commit=NULL;assert(maelys_datalog_session_config_set_backend_v7(c,&b)!=MAELYS_DATALOG_STATUS_OK);
-    b=*input_fixture_transactions();b.resource_features|=MAELYS_DATALOG_RESOURCE_CALLER_ALLOCATOR;assert(maelys_datalog_session_config_set_backend_v7(c,&b)==MAELYS_DATALOG_STATUS_UNSUPPORTED);
+    b=*input_fixture_transactions();b.resource_features|=(UINT64_C(1)<<63);assert(maelys_datalog_session_config_set_backend_v7(c,&b)==MAELYS_DATALOG_STATUS_UNSUPPORTED);
     OK(maelys_datalog_session_config_set_backend_v7(c,input_fixture_transactions()));
     maelys_datalog_session_storage_plan_t delta=MAELYS_DATALOG_SESSION_PLAN_INIT,snapshot=MAELYS_DATALOG_SESSION_PLAN_INIT;
     OK(maelys_datalog_session_storage_requirements_configured(policy,0,c,&delta,NULL));

@@ -99,7 +99,8 @@ maelys_datalog_status_t maelys_datalog_session_inputs_init(
             resource_conflict(storage,needed,p->inputs->prepared,sizeof(*p->inputs->prepared)) ||
             resource_conflict(storage,needed,p->inputs->result_workspace,
                 maelys_datalog_solve_workspace_bytes(p->resources.derived_facts,1)) ||
-            retained_conflict(p->retained_inputs,storage,needed)) {
+            retained_conflict(p->retained_inputs,storage,needed) ||
+            allocation_blocks_conflict(p->allocation,storage,needed)) {
             unlock_workspaces();unlock_arenas();return MAELYS_DATALOG_STATUS_INVALID_STATE;
         }
     if (input_incarnation==UINT64_MAX) {

@@ -489,7 +489,7 @@ maelys_datalog_status_t maelys_datalog_backend_v6_validate(const maelys_datalog_
     if (!d || d->struct_size < sizeof(*d)) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
     if (d->abi_version != MAELYS_DATALOG_BACKEND_V6_ABI_VERSION ||
         !(d->resource_features & MAELYS_DATALOG_RESOURCE_SESSION_CAPACITIES) ||
-        (d->resource_features & ~MAELYS_DATALOG_RESOURCE_SUPPORTED_014))
+        (d->resource_features & ~MAELYS_DATALOG_RESOURCE_SUPPORTED))
         return MAELYS_DATALOG_STATUS_UNSUPPORTED;
     if (!valid_identity(d->name,d->semantic_id) || !d->storage_requirements || !d->prepare ||
         !d->solve || !d->commit || !d->destroy_result || !d->destroy ||

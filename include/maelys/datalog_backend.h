@@ -8,6 +8,71 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+#define MAELYS_DATALOG_ALLOCATION_SERVICE_VERSION 1u
+#define MAELYS_DATALOG_ALLOCATION_BUDGET_VERSION 1u
+
+/* On successful inspect, fits is 0 or 1; required_charge includes all service
+ * overhead. On failure every output member is unchanged. Inspect has no side
+ * effects, including on failure, attempts, peaks and sticky transaction state. */
+typedef struct {
+    size_t struct_size;
+    uint32_t contract_version;
+    uint32_t reserved; /* zero */
+    uint64_t required_features; /* zero in V1 */
+    size_t cap_bytes;
+    size_t current_bytes;
+    size_t remaining_bytes;
+    size_t operation_peak_bytes;
+    size_t required_charge;
+    uint32_t fits;
+    uint32_t reserved_tail; /* zero */
+} maelys_datalog_allocation_budget_t;
+#define MAELYS_DATALOG_ALLOCATION_BUDGET_PREFIX_SIZE \
+    (offsetof(maelys_datalog_allocation_budget_t, required_features) + sizeof(uint64_t))
+#define MAELYS_DATALOG_ALLOCATION_BUDGET_V1_SIZE \
+    sizeof(maelys_datalog_allocation_budget_t)
+#define MAELYS_DATALOG_ALLOCATION_BUDGET_INIT \
+    { MAELYS_DATALOG_ALLOCATION_BUDGET_V1_SIZE, \
+      MAELYS_DATALOG_ALLOCATION_BUDGET_VERSION, UINT32_C(0), UINT64_C(0), \
+      0, 0, 0, 0, 0, UINT32_C(0), UINT32_C(0) }
+
+/* Session-bound host service; never the caller's raw allocator. A provider may
+ * copy these members into its state. The service context survives through its
+ * final destroy callback, and cannot be used for another session or reentrantly.
+ * tracking_bytes = K; exact charge(n,a) = K + (a - 1) + n, all sums checked. */
+typedef struct {
+    size_t struct_size;
+    uint32_t contract_version;
+    uint32_t reserved; /* zero */
+    uint64_t required_features; /* zero in V1 */
+    size_t tracking_bytes;
+    size_t maximum_alignment;
+    void *context;
+    maelys_datalog_status_t (*inspect)(
+        void *context, size_t bytes, size_t alignment,
+        maelys_datalog_allocation_budget_t *out);
+    maelys_datalog_status_t (*acquire)(
+        void *context, size_t bytes, size_t alignment,
+        void **out_block, maelys_datalog_diagnostic_t *diagnostic);
+    void (*release)(void *context, void *block);
+} maelys_datalog_allocation_service_t;
+#define MAELYS_DATALOG_ALLOCATION_SERVICE_PREFIX_SIZE \
+    (offsetof(maelys_datalog_allocation_service_t, required_features) + sizeof(uint64_t))
+#define MAELYS_DATALOG_ALLOCATION_SERVICE_V1_SIZE \
+    sizeof(maelys_datalog_allocation_service_t)
+
+/* Existing normalized V1 resources stay at offset zero. Only elastic callers
+ * receive this required tail. Requirements and prepare receive the same prefix
+ * and scalar policy. allocation is NULL during requirements (no initialized
+ * session exists), then points to the session-bound service during prepare. */
+typedef struct {
+    maelys_datalog_session_resources_t base;
+    size_t execution_byte_cap;
+    const maelys_datalog_allocation_service_t *allocation;
+} maelys_datalog_session_allocation_resources_t;
+#define MAELYS_DATALOG_ALLOCATION_RESOURCES_V1_SIZE \
+    sizeof(maelys_datalog_session_allocation_resources_t)
+
 
 #define MAELYS_DATALOG_BACKEND_ABI_VERSION 5u
 typedef struct maelys_datalog_backend_output maelys_datalog_backend_output_t;
@@ -98,8 +163,9 @@ typedef struct maelys_datalog_backend_t {
 
 #define MAELYS_DATALOG_BACKEND_V6_ABI_VERSION 6u
 /* Independent descriptor: never cast to/from maelys_datalog_backend_t (ABI 5).
- * resource_features must include SESSION_CAPACITIES; other bits are unsupported
- * in 0.14.0, including the known reserved allocator bit. The full V6 descriptor
+ * resource_features must include SESSION_CAPACITIES. CALLER_ALLOCATOR requires
+ * the elastic resource tail and explicit caller opt-in; unknown bits are
+ * unsupported. ABI 5 and the reference provider remain fixed. The full V6 descriptor
  * is required. Compatible optional tails may follow; no callback insertion. */
 typedef struct maelys_datalog_backend_v6_t {
     uint32_t abi_version;
