@@ -5,7 +5,7 @@ All notable changes to Maelys Datalog are documented in this file.
 The project follows [Semantic Versioning](https://semver.org/) and uses the
 format described by [Keep a Changelog](https://keepachangelog.com/).
 
-## [Unreleased]
+## 0.20.0 — 2026-10-02
 
 ### Added
 
@@ -13,7 +13,6 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
   directly from a loaded policy handle, without creating a session or
   allocating storage. The returned identifier is borrowed for the handle's
   lifetime.
-
 - Program inspection can count and enumerate effectively admitted queries with
   `maelys_datalog_program_query_count` and `maelys_datalog_program_query` in
   `datalog_program.h`. The read-only, allocation-free views apply both the
@@ -29,6 +28,23 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
   File, buffer and historical text loaders keep their existing return values;
   caller-owned storage can still be released, reused and protected from a
   second release while its memory remains valid.
+
+### Validation and performance review
+
+- The complete [Python performance report](docs/validation/v0.20-release-review.md)
+  measures signed commit `88f085343c956b34a3c66b9750858fec6b987c41` in
+  [run 37056424298](https://github.com/maelys-dev/maelys-datalog/actions/runs/37056424298).
+  Its `report.json` SHA-256 is
+  `63a1ae5970a74f784ccd55b8dc8b474b5c12558b183ac3213f3676d13f241779`.
+  The report is `review_required`: 48 of 605 statistic rows require review
+  (40 against v0.19.0 and eight against the immutable v0.11.1 anchor), including
+  nine complete-request statistics. Twenty warm rows are not distinguished
+  from the matching null envelope in at least one round; ten cold rows above
+  their A/A floor remain informative only. The injected positive control and
+  historical v0.11.0 control are detected. The report metadata says
+  `release_eligible`. David authorized the 0.20.0 cut on 2026-10-02 after
+  reviewing this report. All `review_required` classifications and limitations
+  are preserved; this authorizes the cut stage only, not tagging or publication.
 
 ## 0.19.0 — 2026-10-02
 
