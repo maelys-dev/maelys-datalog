@@ -250,6 +250,9 @@ class FacadeTest(unittest.TestCase):
         # Python APIs or CFFI entry points for these existing native operations.
         native_only = {"policy_load_manifest_text", "result_filter_statistics",
                        "decision_from_presence"}
+        # Direct policy-ID lookup is a C consumer convenience in this change.
+        # No Python method or CFFI entry point exposes its borrowed string yet.
+        native_only.add("policy_id")
         self.assertEqual(exports, {"maelys_datalog_" + name for name in coverage.keys() | native_only})
         for name in {"maelys_datalog_" + name for name in coverage}:
             self.assertTrue(callable(getattr(binding.lib, name)), name)

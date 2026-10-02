@@ -17,6 +17,10 @@ extension descriptors are not part of its Python interface. The reference
 backend is selected by the native session API. Python/CFFI conversions and
 objects allocate; this is not a zero-malloc Python binding.
 
+Direct policy-identifier lookup through `maelys_datalog_policy_id()` is currently
+a C consumer convenience. This binding does not expose that borrowed-string
+accessor through CFFI or a Python `Ruleset` method.
+
 ## Install a precompiled release wheel
 
 Starting with the next release after 0.17.0, the GitHub Release assets include

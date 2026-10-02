@@ -273,6 +273,16 @@ maelys_datalog_status_t maelys_datalog_policy_count(
     return MAELYS_DATALOG_STATUS_OK;
 }
 
+maelys_datalog_status_t maelys_datalog_policy_id(
+    const maelys_datalog_policy_t *policy, size_t policy_index,
+    const char **out_policy_id) {
+    if (!policy || !out_policy_id) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
+    if (policy->released) return MAELYS_DATALOG_STATUS_INVALID_STATE;
+    if (policy_index >= policy->set.policy_count) return MAELYS_DATALOG_STATUS_NOT_FOUND;
+    *out_policy_id = policy->set.policies[policy_index].policy_id;
+    return MAELYS_DATALOG_STATUS_OK;
+}
+
 maelys_datalog_status_t maelys_datalog_policy_stat_get(
     const maelys_datalog_policy_t *policy, size_t policy_index,
     maelys_datalog_policy_stat_t statistic, size_t *out_value) {
