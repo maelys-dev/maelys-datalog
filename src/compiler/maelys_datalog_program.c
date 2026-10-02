@@ -4,6 +4,7 @@
 #include "src/core/maelys_datalog_filter.h"
 #include "src/core/maelys_datalog_pipeline_testing.h"
 #include "src/core/maelys_datalog_domain_registry.h"
+#include "src/core/maelys_datalog_query_internal.h"
 #include "common/maelys_sha256.h"
 #include "common/maelys_utf8.h"
 #include <stdio.h>
@@ -342,6 +343,36 @@ maelys_datalog_status_t maelys_datalog_program_predicate(const maelys_datalog_pr
     const maelys_datalog_predicate_entry_t *d = &p->ruleset->registry.defs[index];
     *out = (maelys_datalog_predicate_t){d->name, d->arity, d->kind_flags};
     return MAELYS_DATALOG_STATUS_OK;
+}
+maelys_datalog_status_t maelys_datalog_program_query_count(const maelys_datalog_program_t *p,
+                                                       size_t *out_count) {
+    if (!p || !p->ruleset || !out_count)
+        return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
+    size_t count = 0;
+    for (size_t i = 0; i < p->ruleset->registry.count; ++i) {
+        const maelys_datalog_predicate_entry_t *d = &p->ruleset->registry.defs[i];
+        if (maelys_datalog_validate_query_predicate(p->ruleset, d->name, d->arity, NULL) == MAELYS_OK)
+            ++count;
+    }
+    *out_count = count;
+    return MAELYS_DATALOG_STATUS_OK;
+}
+maelys_datalog_status_t maelys_datalog_program_query(const maelys_datalog_program_t *p,
+                                                 size_t index,
+                                                 maelys_datalog_predicate_t *out) {
+    if (!p || !p->ruleset || !out)
+        return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
+    for (size_t i = 0; i < p->ruleset->registry.count; ++i) {
+        const maelys_datalog_predicate_entry_t *d = &p->ruleset->registry.defs[i];
+        if (maelys_datalog_validate_query_predicate(p->ruleset, d->name, d->arity, NULL) != MAELYS_OK)
+            continue;
+        if (index == 0u) {
+            *out = (maelys_datalog_predicate_t){d->name, d->arity, d->kind_flags};
+            return MAELYS_DATALOG_STATUS_OK;
+        }
+        --index;
+    }
+    return MAELYS_DATALOG_STATUS_NOT_FOUND;
 }
 maelys_datalog_status_t maelys_datalog_program_fact(const maelys_datalog_program_t *p, size_t index,
                                                     maelys_datalog_ir_atom_t *out) {

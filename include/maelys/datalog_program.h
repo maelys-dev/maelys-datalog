@@ -124,6 +124,19 @@ MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_program_fingerprint(
     const maelys_datalog_program_t *, char out[MAELYS_DATALOG_PUBLIC_FINGERPRINT_BYTES]);
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_program_predicate(
     const maelys_datalog_program_t *, size_t, maelys_datalog_predicate_t *);
+/* Effective query surface: QUERY predicates admitted by the manifest whitelist
+ * when one is enforced. An absent or empty manifest queries list admits none;
+ * without whitelist enforcement all QUERY predicates are admitted. This is
+ * query authorization, independent of whether any matching facts are derived.
+ * Enumeration follows program_predicate order, omitting inadmissible entries;
+ * each name/arity pair occurs once. The descriptor retains its original flags
+ * and its name is borrowed for the program lifetime. These calls allocate no
+ * memory and leave outputs unchanged on failure. NULL arguments return
+ * INVALID_ARGUMENT; a zero-based query index >= count returns NOT_FOUND. */
+MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_program_query_count(
+    const maelys_datalog_program_t *, size_t *out_count);
+MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_program_query(
+    const maelys_datalog_program_t *, size_t index, maelys_datalog_predicate_t *out);
 MAELYS_DATALOG_API maelys_datalog_status_t
 maelys_datalog_program_fact(const maelys_datalog_program_t *, size_t, maelys_datalog_ir_atom_t *);
 MAELYS_DATALOG_API maelys_datalog_status_t

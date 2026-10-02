@@ -14,6 +14,13 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
   allocating storage. The returned identifier is borrowed for the handle's
   lifetime.
 
+- Program inspection can count and enumerate effectively admitted queries with
+  `maelys_datalog_program_query_count` and `maelys_datalog_program_query` in
+  `datalog_program.h`. The read-only, allocation-free views apply both the
+  predicate's QUERY flag and any manifest whitelist, including an empty list.
+  They describe query authorization, independently of derived facts, without
+  changing program fingerprints or backend ABIs.
+
 ### Fixed
 
 - Release policy handles loaded from manifests whose entries are all disabled.

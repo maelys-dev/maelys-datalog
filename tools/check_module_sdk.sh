@@ -41,6 +41,7 @@ cp "$root/tests/test_maelys_datalog_window.c" "$scratch/"
 cp "$root/tests/test_maelys_datalog_group_window.c" "$scratch/"
 cp "$root/tests/test_maelys_datalog_window_updates.c" "$scratch/"
 cp "$root/tests/test_maelys_datalog_consumer_introspection.c" "$scratch/"
+cp "$root/tests/test_maelys_datalog_program_queries.c" "$scratch/"
 cp "$root/tests/test_maelys_datalog_input_transactions.c" "$scratch/"
 cp "$root/tests/test_maelys_datalog_backend_inputs.c" "$scratch/"
 cp "$root/tests/test_maelys_datalog_backend_allocation.c" "$scratch/"
@@ -143,6 +144,12 @@ for linkage in "${linkages[@]}"; do
   else
     libs=(-L"$libdir" -lmaelys_datalog_shared "-Wl,-rpath,$libdir")
   fi
+  "$cc" "${flags[@]}" -pedantic-errors test_maelys_datalog_program_queries.c "${libs[@]}" -o queries-c
+  ./queries-c
+  "$cxx" -x c++ -std=c++17 -Wall -Wextra -Werror -pedantic-errors -I"$prefix/include" \
+    -c test_maelys_datalog_program_queries.c -o queries-cpp.o
+  "$cxx" queries-cpp.o "${libs[@]}" -o queries-cpp
+  ./queries-cpp
   "$cc" "${flags[@]}" public_api_consumer.c "${libs[@]}" -o facade
   ./facade
   "$cc" "${flags[@]}" -UNDEBUG test_maelys_datalog_advanced.c "${libs[@]}" -o advanced
