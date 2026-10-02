@@ -1,6 +1,6 @@
 # Optional backend allocation — revised contract proposal
 
-Status: documentation proposal, 2026-10-01, against the v0.17.0 SDK. Allocation
+Status: documentation proposal, amended 2026-10-02 against the v0.18.0 SDK. Allocation
 is still unsupported. The filename records an earlier 0.15.0 schedule; that
 release shipped the common JavaScript binding. This revision does not commit to
 a release number, install a declaration, implement a service or change an ABI.
@@ -38,14 +38,15 @@ is not part of any build or SDK installation. It uses native `size_t` byte count
 a separately reviewed implementation makes them available.
 
 Target ownership follows the [SDK header map](../sdk-headers.md): caller
-allocator and session request declarations belong in `maelys/datalog_resources.h`;
+allocator, session request and read-only session allocation statistics belong in `maelys/datalog_resources.h`;
 provider service, block inspection and normalized provider tail declarations
 belong in `maelys/datalog_backend.h`. `datalog_extension.h` retains only forward
 descriptor types and selection/registration. The review-only combined file below
 does not create an installed allocator API or add an application-to-provider
 include edge.
 
-`caller_allocator_t`, `allocation_service_t` and `allocation_budget_t` start with
+`caller_allocator_t`, `allocation_service_t`, `allocation_budget_t` and
+`session_allocation_stats_t` start with
 `struct_size`, `contract_version`, zero `reserved` and `required_features`.
 Version 1 requires the complete declared record and zero descriptor feature
 masks. Unknown versions/features return `UNSUPPORTED`; a short record, invalid
@@ -144,7 +145,10 @@ There is no separately growing host bookkeeping allocation. The implementation
 must publish K for every supported ABI/build and prove metadata fits it; inspect
 and acquisition use one checked calculation. No platform-independent K is claimed.
 
-Admission requires H+B <= C. Preparation may add A after admission, without a
+Admission requires H+B <= C. Invalid versions, opt-ins and provider combinations
+are refused before provider callbacks. Computing H+B can require the selected
+provider's side-effect-free `storage_requirements`; a cap shortfall is refused
+after sizing but before `prepare` or any caller allocator callback. Preparation may add A after admission, without a
 promise that the caller will satisfy it. Fixed plans keep A=0 and no service.
 All private state, indexes, provenance, journals, provisional workspace and
 simultaneous old/new blocks belong to B or A. Retained idle blocks count until
@@ -180,6 +184,28 @@ counters and operation peak are observational data. An operation begins with
 peak=R, can raise it and preserves the final peak after success or rejection.
 Abort restores current R and ownership exactly, not telemetry or the allocator's
 internal heap state. No fit query can secretly increment an attempt counter.
+
+### Application telemetry
+
+`session_get_allocation_stats(session, out)` is a read-only, versioned application
+API. V1 exposes only cap, current charge, remaining margin and operation peak;
+it exposes neither callbacks nor block addresses. FIXED sessions return
+`UNSUPPORTED` with unchanged output: this is unavailable elastic accounting,
+not a claim of zero fixed reservation. Fixed reservations remain available through
+the storage plan. An elastic session reports the successful preparation's final
+charge and peak initially; each solve starts a new peak at its current charge.
+Abort and result cleanup preserve that operation's peak, while current reflects
+released blocks. Acquisitions during failed construction cannot be queried through
+a session that was never published; the test allocator supplies that evidence.
+
+The getter allocates nothing, calls neither provider nor caller, changes no
+counter/lease, and is allowed with a live result or explanation. It rejects
+reentrant access during a session operation with `INVALID_STATE`. Concurrent
+access still requires external serialization. As with the budget output, short
+V1 output is `STORAGE_TOO_SMALL`, unknown version/features is `UNSUPPORTED`,
+nonzero reserved is `INVALID_ARGUMENT`, failure leaves the output unchanged, and
+success preserves caller size and any larger tail. Reading telemetry neither
+starts an operation nor clears a sticky error.
 
 ## 3. Ownership, growth and strict abort
 
@@ -298,7 +324,9 @@ does not silently reinterpret or recompute existing fixed identities. Descriptor
 size, allocation addresses/callbacks, K, current occupancy and operation peak
 are excluded. They affect implementation/resource availability, not the declared
 execution policy. Fingerprints do not guarantee allocator availability, equal
-physical footprint or identical performance across builds.
+physical footprint or identical performance across builds. ABI 7 applies its
+existing `maelys-backend-input-v1/abi7` envelope after this elastic identity; the
+ABI 6 framing vectors below do not silently replace that delivery domain.
 
 Synthetic framing vectors, not execution evidence: for L = 64 ASCII zeroes,
 E/D/S/T = 16/32/32/2048, mode=1 and required resources=3, the 103-byte V2 sequence
@@ -317,7 +345,9 @@ requires equal normalized E/D/S/T, mode/features and configured C in both banks.
 Each bank owns its cap and service: equal C is not a shared pool, a transferable
 balance or half an implicit total. Their current/peak charges may differ during
 alternation without changing identity. A mismatched cap is refused before any
-provider preparation or publication. For adapter storage W,
+candidate/probe solve, additional allocation or publication during window
+initialization. The two sessions have already been prepared by their caller;
+window initialization does not construct them. Both remain unchanged on mismatch. For adapter storage W,
 report fixed reservation W+(H0+B0)+(H1+B1), current reservation W+R0+R1 and
 configured bound W+C0+C1 separately. Never add H/B again to a cap that already
 includes them; shared dependencies and other exclusions remain separate. A
@@ -338,16 +368,21 @@ The modeled window in #140 is not evidence for these real adapters.
 Only after this documentation is reviewed does a separate service implementation
 begin. Keep fixed/default allocation and lease guarantees, installed-SDK ABI 5/6/7
 consumers and language behavior unchanged. The host conformance provider can use
-ABI 6 snapshot solve; there is no requirement to adopt ABI 7 to test allocation.
+ABI 6 snapshot solve. Also exercise a positive, separately compiled ABI 7
+provider with allocator negotiation and transactional input delivery: those are
+independent opt-ins, and abort must not advance its accepted input base.
 
 | Area | Required evidence |
 | --- | --- |
-| Declarations/admission | Separately compiled old/new callers, hosts and providers; short fields, full V1 and optional tails, untouched failed outputs, unknown versions/features, wrong mode and both independent opt-ins. Existing fixed readers refuse before callbacks. |
+| Declarations/admission | Separately compiled old/new callers, hosts and providers; short fields, full V1 and optional tails, untouched failed outputs, unknown versions/features, wrong mode and both independent opt-ins. Existing fixed readers reject elastic mode/required bits before callbacks; new
+fixed callers without that bit ignore optional tails without dereferencing an
+allocator pointer. Sizing may precede byte-cap rejection, but prepare may not. |
+| Application statistics | FIXED unavailable, preparation peak, accepted/rejected solve and result cleanup, live result/explanation reads, short/unknown/larger outputs, no callbacks or state changes. |
 | Exact charge and inspection | Every supported alignment and charged boundary, zero/overflow inputs, C=H+B, one byte short/exact fit, fit followed by NULL, repeated oversized inspection then smaller successful acquire; no change to caller calls, attempts, peak or sticky state. Query and acquire share the checked formula. |
 | Growth/peak | Old+new coexist through commit, cap where replacement alone fits but coexistence does not, never acquire/release in commit, old release only at cleanup, all metadata/padding/cached bytes counted. |
 | Abort | Fail every acquisition ordinal in prepare/solve, including after earlier successes. Compare all committed payload bytes, preexisting ownership/current charge; every new block released once; retry succeeds. Peak/attempt telemetry retained separately. |
 | Late rejection/leases | Swallowed refusal, emission/work/output validation and real window lease rejection after growth; no publication, intact old explanation/result, no early old-block release. |
-| Two banks | Equal cap with unequal current charges, cap mismatch before prepare, independently exhausted caps, shared allocator refusal and alternating accepted bases. |
+| Two banks | Equal cap with unequal current charges, cap mismatch before candidate/probe solve or additional acquisition, independently exhausted caps, shared allocator refusal and alternating accepted bases. |
 | Bounded reuse | Preexisting idle reuse, no new-block cache on abort, accepted workspace retention bounded by policy, long accept/reject/expiry traces, final destruction returns all blocks. |
 
 A small native provider implementing a checked projection qualifies transport,
@@ -373,7 +408,9 @@ allocation ABI or import private implementation into the public repository.
 Measure fixed reservation, current/peak charge, acquire/release counts, copied/
 reset bytes and complete transaction Ir/Dr/Dw by function, including rejected
 growth, cleanup and service accounting. Retain repeated counts and attribution
-residuals. Reduced reservation or fewer allocator calls is not a speed claim.
+residuals. Compare the ordinary fixed path against v0.18.0 in SMALL and LARGE,
+on 93-symbol and small fixtures including result release. Report exact count
+differences by function, with no invented “few instructions” tolerance. Reduced reservation or fewer allocator calls is not a speed claim.
 Only implementation plus host and consumer qualification can advertise the
 currently reserved feature; document any resulting contract correction before
 freezing it. A qualified 0.x contract does not require a 1.0 release.
