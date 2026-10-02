@@ -30,6 +30,15 @@ int main(void) {
     const size_t expected[] = {4, 1, 2};
     char before[MAELYS_DATALOG_PUBLIC_FINGERPRINT_BYTES], after[MAELYS_DATALOG_PUBLIC_FINGERPRINT_BYTES];
     CHECK(maelys_datalog_policy_fingerprint(p, before) == 0);
+    const char *policy_id = "unchanged";
+    CHECK(maelys_datalog_policy_id(p, 0, &policy_id) == MAELYS_DATALOG_STATUS_OK);
+    CHECK(strcmp(policy_id, "counts") == 0);
+    policy_id = "unchanged";
+    CHECK(maelys_datalog_policy_id(p, 1, &policy_id) == MAELYS_DATALOG_STATUS_NOT_FOUND);
+    CHECK(strcmp(policy_id, "unchanged") == 0);
+    CHECK(maelys_datalog_policy_id(NULL, 0, &policy_id) == MAELYS_DATALOG_STATUS_INVALID_ARGUMENT);
+    CHECK(strcmp(policy_id, "unchanged") == 0);
+    CHECK(maelys_datalog_policy_id(p, 0, NULL) == MAELYS_DATALOG_STATUS_INVALID_ARGUMENT);
     for (size_t i = 0; i < 3; ++i) {
         CHECK(maelys_datalog_policy_stat_get(p, 0, keys[i], &value) == 0);
         CHECK(value == expected[i]);
@@ -61,6 +70,9 @@ int main(void) {
     value = 73;
     CHECK(maelys_datalog_policy_stat_get(p, 0, keys[0], &value) == MAELYS_DATALOG_STATUS_INVALID_STATE);
     CHECK(value == 73);
+    policy_id = "unchanged";
+    CHECK(maelys_datalog_policy_id(p, 0, &policy_id) == MAELYS_DATALOG_STATUS_INVALID_STATE);
+    CHECK(strcmp(policy_id, "unchanged") == 0);
     CHECK(maelys_datalog_session_free(session) == 0);
     CHECK(maelys_datalog_session_config_free(config) == 0);
     puts("consumer introspection: bounds, normalized counts, quotas, failures and lifetimes PASS");
