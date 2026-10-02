@@ -641,6 +641,32 @@ remain a separate qualification; neither this fixture nor passing CI proves them
 `tools/check_backend_allocation_mutations.py` rebuilds each negative control with
 ASan/UBSan, requires a passing baseline and a named failing assertion, and keeps
 build failures distinct from detections. Raw logs and measurements belong outside
-Git. Real two-window qualification and complete transaction software counts are
-separate follow-up changes; no performance conclusion or release approval is
+Git. Complete transaction software counts remain a separate follow-up; no performance conclusion or release approval is
 conferred by the session tests.
+
+
+`test_allocation_windows` exercises both actual adapters with ABI 6 snapshots and
+ABI 7 retained inputs. `unequal_caps` rejects mismatch before any probe solve or
+new caller acquisition. `bounded_banks` fixes C to the initial probe peak, then
+rejects a transaction while the other bank still has unused margin. Current
+charges differ under the same execution identity. `shared_allocator` uses a
+single caller ledger for both sessions and fails the second acquisition while
+both have remaining cap; neither committed charge changes and retry succeeds.
+
+`run_window` compares every full typed output with a reference session through
+120 transactions per adapter/ABI, seed `0xa110ca7e`. It covers duplicate event
+contributions and another event/static support, alternate bank bases, static
+replacement and expiration. Its public fixture's restricted EDB anti-join keeps
+output rows in real caller blocks: withdrawing blockers grows that output while
+inputs shrink. Failures at acquisition ordinals 1/2/3 and a late explanation-lease
+rejection restore both banks. The witnesses compare every retained caller block
+byte (including host tracking metadata), its address/size, and the provider arena
+apart from declared test counters/control hooks. Previously retained scratch must
+also be zero at rest. This is not a byte comparison of the host session: peak and
+attempt observations intentionally survive rejection. Current charge, accepted
+base, result lease and expiry watermark remain unchanged. No-op expiry invokes
+no allocator or provider and preserves the explanation lease. Closing returns
+all caller blocks. `--windows` adds six sanitizer-backed mutations; raw evidence
+remains in CI artifacts. The installed static and shared SDK consumer replays the
+same four variants. No private backend, arbitrary negation solver or recursive
+allocation guarantee is inferred from this bounded fixture.

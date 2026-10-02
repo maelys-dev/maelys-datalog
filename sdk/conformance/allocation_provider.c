@@ -9,7 +9,10 @@ typedef struct {
 } allocation_fixture_row;
 typedef struct {
     size_t capacity,count,candidate_count,rules;
-    const char *source[8],*head[8];
+    const char *source[8],*head[8],*blocked[8];
+    int negation;
+    allocation_fixture_row *live_output,*candidate_output;
+    size_t output_count,candidate_output_count;
     size_t arity[8];
     allocation_fixture_row *live,*candidate;
     maelys_datalog_input_base_t base,next;
@@ -24,24 +27,29 @@ typedef struct {
 static maelys_datalog_status_t allocation_fixture_plan(const maelys_datalog_program_t *p,
     const maelys_datalog_session_resources_t *r,size_t *bytes,size_t *alignment) {
     maelys_datalog_program_info_t info;maelys_datalog_status_t rc=maelys_datalog_program_info(p,&info);if(rc)return rc;
-    if(info.fact_count || info.rule_count>8 || (info.required_capabilities & ~MAELYS_DATALOG_CAP_POSITIVE))return MAELYS_DATALOG_STATUS_UNSUPPORTED;
+    if(info.fact_count || info.rule_count>8 || (info.required_capabilities & ~(MAELYS_DATALOG_CAP_POSITIVE|MAELYS_DATALOG_CAP_NEGATION)))return MAELYS_DATALOG_STATUS_UNSUPPORTED;
     for(size_t i=0;i<info.rule_count;++i) {
         maelys_datalog_ir_rule_t rule;rc=maelys_datalog_program_rule(p,i,&rule);if(rc)return rc;
-        if(rule.body_count!=1 || rule.body[0].kind!=MAELYS_DATALOG_IR_ATOM ||
+        if((rule.body_count!=1 && rule.body_count!=2) || rule.body[0].kind!=MAELYS_DATALOG_IR_ATOM ||
+           (rule.body_count==2 && (rule.body[1].kind!=MAELYS_DATALOG_IR_NEGATION || rule.body[1].atom.arity!=rule.head.arity)) ||
            rule.head.arity!=rule.body[0].atom.arity)return MAELYS_DATALOG_STATUS_UNSUPPORTED;
         for(size_t j=0;j<rule.head.arity;++j) {
             if(rule.head.terms[j].kind!=MAELYS_DATALOG_IR_VARIABLE ||
                rule.body[0].atom.terms[j].kind!=MAELYS_DATALOG_IR_VARIABLE ||
                rule.head.terms[j].as.variable!=rule.body[0].atom.terms[j].as.variable)return MAELYS_DATALOG_STATUS_UNSUPPORTED;
+            if(rule.body_count==2 && (rule.body[1].atom.terms[j].kind!=MAELYS_DATALOG_IR_VARIABLE ||
+               rule.body[1].atom.terms[j].as.variable!=rule.head.terms[j].as.variable))return MAELYS_DATALOG_STATUS_UNSUPPORTED;
             for(size_t k=0;k<j;++k)if(rule.head.terms[k].as.variable==rule.head.terms[j].as.variable)return MAELYS_DATALOG_STATUS_UNSUPPORTED;
         }
-        int edb=0;
+        int edb=0,negative_edb=rule.body_count==1;
         for(size_t j=0;j<info.predicate_count;++j) {
             maelys_datalog_predicate_t pred;rc=maelys_datalog_program_predicate(p,j,&pred);if(rc)return rc;
             if(!strcmp(pred.name,rule.body[0].atom.predicate) && pred.arity==rule.body[0].atom.arity)
                 edb=!!(pred.flags&MAELYS_DATALOG_PREDICATE_EDB);
+            if(rule.body_count==2 && !strcmp(pred.name,rule.body[1].atom.predicate) && pred.arity==rule.body[1].atom.arity)
+                negative_edb=!!(pred.flags&MAELYS_DATALOG_PREDICATE_EDB);
         }
-        if(!edb)return MAELYS_DATALOG_STATUS_UNSUPPORTED;
+        if(!edb || !negative_edb)return MAELYS_DATALOG_STATUS_UNSUPPORTED;
     }
     if(r->struct_size<sizeof(maelys_datalog_session_allocation_resources_t) ||
        r->memory_mode!=MAELYS_DATALOG_MEMORY_BACKEND_ELASTIC ||
@@ -68,6 +76,7 @@ static maelys_datalog_status_t allocation_fixture_prepare(const maelys_datalog_p
     for(size_t i=0;i<s->rules;++i) {
         maelys_datalog_ir_rule_t rule;rc=maelys_datalog_program_rule(p,i,&rule);if(rc)return rc;
         s->head[i]=rule.head.predicate;s->source[i]=rule.body[0].atom.predicate;s->arity[i]=rule.head.arity;
+        if(rule.body_count==2){s->blocked[i]=rule.body[1].atom.predicate;s->negation=1;}
     }
     *out=s;return MAELYS_DATALOG_STATUS_OK;
 }
@@ -91,6 +100,19 @@ static int allocation_fixture_equal(const maelys_datalog_fact_t *a,const maelys_
     }
     return 1;
 }
+/* Deliberately small anti-join: every bound source row is tested against EDB.
+ * It is an allocation/lifecycle oracle, not an incremental implementation. */
+static maelys_datalog_status_t allocation_fixture_allowed(allocation_fixture_state *s,
+    const maelys_datalog_fact_t *f,size_t rule,maelys_datalog_backend_output_t *out,int *yes) {
+    *yes=1;
+    if(!s->blocked[rule])return MAELYS_DATALOG_STATUS_OK;
+    maelys_datalog_fact_t blocker=*f;blocker.predicate=s->blocked[rule];
+    for(size_t i=0;i<s->candidate_count;++i) {
+        maelys_datalog_status_t rc=maelys_datalog_backend_charge(out,1);if(rc)return rc;
+        if(allocation_fixture_equal(&blocker,&s->candidate[i].fact)){*yes=0;break;}
+    }
+    return MAELYS_DATALOG_STATUS_OK;
+}
 static maelys_datalog_status_t allocation_fixture_derive(allocation_fixture_state *s,maelys_datalog_backend_output_t *out) {
     if(s->fault==1 || s->fault==5)return MAELYS_DATALOG_STATUS_INVALID_FIELD;
     if(s->fault==2) {
@@ -98,11 +120,30 @@ static maelys_datalog_status_t allocation_fixture_derive(allocation_fixture_stat
         return MAELYS_DATALOG_STATUS_OK;
     }
     if(s->fault==3) { (void)maelys_datalog_backend_charge(out,UINT64_MAX);return MAELYS_DATALOG_STATUS_OK; }
+    size_t needed=0;
+    /* An actual output block grows when a negated blocker disappears, even
+     * while the input shrinks. The former block survives until result cleanup. */
+    if(s->negation) {
+        for(size_t i=0;i<s->candidate_count;++i)for(size_t j=0;j<s->rules;++j) {
+            const maelys_datalog_fact_t *f=&s->candidate[i].fact;int yes;
+            if(f->arity!=s->arity[j] || strcmp(f->predicate,s->source[j]))continue;
+            maelys_datalog_status_t rc=allocation_fixture_allowed(s,f,j,out,&yes);if(rc)return rc;
+            needed+=(size_t)yes;
+        }
+        maelys_datalog_status_t rc=s->allocation.acquire(s->allocation.context,
+            (needed?needed:1)*sizeof(*s->candidate_output),_Alignof(allocation_fixture_row),
+            (void **)&s->candidate_output,NULL);if(rc)return rc;
+    }
     for(size_t i=0;i<s->candidate_count;++i)for(size_t j=0;j<s->rules;++j) {
-        const maelys_datalog_fact_t *f=&s->candidate[i].fact;
+        const maelys_datalog_fact_t *f=&s->candidate[i].fact;int yes;
         if(f->arity!=s->arity[j] || strcmp(f->predicate,s->source[j]))continue;
         maelys_datalog_status_t rc=maelys_datalog_backend_charge(out,1);if(rc)return rc;
-        maelys_datalog_fact_t value=*f;value.predicate=s->head[j];rc=maelys_datalog_backend_emit(out,&value);if(rc)return rc;
+        rc=allocation_fixture_allowed(s,f,j,out,&yes);if(rc)return rc;if(!yes)continue;
+        maelys_datalog_fact_t value=*f;value.predicate=s->head[j];
+        if(s->negation) {
+            rc=allocation_fixture_copy(&s->candidate_output[s->candidate_output_count++],&value);if(rc)return rc;
+        }
+        rc=maelys_datalog_backend_emit(out,&value);if(rc)return rc;
     }
     return MAELYS_DATALOG_STATUS_OK;
 }
@@ -167,12 +208,18 @@ static maelys_datalog_status_t allocation_fixture_solve(void *state,const maelys
 static void allocation_fixture_commit(void *state,void *result) {
     allocation_fixture_state *s=state;(void)result;
     allocation_fixture_row *swap=s->live;s->live=s->candidate;s->candidate=swap;
+    if(s->negation) {
+        swap=s->live_output;s->live_output=s->candidate_output;s->candidate_output=swap;
+        s->output_count=s->candidate_output_count;
+    }
     s->count=s->candidate_count;s->base=s->next;s->committed=1;++s->observation.commits;
 }
 static void allocation_fixture_release(void *state,void *result) {
     allocation_fixture_state *s=state;(void)result;
     if(s->staged) { if(s->committed)++s->observation.releases;else ++s->observation.aborts; }
     if(s->fault!=5 && s->candidate)s->allocation.release(s->allocation.context,s->candidate);
+    if(s->candidate_output)s->allocation.release(s->allocation.context,s->candidate_output);
+    s->candidate_output=NULL;s->candidate_output_count=0;
     if(s->temporary)s->allocation.release(s->allocation.context,s->temporary);
     s->candidate=NULL;s->temporary=NULL;s->candidate_count=0;
     s->next=(maelys_datalog_input_base_t){0};
@@ -181,6 +228,7 @@ static void allocation_fixture_release(void *state,void *result) {
 }
 static void allocation_fixture_destroy(void *state) {
     allocation_fixture_state *s=state;if(!s)return;
+    if(s->live_output)s->allocation.release(s->allocation.context,s->live_output);
     if(s->live)s->allocation.release(s->allocation.context,s->live);
     if(s->workspace)s->allocation.release(s->allocation.context,s->workspace);
 }
@@ -196,6 +244,12 @@ static maelys_datalog_status_t allocation_fixture_explain_prepare(void *state,vo
     if(kind!=MAELYS_DATALOG_EXPLAIN_TRUE)return MAELYS_DATALOG_STATUS_UNSUPPORTED;
     if(!bytes)return MAELYS_DATALOG_STATUS_STORAGE_TOO_SMALL;
     maelys_datalog_fact_t query={.predicate=predicate,.arity=arity};memcpy(query.terms,terms,arity*sizeof(*terms));
+    if(s->negation) {
+        for(size_t i=0;i<s->output_count;++i)if(allocation_fixture_equal(&query,&s->live_output[i].fact)) {
+            *(unsigned char *)storage=1;*text_size=strlen("identity projection from committed EDB");return MAELYS_DATALOG_STATUS_OK;
+        }
+        return MAELYS_DATALOG_STATUS_NOT_FOUND;
+    }
     for(size_t i=0;i<s->count;++i)for(size_t j=0;j<s->rules;++j) {
         maelys_datalog_fact_t fact=s->live[i].fact;
         if(fact.arity!=s->arity[j] || strcmp(fact.predicate,s->source[j]))continue;
@@ -213,8 +267,8 @@ static maelys_datalog_status_t allocation_fixture_explain_write(void *state,void
     memcpy(text,message,sizeof(message));return MAELYS_DATALOG_STATUS_OK;
 }
 #define ALLOCATION_COMMON \
-    .name="allocation_conformance",.semantic_id="public.elastic-projection.v1", \
-    .capabilities=MAELYS_DATALOG_CAP_POSITIVE|MAELYS_DATALOG_CAP_WORK_LIMIT|MAELYS_DATALOG_CAP_EXPLAIN_TRUE, \
+    .name="allocation_conformance",.semantic_id="public.elastic-projection-antijoin.v2", \
+    .capabilities=MAELYS_DATALOG_CAP_NEGATION|MAELYS_DATALOG_CAP_POSITIVE|MAELYS_DATALOG_CAP_WORK_LIMIT|MAELYS_DATALOG_CAP_EXPLAIN_TRUE, \
     .resource_features=MAELYS_DATALOG_RESOURCE_SUPPORTED, \
     .storage_requirements=allocation_fixture_plan,.prepare=allocation_fixture_prepare, \
     .commit=allocation_fixture_commit,.destroy_result=allocation_fixture_release,.destroy=allocation_fixture_destroy, \
@@ -228,7 +282,7 @@ const maelys_datalog_backend_v7_t *allocation_fixture_transactions(void) {
 }
 void allocation_fixture_fault(void *storage,unsigned mode) { ((allocation_fixture_state *)storage)->fault=mode; }
 void allocation_fixture_observe(const void *storage,allocation_fixture_observation *out) {
-    const allocation_fixture_state *s=storage;*out=s->observation;out->base=s->base;out->retained=s->count;
+    const allocation_fixture_state *s=storage;*out=s->observation;out->base=s->base;out->retained=s->count;out->output_bytes=s->output_count*sizeof(*s->live_output);
     uint64_t digest=0;
     for(size_t i=0;i<s->count;++i) {
         const maelys_datalog_fact_t *f=&s->live[i].fact;uint64_t hash=UINT64_C(14695981039346656037);
@@ -262,3 +316,20 @@ void allocation_fixture_service(const void *storage,maelys_datalog_allocation_se
 }
 
 const void *allocation_fixture_live(const void *storage) { return ((const allocation_fixture_state *)storage)->live; }
+
+/* Raw provider arena image except explicitly out-of-band test observations.
+ * Caller-owned block bytes are checked independently by the caller ledger. */
+size_t allocation_fixture_arena_image(const void *storage,void *out,size_t capacity) {
+    allocation_fixture_state copy=*(const allocation_fixture_state *)storage;
+    memset(&copy.observation,0,sizeof(copy.observation));copy.fault=0;
+    copy.hook=NULL;copy.hook_context=NULL;
+    if(out && capacity>=sizeof(copy))memcpy(out,&copy,sizeof(copy));
+    return sizeof(copy);
+}
+
+int allocation_fixture_scratch_valid(const void *storage) {
+    const allocation_fixture_state *s=storage;
+    if(s->staged)return 1;
+    for(size_t i=0;i<128;++i)if(((const unsigned char *)s->workspace)[i])return 0;
+    return 1;
+}

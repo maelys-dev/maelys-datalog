@@ -24,7 +24,9 @@ TEST_HELPER_SRCS = \
 TEST_SRCS = $(wildcard tests/test_*.c)
 TEST_BINS = $(TEST_SRCS:tests/%.c=$(BUILD_DIR)/tests/%)
 $(BUILD_DIR)/tests/test_maelys_datalog_backend_allocation: TEST_EXTRA_SRCS = sdk/conformance/allocation_provider.c
+$(BUILD_DIR)/tests/test_maelys_datalog_allocation_windows: TEST_EXTRA_SRCS = sdk/conformance/allocation_provider.c
 $(BUILD_DIR)/tests/test_maelys_datalog_backend_allocation: TEST_CFLAGS += -Isdk/conformance -UNDEBUG
+$(BUILD_DIR)/tests/test_maelys_datalog_allocation_windows: TEST_CFLAGS += -Isdk/conformance -UNDEBUG
 $(BUILD_DIR)/tests/test_maelys_datalog_backend_inputs: TEST_EXTRA_SRCS = sdk/conformance/input_provider.c
 $(BUILD_DIR)/tests/test_maelys_datalog_backend_inputs: TEST_CFLAGS += -Isdk/conformance -UNDEBUG
 TEST_CFLAGS = $(CFLAGS) -DMAELYS_TESTING
@@ -60,6 +62,8 @@ $(BUILD_DIR)/tests/test_maelys_datalog_pipeline: TEST_EXTRA_SRCS = sdk/examples/
 $(BUILD_DIR)/tests/test_maelys_datalog_pipeline: sdk/examples/frontend/src/extension.c
 
 $(BUILD_DIR)/tests/test_maelys_datalog_backend_allocation: tests/test_maelys_datalog_backend_allocation.c sdk/conformance/allocation_provider.c sdk/conformance/allocation_provider.h tests/fixtures/allocation_guard.h $(SRCS) $(ENGINE_HEADERS) | $(BUILD_DIR)/tests
+	$(CC) $(TEST_CFLAGS) -include tests/fixtures/allocation_guard.h $(SRCS) sdk/conformance/allocation_provider.c $< -o $@
+$(BUILD_DIR)/tests/test_maelys_datalog_allocation_windows: tests/test_maelys_datalog_allocation_windows.c sdk/conformance/allocation_provider.c sdk/conformance/allocation_provider.h tests/fixtures/allocation_guard.h $(SRCS) $(ENGINE_HEADERS) | $(BUILD_DIR)/tests
 	$(CC) $(TEST_CFLAGS) -include tests/fixtures/allocation_guard.h $(SRCS) sdk/conformance/allocation_provider.c $< -o $@
 
 # This test includes the EDB implementation with local allocator fault hooks.
