@@ -6,6 +6,7 @@
 #undef free
 #undef memset
 #include "maelys/datalog.h"
+#include "maelys/datalog_resources.h"
 #include <maelys/datalog_backend.h>
 #include "src/core/maelys_datalog_solver.h"
 #include "src/core/maelys_datalog_domain_registry.h"
@@ -15,6 +16,7 @@
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
+#include <unistd.h>
 
 static int forbidden;
 static size_t attempts, hot_frees, live, total, fault_after = SIZE_MAX;
@@ -146,6 +148,73 @@ static void backend_export_reservation(const maelys_datalog_policy_t *policy, si
     }
     assert(exported_solves == 2u);
 }
+/* A successful load owns a live reference even when every entry is disabled.
+ * Exercise all public loaders: file/buffer use enforce; text/_in use v2. */
+static void empty_manifest_policy_release(void) {
+    const char format[] =
+        "{\"policy_set_id\":\"disabled\",\"policy_set_version\":\"1\","
+        "\"manifest_version\":\"1\",\"default_profile\":\"%s\","
+        "\"created_for\":\"test\",\"strict_loading\":true,\"fail_closed\":true,"
+        "\"capabilities\":[],\"policies\":[{\"policy_id\":\"disabled\","
+        "\"domain\":\"hot_path\",\"file\":\"missing-disabled.dl\","
+        "\"sha256\":\"0000000000000000000000000000000000000000000000000000000000000000\","
+        "\"mode\":\"enforce\",\"enabled\":false,\"description\":\"disabled\"}]}";
+    char manifest[1024], path[] = "/tmp/maelys-disabled-manifest-XXXXXX";
+    int fd = mkstemp(path); assert(fd >= 0);
+    assert(close(fd) == 0);
+    size_t bytes, alignment;
+    assert(maelys_datalog_policy_storage_requirements(&bytes, &alignment) == 0);
+    void *storage = malloc(bytes); assert(storage && (uintptr_t)storage % alignment == 0);
+    const size_t baseline = live;
+    for (unsigned loader = 0; loader < 4; ++loader) {
+        int length = snprintf(manifest, sizeof(manifest), format,
+            loader < 2 ? "enforce" : "MAELYS-DATALOG-v2");
+        assert(length > 0 && (size_t)length < sizeof(manifest));
+        if (loader == 0) {
+            FILE *file = fopen(path, "wb"); assert(file);
+            assert(fwrite(manifest, 1, (size_t)length, file) == (size_t)length);
+            assert(fclose(file) == 0);
+        }
+        for (unsigned repeat = 0; repeat < 3; ++repeat) {
+            maelys_datalog_policy_t *policy = NULL;
+            maelys_datalog_diagnostic_t diag = MAELYS_DATALOG_DIAGNOSTIC_INIT;
+            maelys_datalog_status_t status;
+            if (loader == 0)
+                status = maelys_datalog_policy_load_manifest(path, 0, &policy, &diag);
+            else if (loader == 1)
+                status = maelys_datalog_policy_load_manifest_buffer(
+                    manifest, (size_t)length, NULL, 0, 0, &policy, &diag);
+            else if (loader == 2)
+                status = maelys_datalog_policy_load_manifest_text(
+                    manifest, (size_t)length, NULL, 0, 0, &policy, &diag);
+            else
+                status = maelys_datalog_policy_load_manifest_text_in(
+                    storage, bytes, manifest, (size_t)length, NULL, 0, 0, &policy, &diag);
+            assert(status == MAELYS_DATALOG_STATUS_OK && policy);
+            assert(live == baseline + (loader == 3 ? 0u : 1u));
+            size_t count = 99;
+            assert(maelys_datalog_policy_count(policy, &count) == MAELYS_DATALOG_STATUS_INVALID_STATE);
+            assert(count == 99); /* The existing empty-set query contract stays unchanged. */
+            const size_t before = total;
+            fault_after = 0; /* Releasing must not need a replacement allocation. */
+            assert(maelys_datalog_policy_free(policy) == MAELYS_DATALOG_STATUS_OK);
+            assert(live == baseline && total == before);
+            if (loader == 3) {
+                /* Only caller-owned storage remains addressable after release. */
+                assert(policy == storage);
+                assert(maelys_datalog_policy_free(policy) == MAELYS_DATALOG_STATUS_INVALID_STATE);
+                for (size_t i = 0; i < bytes; ++i) assert(((unsigned char *)storage)[i] == 0);
+                assert(live == baseline && total == before);
+            }
+            fault_after = SIZE_MAX;
+        }
+    }
+    free(storage);
+    assert(unlink(path) == 0);
+    assert(maelys_datalog_policy_free(NULL) == MAELYS_DATALOG_STATUS_INVALID_ARGUMENT);
+    puts("empty manifests: four loaders, balanced allocations and caller-storage reuse PASS");
+}
+
 static void caller_owned_policy_snapshot(void) {
     maelys_datalog_session_recycle_purge();
     size_t bytes, alignment;
@@ -166,6 +235,7 @@ static void caller_owned_policy_snapshot(void) {
     assert(reservation <= 660000u);
 #endif
     assert(maelys_datalog_policy_free(policy) == 0);
+    assert(maelys_datalog_policy_free(policy) == MAELYS_DATALOG_STATUS_INVALID_STATE);
     memset(storage, 0xa5, bytes); free(storage);
     forbidden = 1;
     maelys_datalog_fact_t fact = {.predicate = "seed", .arity = 1};
@@ -369,6 +439,7 @@ int main(void) {
     };
     const maelys_datalog_domain_t domain = {"hot_path", predicates, 3, NULL, 0};
     assert(maelys_datalog_domain_register(&domain) == 0);
+    empty_manifest_policy_release();
     caller_owned_policy_snapshot();
     const char *source = "allow(X) :- seed(X), not(blocked(X)).";
     maelys_datalog_diagnostic_t diag = MAELYS_DATALOG_DIAGNOSTIC_INIT;

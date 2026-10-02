@@ -318,7 +318,9 @@ void maelys_datalog_policy_release_storage(const maelys_datalog_policy_t *retain
 }
 maelys_datalog_status_t maelys_datalog_policy_free(maelys_datalog_policy_t *policy) {
     if (!policy) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
-    if (!policy->set.policy_count || policy->released) return MAELYS_DATALOG_STATUS_INVALID_STATE;
+    /* Empty manifests still own a reference; discarded caller storage does not. */
+    if (policy->released || atomic_load_explicit(&policy->references, memory_order_acquire) == 0u)
+        return MAELYS_DATALOG_STATUS_INVALID_STATE;
     policy->released = 1;
     maelys_datalog_policy_release_storage(policy);
     return MAELYS_DATALOG_STATUS_OK;
