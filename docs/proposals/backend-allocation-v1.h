@@ -93,6 +93,28 @@ typedef struct {
 #define MAELYS_DATALOG_ALLOCATION_SERVICE_V1_SIZE \
     sizeof(maelys_datalog_allocation_service_t)
 
+/* Read-only application output. FIXED returns UNSUPPORTED, unchanged. */
+#define MAELYS_DATALOG_ALLOCATION_STATS_VERSION 1u
+typedef struct {
+    size_t struct_size;
+    uint32_t contract_version;
+    uint32_t reserved;
+    uint64_t required_features;
+    size_t cap_bytes;
+    size_t current_bytes;
+    size_t remaining_bytes;
+    size_t operation_peak_bytes;
+} maelys_datalog_session_allocation_stats_t;
+#define MAELYS_DATALOG_ALLOCATION_STATS_PREFIX_SIZE \
+    (offsetof(maelys_datalog_session_allocation_stats_t, required_features) + sizeof(uint64_t))
+#define MAELYS_DATALOG_ALLOCATION_STATS_V1_SIZE \
+    sizeof(maelys_datalog_session_allocation_stats_t)
+#define MAELYS_DATALOG_ALLOCATION_STATS_INIT \
+    { MAELYS_DATALOG_ALLOCATION_STATS_V1_SIZE, MAELYS_DATALOG_ALLOCATION_STATS_VERSION, \
+      UINT32_C(0), UINT64_C(0), 0, 0, 0, 0 }
+maelys_datalog_status_t maelys_datalog_session_get_allocation_stats(
+    const maelys_datalog_session_t *, maelys_datalog_session_allocation_stats_t *);
+
 /* Existing normalized V1 resources stay at offset zero. Only elastic callers
  * receive this required tail. Requirements and prepare receive the same prefix
  * and scalar policy. allocation is NULL during requirements (no initialized
