@@ -114,5 +114,8 @@ caller allocation and cleanup; it is not a comparison with a FIXED provider.
 The ABI 7 fixture reserves a full-capacity candidate, a deliberate fixture choice,
 so these receipts are not a memory-efficiency ranking of ABI 6 and ABI 7.
 
-The complete Python run is separate and requires its own recorded review. Neither
-this report nor the successful CI approves a performance tradeoff or release.
+The complete Python run is separate. David accepted run 36982091628 for 0.19.0
+on 2026-10-02 after review; its original classifications remain unchanged. See
+[the release review](validation/v0.19-release-review.md) for the report digest,
+observations and decision. The instruction report and successful CI alone do not
+approve a performance tradeoff or release.
