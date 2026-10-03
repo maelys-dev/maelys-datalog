@@ -9,4 +9,7 @@ maelys_datalog_status_t maelys_datalog_resolve_public_terms(const maelys_datalog
                                                             const maelys_datalog_value_t *,
                                                             size_t, maelys_datalog_internal_term_t *,
                                                             int *out_found, int strict_boolean);
+maelys_datalog_status_t maelys_datalog_resolve_public_fact_terms(
+    const maelys_datalog_symbol_table_t *, const maelys_datalog_value_t *, size_t,
+    maelys_datalog_internal_fact_t *, int *, int);
 #endif

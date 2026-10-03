@@ -94,7 +94,7 @@ static maelys_result_t canonical_stream_atom(maelys_sha256_ctx_t *ctx,
     if (!def) return MAELYS_ERR_INVALID_STATE;
     maelys_result_t rc = canonical_printf(ctx, "%s%s/%u(", prefix, def->name, (unsigned)atom->arity);
     if (rc != MAELYS_OK) return rc;
-    rc = canonical_stream_terms(ctx, ruleset, atom->terms, atom->arity);
+    rc = canonical_stream_terms(ctx, ruleset, MAELYS_DATALOG_FACT_ATOM_REF(atom)[0].terms, atom->arity);
     if (rc != MAELYS_OK) return rc;
     return canonical_update(ctx, ")\n");
 }
@@ -106,9 +106,9 @@ static maelys_result_t canonical_stream_literal(maelys_sha256_ctx_t *ctx,
     if (!ctx || !ruleset || !rule || !literal) return MAELYS_ERR_INVALID_ARGUMENT;
     switch (literal->kind) {
         case MAELYS_DATALOG_LITERAL_ATOM:
-            return canonical_stream_atom(ctx, ruleset, "body.atom=", &literal->atom);
+            return canonical_stream_atom(ctx, ruleset, "body.atom=", MAELYS_DATALOG_ATOM_FACT_REF(&literal->atom));
         case MAELYS_DATALOG_LITERAL_NEGATED_ATOM:
-            return canonical_stream_atom(ctx, ruleset, "body.not=", &literal->atom);
+            return canonical_stream_atom(ctx, ruleset, "body.not=", MAELYS_DATALOG_ATOM_FACT_REF(&literal->atom));
         case MAELYS_DATALOG_LITERAL_MIN:
         case MAELYS_DATALOG_LITERAL_MAX:
         case MAELYS_DATALOG_LITERAL_SUM:
@@ -117,7 +117,7 @@ static maelys_result_t canonical_stream_literal(maelys_sha256_ctx_t *ctx,
             if (rc == MAELYS_OK) rc = canonical_stream_term(ctx, ruleset, &literal->lhs);
             if (rc == MAELYS_OK) rc = canonical_update(ctx, ":");
             if (rc == MAELYS_OK) rc = canonical_stream_term(ctx, ruleset, &literal->rhs);
-            if (rc == MAELYS_OK) rc = canonical_stream_atom(ctx, ruleset, ":", &literal->atom);
+            if (rc == MAELYS_OK) rc = canonical_stream_atom(ctx, ruleset, ":", MAELYS_DATALOG_ATOM_FACT_REF(&literal->atom));
             return rc;
         }
         case MAELYS_DATALOG_LITERAL_COMPARISON: {
@@ -232,7 +232,7 @@ static maelys_result_t ruleset_stream_canonical(maelys_sha256_ctx_t *ctx,
         const maelys_datalog_rule_t *rule = &ruleset->rules[i];
         rc = canonical_printf(ctx, "rule=%zu\n", rule->rule_id);
         if (rc != MAELYS_OK) return rc;
-        rc = canonical_stream_atom(ctx, ruleset, "head=", &rule->head);
+        rc = canonical_stream_atom(ctx, ruleset, "head=", MAELYS_DATALOG_ATOM_FACT_REF(&rule->head));
         if (rc != MAELYS_OK) return rc;
         for (size_t j = 0; j < rule->body_count; j++) {
             rc = canonical_stream_literal(ctx, ruleset, rule, &rule->body[j]);

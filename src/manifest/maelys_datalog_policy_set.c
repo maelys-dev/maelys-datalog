@@ -23,8 +23,7 @@ maelys_result_t maelys_datalog_policy_set_fingerprint(
     char out_hex[65]) {
     if (!set || !out_hex) return MAELYS_ERR_INVALID_ARGUMENT;
     out_hex[0] = '\0';
-    if (set->policy_count == 0u ||
-        set->policy_count > sizeof(set->policies) / sizeof(set->policies[0]) ||
+    if (set->policy_count > sizeof(set->policies) / sizeof(set->policies[0]) ||
         set->query_whitelist_count > MAELYS_DATALOG_MAX_QUERY_WHITELIST)
         return MAELYS_ERR_INVALID_STATE;
     maelys_sha256_ctx_t hash;

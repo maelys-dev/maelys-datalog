@@ -196,7 +196,7 @@ static maelys_result_t parse_term(parser_t *p,
 }
 
 static maelys_result_t parse_atom(parser_t *p,
-                                  maelys_datalog_internal_fact_t *atom,
+                                  maelys_datalog_internal_atom_t *atom,
                                   maelys_datalog_term_parse_context_t context,
                                   int *has_anonymous) {
     if (p->tok.kind != MAELYS_DATALOG_TOKEN_PREDICATE) {
@@ -869,7 +869,7 @@ static void parser_rule_expansion_overflow(parser_t *p, size_t requested) {
 
 static maelys_result_t parse_clause(parser_t *p) {
     const maelys_datalog_source_location_t source = {p->tok.line, p->tok.column};
-    maelys_datalog_internal_fact_t head;
+    maelys_datalog_internal_atom_t head;
     int head_has_anonymous = 0;
     p->anonymous_var_count = 0;
     maelys_result_t rc = parse_atom(p,
@@ -907,7 +907,7 @@ static maelys_result_t parse_clause(parser_t *p) {
                 return MAELYS_ERR_INVALID_FIELD;
             }
         }
-        p->ruleset->facts[p->ruleset->fact_count++] = head;
+        p->ruleset->facts[p->ruleset->fact_count++] = maelys_datalog_atom_fact(&head);
         p->ruleset->program_validated = 0;
         p->ruleset->compiled_fingerprint[0] = 0;
         return next(p);
@@ -969,7 +969,7 @@ static maelys_result_t parse_clause(parser_t *p) {
 
         if (first->body[body_index].kind == MAELYS_DATALOG_LITERAL_ATOM &&
             token_is_contextual_or(&p->tok)) {
-            maelys_datalog_internal_fact_t alternatives[MAELYS_DATALOG_MAX_RULES];
+            maelys_datalog_internal_atom_t alternatives[MAELYS_DATALOG_MAX_RULES];
             size_t alternative_count = 1u;
             unsigned max_anonymous = p->anonymous_var_count;
             alternatives[0] = first->body[body_index].atom;

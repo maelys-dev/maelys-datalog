@@ -46,11 +46,11 @@ MUTATIONS = [
     ("abort_commits", INPUTS, "static void retained_abort(maelys_datalog_session_inputs_t *h) { if(h) h->pending=0; }",
      "static void retained_abort(maelys_datalog_session_inputs_t *h) { retained_commit(h); }", ROLLBACK),
     ("generation_not_advanced", INPUTS, "++h->base.generation;h->pending=0;", "h->pending=0;", PUBLIC),
-    ("boolean_not_normalized", INPUTS, "item.terms[t].as.boolean=!!v->as.boolean;",
-     "item.terms[t].as.boolean=v->as.boolean;", PUBLIC),
+    ("boolean_not_normalized", INPUTS, "maelys_datalog_fact_set_boolean(&item, t, !!v->as.boolean);",
+     "maelys_datalog_fact_set_boolean(&item, t, v->as.boolean);", PUBLIC),
     ("canonical_ids_not_remapped", PREPARED,
-     "s->fact_pool[i].terms[t].as.symbol=map[in->terms[t].as.symbol-1u];",
-     "s->fact_pool[i].terms[t].as.symbol=in->terms[t].as.symbol;", PUBLIC),
+     "maelys_datalog_fact_set_symbol(&s->fact_pool[i], t, map[maelys_datalog_fact_symbol(in, t)-1u]);",
+     "maelys_datalog_fact_set_symbol(&s->fact_pool[i], t, maelys_datalog_fact_symbol(in, t));", PUBLIC),
     ("generation_wrap_allowed", INPUTS, "h->base.generation==UINT64_MAX)", "0)", ROLLBACK),
 ]
 

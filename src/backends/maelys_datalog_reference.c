@@ -81,8 +81,8 @@ static maelys_datalog_status_t explanation_prepare(
                                                 &fact.predicate_id))
         return MAELYS_DATALOG_STATUS_INVALID_FIELD;
     int found = 0;
-    maelys_datalog_status_t status = maelys_datalog_resolve_public_terms(
-        &session->symbols, terms, arity, fact.terms, &found, 0);
+    maelys_datalog_status_t status = maelys_datalog_resolve_public_fact_terms(
+        &session->symbols, terms, arity, &fact, &found, 0);
     if (status)
         return status;
     if (!found)

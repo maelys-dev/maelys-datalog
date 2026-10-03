@@ -1,4 +1,5 @@
 #include "src/core/maelys_datalog_edb.h"
+#include "src/core/maelys_datalog_term_internal.h"
 #include "src/core/maelys_datalog_domain_registry.h"
 #include "tests/fixtures/domains/maelys_datalog_example_domains.h"
 #include "src/core/maelys_datalog_predicate_registry.h"
@@ -39,7 +40,7 @@ static maelys_datalog_internal_fact_t fact(maelys_datalog_predicate_id_t predica
     memset(&f, 0, sizeof(f));
     f.predicate_id = predicate_id;
     f.arity = 1;
-    f.terms[0] = int_term(value);
+    maelys_datalog_fact_set_term(&f, 0, int_term(value));
     return f;
 }
 
@@ -340,17 +341,17 @@ static int test_edb_batch_success_unary_and_binary_order(void) {
     maelys_datalog_symbol_id_t users[3] = {alice, bob, mallory};
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_add_symbol_id_facts(&edb, "user", users, 3), "%d");
     TEST_ASSERT_EQUAL((size_t)3u, edb.fact_count, "%zu");
-    TEST_ASSERT_EQUAL(alice, edb.facts[0].terms[0].as.symbol, "%u");
-    TEST_ASSERT_EQUAL(bob, edb.facts[1].terms[0].as.symbol, "%u");
-    TEST_ASSERT_EQUAL(mallory, edb.facts[2].terms[0].as.symbol, "%u");
+    TEST_ASSERT_EQUAL(alice, maelys_datalog_fact_term(&edb.facts[0], 0).as.symbol, "%u");
+    TEST_ASSERT_EQUAL(bob, maelys_datalog_fact_term(&edb.facts[1], 0).as.symbol, "%u");
+    TEST_ASSERT_EQUAL(mallory, maelys_datalog_fact_term(&edb.facts[2], 0).as.symbol, "%u");
 
     maelys_datalog_symbol_id_t pairs[4] = {alice, doc, bob, other};
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_add_symbol_ids_facts(&edb, "owns", pairs, 2), "%d");
     TEST_ASSERT_EQUAL((size_t)5u, edb.fact_count, "%zu");
-    TEST_ASSERT_EQUAL(alice, edb.facts[3].terms[0].as.symbol, "%u");
-    TEST_ASSERT_EQUAL(doc, edb.facts[3].terms[1].as.symbol, "%u");
-    TEST_ASSERT_EQUAL(bob, edb.facts[4].terms[0].as.symbol, "%u");
-    TEST_ASSERT_EQUAL(other, edb.facts[4].terms[1].as.symbol, "%u");
+    TEST_ASSERT_EQUAL(alice, maelys_datalog_fact_term(&edb.facts[3], 0).as.symbol, "%u");
+    TEST_ASSERT_EQUAL(doc, maelys_datalog_fact_term(&edb.facts[3], 1).as.symbol, "%u");
+    TEST_ASSERT_EQUAL(bob, maelys_datalog_fact_term(&edb.facts[4], 0).as.symbol, "%u");
+    TEST_ASSERT_EQUAL(other, maelys_datalog_fact_term(&edb.facts[4], 1).as.symbol, "%u");
     TEST_END();
 }
 
@@ -726,12 +727,12 @@ static int test_edb_runtime_symbol_batch_success_and_reuse(void) {
                       "%d");
     TEST_ASSERT_EQUAL((size_t)2u, edb.fact_count, "%zu");
     TEST_ASSERT_EQUAL((size_t)2u, sym.count, "%zu");
-    TEST_ASSERT_EQUAL_STRING("alice", maelys_datalog_symbol_text(&sym, edb.facts[0].terms[0].as.symbol));
-    TEST_ASSERT_EQUAL_STRING("bob", maelys_datalog_symbol_text(&sym, edb.facts[1].terms[0].as.symbol));
+    TEST_ASSERT_EQUAL_STRING("alice", maelys_datalog_symbol_text(&sym, maelys_datalog_fact_term(&edb.facts[0], 0).as.symbol));
+    TEST_ASSERT_EQUAL_STRING("bob", maelys_datalog_symbol_text(&sym, maelys_datalog_fact_term(&edb.facts[1], 0).as.symbol));
 
     maelys_datalog_symbol_id_t alice = 0;
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_intern_runtime_symbol(&edb, "alice", &alice), "%d");
-    TEST_ASSERT_EQUAL(edb.facts[0].terms[0].as.symbol, alice, "%u");
+    TEST_ASSERT_EQUAL(maelys_datalog_fact_term(&edb.facts[0], 0).as.symbol, alice, "%u");
     TEST_ASSERT_EQUAL((size_t)2u, sym.count, "%zu");
 
     const char *pairs[4] = {"alice", "doc.pdf", "bob", "other.pdf"};
@@ -739,10 +740,10 @@ static int test_edb_runtime_symbol_batch_success_and_reuse(void) {
                       maelys_datalog_edb_add_runtime_symbol_pair_facts(&edb, "owns", pairs, 2),
                       "%d");
     TEST_ASSERT_EQUAL((size_t)4u, edb.fact_count, "%zu");
-    TEST_ASSERT_EQUAL_STRING("alice", maelys_datalog_symbol_text(&sym, edb.facts[2].terms[0].as.symbol));
-    TEST_ASSERT_EQUAL_STRING("doc.pdf", maelys_datalog_symbol_text(&sym, edb.facts[2].terms[1].as.symbol));
-    TEST_ASSERT_EQUAL_STRING("bob", maelys_datalog_symbol_text(&sym, edb.facts[3].terms[0].as.symbol));
-    TEST_ASSERT_EQUAL_STRING("other.pdf", maelys_datalog_symbol_text(&sym, edb.facts[3].terms[1].as.symbol));
+    TEST_ASSERT_EQUAL_STRING("alice", maelys_datalog_symbol_text(&sym, maelys_datalog_fact_term(&edb.facts[2], 0).as.symbol));
+    TEST_ASSERT_EQUAL_STRING("doc.pdf", maelys_datalog_symbol_text(&sym, maelys_datalog_fact_term(&edb.facts[2], 1).as.symbol));
+    TEST_ASSERT_EQUAL_STRING("bob", maelys_datalog_symbol_text(&sym, maelys_datalog_fact_term(&edb.facts[3], 0).as.symbol));
+    TEST_ASSERT_EQUAL_STRING("other.pdf", maelys_datalog_symbol_text(&sym, maelys_datalog_fact_term(&edb.facts[3], 1).as.symbol));
     TEST_END();
 }
 
@@ -772,8 +773,8 @@ static int test_edb_runtime_symbol_batch_binary_uses_full_pair_capacity(void) {
                       "%d");
     TEST_ASSERT_EQUAL((size_t)MAELYS_DATALOG_MAX_FACTS_PER_PRED, edb.fact_count, "%zu");
     TEST_ASSERT_EQUAL((size_t)(2u * MAELYS_DATALOG_MAX_FACTS_PER_PRED), sym.count, "%zu");
-    TEST_ASSERT_EQUAL_STRING("owner_00", maelys_datalog_symbol_text(&sym, edb.facts[0].terms[0].as.symbol));
-    TEST_ASSERT_EQUAL_STRING("doc_00", maelys_datalog_symbol_text(&sym, edb.facts[0].terms[1].as.symbol));
+    TEST_ASSERT_EQUAL_STRING("owner_00", maelys_datalog_symbol_text(&sym, maelys_datalog_fact_term(&edb.facts[0], 0).as.symbol));
+    TEST_ASSERT_EQUAL_STRING("doc_00", maelys_datalog_symbol_text(&sym, maelys_datalog_fact_term(&edb.facts[0], 1).as.symbol));
     TEST_END();
 }
 
@@ -946,9 +947,9 @@ static int test_maelys_datalog_fact_sort_canonical_order(void) {
     set.sorted = 0;
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_fact_set_sort(&set), "%d");
     TEST_ASSERT_EQUAL((uint16_t)2, set.facts[0].predicate_id, "%u");
-    TEST_ASSERT_EQUAL(1LL, set.facts[0].terms[0].as.integer, "%lld");
+    TEST_ASSERT_EQUAL(1LL, maelys_datalog_fact_term(&set.facts[0], 0).as.integer, "%lld");
     TEST_ASSERT_EQUAL((uint16_t)2, set.facts[1].predicate_id, "%u");
-    TEST_ASSERT_EQUAL(9LL, set.facts[1].terms[0].as.integer, "%lld");
+    TEST_ASSERT_EQUAL(9LL, maelys_datalog_fact_term(&set.facts[1], 0).as.integer, "%lld");
     TEST_ASSERT_EQUAL((uint16_t)3, set.facts[2].predicate_id, "%u");
     TEST_ASSERT_EQUAL((uint16_t)4, set.facts[3].predicate_id, "%u");
     TEST_END();
@@ -968,8 +969,8 @@ static int test_maelys_datalog_fact_dedup_removes_duplicates(void) {
     set.sorted = 1;
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_fact_set_dedup(&set), "%d");
     TEST_ASSERT_EQUAL((size_t)2, set.count, "%zu");
-    TEST_ASSERT_EQUAL(1LL, set.facts[0].terms[0].as.integer, "%lld");
-    TEST_ASSERT_EQUAL(2LL, set.facts[1].terms[0].as.integer, "%lld");
+    TEST_ASSERT_EQUAL(1LL, maelys_datalog_fact_term(&set.facts[0], 0).as.integer, "%lld");
+    TEST_ASSERT_EQUAL(2LL, maelys_datalog_fact_term(&set.facts[1], 0).as.integer, "%lld");
     TEST_END();
 }
 
@@ -1156,8 +1157,38 @@ static int test_maelys_datalog_term_equal_padding_sensitive(void) {
     TEST_END();
 }
 
+/* The compact comparator must preserve the historical typed ordering, even
+ * when integer extrema cannot safely be compared by subtraction. */
+static int test_compact_typed_order(void) {
+    TEST_BEGIN();
+    maelys_datalog_internal_term_t values[] = {
+        symbol_term(1), symbol_term(UINT32_MAX), int_term(INT64_MIN),
+        int_term(-1), int_term(0), int_term(INT64_MAX), bool_term(0),
+        bool_term(1), var_term(0), var_term(31)
+    };
+    for (size_t i = 0; i < sizeof(values)/sizeof(*values); ++i)
+    for (size_t j = 0; j < sizeof(values)/sizeof(*values); ++j)
+    for (size_t position = 0; position < MAELYS_DATALOG_MAX_TERMS; ++position) {
+        maelys_datalog_internal_fact_t a = {0}, b = {0};
+        a.predicate_id = b.predicate_id = 1;
+        a.arity = b.arity = (uint8_t)(position+1);
+        for (size_t t = 0; t < position; ++t) {
+            maelys_datalog_fact_set_term(&a, t, int_term(17));
+            maelys_datalog_fact_set_term(&b, t, int_term(17));
+        }
+        maelys_datalog_fact_set_term(&a, position, values[i]);
+        maelys_datalog_fact_set_term(&b, position, values[j]);
+        int expected = maelys_datalog_term_cmp(&values[i], &values[j]);
+        int actual = maelys_datalog_fact_cmp(&a, &b);
+        TEST_ASSERT_TRUE((actual > 0) == (expected > 0));
+        TEST_ASSERT_TRUE((actual < 0) == (expected < 0));
+    }
+    TEST_END();
+}
+
 int main(int argc, char **argv) {
     test_case_t cases[] = {
+        {"maelys_datalog_edb/compact_typed_order", TEST_MODE_NON_BLOCKING, test_compact_typed_order},
         {"maelys_datalog_edb/add_query_duplicate", TEST_MODE_NON_BLOCKING, test_edb_add_query_duplicate},
         {"maelys_datalog_edb/overflow_unknown_atom", TEST_MODE_NON_BLOCKING, test_edb_overflow_and_unknown_atom},
         {"maelys_datalog_edb/intern_runtime_symbol_basic_idempotent", TEST_MODE_NON_BLOCKING, test_edb_intern_runtime_symbol_basic_idempotent},

@@ -190,8 +190,8 @@ static int test_v2_why_false_envelope_states(void) {
     TEST_ASSERT_EQUAL(1, maelys_datalog_predicate_registry_find(
         &ruleset.registry, "allow", 1, &explanation->query.predicate_id), "%d");
     explanation->query.arity = 1;
-    explanation->query.terms[0].kind = MAELYS_DATALOG_TERM_INT;
-    explanation->query.terms[0].as.integer = 7;
+    maelys_datalog_fact_set_kind(&explanation->query, 0, MAELYS_DATALOG_TERM_INT);
+    maelys_datalog_fact_set_integer(&explanation->query, 0, 7);
     const unsigned states[] = {MAELYS_DATALOG_WHY_FALSE_STATUS_COMPLETE,
                                MAELYS_DATALOG_WHY_FALSE_STATUS_TRUNCATED,
                                MAELYS_DATALOG_WHY_FALSE_STATUS_NOT_APPLICABLE};
@@ -249,8 +249,8 @@ static int test_v2_shared_explanation_envelope(void) {
     TEST_ASSERT_EQUAL(1, maelys_datalog_predicate_registry_find(
         &ruleset.registry, "allow", 1, &why_false->query.predicate_id), "%d");
     why_false->query.arity = 1u;
-    why_false->query.terms[0].kind = MAELYS_DATALOG_TERM_INT;
-    why_false->query.terms[0].as.integer = 7;
+    maelys_datalog_fact_set_kind(&why_false->query, 0, MAELYS_DATALOG_TERM_INT);
+    maelys_datalog_fact_set_integer(&why_false->query, 0, 7);
     why_false->status = MAELYS_DATALOG_WHY_FALSE_STATUS_COMPLETE;
     /* The zero-initialized Why-true fixture is valid "not-derived" output;
      * sharing an envelope does not require sharing the status vocabulary. */

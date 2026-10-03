@@ -27,6 +27,7 @@ static int test_fingerprint_is_stable_and_sensitive(void) {
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       maelys_datalog_policy_set_fingerprint(&set, second), "%d");
     TEST_ASSERT_TRUE(strlen(first) == 64u);
+    TEST_ASSERT_TRUE(strcmp(first, "8f6aa77ee36f7962ac901a78a674eb537f704a564445d95ac4b635986502b0f7") == 0);
     TEST_ASSERT_TRUE(strcmp(first, second) == 0);
     set.query_whitelist[0].arity = 2u;
     TEST_ASSERT_EQUAL(MAELYS_OK,
@@ -35,11 +36,29 @@ static int test_fingerprint_is_stable_and_sensitive(void) {
     TEST_END();
 }
 
+static int test_empty_set_fingerprint(void) {
+    TEST_BEGIN();
+    maelys_datalog_internal_policy_set_t set;
+    memset(&set, 0, sizeof(set));
+    char fingerprint[65];
+    TEST_ASSERT_EQUAL(MAELYS_OK,
+        maelys_datalog_policy_set_fingerprint(&set, fingerprint), "%d");
+    TEST_ASSERT_TRUE(strcmp(fingerprint,
+        "7a1a978afc00f6576c17d3c7b8647a218e0c841bf9bd38d39b348b94f2169185") == 0);
+    set.enforces_query_whitelist = 1;
+    TEST_ASSERT_EQUAL(MAELYS_OK,
+        maelys_datalog_policy_set_fingerprint(&set, fingerprint), "%d");
+    TEST_ASSERT_TRUE(strcmp(fingerprint,
+        "27a75b9d3186b42378465a7ced53f4da1465eb92a83a293594635213db667d31") == 0);
+    TEST_END();
+}
+
 static int test_fingerprint_rejects_invalid_sets(void) {
     TEST_BEGIN();
     maelys_datalog_internal_policy_set_t set;
     char fingerprint[65];
     memset(&set, 0, sizeof(set));
+    set.policy_count = sizeof(set.policies) / sizeof(set.policies[0]) + 1u;
     TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_STATE,
                       maelys_datalog_policy_set_fingerprint(&set, fingerprint), "%d");
     initialize_set(&set);
@@ -51,6 +70,7 @@ static int test_fingerprint_rejects_invalid_sets(void) {
 
 int main(int argc, char **argv) {
     test_case_t cases[] = {
+        {"policy_set_fingerprint/empty_set", TEST_MODE_NON_BLOCKING, test_empty_set_fingerprint},
         {"policy_set_fingerprint/stable_and_sensitive", TEST_MODE_NON_BLOCKING,
          test_fingerprint_is_stable_and_sensitive},
         {"policy_set_fingerprint/rejects_invalid_sets", TEST_MODE_NON_BLOCKING,

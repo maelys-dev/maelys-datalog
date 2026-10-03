@@ -209,17 +209,17 @@ static void wr_fact(fmt_writer_t *w,
     wr_byte(w, '(');
     for (uint8_t i = 0; i < fact->arity; i++) {
         if (i != 0u) wr_byte(w, ',');
-        wr_term(w, vocabulary, &fact->terms[i]);
+        wr_term(w, vocabulary, MAELYS_DATALOG_FACT_TERM_REF(fact, i));
     }
     wr_byte(w, ')');
 }
 
 static maelys_datalog_internal_fact_t count_premise_pattern(const maelys_datalog_explanation_premise_t *p) {
     maelys_datalog_internal_fact_t pattern = {0};
-    pattern.predicate_id = p->as.count.predicate_id;
-    pattern.arity = p->as.count.arity;
+    pattern.predicate_id = p->as.count.pattern.predicate_id;
+    pattern.arity = p->as.count.pattern.arity;
     for (size_t i = 0; i < pattern.arity && i < MAELYS_DATALOG_MAX_TERMS; ++i)
-        pattern.terms[i] = p->as.count.terms[i];
+        maelys_datalog_fact_set_term(&pattern, i, maelys_datalog_fact_term(&p->as.count.pattern, i));
     return pattern;
 }
 
@@ -436,7 +436,7 @@ static maelys_result_t validate_fact(const format_vocabulary_t *vocabulary,
     }
     if ((size_t)fact->arity != def->arity) return MAELYS_ERR_INVALID_FIELD;
     for (uint8_t i = 0; i < fact->arity; i++) {
-        const maelys_result_t rc = validate_term(vocabulary, &fact->terms[i]);
+        const maelys_result_t rc = validate_term(vocabulary, MAELYS_DATALOG_FACT_TERM_REF(fact, i));
         if (rc != MAELYS_OK) return rc;
     }
     return MAELYS_OK;
@@ -523,7 +523,7 @@ static maelys_result_t validate_premise(const format_vocabulary_t *vocabulary,
             premise->as.count.value > MAELYS_DATALOG_MAX_INT) return MAELYS_ERR_INVALID_FIELD;
         int present = 0;
         for (size_t t = 0; t < pattern->arity; ++t) {
-            const maelys_datalog_internal_term_t *term = &pattern->terms[t];
+            const maelys_datalog_internal_term_t *term = MAELYS_DATALOG_FACT_TERM_REF(pattern, t);
             if (term->kind == MAELYS_DATALOG_TERM_VAR) {
                 if (term->as.variable >= MAELYS_DATALOG_MAX_RULE_VARIABLES ||
                     (term->as.variable < MAELYS_DATALOG_NAMED_VARIABLE_COUNT &&

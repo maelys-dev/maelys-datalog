@@ -57,3 +57,14 @@ maelys_datalog_resolve_public_terms(const maelys_datalog_symbol_table_t *symbols
     }
     return MAELYS_DATALOG_STATUS_OK;
 }
+
+maelys_datalog_status_t maelys_datalog_resolve_public_fact_terms(
+    const maelys_datalog_symbol_table_t *symbols, const maelys_datalog_value_t *values,
+    size_t count, maelys_datalog_internal_fact_t *fact, int *found, int strict) {
+    maelys_datalog_internal_term_t terms[MAELYS_DATALOG_MAX_TERMS] = {0};
+    maelys_datalog_status_t rc = maelys_datalog_resolve_public_terms(
+        symbols, values, count, terms, found, strict);
+    if (rc) return rc;
+    for (size_t i = 0; i < count; ++i) maelys_datalog_fact_set_term(fact, i, terms[i]);
+    return MAELYS_DATALOG_STATUS_OK;
+}
