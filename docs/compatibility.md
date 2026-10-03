@@ -1,6 +1,6 @@
-# Compatibility contract for the 1.0 preparation
+# Compatibility contract for the freeze
 
-This page records the intended compatibility boundaries for the 1.0 review.
+This page records the intended compatibility boundaries for the freeze review.
 It does not announce a release or freeze a development version. Published SDK
 archives and tags remain immutable. A release decision remains separate from
 this contract and from its validation evidence.
@@ -57,7 +57,7 @@ performance or support for every window operation.
 
 ## Evidence before the freeze
 
-The 1.0 review must verify installed-SDK consumers, separately compiled callers
+The freeze review must verify installed-SDK consumers, separately compiled callers
 and providers for each supported ABI, capability rejection, storage boundaries,
 borrowed lifetimes, typed results and diagnostics. Language/binding parity and
 release performance review remain separate evidence. Internal byte-size or
