@@ -10,6 +10,14 @@ struct maelys_datalog_policy {
     int released;
     atomic_size_t references;
 };
+/* A released caller-owned handle may have been zeroed by discard_policy.
+ * Addressability alone does not restore the reference that makes it live.
+ * This does not validate freed pointers or synchronize concurrent release. */
+static inline int maelys_datalog_policy_is_live(const maelys_datalog_policy_t *policy) {
+    return !policy->released &&
+        atomic_load_explicit(&policy->references, memory_order_acquire) != 0u;
+}
+
 /* Owned immutable storage may outlive the public handle. Caller-owned policy
  * storage is never retained by a session. */
 void maelys_datalog_policy_retain_storage(const maelys_datalog_policy_t *);

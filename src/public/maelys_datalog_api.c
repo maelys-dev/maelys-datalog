@@ -266,9 +266,7 @@ maelys_datalog_status_t maelys_datalog_policy_count(
     const maelys_datalog_policy_t *policy,
     size_t *out_count) {
     if (!policy || !out_count) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
-    if (policy->released) return MAELYS_DATALOG_STATUS_INVALID_STATE;
-    if (atomic_load_explicit(&policy->references, memory_order_acquire) == 0u)
-        return MAELYS_DATALOG_STATUS_INVALID_STATE;
+    if (!maelys_datalog_policy_is_live(policy)) return MAELYS_DATALOG_STATUS_INVALID_STATE;
     const size_t count = policy->set.policy_count;
     *out_count = count;
     return MAELYS_DATALOG_STATUS_OK;
@@ -278,7 +276,7 @@ maelys_datalog_status_t maelys_datalog_policy_id(
     const maelys_datalog_policy_t *policy, size_t policy_index,
     const char **out_policy_id) {
     if (!policy || !out_policy_id) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
-    if (policy->released) return MAELYS_DATALOG_STATUS_INVALID_STATE;
+    if (!maelys_datalog_policy_is_live(policy)) return MAELYS_DATALOG_STATUS_INVALID_STATE;
     if (policy_index >= policy->set.policy_count) return MAELYS_DATALOG_STATUS_NOT_FOUND;
     *out_policy_id = policy->set.policies[policy_index].policy_id;
     return MAELYS_DATALOG_STATUS_OK;
@@ -288,7 +286,7 @@ maelys_datalog_status_t maelys_datalog_policy_stat_get(
     const maelys_datalog_policy_t *policy, size_t policy_index,
     maelys_datalog_policy_stat_t statistic, size_t *out_value) {
     if (!policy || !out_value) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
-    if (policy->released) return MAELYS_DATALOG_STATUS_INVALID_STATE;
+    if (!maelys_datalog_policy_is_live(policy)) return MAELYS_DATALOG_STATUS_INVALID_STATE;
     if (policy_index >= policy->set.policy_count) return MAELYS_DATALOG_STATUS_NOT_FOUND;
     const maelys_datalog_internal_ruleset_t *r = &policy->set.policies[policy_index];
     size_t value;
@@ -306,9 +304,7 @@ maelys_datalog_status_t maelys_datalog_policy_fingerprint(
     const maelys_datalog_policy_t *policy,
     char out_fingerprint[MAELYS_DATALOG_PUBLIC_FINGERPRINT_BYTES]) {
     if (!policy || !out_fingerprint) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
-    if (policy->released) return MAELYS_DATALOG_STATUS_INVALID_STATE;
-    if (atomic_load_explicit(&policy->references, memory_order_acquire) == 0u)
-        return MAELYS_DATALOG_STATUS_INVALID_STATE;
+    if (!maelys_datalog_policy_is_live(policy)) return MAELYS_DATALOG_STATUS_INVALID_STATE;
     char fingerprint[MAELYS_DATALOG_PUBLIC_FINGERPRINT_BYTES];
     maelys_result_t status = maelys_datalog_policy_set_fingerprint(
         &policy->set, fingerprint);
@@ -332,7 +328,7 @@ void maelys_datalog_policy_release_storage(const maelys_datalog_policy_t *retain
 maelys_datalog_status_t maelys_datalog_policy_free(maelys_datalog_policy_t *policy) {
     if (!policy) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
     /* Empty manifests still own a reference; discarded caller storage does not. */
-    if (policy->released || atomic_load_explicit(&policy->references, memory_order_acquire) == 0u)
+    if (!maelys_datalog_policy_is_live(policy))
         return MAELYS_DATALOG_STATUS_INVALID_STATE;
     policy->released = 1;
     maelys_datalog_policy_release_storage(policy);
