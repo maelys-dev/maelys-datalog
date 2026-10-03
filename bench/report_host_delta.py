@@ -11,10 +11,12 @@ from pathlib import Path
 EVENTS = ("Ir", "Dr", "Dw")
 
 
-def counts(path):
+def counts(path, *, separate_sources=False):
     """Read exclusive costs; the cost record following calls= is inclusive."""
     names = {}
     functions = {}
+    locations = {"ob": {}, "fl": {}}
+    current_object = current_file = None
     current = None
     skip = False
     label = None
@@ -35,6 +37,19 @@ def counts(path):
                 summary = values
             else:
                 totals = values
+        elif separate_sources and line.startswith(("ob=", "cob=", "fl=", "cfl=", "fi=", "cfi=", "fe=")):
+            field, text = line.split("=", 1)
+            namespace = "ob" if field.endswith("ob") else "fl"
+            match = re.fullmatch(r"\((\d+)\)(?: (.*))?", text)
+            if match:
+                key, name = match.groups()
+                if name is not None:
+                    locations[namespace][key] = name
+                text = locations[namespace][key]
+            if field == "ob":
+                current_object = Path(text).name
+            elif field == "fl":
+                current_file = re.sub(r"^.*?/(?:base|head)-source/", "", text)
         elif line.startswith(("fn=", "cfn=")):
             text = line.split("=", 1)[1]
             match = re.fullmatch(r"\((\d+)\)(?: (.*))?", text)
@@ -44,7 +59,12 @@ def counts(path):
                     names[key] = name
                 text = names[key]
             if line.startswith("fn="):
-                current = text
+                if separate_sources:
+                    if current_object is None or current_file is None:
+                        raise ValueError(f"missing function source: {path}")
+                    current = f"{current_object}|{current_file}|{text}"
+                else:
+                    current = text
                 functions.setdefault(current, [0, 0, 0])
         elif line.startswith("calls="):
             skip = True
