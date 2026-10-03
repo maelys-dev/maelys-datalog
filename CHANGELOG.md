@@ -5,7 +5,14 @@ All notable changes to Maelys Datalog are documented in this file.
 The project follows [Semantic Versioning](https://semver.org/) and uses the
 format described by [Keep a Changelog](https://keepachangelog.com/).
 
-## Unreleased
+## 0.21.0 — 2026-10-03
+
+### Added
+
+- Document compatibility boundaries for the freeze, independently of a major
+  version number: current four-term record families, explicit rejection of
+  unknown capabilities, checked inspection statuses, separately negotiated
+  provider ABIs and caller-owned storage/lifetime contracts.
 
 ### Changed
 
@@ -16,6 +23,37 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
   Python and JavaScript expose these empty sets without raising an error.
   Released handles remain invalid; existing nonempty-set fingerprints do not
   change.
+
+- Compact internal fact records from 72 to 40 naturally aligned bytes, with
+  canonical inactive terms and explicit aggregate-premise metadata. Public
+  value/fact/view/IR records, compiled rules, backend ABIs and program/execution
+  fingerprints retain their representations. Caller-owned storage users query
+  the actual SDK requirements and alignment rather than assuming private sizes.
+
+### Validation and performance review
+
+- David accepted the documented Python exception on 2026-10-03 for signed
+  measured commit `9e2c47af71bd175ab3303b43701edd824adb41df` in
+  [run 37092737587](https://github.com/maelys-dev/maelys-datalog/actions/runs/37092737587).
+  Its `report.json` SHA-256 is
+  `bf458d20b51a04366ff9da60dc1a18213a5b0aa73710df08686f205d8b8b9cf7`.
+  The report remains `review_required`. Twelve base-reference statistics exceed
+  the matching null envelope in both rounds, all in default builds; six solve
+  medians range from +1.34% to +5.44%. Raw alerts, including a Release p95 not
+  distinguished from its null in the second round, remain preserved. The
+  [release review](docs/validation/v0.21-release-review.md) records the decision,
+  measured scope, controls and distinction between raw and screened statistics.
+  This accepts that named report, not an automatic attribution or publication.
+
+- The combined-runtime report for commit
+  `0108bd640d14e885f2b76048bdbd22f341f5775a` in
+  [run 37097581473](https://github.com/maelys-dev/maelys-datalog/actions/runs/37097581473)
+  has SHA-256 `20a5ef8687070003da10c057402a3cbff3ebe3183d17f4e662875c13079528fa`.
+  Its positive control passes; nine base-reference statistics exceed their
+  matching null envelope in both rounds, including a SMALL/default complete
+  request p95 of +35.72%/+5.96%. The report remains `review_required` and its
+  David explicitly accepted this named report and its documented limits on
+  2026-10-03 and authorized the release ceremony. No causal attribution is made.
 
 ## 0.20.0 — 2026-10-02
 
