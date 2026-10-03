@@ -33,7 +33,7 @@ int maelys_datalog_fact_cmp(const maelys_datalog_internal_fact_t *a,
     if (a->arity < b->arity) return -1;
     if (a->arity > b->arity) return 1;
     for (size_t i = 0; i < a->arity; i++) {
-        int cmp = maelys_datalog_term_cmp(&a->terms[i], &b->terms[i]);
+        int cmp = maelys_datalog_term_cmp(MAELYS_DATALOG_FACT_TERM_REF(a, i), MAELYS_DATALOG_FACT_TERM_REF(b, i));
         if (cmp != 0) return cmp;
     }
     return 0;
@@ -243,7 +243,7 @@ static inline maelys_result_t validate_fact(maelys_datalog_internal_edb_t *edb,
     memset(fact, 0, sizeof(*fact));
     fact->predicate_id = pid;
     fact->arity = (uint8_t)arity;
-    for (size_t i = 0; i < arity; i++) fact->terms[i] = terms[i];
+    for (size_t i = 0; i < arity; i++) maelys_datalog_fact_set_term(fact, i, terms[i]);
     return MAELYS_OK;
 
 }
@@ -267,7 +267,7 @@ static size_t insert_bucket(const maelys_datalog_internal_fact_t *fact) {
     uint64_t hash = fact->predicate_id;
     hash = (hash ^ fact->arity) * UINT64_C(1099511628211);
     for (size_t i = 0; i < fact->arity; ++i) {
-        const maelys_datalog_internal_term_t *term = &fact->terms[i];
+        const maelys_datalog_internal_term_t *term = MAELYS_DATALOG_FACT_TERM_REF(fact, i);
         uint64_t value = 0;
         switch (term->kind) {
             case MAELYS_DATALOG_TERM_SYMBOL: value = term->as.symbol; break;

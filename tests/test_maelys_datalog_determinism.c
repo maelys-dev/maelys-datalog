@@ -659,8 +659,8 @@ static int det_make_fact2(maelys_datalog_internal_ruleset_t *ruleset,
         return 0;
     }
     out->arity = 2u;
-    out->terms[0] = symbol_term(ruleset, a);
-    out->terms[1] = symbol_term(ruleset, b);
+    maelys_datalog_fact_set_term(out, 0, symbol_term(ruleset, a));
+    maelys_datalog_fact_set_term(out, 1, symbol_term(ruleset, b));
     return 1;
 }
 

@@ -281,7 +281,7 @@ static int fact_array_contains_semantic(const maelys_datalog_internal_fact_t *fa
 static int fact_has_var(const maelys_datalog_internal_fact_t *fact) {
     if (!fact) return 0;
     for (size_t i = 0; i < fact->arity && i < MAELYS_DATALOG_MAX_TERMS; i++) {
-        if (fact->terms[i].kind == MAELYS_DATALOG_TERM_VAR) return 1;
+        if (maelys_datalog_fact_term(fact, i).kind == MAELYS_DATALOG_TERM_VAR) return 1;
     }
     return 0;
 }
@@ -332,8 +332,8 @@ static int make_fact2(maelys_datalog_internal_ruleset_t *r,
         return 0;
     }
     out->arity = 2;
-    out->terms[0] = sym_term(r, a);
-    out->terms[1] = sym_term(r, b);
+    maelys_datalog_fact_set_term(out, 0, sym_term(r, a));
+    maelys_datalog_fact_set_term(out, 1, sym_term(r, b));
     return 1;
 }
 
@@ -2993,13 +2993,13 @@ static int test_datalog_fact_equals_matches_fact_set_contains(void) {
     maelys_datalog_fact_set_init(&set, pool, 2);
     pool[0].predicate_id = 1;
     pool[0].arity = 1;
-    pool[0].terms[0].kind = MAELYS_DATALOG_TERM_INT;
-    pool[0].terms[0].as.integer = 7;
+    maelys_datalog_fact_set_kind(&pool[0], 0, MAELYS_DATALOG_TERM_INT);
+    maelys_datalog_fact_set_integer(&pool[0], 0, 7);
     set.count = 1;
     set.sorted = 1;
     maelys_datalog_internal_fact_t same = pool[0];
     maelys_datalog_internal_fact_t other = pool[0];
-    other.terms[0].as.integer = 8;
+    maelys_datalog_fact_set_integer(&other, 0, 8);
     TEST_ASSERT_TRUE(maelys_datalog_fact_equals(&pool[0], &same));
     TEST_ASSERT_TRUE(maelys_datalog_fact_set_contains(&set, &same));
     TEST_ASSERT_FALSE(maelys_datalog_fact_equals(&pool[0], &other));
@@ -3050,7 +3050,7 @@ static int test_datalog_factstore_rejects_unknown_term_kind(void) {
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_init(&edb, facts, 2, &r.symbols, &r.registry), "%d");
     add_int_symbol_binary(&r, &edb, "q", 1, "a");
     TEST_ASSERT_EQUAL(MAELYS_OK, maelys_datalog_edb_finalize(&edb), "%d");
-    edb.fact_set.facts[0].terms[0].kind = (maelys_datalog_internal_term_kind_t)99;
+    maelys_datalog_fact_set_kind(&edb.fact_set.facts[0], 0, (maelys_datalog_internal_term_kind_t)99);
     maelys_datalog_internal_solve_result_t *result = NULL;
     TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_STATE, maelys_datalog_solve_once(&r, &edb, &result), "%d");
     TEST_ASSERT_NULL(result);
@@ -4215,7 +4215,7 @@ static int make_fact1(maelys_datalog_internal_ruleset_t *r,
         return 0;
     }
     out->arity = 1;
-    out->terms[0] = sym_term(r, a);
+    maelys_datalog_fact_set_term(out, 0, sym_term(r, a));
     return 1;
 }
 
@@ -4228,7 +4228,7 @@ static int make_fact1_int(maelys_datalog_internal_ruleset_t *r,
         return 0;
     }
     out->arity = 1;
-    out->terms[0] = int_term(value);
+    maelys_datalog_fact_set_term(out, 0, int_term(value));
     return 1;
 }
 
@@ -4742,8 +4742,8 @@ static int test_p4c64_error_paths_preserve_output(void) {
 
     /* Structurally invalid fact (variable term) -> INVALID_FIELD, untouched. */
     maelys_datalog_internal_fact_t invalid = valid;
-    invalid.terms[0].kind = MAELYS_DATALOG_TERM_VAR;
-    invalid.terms[0].as.variable = 0u;
+    maelys_datalog_fact_set_kind(&invalid, 0, MAELYS_DATALOG_TERM_VAR);
+    maelys_datalog_fact_set_variable(&invalid, 0, 0u);
     TEST_ASSERT_EQUAL(MAELYS_ERR_INVALID_FIELD,
                       maelys_datalog_explain_solved_fact(result, &invalid, &sentinel), "%d");
     TEST_ASSERT_EQUAL(0, memcmp(&sentinel, &expected, sizeof(sentinel)), "%d");

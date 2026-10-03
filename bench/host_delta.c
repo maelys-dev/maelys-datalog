@@ -61,8 +61,8 @@ static NI maelys_result_t delta_convert(bank *b, const maelys_datalog_fact_t *so
                 return MAELYS_ERR_INVALID_ARGUMENT;
         }
         native_fact value = {.predicate_id = id, .arity = f->arity}; int found = 0;
-        maelys_result_t rc = (maelys_result_t)maelys_datalog_resolve_public_terms(&b->session->inputs->symbols,
-            f->terms, f->arity, value.terms, &found, 0);
+        maelys_result_t rc = (maelys_result_t)maelys_datalog_resolve_public_fact_terms(&b->session->inputs->symbols,
+            f->terms, f->arity, &value, &found, 0);
         if (rc) return rc;
         if (!found) { if (adding) return MAELYS_ERR_INVALID_FIELD; else continue; }
         dest[(*used)++] = value;

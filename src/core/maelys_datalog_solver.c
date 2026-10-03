@@ -351,10 +351,10 @@ static void solve_once_diag_from_fact(maelys_datalog_internal_solve_diagnostic_t
         if (def) diag->arity_expected = def->arity;
     }
     for (size_t i = 0; i < fact->arity && i < MAELYS_DATALOG_MAX_TERMS; i++) {
-        if (!datalog_term_kind_known(fact->terms[i].kind) ||
-            fact->terms[i].kind == MAELYS_DATALOG_TERM_VAR) {
+        if (!datalog_term_kind_known(maelys_datalog_fact_term(fact, i).kind) ||
+            maelys_datalog_fact_term(fact, i).kind == MAELYS_DATALOG_TERM_VAR) {
             diag->term_index = (uint8_t)i;
-            diag->lhs_kind = (uint8_t)fact->terms[i].kind;
+            diag->lhs_kind = (uint8_t)maelys_datalog_fact_term(fact, i).kind;
             break;
         }
     }
@@ -509,7 +509,7 @@ static int fact_matches_query(const maelys_datalog_internal_fact_t *fact,
         /* Defensive: callers already require ground query terms, but this helper
          * re-checks to keep matching safe if reused internally. */
         if (args[i].kind == MAELYS_DATALOG_TERM_VAR) return 0;
-        if (!maelys_datalog_term_equal(&fact->terms[i], &args[i])) return 0;
+        if (!maelys_datalog_term_equal(MAELYS_DATALOG_FACT_TERM_REF(fact, i), &args[i])) return 0;
     }
     return 1;
 }
@@ -612,6 +612,15 @@ static int solve_once_instantiate_term(const solve_once_bindings_t *bindings,
     *dst = bindings->value[variable];
     return 1;
 }
+static int solve_once_instantiate_fact_term(const solve_once_bindings_t *bindings,
+    const maelys_datalog_internal_term_t *source,
+    maelys_datalog_internal_fact_t *fact, size_t index) {
+    maelys_datalog_internal_term_t term;
+    if (!solve_once_instantiate_term(bindings, source, &term)) return 0;
+    maelys_datalog_fact_set_term(fact, index, term);
+    return 1;
+}
+
 
 static int datalog_term_kind_known(maelys_datalog_internal_term_kind_t kind) {
     switch (kind) {
@@ -632,8 +641,8 @@ static int datalog_fact_structurally_valid(const maelys_datalog_predicate_regist
         maelys_datalog_predicate_registry_get(registry, fact->predicate_id);
     if (!def || fact->arity != def->arity) return 0;
     for (size_t i = 0; i < fact->arity; i++) {
-        if (!datalog_term_kind_known(fact->terms[i].kind)) return 0;
-        if (fact->terms[i].kind == MAELYS_DATALOG_TERM_VAR) return 0;
+        if (!datalog_term_kind_known(maelys_datalog_fact_term(fact, i).kind)) return 0;
+        if (maelys_datalog_fact_term(fact, i).kind == MAELYS_DATALOG_TERM_VAR) return 0;
     }
     return 1;
 }
@@ -830,10 +839,10 @@ static void solve_once_set_invalid_fact(maelys_datalog_internal_solve_result_t *
         if (def) result->runtime_diag.expected_arity = def->arity;
     }
     for (size_t i = 0; i < fact->arity && i < MAELYS_DATALOG_MAX_TERMS; i++) {
-        if (!datalog_term_kind_known(fact->terms[i].kind) ||
-            fact->terms[i].kind == MAELYS_DATALOG_TERM_VAR) {
+        if (!datalog_term_kind_known(maelys_datalog_fact_term(fact, i).kind) ||
+            maelys_datalog_fact_term(fact, i).kind == MAELYS_DATALOG_TERM_VAR) {
             result->runtime_diag.term_index = (uint8_t)i;
-            result->runtime_diag.observed_lhs_kind = (uint8_t)fact->terms[i].kind;
+            result->runtime_diag.observed_lhs_kind = (uint8_t)maelys_datalog_fact_term(fact, i).kind;
             break;
         }
     }
@@ -1131,7 +1140,7 @@ static void explanation_copy_fact(maelys_datalog_internal_fact_t *dst,
         ? (size_t)src->arity
         : (size_t)MAELYS_DATALOG_MAX_TERMS;
     for (size_t i = 0; i < term_count; i++) {
-        explanation_copy_term(&dst->terms[i], &src->terms[i]);
+        maelys_datalog_fact_set_term(dst, i, maelys_datalog_fact_term(src, i));
     }
 }
 
@@ -1158,10 +1167,10 @@ static void explanation_copy_premise(
         case MAELYS_DATALOG_EXPLANATION_PREMISE_MAX:
         case MAELYS_DATALOG_EXPLANATION_PREMISE_SUM:
         case MAELYS_DATALOG_EXPLANATION_PREMISE_COUNT:
-            dst->as.count.predicate_id = src->as.count.predicate_id;
-            dst->as.count.arity = src->as.count.arity;
-            for (size_t i = 0; i < src->as.count.arity && i < MAELYS_DATALOG_MAX_TERMS; ++i)
-                explanation_copy_term(&dst->as.count.terms[i], &src->as.count.terms[i]);
+            dst->as.count.pattern.predicate_id = src->as.count.pattern.predicate_id;
+            dst->as.count.pattern.arity = src->as.count.pattern.arity;
+            for (size_t i = 0; i < src->as.count.pattern.arity && i < MAELYS_DATALOG_MAX_TERMS; ++i)
+                maelys_datalog_fact_set_term(&dst->as.count.pattern, i, maelys_datalog_fact_term(&src->as.count.pattern, i));
             dst->as.count.value = src->as.count.value;
             dst->as.count.projected_variable = src->as.count.projected_variable;
             break;
@@ -1786,7 +1795,7 @@ static int solve_once_match_candidate(const maelys_datalog_internal_ruleset_t *r
      * This is the local backtracking mechanism. */
     solve_once_bindings_t next = *bindings;
     for (size_t i = 0; i < candidate->arity; i++) {
-        if (!solve_once_bind_or_match(&next, &literal->atom.terms[i], &candidate->terms[i])) return 1;
+        if (!solve_once_bind_or_match(&next, &literal->atom.terms[i], MAELYS_DATALOG_FACT_TERM_REF(candidate, i))) return 1;
     }
     /* Positive premise: capture the exact matched candidate before recursion. */
     witness_record_positive(result, literal_index, candidate_origin, candidate, candidate_proof_index);
@@ -1894,9 +1903,9 @@ static int solve_negated_literal(maelys_datalog_internal_solve_result_t *result,
     query.predicate_id = literal->atom.predicate_id;
     query.arity = literal->atom.arity;
     for (size_t i = 0; i < query.arity; i++) {
-        if (!solve_once_instantiate_term(bindings,
+        if (!solve_once_instantiate_fact_term(bindings,
                                          &literal->atom.terms[i],
-                                         &query.terms[i])) {
+                                         &query, i)) {
             return 0;
         }
     }
@@ -1962,13 +1971,15 @@ static maelys_result_t aggregate_source(
         literal->rhs.as.variable >= MAELYS_DATALOG_MAX_RULE_VARIABLES ||
         literal->atom.arity > MAELYS_DATALOG_MAX_TERMS ||
         literal->atom.arity != def->arity) return MAELYS_ERR_INVALID_STATE;
-    *pattern = literal->atom;
+    *pattern = maelys_datalog_atom_fact(&literal->atom);
     const unsigned projection = literal->lhs.as.variable;
     for (size_t i = 0; i < pattern->arity; ++i) {
-        maelys_datalog_internal_term_t *t = &pattern->terms[i];
+        maelys_datalog_internal_term_t term = maelys_datalog_fact_term(pattern, i);
+        maelys_datalog_internal_term_t *t = &term;
         if (t->kind != MAELYS_DATALOG_TERM_VAR || t->as.variable == projection ||
             t->as.variable >= MAELYS_DATALOG_NAMED_VARIABLE_COUNT) continue;
         if (!solve_once_instantiate_term(bindings, t, t)) return MAELYS_ERR_INVALID_STATE;
+        maelys_datalog_fact_set_term(pattern, i, term);
     }
     const maelys_datalog_internal_fact_t *facts = NULL;
     size_t count = 0;
@@ -2028,7 +2039,7 @@ static maelys_result_t evaluate_count(
         solve_once_bindings_t local = {0};
         int matches = 1;
         for (size_t t = 0; t < pattern->arity; ++t)
-            if (!solve_once_bind_or_match(&local, &pattern->terms[t], &fact->terms[t])) {
+            if (!solve_once_bind_or_match(&local, MAELYS_DATALOG_FACT_TERM_REF(pattern, t), MAELYS_DATALOG_FACT_TERM_REF(fact, t))) {
                 matches = 0;
                 break;
             }
@@ -2090,8 +2101,8 @@ static maelys_result_t evaluate_numeric_aggregate(
     const unsigned projection = literal->lhs.as.variable;
     size_t projected_term = pattern->arity;
     for (size_t t = 0; t < pattern->arity; ++t)
-        if (pattern->terms[t].kind == MAELYS_DATALOG_TERM_VAR &&
-            pattern->terms[t].as.variable == projection) { projected_term = t; break; }
+        if (maelys_datalog_fact_term(pattern, t).kind == MAELYS_DATALOG_TERM_VAR &&
+            maelys_datalog_fact_term(pattern, t).as.variable == projection) { projected_term = t; break; }
     if (projected_term == pattern->arity) return MAELYS_ERR_INVALID_STATE;
     aggregate_fact_pointer_t matches[MAELYS_DATALOG_MAX_RULE_FACTS > MAELYS_DATALOG_MAX_FACTS_PER_PRED
         ? MAELYS_DATALOG_MAX_RULE_FACTS : MAELYS_DATALOG_MAX_FACTS_PER_PRED];
@@ -2105,12 +2116,12 @@ static maelys_result_t evaluate_numeric_aggregate(
         solve_once_bindings_t local = {0};
         int match = 1;
         for (size_t t = 0; t < pattern->arity; ++t)
-            if (!solve_once_bind_or_match(&local, &pattern->terms[t], &fact->terms[t])) {
+            if (!solve_once_bind_or_match(&local, MAELYS_DATALOG_FACT_TERM_REF(pattern, t), MAELYS_DATALOG_FACT_TERM_REF(fact, t))) {
                 match = 0;
                 break;
             }
         if (!match) continue;
-        const maelys_datalog_internal_term_t *term = &fact->terms[projected_term];
+        const maelys_datalog_internal_term_t *term = MAELYS_DATALOG_FACT_TERM_REF(fact, projected_term);
         if (term->kind != MAELYS_DATALOG_TERM_INT || term->as.integer < 0 ||
             term->as.integer > MAELYS_DATALOG_MAX_INT) {
             aggregate_rejection(error, literal, pattern->predicate_id, projected_term, term, 0);
@@ -2129,7 +2140,7 @@ static maelys_result_t evaluate_numeric_aggregate(
         sort_aggregate_facts(matches, n);
         for (size_t i = 0; i < n; ++i) {
             if (i && !maelys_datalog_fact_cmp(matches[i - 1u], matches[i])) continue;
-            const long long addend = matches[i]->terms[projected_term].as.integer;
+            const long long addend = maelys_datalog_fact_term(matches[i], projected_term).as.integer;
             /* Nonnegative bounded integers make overflow independent of order. */
             if (accumulated > MAELYS_DATALOG_MAX_INT - addend) {
                 maelys_datalog_internal_term_t total = {0};
@@ -2194,10 +2205,10 @@ static __attribute__((noinline)) int solve_aggregate_literal(maelys_datalog_inte
     slot->origin = (uint8_t)origin;
     slot->body_index = (uint16_t)body_index;
     slot->parent_step = MAELYS_DATALOG_EXPLANATION_NO_STEP;
-    slot->as.count.predicate_id = pattern.predicate_id;
-    slot->as.count.arity = pattern.arity;
+    slot->as.count.pattern.predicate_id = pattern.predicate_id;
+    slot->as.count.pattern.arity = pattern.arity;
     for (size_t i = 0; i < pattern.arity; ++i)
-        explanation_copy_term(&slot->as.count.terms[i], &pattern.terms[i]);
+        maelys_datalog_fact_set_term(&slot->as.count.pattern, i, maelys_datalog_fact_term(&pattern, i));
     slot->as.count.projected_variable = (uint8_t)literal->lhs.as.variable;
     slot->as.count.value = (uint32_t)value.as.integer;
     result->witness_filled_mask |= UINT32_C(1) << body_index;
@@ -2223,7 +2234,7 @@ static int solve_once_derive_recursive(const maelys_datalog_internal_ruleset_t *
         fact.predicate_id = rule->head.predicate_id;
         fact.arity = rule->head.arity;
         for (size_t i = 0; i < fact.arity; i++) {
-            if (!solve_once_instantiate_term(bindings, &rule->head.terms[i], &fact.terms[i])) return 1;
+            if (!solve_once_instantiate_fact_term(bindings, &rule->head.terms[i], &fact, i)) return 1;
         }
         return solve_once_append_idb_merge(result, &fact, rule->rule_id, depth, parent_proof_index, rule);
     }
@@ -2418,7 +2429,7 @@ static int solve_once_match_candidate_ordered(const maelys_datalog_internal_rule
     if (candidate->predicate_id != literal->atom.predicate_id || candidate->arity != literal->atom.arity) return 1;
     solve_once_bindings_t next = *bindings;
     for (size_t i = 0; i < candidate->arity; i++) {
-        if (!solve_once_bind_or_match(&next, &literal->atom.terms[i], &candidate->terms[i])) return 1;
+        if (!solve_once_bind_or_match(&next, &literal->atom.terms[i], MAELYS_DATALOG_FACT_TERM_REF(candidate, i))) return 1;
     }
     /* Record into the lexical body slot (literal_index), not the join position,
      * so provenance stays in body order even under the static join plan. */
@@ -2497,7 +2508,7 @@ static int solve_once_derive_ordered(const maelys_datalog_internal_ruleset_t *ru
         fact.predicate_id = rule->head.predicate_id;
         fact.arity = rule->head.arity;
         for (size_t i = 0; i < fact.arity; i++) {
-            if (!solve_once_instantiate_term(bindings, &rule->head.terms[i], &fact.terms[i])) return 1;
+            if (!solve_once_instantiate_fact_term(bindings, &rule->head.terms[i], &fact, i)) return 1;
         }
         return solve_once_append_idb_merge(result, &fact, rule->rule_id, depth, parent_proof_index, rule);
     }
@@ -3849,7 +3860,7 @@ maelys_result_t maelys_datalog_query_solved_ground_fact(
     memset(&query_fact, 0, sizeof(query_fact));
     query_fact.predicate_id = pid;
     query_fact.arity = (uint8_t)arity;
-    for (size_t i = 0; i < arity; i++) query_fact.terms[i] = terms[i];
+    for (size_t i = 0; i < arity; i++) maelys_datalog_fact_set_term(&query_fact, i, terms[i]);
     if (!datalog_fact_structurally_valid(&result->ruleset->registry, &query_fact)) {
         return MAELYS_ERR_INVALID_STATE;
     }
@@ -3995,7 +4006,7 @@ static int why_false_fact_symbols_resolve(
     const maelys_datalog_internal_fact_t *fact) {
     if (!fact || fact->arity > MAELYS_DATALOG_MAX_TERMS) return 0;
     for (size_t term = 0u; term < fact->arity; term++) {
-        if (!why_false_term_symbol_resolves(context, &fact->terms[term])) {
+        if (!why_false_term_symbol_resolves(context, MAELYS_DATALOG_FACT_TERM_REF(fact, term))) {
             return 0;
         }
     }
@@ -4028,7 +4039,7 @@ static maelys_result_t why_false_validate_result_symbols(
     }
     for (size_t rule_index = 0u; rule_index < ruleset->rule_count; rule_index++) {
         const maelys_datalog_rule_t *rule = &ruleset->rules[rule_index];
-        if (!why_false_fact_symbols_resolve(context, &rule->head)) {
+        if (!why_false_fact_symbols_resolve(context, MAELYS_DATALOG_ATOM_FACT_REF(&rule->head))) {
             return MAELYS_ERR_INVALID_STATE;
         }
         for (size_t body = 0u; body < rule->body_count; body++) {
@@ -4036,7 +4047,7 @@ static maelys_result_t why_false_validate_result_symbols(
             if ((literal->kind == MAELYS_DATALOG_LITERAL_ATOM ||
                  literal->kind == MAELYS_DATALOG_LITERAL_NEGATED_ATOM ||
                  maelys_datalog_literal_is_aggregate(literal->kind)) &&
-                !why_false_fact_symbols_resolve(context, &literal->atom)) {
+                !why_false_fact_symbols_resolve(context, MAELYS_DATALOG_ATOM_FACT_REF(&literal->atom))) {
                 return MAELYS_ERR_INVALID_STATE;
             }
             if (literal->kind == MAELYS_DATALOG_LITERAL_COMPARISON &&
@@ -4120,7 +4131,7 @@ static int why_false_fact_cmp(
     if (left->arity > right->arity) return 1;
     for (size_t term = 0u; term < left->arity; term++) {
         const int value_cmp = why_false_term_cmp(
-            context, &left->terms[term], &right->terms[term]);
+            context, MAELYS_DATALOG_FACT_TERM_REF(left, term), MAELYS_DATALOG_FACT_TERM_REF(right, term));
         if (value_cmp != 0) return value_cmp;
         if (context->fatal_error != MAELYS_OK) return 0;
     }
@@ -4302,7 +4313,7 @@ static int why_false_unify_head(const maelys_datalog_rule_t *rule,
     memset(out_bindings, 0, sizeof(*out_bindings));
     for (size_t term = 0u; term < target->arity; term++) {
         if (!solve_once_bind_or_match(
-                out_bindings, &rule->head.terms[term], &target->terms[term])) {
+                out_bindings, &rule->head.terms[term], MAELYS_DATALOG_FACT_TERM_REF(target, term))) {
             return 0;
         }
     }
@@ -4479,7 +4490,7 @@ static void why_false_pattern_as_fact(
     out_fact->predicate_id = pattern->predicate_id;
     out_fact->arity = pattern->arity;
     for (size_t term = 0u; term < pattern->arity; term++) {
-        out_fact->terms[term] = pattern->terms[term];
+        maelys_datalog_fact_set_term(out_fact, term, pattern->terms[term]);
     }
 }
 
@@ -4844,10 +4855,10 @@ static int why_false_explore_body(
         ground.predicate_id = literal->atom.predicate_id;
         ground.arity = literal->atom.arity;
         for (size_t term = 0u; term < ground.arity; term++) {
-            if (!solve_once_instantiate_term(
+            if (!solve_once_instantiate_fact_term(
                     &branch->bindings,
                     &literal->atom.terms[term],
-                    &ground.terms[term])) {
+                    &ground, term)) {
                 context->fatal_error = MAELYS_ERR_INVALID_STATE;
                 return 0;
             }
@@ -4873,7 +4884,7 @@ static int why_false_explore_body(
         diagnostic.obstacle.pattern.predicate_id = ground.predicate_id;
         diagnostic.obstacle.pattern.arity = ground.arity;
         for (size_t term = 0u; term < ground.arity; term++) {
-            diagnostic.obstacle.pattern.terms[term] = ground.terms[term];
+            diagnostic.obstacle.pattern.terms[term] = maelys_datalog_fact_term(&ground, term);
         }
         why_false_retain_diagnostic(context, &diagnostic);
         return 1;
@@ -4910,7 +4921,7 @@ static int why_false_explore_body(
         for (size_t term = 0u; term < literal->atom.arity; term++) {
             if (!solve_once_bind_or_match(&next.bindings,
                                           &literal->atom.terms[term],
-                                          &candidates[candidate_index].fact->terms[term])) {
+                                          MAELYS_DATALOG_FACT_TERM_REF(candidates[candidate_index].fact, term))) {
                 matched = 0;
                 break;
             }

@@ -768,10 +768,10 @@ static int test_typed_terms_are_materialized_exactly(void) {
                           result, enabled_id, &enabled, &enabled_count), "%d");
     TEST_ASSERT_EQUAL((size_t)1u, quota_count, "%zu");
     TEST_ASSERT_EQUAL((size_t)1u, enabled_count, "%zu");
-    TEST_ASSERT_EQUAL(MAELYS_DATALOG_TERM_INT, quota[0].terms[1].kind, "%d");
-    TEST_ASSERT_EQUAL((long long)7, quota[0].terms[1].as.integer, "%lld");
-    TEST_ASSERT_EQUAL(MAELYS_DATALOG_TERM_BOOL, enabled[0].terms[1].kind, "%d");
-    TEST_ASSERT_EQUAL(1, enabled[0].terms[1].as.boolean, "%d");
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_TERM_INT, maelys_datalog_fact_term(&quota[0], 1).kind, "%d");
+    TEST_ASSERT_EQUAL((long long)7, maelys_datalog_fact_term(&quota[0], 1).as.integer, "%lld");
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_TERM_BOOL, maelys_datalog_fact_term(&enabled[0], 1).kind, "%d");
+    TEST_ASSERT_EQUAL(1, maelys_datalog_fact_term(&enabled[0], 1).as.boolean, "%d");
 
     maelys_datalog_solve_result_free(result);
     TEST_ASSERT_EQUAL(MAELYS_OK,
@@ -986,8 +986,8 @@ static int test_filter_fresh_and_prepared_statistics_match(void) {
     memset(&absent, 0, sizeof(absent));
     absent.predicate_id = allow_id;
     absent.arity = 1u;
-    absent.terms[0].kind = MAELYS_DATALOG_TERM_SYMBOL;
-    absent.terms[0].as.symbol = bob_id;
+    maelys_datalog_fact_set_kind(&absent, 0, MAELYS_DATALOG_TERM_SYMBOL);
+    maelys_datalog_fact_set_symbol(&absent, 0, bob_id);
     maelys_datalog_why_false_limits_t limits = {
         MAELYS_DATALOG_MAX_RULES,
         MAELYS_DATALOG_MAX_WHY_FALSE_SUBSTITUTIONS_PER_RULE,
@@ -1295,8 +1295,8 @@ static int test_reuse_resets_index_without_symbols(void) {
             actual, &derived, &derived_count), "%d");
         TEST_ASSERT_EQUAL(counts[pass], derived_count, "%zu");
         for (size_t i = 0u; i < derived_count; ++i) {
-            TEST_ASSERT_EQUAL(MAELYS_DATALOG_TERM_INT, derived[i].terms[0].kind, "%d");
-            TEST_ASSERT_EQUAL((long long)i, derived[i].terms[0].as.integer, "%lld");
+            TEST_ASSERT_EQUAL(MAELYS_DATALOG_TERM_INT, maelys_datalog_fact_term(&derived[i], 0).kind, "%d");
+            TEST_ASSERT_EQUAL((long long)i, maelys_datalog_fact_term(&derived[i], 0).as.integer, "%lld");
         }
         maelys_datalog_solve_result_free(actual);
         maelys_datalog_solve_result_free(expected);

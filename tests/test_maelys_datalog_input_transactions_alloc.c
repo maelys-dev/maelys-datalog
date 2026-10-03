@@ -57,7 +57,7 @@ int main(void) {
     OK(maelys_datalog_result_free(r));same_committed(h,base,saved,1,&vocabulary);
     /* Retry succeeds after withdrawing the overflow contributor. */
     OK(maelys_datalog_session_inputs_apply(h,base,&b,1,&a,1,&r,NULL));OK(maelys_datalog_result_free(r));
-    assert(h->base.generation==base.generation+1 && h->live[0].terms[0].as.integer==INT32_MAX);
+    assert(h->base.generation==base.generation+1 && maelys_datalog_fact_term(&h->live[0], 0).as.integer==INT32_MAX);
     /* Rejection on raw validation also preserves the entire committed payload. */
     base=h->base;memcpy(saved,h->live,sizeof(*saved));a.predicate="absent";
     assert(maelys_datalog_session_inputs_apply(h,base,&a,1,&b,1,&r,NULL)==MAELYS_DATALOG_STATUS_INVALID_FIELD);

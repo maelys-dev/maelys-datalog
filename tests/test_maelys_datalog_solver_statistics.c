@@ -63,10 +63,10 @@ static int fact_pair_matches(const maelys_datalog_internal_fact_t *fact,
                              maelys_datalog_symbol_id_t right) {
     return fact &&
            fact->arity == 2u &&
-           fact->terms[0].kind == MAELYS_DATALOG_TERM_SYMBOL &&
-           fact->terms[1].kind == MAELYS_DATALOG_TERM_SYMBOL &&
-           fact->terms[0].as.symbol == left &&
-           fact->terms[1].as.symbol == right;
+           maelys_datalog_fact_term(fact, 0).kind == MAELYS_DATALOG_TERM_SYMBOL &&
+           maelys_datalog_fact_term(fact, 1).kind == MAELYS_DATALOG_TERM_SYMBOL &&
+           maelys_datalog_fact_term(fact, 0).as.symbol == left &&
+           maelys_datalog_fact_term(fact, 1).as.symbol == right;
 }
 
 static int facts_contain_pair(const maelys_datalog_internal_fact_t *facts,
