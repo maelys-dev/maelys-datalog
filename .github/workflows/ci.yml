@@ -85,6 +85,16 @@ jobs:
           python3 tools/check_session_recycle_lifecycle.py --output "$RUNNER_TEMP/session-recycle-unload-small"
           python3 tools/check_session_recycle_lifecycle.py --large --output "$RUNNER_TEMP/session-recycle-unload-large"
 
+      - name: Check compact fact negative controls
+        run: |
+          python3 tools/check_compact_fact_mutations.py --output "$RUNNER_TEMP/compact-facts-small"
+          python3 tools/check_compact_fact_mutations.py --large --output "$RUNNER_TEMP/compact-facts-large"
+      - name: Preserve compact fact negative controls
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: compact-fact-mutations-${{ runner.os }}
+          path: ${{ runner.temp }}/compact-facts-*/*.log
       - name: Check retained-input transaction negative controls
         if: runner.os == 'Linux'
         run: |
