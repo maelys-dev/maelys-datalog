@@ -40,8 +40,17 @@ static void roundtrip(void) {
             assert(restored.terms[t].kind == (t < arity ? MAELYS_DATALOG_TERM_INT : 0));
             assert(restored.terms[t].as.integer == (t < arity ? integers[n] : 0));
         }
-        for (size_t t = 0; t < arity; ++t)
+        for (size_t t = 0; t < arity; ++t) {
             assert(maelys_datalog_fact_term(&fact, t).as.integer == integers[n]);
+            maelys_datalog_internal_term_t expanded;
+            memset(&expanded, 0xa5, sizeof(expanded));
+            maelys_datalog_fact_copy_term(&expanded, &fact, t);
+            unsigned char expected_bytes[sizeof(expanded)] = {0};
+            maelys_datalog_internal_term_kind_t kind = MAELYS_DATALOG_TERM_INT;
+            memcpy(expected_bytes + offsetof(maelys_datalog_internal_term_t, kind), &kind, sizeof(kind));
+            memcpy(expected_bytes + offsetof(maelys_datalog_internal_term_t, as), &integers[n], sizeof(integers[n]));
+            assert(!memcmp(&expanded, expected_bytes, sizeof(expanded)));
+        }
     }
 }
 static void reused_payload(void) {

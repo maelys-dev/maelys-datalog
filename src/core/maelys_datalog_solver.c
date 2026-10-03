@@ -4884,7 +4884,8 @@ static int why_false_explore_body(
         diagnostic.obstacle.pattern.predicate_id = ground.predicate_id;
         diagnostic.obstacle.pattern.arity = ground.arity;
         for (size_t term = 0u; term < ground.arity; term++) {
-            diagnostic.obstacle.pattern.terms[term] = maelys_datalog_fact_term(&ground, term);
+            maelys_datalog_fact_copy_term(
+                &diagnostic.obstacle.pattern.terms[term], &ground, term);
         }
         why_false_retain_diagnostic(context, &diagnostic);
         return 1;

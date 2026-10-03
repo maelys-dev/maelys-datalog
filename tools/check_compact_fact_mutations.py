@@ -13,6 +13,7 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[1]
 HEADER = Path("src/core/maelys_datalog_types.h")
 MUTATIONS = {
+    "diagnostic-padding-not-cleared": ("    memset(out, 0, sizeof(*out));\n    out->kind", "    /* mutant retains diagnostic padding */\n    out->kind"),
     "integer-load-truncated": ("memcpy(&term.as, &fact->payload[index], sizeof(term.as));", "memcpy(&term.as, &fact->payload[index], sizeof(term.as)); if (term.kind == MAELYS_DATALOG_TERM_INT) term.as.integer = (int32_t)term.as.integer;"),
     "integer-store-truncated": ("fact->payload[index].integer = term.as.integer", "fact->payload[index].integer = (int32_t)term.as.integer"),
     "reused-term-not-cleared": ("    fact->payload[index].integer = 0;\n    switch (term.kind)", "    /* mutant leaves old upper payload bytes */\n    switch (term.kind)"),

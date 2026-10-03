@@ -144,6 +144,15 @@ static inline maelys_datalog_internal_term_t maelys_datalog_fact_term(
     memcpy(&term.as, &fact->payload[index], sizeof(term.as));
     return term;
 }
+/* Byte-canonical expansion for diagnostic records compared as whole images.
+ * Returning a struct by value does not promise to preserve its padding. */
+static inline void maelys_datalog_fact_copy_term(
+    maelys_datalog_internal_term_t *out,
+    const maelys_datalog_internal_fact_t *fact, size_t index) {
+    memset(out, 0, sizeof(*out));
+    out->kind = (maelys_datalog_internal_term_kind_t)fact->kind[index];
+    memcpy(&out->as, &fact->payload[index], sizeof(out->as));
+}
 static inline void maelys_datalog_fact_set_term(maelys_datalog_internal_fact_t *fact,
     size_t index, maelys_datalog_internal_term_t term) {
     fact->kind[index] = (uint8_t)term.kind;
