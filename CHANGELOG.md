@@ -45,6 +45,15 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
   measured scope, controls and distinction between raw and screened statistics.
   This accepts that named report, not an automatic attribution or publication.
 
+- The combined-runtime report for commit
+  `0108bd640d14e885f2b76048bdbd22f341f5775a` in
+  [run 37097581473](https://github.com/maelys-dev/maelys-datalog/actions/runs/37097581473)
+  has SHA-256 `20a5ef8687070003da10c057402a3cbff3ebe3183d17f4e662875c13079528fa`.
+  Its positive control passes; nine base-reference statistics exceed their
+  matching null envelope in both rounds, including a SMALL/default complete
+  request p95 of +35.72%/+5.96%. The report remains `review_required` and its
+  maintainer decision is pending; the earlier acceptance does not cover it.
+
 ## 0.20.0 — 2026-10-02
 
 ### Added
