@@ -431,6 +431,10 @@ MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_policy_load_manifest_t
     unsigned flags, maelys_datalog_policy_t **, maelys_datalog_diagnostic_t *);
 
 
+/* Count enabled policies without allocating storage. A live empty set returns
+ * OK and zero. NULL arguments return INVALID_ARGUMENT; a released handle whose
+ * storage remains addressable returns INVALID_STATE. A freed pointer is invalid.
+ * Every failure leaves out_count intact. */
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_policy_count(
     const maelys_datalog_policy_t *policy,
     size_t *out_count);
@@ -451,6 +455,17 @@ MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_policy_id(
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_policy_stat_get(
     const maelys_datalog_policy_t *policy, size_t policy_index,
     maelys_datalog_policy_stat_t statistic, size_t *out_value);
+/* Read the loaded set's deterministic SHA-256 fingerprint (64 lowercase hex
+ * digits plus NUL), including a live empty set. The v1 serialization hashes
+ * "MAELYS-DATALOG-POLICY-SET-v1" including its NUL, the enabled-policy count,
+ * each enabled policy's ID/domain/ruleset hash in manifest order, then the
+ * effective whitelist flag, count and name/arity entries. Integers and string
+ * byte lengths are unsigned 64-bit big-endian; string bytes exclude their NUL.
+ * An empty set contributes no policy entries; its query configuration remains
+ * covered. Manifest formatting and disabled entries do not affect the identity.
+ * NULL arguments return INVALID_ARGUMENT; a released handle whose storage
+ * remains addressable returns INVALID_STATE. A freed pointer is invalid.
+ * Every failure leaves out_fingerprint intact. No allocation is performed. */
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_policy_fingerprint(
     const maelys_datalog_policy_t *policy,
     char out_fingerprint[MAELYS_DATALOG_PUBLIC_FINGERPRINT_BYTES]);
