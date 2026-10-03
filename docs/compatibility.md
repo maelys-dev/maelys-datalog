@@ -1,9 +1,37 @@
 # Compatibility contract for the freeze
 
-This page records the intended compatibility boundaries for the freeze review.
-It does not announce a release or freeze a development version. Published SDK
-archives and tags remain immutable. A release decision remains separate from
-this contract and from its validation evidence.
+The compatibility freeze defined here takes effect with the explicitly approved
+publication of 0.22.0. Until that publication, this declaration is a candidate;
+merging documentation alone does not freeze a development build or approve a
+release. The project keeps its 0.x version series: the freeze is a compatibility
+commitment, not a promise to publish 1.0.0. Published SDK archives and tags remain
+immutable. The [freeze review](validation/freeze-review.md) records evidence and
+remaining decisions separately.
+
+## Frozen baseline: versions and record bounds
+
+The existing installed contract has the following numeric baseline. These are
+versions and bounds of the current interface/record families, not a prohibition
+on explicitly negotiated future families or additional headers.
+
+| Contract | Frozen value | Installed declaration |
+| --- | ---: | --- |
+| Consumer API | 2 | `MAELYS_DATALOG_PUBLIC_API_VERSION` |
+| Compiled-program ABI | 2 | `MAELYS_DATALOG_PROGRAM_ABI_VERSION` |
+| Backend ABIs, negotiated separately | 5, 6, 7 | `MAELYS_DATALOG_BACKEND_ABI_VERSION`, `MAELYS_DATALOG_BACKEND_V6_ABI_VERSION`, `MAELYS_DATALOG_BACKEND_V7_ABI_VERSION` |
+| Terms per current fact/view/IR atom | 4 | `MAELYS_DATALOG_PUBLIC_MAX_TERMS` |
+| Body literals per current IR rule | 8 | `MAELYS_DATALOG_IR_MAX_BODY` |
+| Variables per current IR rule | 32 | `MAELYS_DATALOG_IR_MAX_VARIABLES` |
+| Existing installed header family | 11 | The paths listed below, detailed in [SDK headers](sdk-headers.md) |
+
+The eleven existing paths under `maelys/` are `datalog.h`,
+`datalog_builders.h`, `datalog_window.h`, `datalog_inputs.h`,
+`datalog_resources.h`, `datalog_program.h`, `datalog_explanations.h`,
+`datalog_extension.h`, `datalog_module.h`, `datalog_frontend.h` and
+`datalog_backend.h`. Their continued compatibility does not resurrect retired
+header paths. Program/build limits that differ by size profile and effective
+session quotas remain distinct; the numbers above do not replace admission or
+storage-plan queries.
 
 ## Public records and language features
 
@@ -55,9 +83,33 @@ specified prepared paths. External providers and callbacks must establish their
 own guarantees; ABI compatibility alone does not establish zero allocation,
 performance or support for every window operation.
 
-## Evidence before the freeze
+## Additive evolution after the freeze
 
-The freeze review must verify installed-SDK consumers, separately compiled callers
+For the frozen record families and negotiated ABIs, later releases preserve
+existing declarations, layouts and documented behavior for programs that do not
+request new features. New capabilities, record families, entry points and ABI
+versions are negotiated explicitly; existing callers and providers do not gain
+new obligations merely because another version is available. Source migration
+from earlier pre-freeze releases remains documented rather than retroactively
+made compatible.
+
+A correction that restores a documented contract is identified in the changelog
+and qualified against its observable results and diagnostics. A proposed change
+to a frozen contract requires an explicit compatibility decision and migration
+plan; a minor version number alone does not authorize that change. Performance
+observations and provider-specific allocation guarantees keep their own evidence
+and limits. Neither private implementation bytes nor fixed latency is promised.
+
+A policy handle is live only until release. An addressable released caller-owned
+handle returns INVALID_STATE from count, id, fingerprint, statistics and session
+creation; a freed pointer remains invalid. A successfully loaded empty set is
+live, with zero enabled policies and its defined fingerprint. Caller-owned
+storage can be loaded again after release under the loader's requirements; its
+address alone never revives the former handle.
+
+## Qualification and publication
+
+The [freeze review](validation/freeze-review.md) must verify installed-SDK consumers, separately compiled callers
 and providers for each supported ABI, capability rejection, storage boundaries,
 borrowed lifetimes, typed results and diagnostics. Language/binding parity and
 release performance review remain separate evidence. Internal byte-size or
