@@ -222,6 +222,74 @@ static int atomic_registration(void) {
     OK(maelys_datalog_context_free(c));
     return 0;
 }
+/* Language capability bits are distinct from resource-feature bits. */
+static int unknown_backend_capability(void) {
+    const uint64_t unknown = UINT64_C(1) << 63;
+    CHECK(!(MAELYS_DATALOG_CAP_ALL & unknown));
+    maelys_datalog_context_t *c;
+    OK(maelys_datalog_context_create(&c));
+    size_t before, after;
+    OK(maelys_datalog_context_component_count(c, MAELYS_DATALOG_EXTENSION_BACKEND, &before));
+    maelys_datalog_backend_t b = *example_naive_backend();
+    const uint64_t known = b.capabilities;
+    b.capabilities |= unknown;
+    maelys_datalog_extension_t e = extension();
+    e.backends = &b; e.backend_count = 1;
+    CHECK(maelys_datalog_context_register(c, &e) == MAELYS_DATALOG_STATUS_INVALID_ARGUMENT);
+    OK(maelys_datalog_context_component_count(c, MAELYS_DATALOG_EXTENSION_BACKEND, &after));
+    CHECK(after == before);
+    b.capabilities = known;
+    OK(maelys_datalog_context_register(c, &e));
+    OK(maelys_datalog_context_component_count(c, MAELYS_DATALOG_EXTENSION_BACKEND, &after));
+    CHECK(after == before + 1);
+
+    maelys_datalog_backend_v6_t b6 = *maelys_datalog_backend_reference_v6();
+    b6.name = "known6"; b6.semantic_id = "test.known6.v1";
+    b6.capabilities |= unknown;
+    maelys_datalog_extension_v2_t e6 = {0};
+    e6.abi_version = MAELYS_DATALOG_EXTENSION_V2_ABI_VERSION;
+    e6.struct_size = sizeof(e6); e6.name = "bundle6"; e6.semantic_id = "bundle6.v1";
+    e6.backends_v6 = &b6; e6.backend_v6_count = 1;
+    OK(maelys_datalog_context_backend_v6_count(c, &before));
+    CHECK(maelys_datalog_context_register_v2(c, &e6) == MAELYS_DATALOG_STATUS_INVALID_ARGUMENT);
+    OK(maelys_datalog_context_backend_v6_count(c, &after));
+    CHECK(after == before);
+    b6.capabilities &= ~unknown;
+    OK(maelys_datalog_context_register_v2(c, &e6));
+    OK(maelys_datalog_context_backend_v6_count(c, &after));
+    CHECK(after == before + 1);
+    OK(maelys_datalog_context_seal(c, NULL));
+
+    maelys_datalog_policy_t *policy;
+    const char *text = "allow(X) :- seed(X).";
+    OK(maelys_datalog_context_load_inline(c, NULL, "context_test", "unknown", text,
+                                         strlen(text), &policy, NULL));
+    maelys_datalog_session_t *session = (void *)1;
+    maelys_datalog_session_options_t opts = {
+        MAELYS_DATALOG_BACKEND_ABI_VERSION, sizeof(opts), NULL, unknown, 0};
+    CHECK(maelys_datalog_session_create_ex(policy, 0, &opts, &session) ==
+          MAELYS_DATALOG_STATUS_INVALID_ARGUMENT);
+    CHECK(!session);
+    session = (void *)1;
+    CHECK(maelys_datalog_context_session_create(c, policy, 0, NULL, unknown, 0,
+                                               &session) == MAELYS_DATALOG_STATUS_INVALID_ARGUMENT);
+    CHECK(!session);
+    maelys_datalog_session_config_t *config;
+    OK(maelys_datalog_session_config_create(&config));
+    CHECK(maelys_datalog_session_config_set_required_capabilities(config, unknown) ==
+          MAELYS_DATALOG_STATUS_INVALID_ARGUMENT);
+    uint64_t required = unknown;
+    OK(maelys_datalog_session_config_get_required_capabilities(config, &required));
+    CHECK(!required);
+    OK(maelys_datalog_session_config_free(config));
+    opts.required_capabilities = MAELYS_DATALOG_CAP_POSITIVE;
+    OK(maelys_datalog_session_create_ex(policy, 0, &opts, &session));
+    OK(maelys_datalog_session_free(session));
+    OK(maelys_datalog_policy_free(policy));
+    OK(maelys_datalog_context_free(c));
+    puts("unknown_backend_capability: registration and session refusal PASS");
+    return 0;
+}
 static int selections_and_compatibility(void) {
     maelys_datalog_context_t *c;
     CHECK(!make_context(1, 0, &c));
@@ -342,8 +410,11 @@ static int registration_order_and_capacity(void) {
     }
     return 0;
 }
-int main(void) {
+int main(int argc, char **argv) {
     CHECK(!setup());
+    if (argc == 2 && !strcmp(argv[1], "--unknown-backend-capability"))
+        return unknown_backend_capability();
+    CHECK(!unknown_backend_capability());
     CHECK(!atomic_registration());
     CHECK(!isolation_and_lifetime());
     CHECK(!selections_and_compatibility());

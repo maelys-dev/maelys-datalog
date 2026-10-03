@@ -37,6 +37,42 @@ historical evidence, not claims that their tests or timing acceptance already
 qualify the new candidate. A provider fixture does not demonstrate every
 independent provider's algorithm, allocation guarantee or language coverage.
 
+## Real installed-SDK consumers
+
+The table records the consumer revision actually qualified, not an untested
+latest main. Each dependency pin was checked at that revision against published
+v0.21.0 (`9630f591637c7046ec73996458e1ba282194e32c`). The linked logs show SDK
+installation before external consumer builds. Dates are UTC. This inventory
+does not requalify these consumers against the unpublished 0.22.0 candidate.
+
+| Consumer repository | Qualified pinned consumer commit | Installed SDK | Qualification result and evidence | Date |
+| --- | --- | --- | --- | --- |
+| [maelys-datalog-cli](https://github.com/maelys-dev/maelys-datalog-cli/pull/9) | `4be8e34450bacdba8bafaf8d2c62983d47299eb4` | v0.21.0 | [37111243252](https://github.com/maelys-dev/maelys-datalog-cli/actions/runs/37111243252): four active checks green; installed SDK behavior/schema tests and 286 conformance cases passed. SMALL/LARGE and sanitizer replays are recorded in the PR. | 2026-10-03 |
+| [maelys-datalog-incremental](https://github.com/maelys-dev/maelys-datalog-incremental/pull/39) | `9343dc9c23cbcf4a08eb8239ef3525529de6c10c` | v0.21.0 | [37113056663](https://github.com/maelys-dev/maelys-datalog-incremental/actions/runs/37113056663): installed guard/sanitizer SDKs, LARGE 12/12 and SMALL 2/2; separate opt-in elastic probe 1/1 in both profiles. This completed qualification run does not imply that every general CI job or the PR merge has completed. | 2026-10-03 |
+| [maelys-datalog-verifier](https://github.com/maelys-dev/maelys-datalog-verifier/pull/9) | `e23845be860691301a5036ca3eeb40cc84df2bef` | v0.21.0 | [37111216556](https://github.com/maelys-dev/maelys-datalog-verifier/actions/runs/37111216556): four active checks green; 15/15 suites in each profile on the ordinary targets and under sanitizers, including live empty/disabled manifests. | 2026-10-03 |
+
+These are separate SDK consumers. Their scopes and rejected programs remain
+those of their own qualification; successful SDK integration is not a claim of
+universal language support, verifier completeness or measured latency.
+
+## Named unknown-capability refusal
+
+`unknown_backend_capability` in `tests/test_maelys_datalog_context.c` is also
+registered as `unknown_backend_capability_static` and
+`unknown_backend_capability_shared` in CMake. It uses an unknown **language**
+capability bit (63), independently of the existing resource-feature-bit test.
+Copied valid ABI 5 and ABI 6 descriptors with that bit are refused at extension
+registration with INVALID_ARGUMENT and leave catalog counts unchanged. Clearing
+only that bit makes the same descriptors register successfully.
+
+A session requiring that bit is refused by both `session_create_ex` and the
+context creation path; neither publishes a session. Configuration rejects it
+without changing its required-capability mask. A known-capability session then
+creates and closes normally. These positive controls distinguish the intended
+refusal from an otherwise invalid descriptor or policy. ABI 7 has no extension
+registry in its current contract; this test does not invent or claim one.
+There is no runtime or public-interface change in this witness.
+
 ## Final handle-liveness correction
 
 [#180](https://github.com/maelys-dev/maelys-datalog/pull/180), signed head
@@ -60,8 +96,9 @@ and Release LARGE under ASan/UBSan/alignment, 39/39 each; allocator guards;
 the two negative controls in both profiles; socle v0.62.2 check. These runs are
 macOS functional evidence, without a LeakSanitizer or performance claim.
 [Hosted CI 37114217056](https://github.com/maelys-dev/maelys-datalog/actions/runs/37114217056)
-is pending at preparation of this review. Its final conclusion and negative-control
-artifacts must be checked on the actual integrated head.
+passed all 46 checks on that head. The authorized squash merge is signed commit
+`5f668293241a0070202b06f177d2c87ea2318f2e`. Successor and integrated-main checks
+must still qualify their own heads.
 
 ## Remaining decisions before the release
 
