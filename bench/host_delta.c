@@ -79,6 +79,122 @@ static NI size_t delta_position(const native_fact *facts, size_t n, const native
         if (maelys_datalog_fact_cmp(&facts[mid], f) < 0) lo = mid+1; else hi = mid;
     } return lo;
 }
+/* All three arrays are sorted and unique. facts and added are provisional;
+ * retained bytes never alias them. Each pass advances its cursors monotonically.
+ * Failed capacity checks may change scratch, but never publish *count. */
+static NI maelys_result_t delta_compose_linear(native_fact *facts, size_t *count,
+    size_t capacity, native_fact *added, size_t na, const native_fact *removed, size_t nr) {
+    size_t n = *count;
+    if (n > capacity) return MAELYS_ERR_PAYLOAD_TOO_LARGE;
+    if (nr) {
+        size_t write = 0, removal = 0;
+        for (size_t read = 0; read < n; ++read) {
+            while (removal < nr && maelys_datalog_fact_cmp(&removed[removal], &facts[read]) < 0)
+                ++removal;
+            if (removal < nr && !maelys_datalog_fact_cmp(&removed[removal], &facts[read]))
+                continue;
+            if (write != read) facts[write] = facts[read];
+            ++write;
+        }
+        n = write;
+    }
+    /* Discard additions already among the survivors. A removed-and-added fact
+     * is absent from these survivors, so the addition wins. Compact only scratch. */
+    size_t base = 0, fresh = 0;
+    for (size_t i = 0; i < na; ++i) {
+        while (base < n && maelys_datalog_fact_cmp(&facts[base], &added[i]) < 0) ++base;
+        if (base < n && !maelys_datalog_fact_cmp(&facts[base], &added[i])) continue;
+        if (fresh != i) added[fresh] = added[i];
+        ++fresh;
+    }
+    if (fresh > capacity - n) return MAELYS_ERR_PAYLOAD_TOO_LARGE;
+    /* Merge disjoint sorted lists backward; write-base == unconsumed additions,
+     * so a write cannot overwrite an unread survivor. No repeated range moves. */
+    size_t left = n, right = fresh, write = n + fresh;
+    while (right) {
+        if (left && maelys_datalog_fact_cmp(&facts[left-1], &added[right-1]) > 0)
+            facts[--write] = facts[--left];
+        else
+            facts[--write] = added[--right];
+    }
+    *count = n + fresh;
+    return MAELYS_OK;
+}
+
+/* A mark lives in an otherwise invalid arity bit in provisional facts only.
+ * Binary search compares the original key, never the marked arity. */
+#define DELTA_TOMBSTONE 128u
+_Static_assert(MAELYS_DATALOG_MAX_TERMS < DELTA_TOMBSTONE, "tombstone arity bit");
+static int delta_t_compare(native_fact *fact, const native_fact *key) {
+    uint8_t arity = fact->arity;
+    if (!(arity & DELTA_TOMBSTONE)) return maelys_datalog_fact_cmp(fact, key);
+    fact->arity = arity & ~DELTA_TOMBSTONE;
+    int cmp = maelys_datalog_fact_cmp(fact, key);
+    fact->arity = arity;
+    return cmp;
+}
+static size_t delta_t_position(native_fact *facts, size_t n, const native_fact *key) {
+    size_t lo = 0, hi = n;
+    while (lo < hi) {
+        size_t mid = lo + (hi-lo)/2;
+        if (delta_t_compare(&facts[mid], key) < 0) lo = mid+1; else hi = mid;
+    }
+    return lo;
+}
+/* Sorted unique inputs, add wins. No new array or heap storage. lo/hi bound
+ * the ORIGINAL affected interval [lo,hi). Compaction and merge stay within
+ * that interval when cardinality is unchanged. Otherwise a contiguous pool
+ * necessarily moves the suffix once. Searches can read outside the interval.
+ * Capacity is checked before payload writes; marks are provisional metadata. */
+static NI maelys_result_t delta_compose_tombstones(native_fact *facts, size_t *count,
+    size_t capacity, native_fact *added, size_t na, const native_fact *removed, size_t nr) {
+    size_t n = *count, lo = n, hi = 0, deleted = 0, fresh = 0;
+    if (n > capacity) return MAELYS_ERR_PAYLOAD_TOO_LARGE;
+    for (size_t i = 0; i < nr; ++i) {
+        size_t pos = delta_t_position(facts, n, &removed[i]);
+        if (pos == n || delta_t_compare(&facts[pos], &removed[i])) continue;
+        facts[pos].arity |= DELTA_TOMBSTONE;
+        ++deleted;
+        if (pos < lo) lo = pos;
+        if (pos+1 > hi) hi = pos+1;
+    }
+    for (size_t i = 0; i < na; ++i) {
+        size_t pos = delta_t_position(facts, n, &added[i]);
+        if (pos < n && !delta_t_compare(&facts[pos], &added[i])) {
+            if (facts[pos].arity & DELTA_TOMBSTONE) {
+                facts[pos].arity &= ~DELTA_TOMBSTONE;
+                --deleted;
+            }
+            continue;
+        }
+        if (fresh != i) added[fresh] = added[i];
+        ++fresh;
+        if (pos < lo) lo = pos;
+        if (pos > hi) hi = pos;
+    }
+    if (fresh > capacity - (n-deleted)) return MAELYS_ERR_PAYLOAD_TOO_LARGE;
+    if (!deleted && !fresh) return MAELYS_OK;
+    size_t write = lo;
+    for (size_t read = lo; read < hi; ++read) {
+        if (facts[read].arity & DELTA_TOMBSTONE) continue;
+        if (write != read) facts[write] = facts[read];
+        ++write;
+    }
+    size_t end = write + fresh;
+    if (end != hi && hi < n)
+        memmove(facts+end, facts+hi, (n-hi)*sizeof(*facts));
+    size_t left = write, right = fresh;
+    write = end;
+    while (right) {
+        if (left > lo && maelys_datalog_fact_cmp(&facts[left-1], &added[right-1]) > 0)
+            facts[--write] = facts[--left];
+        else
+            facts[--write] = added[--right];
+    }
+    *count = n-deleted+fresh;
+    return MAELYS_OK;
+}
+
 static NI maelys_result_t delta_stage(operation *op) {
     bank *b = op->owner;
     maelys_datalog_internal_prepared_session_t *p = b->session->inputs;
@@ -93,6 +209,20 @@ static NI maelys_result_t delta_stage(operation *op) {
     size_t n = b->committed.count;
     memcpy(p->fact_pool, b->committed.facts, n*sizeof(native_fact));
     for (size_t step = 0; step < op->count; ++step) {
+        if (op->delta == 3) {
+            size_t capacity = p->edb.fact_capacity < CAP ? p->edb.fact_capacity : CAP;
+            maelys_result_t rc = delta_compose_tombstones(p->fact_pool, &n, capacity,
+                b->added[step], b->na[step], b->removed[step], b->nr[step]);
+            if (rc) return rc;
+            continue;
+        }
+        if (op->delta == 2) {
+            size_t capacity = p->edb.fact_capacity < CAP ? p->edb.fact_capacity : CAP;
+            maelys_result_t rc = delta_compose_linear(p->fact_pool, &n, capacity,
+                b->added[step], b->na[step], b->removed[step], b->nr[step]);
+            if (rc) return rc;
+            continue;
+        }
         for (size_t i = 0; i < b->nr[step]; ++i) {
             native_fact *f = &b->removed[step][i]; size_t pos = delta_position(p->fact_pool,n,f);
             if (pos < n && !maelys_datalog_fact_cmp(&p->fact_pool[pos],f)) {
@@ -248,7 +378,7 @@ static void run_case(const maelys_datalog_policy_t *policy, int delta, int deriv
             trace[t+1][pos]=old<n ? old+n : old-n;
         }
     }
-    char name[160]; snprintf(name,sizeof(name),"%s/%s/%s/%zu/%s/%s",delta ? "B" : "A",
+    char name[160]; snprintf(name,sizeof(name),"%s/%s/%s/%zu/%s/%s",delta == 3 ? "T" : delta == 2 ? "L" : delta ? "B" : "A",
         lifecycle ? "caller" : "engine", derive ? "projection" : "inert",n,symbol ? "symbol" : "integer",scenario);
     maelys_datalog_fact_t full[CAP], oracle_full[CAP]; size_t size=model_snapshot(supports,n,symbol,full,0);
     size_t alloc_before=delta_alloc_calls, bytes_before=delta_alloc_bytes;
@@ -314,7 +444,7 @@ static void run_failure(const maelys_datalog_policy_t *policy, int delta, int de
         CHECK(rc && !result && b->backend.committed_hash==hash && b->backend.commits==commits);
         CHECK(!memcmp(before,&b->committed,sizeof(*before)));
     }
-    char name[160]; snprintf(name,sizeof(name),"%s/engine/%s/64/symbol/abort%d/failure",delta?"B":"A",derive?"projection":"inert",failure);
+    char name[160]; snprintf(name,sizeof(name),"%s/engine/%s/64/symbol/abort%d/failure",delta==3?"T":delta==2?"L":delta?"B":"A",derive?"projection":"inert",failure);
     DUMP(name);
     printf("%.*s,%u,%" PRIu64 ",%zu,%zu,64,0,0\n",(int)(strlen(name)-8),name,STEPS,hash,sizeof(retained),sizeof(bank));
     b->backend.fail=0; c->na=c->nr=0;
@@ -324,12 +454,12 @@ static void run_failure(const maelys_datalog_policy_t *policy, int delta, int de
     delta_alloc_disabled=0;
     OK(maelys_datalog_session_free(b->session)); free(before); free(c); free(b);
 }
-static void conformance(const maelys_datalog_policy_t *policy) {
+static void conformance(const maelys_datalog_policy_t *policy, int mode) {
     bank *b=make_bank(policy),*other=make_bank(policy);
     maelys_datalog_fact_t initial=fact(0,1); seed_bank(b,&initial,1); seed_bank(other,&initial,1);
     change *c=calloc(1,sizeof(*c)); retained *before=malloc(sizeof(*before)); CHECK(c && before);
     *before=b->committed;
-    operation op={.owner=b,.delta=1,.count=1,.steps={c}};
+    operation op={.owner=b,.delta=mode,.count=1,.steps={c}};
     maelys_datalog_result_t *r=NULL;
     delta_alloc_disabled=1;
     CHECK(delta_execute(&op,other,1,1,NULL,0,0,&r)==MAELYS_DATALOG_STATUS_INVALID_STATE);
@@ -376,8 +506,54 @@ static void conformance(const maelys_datalog_policy_t *policy) {
     OK(maelys_datalog_session_free(b->session)); OK(maelys_datalog_session_free(other->session));
     free(b); free(other); free(c); free(before);
 }
+/* Exhaustive typed-set oracle: 32 bases x 32 removal sets x 32 addition
+ * sets, each at a roomy and a tight capacity. This also checks guard bytes and
+ * empty/exact/overflow boundaries without running a solver or allocating. */
+static void linear_set_checks(int mode) {
+    native_fact universe[5] = {{0}};
+    for (size_t i=0; i<5; ++i) {
+        universe[i].arity = 1;
+        universe[i].terms[0].kind = i<2 ? MAELYS_DATALOG_TERM_SYMBOL :
+                                  i<4 ? MAELYS_DATALOG_TERM_INT : MAELYS_DATALOG_TERM_BOOL;
+        if (i<2) universe[i].terms[0].as.symbol = (maelys_datalog_symbol_id_t)i;
+        else if (i<4) universe[i].terms[0].as.integer = i==2 ? -1 : 1;
+        else universe[i].terms[0].as.boolean = 1;
+    }
+    maelys_datalog_fact_set_t ordered;
+    maelys_datalog_fact_set_init(&ordered,universe,5); ordered.count=5; ordered.sorted=0;
+    OK(maelys_datalog_fact_set_sort(&ordered));
+    delta_alloc_disabled=1;
+    for(unsigned bm=0;bm<32;++bm) for(unsigned rm=0;rm<32;++rm) for(unsigned am=0;am<32;++am) {
+        for(size_t tight=0;tight<2;++tight) {
+            native_fact facts[8], additions[5], removals[5], before[8];
+            memset(facts,0xa5,sizeof(facts));
+            size_t n=0,na=0,nr=0,expected=0;
+            unsigned final=(bm & ~rm) | am;
+            for(size_t i=0;i<5;++i) {
+                if(bm & (1u<<i)) facts[n++]=universe[i];
+                if(rm & (1u<<i)) removals[nr++]=universe[i];
+                if(am & (1u<<i)) additions[na++]=universe[i];
+                if(final & (1u<<i)) ++expected;
+            }
+            memcpy(before,facts,sizeof(before));
+            size_t original=n,capacity=tight ? n : 5;
+            maelys_result_t rc=mode==3 ?
+                delta_compose_tombstones(facts,&n,capacity,additions,na,removals,nr) :
+                delta_compose_linear(facts,&n,capacity,additions,na,removals,nr);
+            CHECK(!memcmp(facts+capacity,before+capacity,(8-capacity)*sizeof(*facts)));
+            if(expected>capacity) { CHECK(rc==MAELYS_ERR_PAYLOAD_TOO_LARGE && n==original); continue; }
+            CHECK(rc==MAELYS_OK && n==expected);
+            size_t k=0;
+            for(size_t i=0;i<5;++i) if(final & (1u<<i)) CHECK(!maelys_datalog_fact_cmp(&facts[k++],&universe[i]));
+        }
+    }
+    delta_alloc_disabled=0;
+}
+
 int main(int argc,char **argv) {
-    CHECK((argc==2 || argc==3) && (!strcmp(argv[1],"A") || !strcmp(argv[1],"B") || !strcmp(argv[1],"check")));
+    CHECK((argc==2 || argc==3) && (!strcmp(argv[1],"A") || !strcmp(argv[1],"B") || !strcmp(argv[1],"L") || !strcmp(argv[1],"T") || !strcmp(argv[1],"check")));
+    int mode=!strcmp(argv[1],"A") ? 0 : !strcmp(argv[1],"B") ? 1 : !strcmp(argv[1],"L") ? 2 : 3;
+    if(!strcmp(argv[1],"check")) { linear_set_checks(2); linear_set_checks(3); }
     int lifecycle=argc==3 && !strcmp(argv[2],"caller");
     CHECK(argc==2 || lifecycle || !strcmp(argv[2],"engine"));
     static const maelys_datalog_predicate_t predicates[]={MAELYS_DATALOG_EDB_QUERY("event",3),MAELYS_DATALOG_EDB("unused",3),MAELYS_DATALOG_IDB_QUERY("seen",3),{ "vocab",1,MAELYS_DATALOG_PREDICATE_POLICY_FACT }};
@@ -392,14 +568,14 @@ int main(int argc,char **argv) {
         maelys_datalog_policy_t *p; maelys_datalog_diagnostic_t diag=MAELYS_DATALOG_DIAGNOSTIC_INIT;
         int load=maelys_datalog_policy_load_inline(domain.name,"p",source,strlen(source),&p,&diag);
         if(load) fprintf(stderr,"load %d %s %s\n",load,diag.message,diag.hint); CHECK(!load);
-        if(!strcmp(argv[1],"check")) conformance(p);
+        if(!strcmp(argv[1],"check")) { conformance(p,1); conformance(p,2); conformance(p,3); }
         for(size_t n=0;n<3;++n) {
             if(sizes[n]>MAELYS_DATALOG_MAX_FACTS_PER_PRED) continue; /* Explicit inventory exclusion in the report. */
             for(int symbol=0;symbol<2;++symbol) for(size_t s=0;s<5;++s)
-                run_case(p,!strcmp(argv[1],"B") || !strcmp(argv[1],"check"),derive,sizes[n],symbol,scenarios[s],lifecycle);
+                run_case(p,mode,derive,sizes[n],symbol,scenarios[s],lifecycle);
         }
         if(!lifecycle) for(int failure=1;failure<=3;++failure)
-            run_failure(p,strcmp(argv[1],"A")!=0,derive,failure);
+            run_failure(p,mode,derive,failure);
         OK(maelys_datalog_policy_free(p));
     }
     return 0;

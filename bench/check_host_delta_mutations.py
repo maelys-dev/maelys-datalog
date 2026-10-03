@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MPL-2.0
-"""Prove that the oracle/atomicity checks detect four transaction defects."""
+"""Prove that the oracle/atomicity checks detect transaction and linear-composition defects."""
 import argparse
 import json
 import subprocess
@@ -15,6 +15,20 @@ MUTATIONS = {
                              "current = NULL;\n    if (rc) { delta_accept(b,logical,op->delta); return rc; }"),
     "skip_raw_rejection": ("if (rc) return rc;\n    }\n    size_t n = b->committed.count;",
                            "/* discarded validation error */\n    }\n    size_t n = b->committed.count;"),
+    "skip_linear_removals": ("if (nr) {", "if (0 && nr) {"),
+    "keep_existing_additions": ("if (base < n && !maelys_datalog_fact_cmp(&facts[base], &added[i])) continue;",
+                                "if (0 && base < n && !maelys_datalog_fact_cmp(&facts[base], &added[i])) continue;"),
+    "reject_exact_capacity": ("if (fresh > capacity - n)", "if (fresh >= capacity - n)"),
+    "merge_wrong_order": ("maelys_datalog_fact_cmp(&facts[left-1], &added[right-1]) > 0",
+                          "maelys_datalog_fact_cmp(&facts[left-1], &added[right-1]) < 0"),
+    "merge_without_left_guard": ("if (left && maelys_datalog_fact_cmp", "if (maelys_datalog_fact_cmp"),
+    "tombstone_visible": ("if (facts[read].arity & DELTA_TOMBSTONE) continue;",
+                           "/* tombstone escapes compaction */"),
+    "tombstone_not_unmarked": ("facts[pos].arity &= ~DELTA_TOMBSTONE;",
+                                "/* addition fails to unmark */"),
+    "tombstone_short_interval": ("if (pos+1 > hi) hi = pos+1;", "if (pos > hi) hi = pos;"),
+    "tombstone_exact_capacity": ("if (fresh > capacity - (n-deleted))",
+                                 "if (fresh >= capacity - (n-deleted))"),
 }
 
 
@@ -24,7 +38,8 @@ def run(build, profile):
     objects += [build/"backend.o", build/"alloc.o"]
     if not objects or not all(p.is_file() for p in objects):
         raise ValueError("build the uninstrumented driver first")
-    flags = ["-O2", "-g", "-I.", "-Iinclude", "-Ibench", "-include", "bench/host_delta_alloc.h"]
+    flags = ["-O2", "-g", "-fsanitize=address,undefined", "-fno-sanitize-recover=all",
+             "-I.", "-Iinclude", "-Ibench", "-include", "bench/host_delta_alloc.h"]
     if profile == "LARGE":
         flags += ["-DMAELYS_DATALOG_PROFILE_LARGE"]
     results = []

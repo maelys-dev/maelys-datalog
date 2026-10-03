@@ -2,6 +2,8 @@
 
 Status: test-driver experiment following agreement on
 [the engine response](backend-transaction-deltas.md), merged as #138 (`98898dc`).
+The current harness also includes the [linear-composition follow-up](host-delta-linear-composition.md)
+as variant L; the original A/B protocol and scope are retained below.
 There is no installed delta function, descriptor field, capability or reserved
 ABI version. The production engine and its ABI 5 snapshot path are unchanged.
 A host instruction saving is necessary evidence for further design review, not
@@ -84,8 +86,8 @@ Checks and reference solves are outside all counters. Native allocator traps
 remain active for candidate operations, oracle queries, commit/abort and release.
 The proof also exercises capacity overflow, raw batch overflow, invalid cancelling
 entries, duplicate/add-wins updates, unknown symbols, stale/wrong-owner tokens,
-live-result refusal, poisoned scratch reuse and generation exhaustion. Four
-mutants must fail: wrong owner, skipped bank catch-up, publication on rejection,
+live-result refusal, poisoned scratch reuse and generation exhaustion. The four original
+mutants must fail (the follow-up adds four composition mutants): wrong owner, skipped bank catch-up, publication on rejection,
 and ignored raw validation failure.
 
 Not yet exercised: a general indexed delta store, adversarial hash chains,
@@ -100,7 +102,7 @@ lose badly and must remain in the report.
 
 Run `sh bench/run_host_delta.sh /absolute/fresh/evidence` on Linux with Clang,
 CMake, make, Python 3 and Valgrind installed. Both profiles and installed SDKs are
-built first. Software counts then run in A1/B1/B2/A2 order, in separate processes,
+built first. #139 used A1/B1/B2/A2; schema 2 now uses A1/B1/L1/L2/B2/A2, in separate processes,
 for each scope. No wall-clock measurements are taken. Local Docker execution is
 local instruction evidence, not a hosted timing run or a self-hosted ARM runner.
 
