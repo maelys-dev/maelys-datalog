@@ -4,6 +4,7 @@
 import argparse
 import hashlib
 import json
+import re
 from pathlib import Path
 import subprocess
 from report_host_delta import counts
@@ -16,6 +17,17 @@ ORDER = ("base1", "base2", "head1", "head2", "base3", "head3", "base4", "head4")
 def command(argv, log):
     with log.open("w") as stream:
         subprocess.run(argv, check=True, stdout=stream, stderr=subprocess.STDOUT)
+
+def physical_functions(region):
+    functions = {}
+    for name, vector in region["functions"].items():
+        # Callgrind appends apostrophe + digits for synthetic recursion contexts.
+        # C identifiers cannot contain these suffixes; they share one ELF symbol.
+        symbol = re.sub(r"'\d+$", "", name)
+        current = functions.setdefault(symbol, [0, 0, 0])
+        for i in range(3):
+            current[i] += vector[i]
+    return {**region, "functions": functions}
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
@@ -68,9 +80,9 @@ def main():
             role = label[:-1]
             for case in CASES:
                 path = out/profile/label/case; path.mkdir(parents=True)
-                command(["valgrind", "--tool=callgrind", "--cache-sim=yes", "--branch-sim=no", "--collect-atstart=no",
+                command(["valgrind", "--tool=callgrind", "--cache-sim=yes", "--branch-sim=no", "--instr-atstart=no",
                     "--error-exitcode=3", "--callgrind-out-file="+str(path/"counts"), str(out/profile/role/"compact-storage"), case], path/"checked.log")
-                regions = [r for f in sorted(path.glob("counts.*")) if (r := counts(f)) is not None]
+                regions = [r for f in sorted(path.glob("counts.*")) if (raw := counts(f)) is not None for r in [physical_functions(raw)]]
                 if len(regions) != 2 or regions[0] != regions[1]:
                     raise ValueError(f"nonidentical internal repetitions: {profile}/{label}/{case}")
                 measured[label, case] = regions[0]

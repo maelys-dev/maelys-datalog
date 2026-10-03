@@ -18,8 +18,18 @@
 #endif
 #ifdef MAELYS_BENCH_COUNT
 #include <valgrind/callgrind.h>
-#define START() CALLGRIND_TOGGLE_COLLECT
-#define STOP() do { CALLGRIND_TOGGLE_COLLECT; CALLGRIND_DUMP_STATS_AT("compact"); CALLGRIND_ZERO_STATS; } while(0)
+/* Isolate repeated regions from caller-loop unrolling and delayed attribution
+ * of adjacent driver blocks. Dump while instrumentation is still enabled. */
+__attribute__((noinline)) static void compact_collect_start(void) {
+    CALLGRIND_ZERO_STATS;
+    CALLGRIND_START_INSTRUMENTATION;
+}
+__attribute__((noinline)) static void compact_collect_stop(void) {
+    CALLGRIND_DUMP_STATS_AT("compact");
+    CALLGRIND_STOP_INSTRUMENTATION;
+}
+#define START() compact_collect_start()
+#define STOP() compact_collect_stop()
 #else
 #define START() ((void)0)
 #define STOP() ((void)0)
@@ -112,12 +122,7 @@ static void memory(void) {
 #endif
     for(size_t i=0;i<64;++i) OK(maelys_datalog_session_free(sessions[i]));
 }
-static void ordinary(void) {
-    maelys_datalog_session_t *warm=NULL;maelys_datalog_result_t *wr=NULL;
-    OK(maelys_datalog_session_create(policy,0,&warm));
-    OK(maelys_datalog_session_solve_edb(warm,edb,&wr,NULL));check(wr);
-    OK(maelys_datalog_result_free(wr));OK(maelys_datalog_session_free(warm));
-    for(unsigned repeat=0;repeat<2;++repeat) {
+__attribute__((noinline)) static void ordinary_region(void) {
         START();
         for(unsigned i=0;i<16;++i) {
             maelys_datalog_session_t *s=NULL;maelys_datalog_result_t *r=NULL;
@@ -128,8 +133,23 @@ static void ordinary(void) {
             OK(maelys_datalog_result_query(r,"allow",q,2,&present));assert(present);
             OK(maelys_datalog_result_free(r));OK(maelys_datalog_session_free(s));
         }
-        STOP();printf("checked ordinary93 repeat=%u transactions=16\n",repeat);
+        STOP();
+}
+static void ordinary(void) {
+    maelys_datalog_session_t *warm=NULL;maelys_datalog_result_t *wr=NULL;
+    OK(maelys_datalog_session_create(policy,0,&warm));
+    OK(maelys_datalog_session_solve_edb(warm,edb,&wr,NULL));check(wr);
+    OK(maelys_datalog_result_free(wr));OK(maelys_datalog_session_free(warm));
+    for(unsigned repeat=0;repeat<2;++repeat) {
+        ordinary_region();
+        printf("checked ordinary93 repeat=%u transactions=16\n",repeat);
     }
+}
+
+__attribute__((noinline)) static void window_region(maelys_datalog_window_t *w) {
+    START();
+    for(unsigned i=0;i<130;++i) {maelys_datalog_value_t v=symbol(events[i%65]);OK(maelys_datalog_window_push(w,"event",&v,1,NULL,NULL));}
+    STOP();
 }
 static void window(void) {
     for(unsigned repeat=0;repeat<2;++repeat) {
@@ -140,9 +160,7 @@ static void window(void) {
         /* Each repetition starts from the same primed banks/cursor. All work
          * of each measured push, including expiry and result release, counts. */
         for(unsigned i=0;i<130;++i) {maelys_datalog_value_t v=symbol(events[i%65]);OK(maelys_datalog_window_push(w,"event",&v,1,NULL,NULL));}
-        START();
-        for(unsigned i=0;i<130;++i) {maelys_datalog_value_t v=symbol(events[i%65]);OK(maelys_datalog_window_push(w,"event",&v,1,NULL,NULL));}
-        STOP();
+        window_region(w);
         maelys_datalog_result_t *r=NULL;OK(maelys_datalog_window_result(w,&r));size_t n=0;OK(maelys_datalog_result_derived_fact_count(r,&n));assert(n==64);
         printf("checked last_n64 repeat=%u transactions=130 derived=%zu\n",repeat,n);
         OK(maelys_datalog_window_free(w));free(arena);OK(maelys_datalog_session_free(a));OK(maelys_datalog_session_free(b));

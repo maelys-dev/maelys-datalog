@@ -28,13 +28,18 @@ static void roundtrip(void) {
             atom.terms[t].kind = MAELYS_DATALOG_TERM_INT;
             atom.terms[t].as.integer = integers[n];
         }
-        maelys_datalog_internal_atom_t expected = atom;
         for (size_t t = arity; t < MAELYS_DATALOG_MAX_TERMS; ++t)
             memset(&atom.terms[t], 0xa5, sizeof(atom.terms[t]));
         maelys_datalog_internal_fact_t fact = maelys_datalog_atom_fact(&atom);
         canonical(&fact);
         maelys_datalog_internal_atom_t restored = maelys_datalog_fact_atom(&fact);
-        assert(!memcmp(&expected, &restored, sizeof(expected)));
+        assert(restored.predicate_id == atom.predicate_id);
+        assert(restored.arity == arity);
+        for (size_t t = 0; t < MAELYS_DATALOG_MAX_TERMS; ++t) {
+            /* The compiled term has padding; compare its defined fields only. */
+            assert(restored.terms[t].kind == (t < arity ? MAELYS_DATALOG_TERM_INT : 0));
+            assert(restored.terms[t].as.integer == (t < arity ? integers[n] : 0));
+        }
         for (size_t t = 0; t < arity; ++t)
             assert(maelys_datalog_fact_term(&fact, t).as.integer == integers[n]);
     }
