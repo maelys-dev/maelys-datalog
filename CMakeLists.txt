@@ -322,6 +322,8 @@ if(BUILD_TESTING)
             target_link_libraries(test_context_${linkage} PRIVATE maelys_datalog_shared)
         endif()
         add_test(NAME context_${linkage} COMMAND test_context_${linkage})
+        add_test(NAME unknown_backend_capability_${linkage}
+            COMMAND test_context_${linkage} --unknown-backend-capability)
         add_executable(test_pipeline_${linkage} tests/test_maelys_datalog_pipeline.c)
         target_include_directories(test_pipeline_${linkage} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
         if(linkage STREQUAL "static")
