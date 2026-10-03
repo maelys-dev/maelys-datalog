@@ -232,6 +232,31 @@ for (const runtime of runtimes) {
     const defaults = rules.prepare().capacities;
     assert.equal(defaults.inputFacts, engine.limits.maxEdbFacts);
   });
+  test(`${runtime}: empty manifest policy set contract`, async t => {
+    const { engine } = await basic(t);
+    const dir = await mkdtemp(resolve(tmpdir(), 'maelys-js-empty-manifest-'));
+    t.after(() => rm(dir, { recursive: true, force: true }));
+    for (const policies of [[], [{ policy_id: 'disabled', domain: 'js_common',
+      file: 'missing.dl', sha256: '0'.repeat(64), mode: 'enforce', enabled: false,
+      description: 'disabled' }]]) {
+      const text = JSON.stringify({ policy_set_id: 'empty', policy_set_version: '1',
+        manifest_version: '1', default_profile: 'enforce', created_for: 'test',
+        strict_loading: true, fail_closed: true, capabilities: [], policies });
+      const inputs = [{ text, policies: [] }];
+      if (runtime === 'node') {
+        const path = resolve(dir, 'manifest.json'); await writeFile(path, text);
+        inputs.push({ path });
+      }
+      for (const input of inputs) {
+        const rules = engine.loadManifest(input);
+        assert.equal(rules.policyCount, 0);
+        assert.equal(rules.fingerprint,
+          '27a75b9d3186b42378465a7ced53f4da1465eb92a83a293594635213db667d31');
+        assert.throws(() => rules.prepare({ policyIndex: 0 }));
+        rules.close();
+      }
+    }
+  });
   test(`${runtime}: in-memory manifests verify hashes, flags and policy selection`, async t => {
     const { engine } = await basic(t);
     const sources = ['allow(X) :- seed(X).', 'hidden(X) :- seed(X). allow(X) :- hidden(X), not(blocked(X)).'];

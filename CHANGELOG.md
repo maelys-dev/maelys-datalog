@@ -5,6 +5,18 @@ All notable changes to Maelys Datalog are documented in this file.
 The project follows [Semantic Versioning](https://semver.org/) and uses the
 format described by [Keep a Changelog](https://keepachangelog.com/).
 
+## Unreleased
+
+### Changed
+
+- A live empty manifest policy set now returns `OK` and zero from
+  `maelys_datalog_policy_count`, and `OK` with a deterministic v1 set fingerprint
+  from `maelys_datalog_policy_fingerprint`. Previously both returned
+  `INVALID_STATE` despite a successful load and a valid, releasable handle.
+  Python and JavaScript expose these empty sets without raising an error.
+  Released handles remain invalid; existing nonempty-set fingerprints do not
+  change.
+
 ## 0.20.0 — 2026-10-02
 
 ### Added
