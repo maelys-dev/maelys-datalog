@@ -4521,9 +4521,26 @@ static void why_false_make_diagnostic(
         (uint8_t)MAELYS_DATALOG_EXPLANATION_ORIGIN_NOT_APPLICABLE;
 }
 
+/* Compact reads expand into terms passed by value. ABI padding in those
+ * temporaries is not data; clear it at the diagnostic image boundary. */
+static void why_false_canonicalize_term(maelys_datalog_internal_term_t *term) {
+    memset((unsigned char *)term + sizeof(term->kind), 0,
+           offsetof(maelys_datalog_internal_term_t, as) - sizeof(term->kind));
+}
+
 static void why_false_retain_diagnostic(
     why_false_context_t *context,
     const maelys_datalog_why_false_diagnostic_t *diagnostic) {
+    maelys_datalog_why_false_diagnostic_t canonical;
+    memcpy(&canonical, diagnostic, sizeof(canonical));
+    for (size_t variable = 0u; variable < MAELYS_DATALOG_MAX_RULE_VARIABLES; ++variable)
+        why_false_canonicalize_term(&canonical.substitution[variable]);
+    for (size_t term = 0u; term < MAELYS_DATALOG_MAX_TERMS; ++term)
+        why_false_canonicalize_term(&canonical.obstacle.pattern.terms[term]);
+    why_false_canonicalize_term(&canonical.obstacle.lhs);
+    why_false_canonicalize_term(&canonical.obstacle.rhs);
+    why_false_canonicalize_term(&canonical.obstacle.filter_value);
+    diagnostic = &canonical;
     const size_t capacity = context->limits->max_diagnostics;
     if (context->out->diagnostic_count < capacity) {
         context->out->diagnostics[context->out->diagnostic_count++] = *diagnostic;
