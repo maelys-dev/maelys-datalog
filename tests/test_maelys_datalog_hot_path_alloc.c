@@ -245,6 +245,52 @@ static void empty_policy_set_contract(void) {
     puts("empty_policy_set_contract: empty/disabled, four loaders, statuses, fingerprint, no allocations, release/reuse PASS");
 }
 
+static void caller_owned_policy_liveness(void) {
+    const char manifest[] = "{\"policy_set_id\":\"liveness\",\"policy_set_version\":\"1\","
+        "\"manifest_version\":\"1\",\"default_profile\":\"MAELYS-DATALOG-v2\","
+        "\"created_for\":\"test\",\"strict_loading\":true,\"fail_closed\":true,"
+        "\"capabilities\":[],\"policies\":[]}";
+    size_t bytes, alignment;
+    assert(maelys_datalog_policy_storage_requirements(&bytes, &alignment) == 0);
+    void *storage = malloc(bytes);
+    assert(storage && (uintptr_t)storage % alignment == 0);
+    const size_t baseline = live;
+    for (unsigned reuse = 0; reuse < 2; ++reuse) {
+        maelys_datalog_policy_t *policy = NULL;
+        maelys_datalog_diagnostic_t diag = MAELYS_DATALOG_DIAGNOSTIC_INIT;
+        assert(maelys_datalog_policy_load_manifest_text_in(storage, bytes,
+            manifest, sizeof(manifest) - 1u, NULL, 0, 0, &policy, &diag) == 0);
+        assert(policy == storage);
+        size_t count = 99;
+        assert(maelys_datalog_policy_count(policy, &count) == 0 && count == 0);
+        const size_t before = total;
+        fault_after = 0;
+        assert(maelys_datalog_policy_free(policy) == 0);
+        count = 99;
+        assert(maelys_datalog_policy_count(policy, &count) == MAELYS_DATALOG_STATUS_INVALID_STATE);
+        assert(count == 99);
+        const char *id = "unchanged";
+        assert(maelys_datalog_policy_id(policy, 0, &id) == MAELYS_DATALOG_STATUS_INVALID_STATE);
+        assert(strcmp(id, "unchanged") == 0);
+        char fingerprint[MAELYS_DATALOG_PUBLIC_FINGERPRINT_BYTES];
+        memset(fingerprint, 'x', sizeof(fingerprint));
+        assert(maelys_datalog_policy_fingerprint(policy, fingerprint) == MAELYS_DATALOG_STATUS_INVALID_STATE);
+        for (size_t i = 0; i < sizeof(fingerprint); ++i) assert(fingerprint[i] == 'x');
+        size_t statistic = 99;
+        assert(maelys_datalog_policy_stat_get(policy, 0, MAELYS_DATALOG_POLICY_RULE_COUNT,
+            &statistic) == MAELYS_DATALOG_STATUS_INVALID_STATE);
+        assert(statistic == 99);
+        maelys_datalog_session_t *session = (void *)(uintptr_t)1;
+        assert(maelys_datalog_session_create(policy, 0, &session) == MAELYS_DATALOG_STATUS_INVALID_STATE);
+        assert(session == NULL);
+        assert(live == baseline && total == before);
+        for (size_t i = 0; i < bytes; ++i) assert(((unsigned char *)storage)[i] == 0);
+        fault_after = SIZE_MAX;
+    }
+    free(storage);
+    puts("caller_owned_policy_liveness: release, five INVALID_STATE observations, outputs, zero allocation, reload PASS");
+}
+
 static void caller_owned_policy_snapshot(void) {
     maelys_datalog_session_recycle_purge();
     size_t bytes, alignment;
@@ -462,8 +508,14 @@ static void predicate_declarations_without_allocator(void) {
 }
 
 int main(int argc, char **argv) {
+    if (argc == 2 && strcmp(argv[1], "--caller-owned-policy-liveness") == 0) {
+        caller_owned_policy_liveness();
+        assert(live == 0u);
+        return 0;
+    }
     if (argc == 2 && strcmp(argv[1], "--empty-policy-set-contract") == 0) {
         empty_policy_set_contract();
+        caller_owned_policy_liveness();
         assert(live == 0u);
         return 0;
     }
@@ -475,6 +527,7 @@ int main(int argc, char **argv) {
     const maelys_datalog_domain_t domain = {"hot_path", predicates, 3, NULL, 0};
     assert(maelys_datalog_domain_register(&domain) == 0);
     empty_policy_set_contract();
+    caller_owned_policy_liveness();
     caller_owned_policy_snapshot();
     const char *source = "allow(X) :- seed(X), not(blocked(X)).";
     maelys_datalog_diagnostic_t diag = MAELYS_DATALOG_DIAGNOSTIC_INIT;

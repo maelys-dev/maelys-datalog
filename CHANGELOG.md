@@ -5,6 +5,16 @@ All notable changes to Maelys Datalog are documented in this file.
 The project follows [Semantic Versioning](https://semver.org/) and uses the
 format described by [Keep a Changelog](https://keepachangelog.com/).
 
+## [Unreleased]
+
+### Changed
+
+- Policy observations and session creation consistently return `INVALID_STATE`
+  for a released handle whose caller-owned storage remains addressable. Previously
+  `policy_id`, `policy_stat_get` and session creation could return `NOT_FOUND`
+  after that storage was cleared. Live empty sets retain their defined behavior;
+  freed engine-owned pointers remain invalid to use.
+
 ## 0.21.0 — 2026-10-03
 
 ### Added

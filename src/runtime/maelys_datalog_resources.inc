@@ -175,7 +175,7 @@ static int plan_part(fixed_plan_t *p, size_t count, size_t width, size_t alignme
 static maelys_datalog_status_t policy_config_valid(const maelys_datalog_policy_t *policy, size_t index,
     const maelys_datalog_session_config_t *c) {
     if (!policy) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
-    if (policy->released) return MAELYS_DATALOG_STATUS_INVALID_STATE;
+    if (!maelys_datalog_policy_is_live(policy)) return MAELYS_DATALOG_STATUS_INVALID_STATE;
     if (index >= policy->set.policy_count) return MAELYS_DATALOG_STATUS_NOT_FOUND;
     if (c && c->context && policy->set.policies[index].modules != c->context)
         return MAELYS_DATALOG_STATUS_INVALID_FIELD;

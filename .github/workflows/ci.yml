@@ -59,6 +59,19 @@ jobs:
       - name: Check module boundaries
         run: bash tools/check_module_boundaries.sh
 
+      - name: Rebuild caller-owned policy liveness negative controls
+        if: runner.os == 'Linux'
+        run: |
+          python3 tools/check_policy_liveness_mutations.py --profile SMALL --output "$RUNNER_TEMP/policy-liveness-small"
+          python3 tools/check_policy_liveness_mutations.py --profile LARGE --output "$RUNNER_TEMP/policy-liveness-large"
+
+      - name: Preserve policy liveness negative controls
+        if: always() && runner.os == 'Linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: policy-liveness-mutations
+          path: ${{ runner.temp }}/policy-liveness-*/*
+
       - name: Rebuild fixed-resource negative controls under ASan and UBSan
         if: runner.os == 'Linux'
         run: |

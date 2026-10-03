@@ -442,16 +442,17 @@ MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_policy_count(
  * allocating storage. policy_index follows manifest enabled-policy order, as
  * policy_count and session_create do. The returned string is borrowed from
  * policy and remains valid only while that handle is live. An invalid index
- * returns NOT_FOUND; a released handle returns INVALID_STATE. Every failure
- * leaves out_policy_id intact. */
+ * returns NOT_FOUND; a released handle whose storage remains addressable
+ * returns INVALID_STATE. A freed pointer is invalid. Every failure leaves
+ * out_policy_id intact. */
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_policy_id(
     const maelys_datalog_policy_t *policy, size_t policy_index,
     const char **out_policy_id);
 /* Read one selected policy without preparing a session or allocating storage.
  * policy_index follows manifest enabled-policy order, as session_create does.
  * An invalid index returns NOT_FOUND; an unknown statistic returns UNSUPPORTED.
- * A released handle retained by a session returns INVALID_STATE. As with other
- * handle APIs, a freed pointer is invalid. Every failure leaves out_value intact. */
+ * A released handle whose storage remains addressable returns INVALID_STATE.
+ * A freed pointer is invalid. Every failure leaves out_value intact. */
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_policy_stat_get(
     const maelys_datalog_policy_t *policy, size_t policy_index,
     maelys_datalog_policy_stat_t statistic, size_t *out_value);

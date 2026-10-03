@@ -339,7 +339,7 @@ static maelys_datalog_status_t context_session_create_with_storage(maelys_datalo
     if (out) *out = NULL;
     if (!context || !policy || !out) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
     if (!maelys_datalog_context_is_sealed(context)) return MAELYS_DATALOG_STATUS_INVALID_STATE;
-    if (policy->released) return MAELYS_DATALOG_STATUS_INVALID_STATE;
+    if (!maelys_datalog_policy_is_live(policy)) return MAELYS_DATALOG_STATUS_INVALID_STATE;
     if (index >= policy->set.policy_count) return MAELYS_DATALOG_STATUS_NOT_FOUND;
     if (policy->set.policies[index].modules != context) return MAELYS_DATALOG_STATUS_INVALID_FIELD;
     const maelys_datalog_backend_t *backend = maelys_datalog_context_backend(context, backend_name);
@@ -382,7 +382,7 @@ maelys_datalog_status_t maelys_datalog_backend_storage_requirements(
     if (!policy || !bytes || !alignment) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
     if (!backend) backend = maelys_datalog_backend_reference();
     if (!maelys_datalog_backend_descriptor_valid(backend)) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
-    if (policy->released) return MAELYS_DATALOG_STATUS_INVALID_STATE;
+    if (!maelys_datalog_policy_is_live(policy)) return MAELYS_DATALOG_STATUS_INVALID_STATE;
     if (index >= policy->set.policy_count) return MAELYS_DATALOG_STATUS_NOT_FOUND;
     const maelys_datalog_program_t view = {.ruleset = &policy->set.policies[index]};
     return query_backend_storage(&view, backend, bytes, alignment);
@@ -403,7 +403,7 @@ static maelys_datalog_status_t session_create_with_storage(
         *out = NULL;
     if (!policy || !out)
         return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
-    if (policy->released) return MAELYS_DATALOG_STATUS_INVALID_STATE;
+    if (!maelys_datalog_policy_is_live(policy)) return MAELYS_DATALOG_STATUS_INVALID_STATE;
     if (index >= policy->set.policy_count)
         return MAELYS_DATALOG_STATUS_NOT_FOUND;
     if (options && (options->abi_version != MAELYS_DATALOG_BACKEND_ABI_VERSION ||
