@@ -267,8 +267,9 @@ maelys_datalog_status_t maelys_datalog_policy_count(
     size_t *out_count) {
     if (!policy || !out_count) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
     if (policy->released) return MAELYS_DATALOG_STATUS_INVALID_STATE;
+    if (atomic_load_explicit(&policy->references, memory_order_acquire) == 0u)
+        return MAELYS_DATALOG_STATUS_INVALID_STATE;
     const size_t count = policy->set.policy_count;
-    if (count == 0u) return MAELYS_DATALOG_STATUS_INVALID_STATE;
     *out_count = count;
     return MAELYS_DATALOG_STATUS_OK;
 }
@@ -306,6 +307,8 @@ maelys_datalog_status_t maelys_datalog_policy_fingerprint(
     char out_fingerprint[MAELYS_DATALOG_PUBLIC_FINGERPRINT_BYTES]) {
     if (!policy || !out_fingerprint) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
     if (policy->released) return MAELYS_DATALOG_STATUS_INVALID_STATE;
+    if (atomic_load_explicit(&policy->references, memory_order_acquire) == 0u)
+        return MAELYS_DATALOG_STATUS_INVALID_STATE;
     char fingerprint[MAELYS_DATALOG_PUBLIC_FINGERPRINT_BYTES];
     maelys_result_t status = maelys_datalog_policy_set_fingerprint(
         &policy->set, fingerprint);

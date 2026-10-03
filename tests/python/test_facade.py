@@ -512,6 +512,23 @@ class FacadeTest(unittest.TestCase):
         self.assertTrue(all("creating thread" in message for message in failures))
         self.assertTrue(result.contains_fact("allow", ["alice"]))
 
+    def test_empty_manifest_policy_set_contract(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = manifest(Path(directory), [])
+            for disabled in (False, True):
+                if disabled:
+                    path = manifest(Path(directory), [SOURCE])
+                    document = json.loads(path.read_text())
+                    document["policies"][0]["enabled"] = False
+                    path.write_text(json.dumps(document))
+                with self.engine.load_manifest(path) as rules:
+                    self.assertEqual(rules.policy_count, 0)
+                    self.assertEqual(rules.fingerprint,
+                        "27a75b9d3186b42378465a7ced53f4da1465eb92a83a293594635213db667d31")
+                    self.assertEqual(rules.fingerprint, rules.fingerprint)
+                    with self.assertRaises(IndexError):
+                        rules.prepare(policy_index=0)
+
     def test_manifest_policy_local_atoms_and_multi_policy_selection(self):
         with tempfile.TemporaryDirectory() as directory:
             path = manifest(Path(directory), ['allow("alice") :- seed("alice").',
