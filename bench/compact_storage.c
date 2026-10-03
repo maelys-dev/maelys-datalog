@@ -73,11 +73,19 @@ static void setup(void) {
     for(unsigned i=0;i<65;++i) snprintf(events[i],16,"event%u",i);
 }
 static void check(maelys_datalog_result_t *r) {
-    maelys_datalog_value_t terms[]={symbol(users[1]),symbol(docs[1])};int present=0;
-    OK(maelys_datalog_result_query(r,"allow",terms,2,&present));assert(present);
-    terms[0]=symbol(users[10]);terms[1]=symbol(docs[10]);
-    OK(maelys_datalog_result_query(r,"allow",terms,2,&present));assert(!present);
+    size_t derived=0;OK(maelys_datalog_result_derived_fact_count(r,&derived));
+    assert(derived==138); /* can_read 54 + allow 54 + has_any_document 30 */
+    for(unsigned i=0;i<30;++i) {
+        maelys_datalog_value_t u=symbol(users[i]);int present=0;
+        OK(maelys_datalog_result_query(r,"has_any_document",&u,1,&present));assert(present);
+        for(unsigned j=0;j<30;++j) {
+            maelys_datalog_value_t terms[]={u,symbol(docs[j])};
+            OK(maelys_datalog_result_query(r,"allow",terms,2,&present));
+            assert(present==((i%10)!=0 && (j==i || j==(i+1)%30)));
+        }
+    }
 }
+
 static void plans(void) {
     size_t bytes,align;
     OK(maelys_datalog_policy_storage_requirements(&bytes,&align));
@@ -162,6 +170,10 @@ static void window(void) {
         for(unsigned i=0;i<130;++i) {maelys_datalog_value_t v=symbol(events[i%65]);OK(maelys_datalog_window_push(w,"event",&v,1,NULL,NULL));}
         window_region(w);
         maelys_datalog_result_t *r=NULL;OK(maelys_datalog_window_result(w,&r));size_t n=0;OK(maelys_datalog_result_derived_fact_count(r,&n));assert(n==64);
+        for(unsigned i=0;i<65;++i) {
+            maelys_datalog_value_t v=symbol(events[i]);int present=0;
+            OK(maelys_datalog_result_query(r,"seen",&v,1,&present));assert(present==(i!=0));
+        }
         printf("checked last_n64 repeat=%u transactions=130 derived=%zu\n",repeat,n);
         OK(maelys_datalog_window_free(w));free(arena);OK(maelys_datalog_session_free(a));OK(maelys_datalog_session_free(b));
     }
