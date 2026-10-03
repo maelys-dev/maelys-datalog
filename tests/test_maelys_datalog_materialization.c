@@ -127,24 +127,24 @@ static void collisions(void) {
     maelys_datalog_predicate_id_t pid;
     assert(maelys_datalog_predicate_registry_find(&rules.registry, names[0], 1, &pid));
     maelys_datalog_internal_fact_t fact = {.predicate_id=pid, .arity=1};
-    fact.terms[0].kind = MAELYS_DATALOG_TERM_INT;
+    maelys_datalog_fact_set_kind(&fact, 0, MAELYS_DATALOG_TERM_INT);
     size_t found = 0;
     long long first = -1;
     for (long long v = 0; found < 40; ++v) {
         assert(v < 1000000);
-        fact.terms[0].as.integer = v;
+        maelys_datalog_fact_set_integer(&fact, 0, v);
         if (maelys_datalog_test_edb_insert_bucket(&fact) != MAELYS_DATALOG_EDB_INSERT_SLOTS - 1u) continue;
         if (!found) first = v;
-        OK(insert(names[0], fact.terms, 1));
-        OK(insert(names[0], fact.terms, 1));
+        OK(insert(names[0], MAELYS_DATALOG_FACT_ATOM_REF(&fact)[0].terms, 1));
+        OK(insert(names[0], MAELYS_DATALOG_FACT_ATOM_REF(&fact)[0].terms, 1));
         ++found;
         assert(edbs[1].fact_count == found);
     }
     /* This deliberately wraps a chain across the end of the table. */
     assert(index_state.slots[0] && index_state.slots[38]);
     /* A nonconsecutive duplicate must traverse the index, not the last fact. */
-    fact.terms[0].as.integer = first;
-    OK(insert(names[0], fact.terms, 1));
+    maelys_datalog_fact_set_integer(&fact, 0, first);
+    OK(insert(names[0], MAELYS_DATALOG_FACT_ATOM_REF(&fact)[0].terms, 1));
     assert(edbs[1].fact_count == found);
 }
 

@@ -226,7 +226,7 @@ static maelys_datalog_internal_fact_t f1(maelys_datalog_predicate_id_t pid,
     memset(&f, 0, sizeof(f));
     f.predicate_id = pid;
     f.arity = 1u;
-    f.terms[0] = a;
+    maelys_datalog_fact_set_term(&f, 0, a);
     return f;
 }
 
@@ -237,8 +237,8 @@ static maelys_datalog_internal_fact_t f2(maelys_datalog_predicate_id_t pid,
     memset(&f, 0, sizeof(f));
     f.predicate_id = pid;
     f.arity = 2u;
-    f.terms[0] = a;
-    f.terms[1] = b;
+    maelys_datalog_fact_set_term(&f, 0, a);
+    maelys_datalog_fact_set_term(&f, 1, b);
     return f;
 }
 
@@ -1062,24 +1062,24 @@ static int test_fmt_invalid_terms(void) {
     TEST_ASSERT_TRUE(ensure_fx());
     /* VAR term in a ground explanation. */
     build_normative_example(&g_bad);
-    g_bad.steps[0].derived_fact.terms[0].kind = MAELYS_DATALOG_TERM_VAR;
-    g_bad.steps[0].derived_fact.terms[0].as.variable = 0u;
+    maelys_datalog_fact_set_kind(&g_bad.steps[0].derived_fact, 0, MAELYS_DATALOG_TERM_VAR);
+    maelys_datalog_fact_set_variable(&g_bad.steps[0].derived_fact, 0, 0u);
     TEST_ASSERT_TRUE(expect_error_untouched(&g_fx, &g_bad, MAELYS_ERR_INVALID_FIELD));
     /* Unknown term kinds. */
     build_normative_example(&g_bad);
-    g_bad.premises[0].as.fact.terms[0].kind = (maelys_datalog_internal_term_kind_t)0;
+    maelys_datalog_fact_set_kind(&g_bad.premises[0].as.fact, 0, (maelys_datalog_internal_term_kind_t)0);
     TEST_ASSERT_TRUE(expect_error_untouched(&g_fx, &g_bad, MAELYS_ERR_INVALID_FIELD));
     build_normative_example(&g_bad);
-    g_bad.premises[0].as.fact.terms[1].kind = (maelys_datalog_internal_term_kind_t)9;
+    maelys_datalog_fact_set_kind(&g_bad.premises[0].as.fact, 1, (maelys_datalog_internal_term_kind_t)9);
     TEST_ASSERT_TRUE(expect_error_untouched(&g_fx, &g_bad, MAELYS_ERR_INVALID_FIELD));
     /* Symbol id zero: rejected before any id - 1 evaluation. */
     build_normative_example(&g_bad);
-    g_bad.steps[0].derived_fact.terms[0].as.symbol = 0u;
+    maelys_datalog_fact_set_symbol(&g_bad.steps[0].derived_fact, 0, 0u);
     TEST_ASSERT_TRUE(expect_error_untouched(&g_fx, &g_bad, MAELYS_ERR_INVALID_FIELD));
     /* Symbol id out of range. */
     build_normative_example(&g_bad);
-    g_bad.steps[0].derived_fact.terms[0].as.symbol =
-        (maelys_datalog_symbol_id_t)(g_fx.symbols.count + 1u);
+    maelys_datalog_fact_set_symbol(&g_bad.steps[0].derived_fact, 0,
+        (maelys_datalog_symbol_id_t)(g_fx.symbols.count + 1u));
     TEST_ASSERT_TRUE(expect_error_untouched(&g_fx, &g_bad, MAELYS_ERR_INVALID_FIELD));
     TEST_END();
 }
@@ -1314,11 +1314,11 @@ static int test_fmt_ordered_vs_reference_traversal_same_text(void) {
                                                             "ancestor", 2u,
                                                             &target2.predicate_id));
     target1.arity = 2u;
-    target1.terms[0] = t_sym(a1);
-    target1.terms[1] = t_sym(c1);
+    maelys_datalog_fact_set_term(&target1, 0, t_sym(a1));
+    maelys_datalog_fact_set_term(&target1, 1, t_sym(c1));
     target2.arity = 2u;
-    target2.terms[0] = t_sym(a2);
-    target2.terms[1] = t_sym(c2);
+    maelys_datalog_fact_set_term(&target2, 0, t_sym(a2));
+    maelys_datalog_fact_set_term(&target2, 1, t_sym(c2));
 
     TEST_ASSERT_EQUAL(MAELYS_OK,
                       maelys_datalog_explain_solved_fact(ordered, &target1, &g_exp), "%d");

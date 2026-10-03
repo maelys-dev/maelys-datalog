@@ -173,15 +173,17 @@ static maelys_datalog_status_t retained_convert(maelys_datalog_session_inputs_t 
             const maelys_datalog_value_t *v=&f->terms[t];
             maelys_datalog_status_t rc=maelys_datalog_validate_value(v,0);
             if(rc) return rc;
-            item.terms[t].kind=(maelys_datalog_internal_term_kind_t)v->kind;
-            if(v->kind==MAELYS_DATALOG_VALUE_INTEGER) item.terms[t].as.integer=v->as.integer;
-            else if(v->kind==MAELYS_DATALOG_VALUE_BOOLEAN) item.terms[t].as.boolean=!!v->as.boolean;
+            maelys_datalog_fact_set_kind(&item, t, (maelys_datalog_internal_term_kind_t)v->kind);
+            if(v->kind==MAELYS_DATALOG_VALUE_INTEGER) maelys_datalog_fact_set_integer(&item, t, v->as.integer);
+            else if(v->kind==MAELYS_DATALOG_VALUE_BOOLEAN) maelys_datalog_fact_set_boolean(&item, t, !!v->as.boolean);
             else {
                 size_t len=strnlen(v->as.symbol,MAELYS_DATALOG_MAX_STRING_BYTES+1u);int found=0;
                 if(len>MAELYS_DATALOG_MAX_STRING_BYTES || retained_conflict(h,v->as.symbol,len+1))
                     return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
+                maelys_datalog_symbol_id_t symbol = 0;
                 rc=(maelys_datalog_status_t)maelys_datalog_symbol_lookup_readonly(
-                    &h->vocabulary,v->as.symbol,len,&item.terms[t].as.symbol,&found);
+                    &h->vocabulary,v->as.symbol,len,&symbol,&found);
+                maelys_datalog_fact_set_symbol(&item, t, symbol);
                 if(rc) return rc;
                 if(!found) { if(!removal) return MAELYS_DATALOG_STATUS_INVALID_FIELD; absent=1; }
             }

@@ -271,8 +271,8 @@ maelys_datalog_status_t maelys_datalog_backend_emit(maelys_datalog_backend_outpu
         (d->kind_flags & (MAELYS_DATALOG_PRED_KIND_EDB | MAELYS_DATALOG_PRED_KIND_POLICY_FACT)))
         return output_fail(out, MAELYS_DATALOG_STATUS_INVALID_FIELD);
     int found = 0;
-    maelys_datalog_status_t rc = maelys_datalog_resolve_public_terms(
-        &s->inputs->symbols, in->terms, in->arity, fact.terms, &found, 1);
+    maelys_datalog_status_t rc = maelys_datalog_resolve_public_fact_terms(
+        &s->inputs->symbols, in->terms, in->arity, &fact, &found, 1);
     if (rc != MAELYS_DATALOG_STATUS_OK)
         return output_fail(out, rc);
     if (!found)
@@ -759,8 +759,8 @@ maelys_datalog_status_t maelys_datalog_result_query(const maelys_datalog_result_
         return rc;
     fact.arity = (uint8_t)arity;
     int found;
-    rc = maelys_datalog_resolve_public_terms(&result->owner->inputs->symbols, terms, arity,
-                                             fact.terms, &found, 0);
+    rc = maelys_datalog_resolve_public_fact_terms(&result->owner->inputs->symbols, terms, arity,
+                                             &fact, &found, 0);
     if (rc != MAELYS_DATALOG_STATUS_OK)
         return rc;
     int answer = 0;
@@ -795,13 +795,13 @@ maelys_datalog_status_t maelys_datalog_result_enumerate(const maelys_datalog_res
             maelys_datalog_fact_view_t v = {0};
             v.arity = f->arity;
             for (size_t t = 0; t < arity; ++t) {
-                v.terms[t].kind = (maelys_datalog_value_kind_t)f->terms[t].kind;
-                if (f->terms[t].kind == MAELYS_DATALOG_TERM_SYMBOL)
-                    v.terms[t].as.symbol_id = f->terms[t].as.symbol;
-                else if (f->terms[t].kind == MAELYS_DATALOG_TERM_INT)
-                    v.terms[t].as.integer = f->terms[t].as.integer;
+                v.terms[t].kind = (maelys_datalog_value_kind_t)maelys_datalog_fact_kind(f, t);
+                if (maelys_datalog_fact_kind(f, t) == MAELYS_DATALOG_TERM_SYMBOL)
+                    v.terms[t].as.symbol_id = maelys_datalog_fact_symbol(f, t);
+                else if (maelys_datalog_fact_kind(f, t) == MAELYS_DATALOG_TERM_INT)
+                    v.terms[t].as.integer = maelys_datalog_fact_integer(f, t);
                 else
-                    v.terms[t].as.boolean = f->terms[t].as.boolean;
+                    v.terms[t].as.boolean = maelys_datalog_fact_boolean(f, t);
             }
             out[n] = v;
         }
@@ -1083,8 +1083,8 @@ static maelys_datalog_status_t cached_explain_text(maelys_datalog_result_t *resu
     if (rc) return rc;
     query.arity = (uint8_t)arity;
     int found = 0;
-    rc = maelys_datalog_resolve_public_terms(&s->inputs->symbols,
-        terms, arity, query.terms, &found, 0);
+    rc = maelys_datalog_resolve_public_fact_terms(&s->inputs->symbols,
+        terms, arity, &query, &found, 0);
     if (rc) return rc;
     if (!found) return MAELYS_DATALOG_STATUS_NOT_FOUND;
     if (!s->explanation_cache || s->explanation_generation != s->result_generation ||
@@ -1260,15 +1260,15 @@ maelys_datalog_status_t maelys_datalog_prepared_explanation_premise(
     memset(out, 0, sizeof(*out)); out->kind = v->kind; out->origin = v->origin;
     out->body_index = v->body_index; out->parent_step = v->parent_step; out->op = (maelys_datalog_ir_comparison_t)v->op;
     if (maelys_datalog_premise_is_aggregate(v->kind)) {
-        maelys_datalog_internal_fact_t fact = {0}; fact.predicate_id = v->as.count.predicate_id; fact.arity = v->as.count.arity;
-        memcpy(fact.terms, v->as.count.terms, sizeof(fact.terms));
+        maelys_datalog_internal_fact_t fact = {0}; fact.predicate_id = v->as.count.pattern.predicate_id; fact.arity = v->as.count.pattern.arity;
+        fact = v->as.count.pattern;
         out->projected_variable = v->as.count.projected_variable; out->aggregate_value = v->as.count.value;
-        return (maelys_datalog_status_t)maelys_datalog_export_ir_atom(r, symbols, &fact, &out->atom);
+        return (maelys_datalog_status_t)maelys_datalog_export_ir_atom(r, symbols, MAELYS_DATALOG_FACT_ATOM_REF(&fact), &out->atom);
     }
     switch (v->kind) {
     case MAELYS_DATALOG_EXPLANATION_PREMISE_POSITIVE_FACT:
     case MAELYS_DATALOG_EXPLANATION_PREMISE_NEGATED_ABSENCE:
-        return (maelys_datalog_status_t)maelys_datalog_export_ir_atom(r, symbols, &v->as.fact, &out->atom);
+        return (maelys_datalog_status_t)maelys_datalog_export_ir_atom(r, symbols, MAELYS_DATALOG_FACT_ATOM_REF(&v->as.fact), &out->atom);
     case MAELYS_DATALOG_EXPLANATION_PREMISE_COMPARISON_TRUE:
         rc = export_value(symbols, &v->as.comparison.lhs, &out->lhs);
         return rc ? rc : export_value(symbols, &v->as.comparison.rhs, &out->rhs);
@@ -1314,8 +1314,9 @@ maelys_datalog_status_t maelys_datalog_prepared_explanation_obstacle(
         rc = export_value(symbols, &o->rhs, &out->rhs); if (rc) return rc;
     }
     maelys_datalog_internal_fact_t fact = {0}; fact.predicate_id = o->pattern.predicate_id; fact.arity = o->pattern.arity;
-    memcpy(fact.terms, o->pattern.terms, sizeof(fact.terms));
-    return (maelys_datalog_status_t)maelys_datalog_export_ir_atom(r, symbols, &fact, &out->pattern);
+    for (size_t i = 0; i < fact.arity; ++i)
+        maelys_datalog_fact_set_term(&fact, i, o->pattern.terms[i]);
+    return (maelys_datalog_status_t)maelys_datalog_export_ir_atom(r, symbols, MAELYS_DATALOG_FACT_ATOM_REF(&fact), &out->pattern);
 }
 maelys_datalog_status_t maelys_datalog_result_filter_statistics(
     const maelys_datalog_result_t *result, maelys_datalog_filter_statistics_t *out) {

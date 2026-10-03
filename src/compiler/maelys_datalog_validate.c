@@ -14,7 +14,7 @@ static void validation_diag(validation_context_t *p, maelys_datalog_diag_code_t 
     maelys_datalog_internal_diagnostic_set(p->diag, code, "parser", p->file_path, p->line, p->column,
                                   message, hint);
 }
-static void vars_in_atom(const maelys_datalog_internal_fact_t *a, uint32_t *mask) {
+static void vars_in_atom(const maelys_datalog_internal_atom_t *a, uint32_t *mask) {
     for (size_t i = 0; i < a->arity; i++) {
         if (a->terms[i].kind == MAELYS_DATALOG_TERM_VAR &&
             a->terms[i].as.variable < MAELYS_DATALOG_MAX_RULE_VARIABLES) {
@@ -270,7 +270,7 @@ static int valid_term(const maelys_datalog_internal_ruleset_t *r, const maelys_d
         return 0;
     }
 }
-static int valid_atom(const maelys_datalog_internal_ruleset_t *r, const maelys_datalog_internal_fact_t *a,
+static int valid_atom(const maelys_datalog_internal_ruleset_t *r, const maelys_datalog_internal_atom_t *a,
                       int variables) {
     const maelys_datalog_predicate_entry_t *d =
         maelys_datalog_predicate_registry_get(&r->registry, a->predicate_id);
@@ -432,7 +432,7 @@ static maelys_result_t validate_program_impl(maelys_datalog_internal_ruleset_t *
         }
     }
     for (size_t i = 0; i < r->fact_count; ++i) {
-        if (!valid_atom(r, &r->facts[i], 0))
+        if (!valid_atom(r, MAELYS_DATALOG_FACT_ATOM_REF(&r->facts[i]), 0))
             goto malformed;
         const maelys_datalog_predicate_entry_t *d =
             maelys_datalog_predicate_registry_get(&r->registry, r->facts[i].predicate_id);

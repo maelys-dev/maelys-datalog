@@ -737,8 +737,8 @@ static int check_filter_why_false(const char *source) {
     memset(&query, 0, sizeof(query));
     query.predicate_id = pid;
     query.arity = 1u;
-    query.terms[0].kind = MAELYS_DATALOG_TERM_SYMBOL;
-    query.terms[0].as.symbol = symbol;
+    maelys_datalog_fact_set_kind(&query, 0, MAELYS_DATALOG_TERM_SYMBOL);
+    maelys_datalog_fact_set_symbol(&query, 0, symbol);
     maelys_datalog_why_false_limits_t limits = {
         MAELYS_DATALOG_MAX_RULES,
         MAELYS_DATALOG_MAX_WHY_FALSE_SUBSTITUTIONS_PER_RULE,

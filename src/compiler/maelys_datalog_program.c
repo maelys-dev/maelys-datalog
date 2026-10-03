@@ -113,7 +113,7 @@ maelys_result_t maelys_datalog_export_ir_term(const maelys_datalog_symbol_table_
 }
 maelys_result_t maelys_datalog_export_ir_atom(const maelys_datalog_internal_ruleset_t *r,
     const maelys_datalog_symbol_table_t *symbols,
-                                   const maelys_datalog_internal_fact_t *in, maelys_datalog_ir_atom_t *out) {
+                                   const maelys_datalog_internal_atom_t *in, maelys_datalog_ir_atom_t *out) {
     memset(out, 0, sizeof(*out));
     const maelys_datalog_predicate_entry_t *d =
         maelys_datalog_predicate_registry_get(&r->registry, in->predicate_id);
@@ -133,7 +133,7 @@ maelys_result_t maelys_datalog_export_fact(const maelys_datalog_internal_ruleset
                                            const maelys_datalog_internal_fact_t *in,
                                            maelys_datalog_fact_t *out) {
     maelys_datalog_ir_atom_t a;
-    maelys_result_t rc = maelys_datalog_export_ir_atom(r, symbols, in, &a);
+    maelys_result_t rc = maelys_datalog_export_ir_atom(r, symbols, MAELYS_DATALOG_FACT_ATOM_REF(in), &a);
     if (rc != MAELYS_OK)
         return rc;
     memset(out, 0, sizeof(*out));
@@ -220,7 +220,7 @@ static void hash_term(maelys_sha256_ctx_t *h, const maelys_datalog_internal_rule
         hash_number(h, term->as.variable);
 }
 static void hash_atom(maelys_sha256_ctx_t *h, const maelys_datalog_internal_ruleset_t *r,
-                      const maelys_datalog_internal_fact_t *atom) {
+                      const maelys_datalog_internal_atom_t *atom) {
     hash_number(h, atom->predicate_id);
     hash_number(h, atom->arity);
     for (size_t i = 0; i < atom->arity; ++i)
@@ -269,7 +269,7 @@ maelys_result_t maelys_datalog_compute_program_fingerprint(const maelys_datalog_
     }
     hash_number(&h, r->fact_count);
     for (size_t i = 0; i < r->fact_count; ++i)
-        hash_atom(&h, r, &r->facts[i]);
+        hash_atom(&h, r, MAELYS_DATALOG_FACT_ATOM_REF(&r->facts[i]));
     hash_number(&h, r->rule_count);
     for (size_t i = 0; i < r->rule_count; ++i) {
         const maelys_datalog_rule_t *rule = &r->rules[i];
@@ -381,7 +381,7 @@ maelys_datalog_status_t maelys_datalog_program_fact(const maelys_datalog_program
     if (index >= p->ruleset->fact_count)
         return MAELYS_DATALOG_STATUS_NOT_FOUND;
     maelys_datalog_ir_atom_t a;
-    maelys_result_t rc = maelys_datalog_export_ir_atom(p->ruleset, &p->ruleset->symbols, &p->ruleset->facts[index], &a);
+    maelys_result_t rc = maelys_datalog_export_ir_atom(p->ruleset, &p->ruleset->symbols, MAELYS_DATALOG_FACT_ATOM_REF(&p->ruleset->facts[index]), &a);
     if (rc == MAELYS_OK)
         *out = a;
     return (maelys_datalog_status_t)rc;
@@ -497,7 +497,7 @@ static maelys_result_t import_term(maelys_datalog_internal_ruleset_t *r, const m
     return MAELYS_OK;
 }
 static maelys_result_t import_atom(maelys_datalog_internal_ruleset_t *r, const maelys_datalog_ir_atom_t *in,
-                                   maelys_datalog_internal_fact_t *out, int variables) {
+                                   maelys_datalog_internal_atom_t *out, int variables) {
     if (!in->predicate || in->arity > MAELYS_DATALOG_MAX_TERMS)
         return MAELYS_ERR_INVALID_ARGUMENT;
     memset(out, 0, sizeof(*out));
@@ -521,11 +521,11 @@ maelys_datalog_status_t maelys_datalog_program_add_fact(maelys_datalog_program_b
     maelys_datalog_internal_ruleset_t *r = b->ruleset;
     if (r->fact_count >= MAELYS_DATALOG_MAX_RULE_FACTS)
         return fail(b, MAELYS_ERR_PAYLOAD_TOO_LARGE);
-    maelys_datalog_internal_fact_t fact;
+    maelys_datalog_internal_atom_t fact;
     maelys_result_t rc = import_atom(r, in, &fact, 0);
     if (rc != MAELYS_OK)
         return fail(b, rc);
-    r->facts[r->fact_count++] = fact;
+    r->facts[r->fact_count++] = maelys_datalog_atom_fact(&fact);
     r->program_validated = 0;
     r->compiled_fingerprint[0] = 0;
     return MAELYS_DATALOG_STATUS_OK;

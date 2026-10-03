@@ -235,14 +235,17 @@ static int ruleset_query(const maelys_datalog_internal_ruleset_t *ruleset,
         return 0;
     }
     out_fact->arity = 1u;
-    out_fact->terms[0].kind = MAELYS_DATALOG_TERM_SYMBOL;
+    maelys_datalog_fact_set_kind(out_fact, 0, MAELYS_DATALOG_TERM_SYMBOL);
     int found = 0;
-    return maelys_datalog_symbol_lookup_readonly(
+    maelys_datalog_symbol_id_t id = 0;
+    int ok = maelys_datalog_symbol_lookup_readonly(
                &ruleset->symbols,
                symbol,
                strlen(symbol),
-               &out_fact->terms[0].as.symbol,
+               &id,
                &found) == MAELYS_OK && found;
+    maelys_datalog_fact_set_symbol(out_fact, 0, id);
+    return ok;
 }
 
 static void fixture_clear(why_false_fixture_t *fixture) {
@@ -269,15 +272,17 @@ static int fixture_query(why_false_fixture_t *fixture,
         return 0;
     }
     out_fact->arity = 1u;
-    out_fact->terms[0].kind = MAELYS_DATALOG_TERM_SYMBOL;
+    maelys_datalog_fact_set_kind(out_fact, 0, MAELYS_DATALOG_TERM_SYMBOL);
     int found = 0;
+    maelys_datalog_symbol_id_t id = 0;
     if (maelys_datalog_prepared_session_lookup_symbol(
             fixture->session,
             symbol,
-            &out_fact->terms[0].as.symbol,
+            &id,
             &found) != MAELYS_OK) {
         return 0;
     }
+    maelys_datalog_fact_set_symbol(out_fact, 0, id);
     return found;
 }
 
@@ -353,9 +358,9 @@ static int normalized_fact_equal(
     }
     for (size_t term = 0u; term < left->arity; term++) {
         if (!normalized_term_equal(left_vocabulary,
-                                   &left->terms[term],
+                                   MAELYS_DATALOG_FACT_TERM_REF(left, term),
                                    right_vocabulary,
-                                   &right->terms[term])) {
+                                   MAELYS_DATALOG_FACT_TERM_REF(right, term))) {
             return 0;
         }
     }
@@ -1368,8 +1373,8 @@ static int test_unresolvable_symbol_fails_closed_and_preserves_output(void) {
                           fixture.result, &idb_facts, &idb_count), "%d");
     TEST_ASSERT_TRUE(idb_count >= 2u);
     maelys_datalog_internal_fact_t *mutable_idb = (maelys_datalog_internal_fact_t *)idb_facts;
-    const maelys_datalog_symbol_id_t saved = mutable_idb[0].terms[0].as.symbol;
-    mutable_idb[0].terms[0].as.symbol = UINT32_MAX;
+    const maelys_datalog_symbol_id_t saved = maelys_datalog_fact_term(&mutable_idb[0], 0).as.symbol;
+    maelys_datalog_fact_set_symbol(&mutable_idb[0], 0, UINT32_MAX);
 
     maelys_datalog_why_false_explanation_t *explanation = new_explanation();
     maelys_datalog_why_false_explanation_t *sentinel = new_explanation();
@@ -1384,7 +1389,7 @@ static int test_unresolvable_symbol_fails_closed_and_preserves_output(void) {
     TEST_ASSERT_EQUAL(0,
                       memcmp(explanation, sentinel, sizeof(*explanation)), "%d");
 
-    mutable_idb[0].terms[0].as.symbol = saved;
+    maelys_datalog_fact_set_symbol(&mutable_idb[0], 0, saved);
     free(sentinel);
     free(explanation);
     fixture_clear(&fixture);

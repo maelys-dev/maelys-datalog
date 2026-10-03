@@ -6,6 +6,7 @@
 #include "maelys/datalog.h"
 #include <stddef.h>
 #include <stdint.h>
+#include <string.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -100,11 +101,132 @@ typedef struct {
     } as;
 } maelys_datalog_internal_term_t;
 
+/* Compiled atoms keep their historical layout. Session facts carry separate
+ * tags and aligned payloads; no packed types or unaligned integer loads. */
 typedef struct {
     maelys_datalog_predicate_id_t predicate_id;
     uint8_t arity;
     maelys_datalog_internal_term_t terms[MAELYS_DATALOG_MAX_TERMS];
+} maelys_datalog_internal_atom_t;
+
+typedef union {
+    int64_t integer; /* First member: a zero initializer covers all eight bytes. */
+    maelys_datalog_symbol_id_t symbol;
+    int boolean;
+    unsigned variable;
+} maelys_datalog_fact_payload_t;
+
+typedef struct {
+    maelys_datalog_predicate_id_t predicate_id;
+    uint8_t arity;
+    uint8_t kind[MAELYS_DATALOG_MAX_TERMS];
+    uint8_t reserved;
+    maelys_datalog_fact_payload_t payload[MAELYS_DATALOG_MAX_TERMS];
 } maelys_datalog_internal_fact_t;
+
+_Static_assert(sizeof(maelys_datalog_internal_fact_t) == 40u,
+               "four-term compact fact must occupy 40 bytes");
+_Static_assert(offsetof(maelys_datalog_internal_fact_t, payload) == 8u,
+               "fact payload must start at the aligned eight-byte header");
+_Static_assert(_Alignof(maelys_datalog_internal_fact_t) >= _Alignof(int64_t),
+               "fact integer payload must be naturally aligned");
+_Static_assert(sizeof(maelys_datalog_internal_atom_t) == 72u,
+               "compiled atom layout must remain unchanged");
+
+/* Single-field reads do not materialize a padded temporary term. Each argument
+ * is evaluated once; these accessors are single loads in unoptimized builds
+ * too. Full expansion stays explicit at historical-term record boundaries. */
+#define maelys_datalog_fact_kind(fact, index) \
+    ((maelys_datalog_internal_term_kind_t)((fact)->kind[(index)]))
+#define maelys_datalog_fact_symbol(fact, index) ((fact)->payload[(index)].symbol)
+#define maelys_datalog_fact_integer(fact, index) ((fact)->payload[(index)].integer)
+#define maelys_datalog_fact_boolean(fact, index) ((fact)->payload[(index)].boolean)
+#define maelys_datalog_fact_variable(fact, index) ((fact)->payload[(index)].variable)
+
+static inline maelys_datalog_internal_term_t maelys_datalog_fact_term(
+    const maelys_datalog_internal_fact_t *fact, size_t index) {
+    maelys_datalog_internal_term_t term; /* Both defined fields are assigned below. */
+    term.kind = (maelys_datalog_internal_term_kind_t)fact->kind[index];
+    /* Copy the aligned representation once, without a kind-dependent decode.
+     * Writes canonicalize the inactive bytes of narrow union members. */
+    _Static_assert(sizeof(term.as) == sizeof(fact->payload[index]),
+                   "fact and temporary term payload widths must match");
+    memcpy(&term.as, &fact->payload[index], sizeof(term.as));
+    return term;
+}
+/* Byte-canonical expansion for diagnostic records compared as whole images.
+ * Returning a struct by value does not promise to preserve its padding. */
+static inline void maelys_datalog_fact_copy_term(
+    maelys_datalog_internal_term_t *out,
+    const maelys_datalog_internal_fact_t *fact, size_t index) {
+    memset(out, 0, sizeof(*out));
+    out->kind = (maelys_datalog_internal_term_kind_t)fact->kind[index];
+    memcpy(&out->as, &fact->payload[index], sizeof(out->as));
+}
+static inline void maelys_datalog_fact_set_term(maelys_datalog_internal_fact_t *fact,
+    size_t index, maelys_datalog_internal_term_t term) {
+    fact->kind[index] = (uint8_t)term.kind;
+    fact->payload[index].integer = 0;
+    switch (term.kind) {
+    case MAELYS_DATALOG_TERM_SYMBOL: fact->payload[index].symbol = term.as.symbol; break;
+    case MAELYS_DATALOG_TERM_INT: fact->payload[index].integer = term.as.integer; break;
+    case MAELYS_DATALOG_TERM_BOOL: fact->payload[index].boolean = term.as.boolean; break;
+    case MAELYS_DATALOG_TERM_VAR: fact->payload[index].variable = term.as.variable; break;
+    default: break;
+    }
+}
+static inline void maelys_datalog_fact_set_kind(maelys_datalog_internal_fact_t *fact,
+    size_t index, unsigned kind) {
+    fact->kind[index] = (uint8_t)kind;
+    if (!kind) fact->payload[index].integer = 0;
+}
+static inline void maelys_datalog_fact_set_symbol(maelys_datalog_internal_fact_t *fact,
+    size_t index, maelys_datalog_symbol_id_t value) {
+    fact->payload[index].integer = 0;
+    fact->payload[index].symbol = value;
+}
+static inline void maelys_datalog_fact_set_integer(maelys_datalog_internal_fact_t *fact,
+    size_t index, int64_t value) {
+    fact->payload[index].integer = 0;
+    fact->payload[index].integer = value;
+}
+static inline void maelys_datalog_fact_set_boolean(maelys_datalog_internal_fact_t *fact,
+    size_t index, int value) {
+    fact->payload[index].integer = 0;
+    fact->payload[index].boolean = value;
+}
+static inline void maelys_datalog_fact_set_variable(maelys_datalog_internal_fact_t *fact,
+    size_t index, unsigned value) {
+    fact->payload[index].integer = 0;
+    fact->payload[index].variable = value;
+}
+/* A temporary term is for immediate read-only calls only, never retained. */
+#define MAELYS_DATALOG_FACT_TERM_REF(fact, index) \
+    ((const maelys_datalog_internal_term_t[]){maelys_datalog_fact_term((fact), (index))})
+
+static inline maelys_datalog_internal_fact_t maelys_datalog_atom_fact(
+    const maelys_datalog_internal_atom_t *atom) {
+    maelys_datalog_internal_fact_t fact = {0};
+    fact.predicate_id = atom->predicate_id;
+    fact.arity = atom->arity;
+    for (size_t i = 0; i < atom->arity && i < MAELYS_DATALOG_MAX_TERMS; ++i)
+        maelys_datalog_fact_set_term(&fact, i, atom->terms[i]);
+    return fact;
+}
+
+static inline maelys_datalog_internal_atom_t maelys_datalog_fact_atom(
+    const maelys_datalog_internal_fact_t *fact) {
+    maelys_datalog_internal_atom_t atom = {0};
+    atom.predicate_id = fact->predicate_id;
+    atom.arity = fact->arity;
+    for (size_t i = 0; i < fact->arity && i < MAELYS_DATALOG_MAX_TERMS; ++i)
+        atom.terms[i] = maelys_datalog_fact_term(fact, i);
+    return atom;
+}
+#define MAELYS_DATALOG_ATOM_FACT_REF(atom) \
+    ((const maelys_datalog_internal_fact_t[]){maelys_datalog_atom_fact((atom))})
+#define MAELYS_DATALOG_FACT_ATOM_REF(fact) \
+    ((const maelys_datalog_internal_atom_t[]){maelys_datalog_fact_atom((fact))})
 
 typedef struct {
     maelys_datalog_internal_fact_t *facts;
@@ -180,7 +302,7 @@ typedef struct {
 
 typedef struct {
     maelys_datalog_literal_kind_t kind;
-    maelys_datalog_internal_fact_t atom;
+    maelys_datalog_internal_atom_t atom;
     maelys_datalog_internal_term_t lhs;
     maelys_datalog_internal_term_t rhs;
     maelys_datalog_cmp_op_t op;
@@ -193,7 +315,7 @@ typedef struct {
 } maelys_datalog_literal_t;
 
 typedef struct {
-    maelys_datalog_internal_fact_t head;
+    maelys_datalog_internal_atom_t head;
     maelys_datalog_literal_t body[MAELYS_DATALOG_MAX_BODY_LITERALS];
     maelys_datalog_arith_expr_node_t expr_nodes[MAELYS_DATALOG_MAX_ARITH_EXPR_NODES];
     uint8_t expr_node_count;
@@ -252,8 +374,8 @@ typedef struct {
  * A structured, complete and bounded witness for a retained canonical
  * derivation of an IDB fact. These public types are the caller-owned output of
  * maelys_datalog_explain_solved_fact() (declared in the solver header). They do
- * NOT change maelys_datalog_proof_node_t / maelys_datalog_proof_tree_t, whose
- * layout and bytes remain the historic proof-tree contract.
+ * preserve the public structured records and serialized proof text. These
+ * private premise/proof layouts use compact facts independently of public views.
  * ------------------------------------------------------------------------- */
 
 /* One explanation step per proof node; one premise per body literal. */
@@ -298,14 +420,12 @@ typedef struct {
     union {
         maelys_datalog_internal_fact_t fact;
         struct {
-            /* Same size/alignment as a fact; use its header padding for the
-             * aggregate metadata, keeping every existing premise layout.
-             * COUNT/MIN/MAX/SUM all use this historically named member. */
-            maelys_datalog_predicate_id_t predicate_id;
-            uint8_t arity;
-            uint8_t projected_variable;
+            /* Aggregate metadata follows the compact pattern explicitly;
+             * its header bytes are reserved for tags, never overlaid. */
+            maelys_datalog_internal_fact_t pattern;
             uint32_t value;
-            maelys_datalog_internal_term_t terms[MAELYS_DATALOG_MAX_TERMS];
+            uint8_t projected_variable;
+            uint8_t reserved[3];
         } count;
         struct {
             maelys_datalog_internal_term_t lhs;
@@ -321,7 +441,10 @@ typedef struct {
 } maelys_datalog_explanation_premise_t;
 
 _Static_assert(sizeof(((maelys_datalog_explanation_premise_t *)0)->as.count) ==
-               sizeof(maelys_datalog_internal_fact_t), "count must not enlarge the premise union");
+               sizeof(maelys_datalog_internal_fact_t) + 8u,
+               "aggregate metadata must add exactly one aligned eight-byte trailer");
+_Static_assert(sizeof(((maelys_datalog_explanation_premise_t *)0)->as) == 48u,
+               "aggregate pattern and metadata must bound the whole premise union");
 _Static_assert(sizeof(maelys_datalog_explanation_premise_t) <= 96u,
                "explanation premise exceeds 96-byte bound");
 

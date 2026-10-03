@@ -66,8 +66,8 @@ static void check(size_t n, unsigned pattern) {
     for (size_t i = 0; i < n; ++i) {
         facts[i].predicate_id = (uint16_t)(1u + next_random() % 7u);
         facts[i].arity = 1u;
-        facts[i].terms[0].kind = MAELYS_DATALOG_TERM_INT;
-        facts[i].terms[0].as.integer = expected[(i * 13u) % n];
+        maelys_datalog_fact_set_kind(&facts[i], 0, MAELYS_DATALOG_TERM_INT);
+        maelys_datalog_fact_set_integer(&facts[i], 0, expected[(i * 13u) % n]);
     }
     memcpy(expected_facts, facts, n * sizeof(*facts));
     qsort(expected_facts, n, sizeof(*facts), reference_fact_cmp);
