@@ -5,6 +5,51 @@ All notable changes to Maelys Datalog are documented in this file.
 The project follows [Semantic Versioning](https://semver.org/) and uses the
 format described by [Keep a Changelog](https://keepachangelog.com/).
 
+## 0.22.0 — 2026-10-03
+
+This version carries the compatibility freeze for the existing 0.x public
+contract. It does not declare a 1.0.0 release. The freeze declaration takes
+effect only upon explicit approval and publication of 0.22.0.
+
+### Changed
+
+- Return `INVALID_STATE` consistently from policy accessors and session creation
+  after a caller-owned policy handle has been freed while its storage remains
+  addressable. Previously `policy_id` and `policy_stat_get` could report
+  `NOT_FOUND` after the storage was cleared. Live empty policy sets remain
+  valid; freed engine-owned pointers remain invalid.
+
+### Python performance review — maintainer decision pending
+
+The complete Python lifecycle report measures signed candidate commit
+`5f668293241a0070202b06f177d2c87ea2318f2e` against v0.21.0 commit
+`9630f591637c7046ec73996458e1ba282194e32c` and immutable v0.11.1 anchor
+`0f247a7c81ec4a297f35ccee2bf007344f72ac7e` in
+[run 37117072226](https://github.com/maelys-dev/maelys-datalog/actions/runs/37117072226).
+The `report.json` SHA-256 is
+`52c665d83721e424aca787487852ca8ab690446643d6152560d851ea97d763d1`.
+The report status is `review_required`; its machine field `release_eligible: true`
+is not maintainer approval.
+
+The injected three-request positive control is detected in every case and
+configuration. The informative historical v0.11.0 quickstart control is not
+detected. Of 597 candidate statistic rows, 54 require review (37 versus the
+published base, 17 versus the anchor); 30 warm rows are not distinguished from
+the matched null envelope in at least one round, and 15 cold rows above the
+original A/A floor are informative only. Of the 54 review rows, 52 exceed the
+matched null envelope in one round only. Two exceed it in both rounds, both
+against the anchor: LARGE Release, 7-symbol prepared close minimum (+6.67%,
++9.11%; null envelope 4.41%), and LARGE default, 7-integer prepared total p95
+(+191.75%, +12.11%; null envelope 6.09%). The large single-round p95 is retained
+as an alert; no mechanism is attributed. A/A and null envelopes are observations,
+not confidence bounds or universal tolerances. Cold requests are informative
+only, and the report's raw classifications remain unchanged.
+
+**David's decision: PENDING.** Review the linked full report and decide whether
+to accept its documented limits, request a specific follow-up, or hold 0.22.0.
+No release cut has been started. The [freeze review](docs/validation/freeze-review.md)
+records the broader evidence and compatibility boundaries.
+
 ## [Unreleased]
 
 ### Changed
