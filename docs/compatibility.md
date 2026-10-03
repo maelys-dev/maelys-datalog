@@ -8,6 +8,31 @@ commitment, not a promise to publish 1.0.0. Published SDK archives and tags rema
 immutable. The [freeze review](validation/freeze-review.md) records evidence and
 remaining decisions separately.
 
+## Frozen baseline: versions and record bounds
+
+The existing installed contract has the following numeric baseline. These are
+versions and bounds of the current interface/record families, not a prohibition
+on explicitly negotiated future families or additional headers.
+
+| Contract | Frozen value | Installed declaration |
+| --- | ---: | --- |
+| Consumer API | 2 | `MAELYS_DATALOG_PUBLIC_API_VERSION` |
+| Compiled-program ABI | 2 | `MAELYS_DATALOG_PROGRAM_ABI_VERSION` |
+| Backend ABIs, negotiated separately | 5, 6, 7 | `MAELYS_DATALOG_BACKEND_ABI_VERSION`, `MAELYS_DATALOG_BACKEND_V6_ABI_VERSION`, `MAELYS_DATALOG_BACKEND_V7_ABI_VERSION` |
+| Terms per current fact/view/IR atom | 4 | `MAELYS_DATALOG_PUBLIC_MAX_TERMS` |
+| Body literals per current IR rule | 8 | `MAELYS_DATALOG_IR_MAX_BODY` |
+| Variables per current IR rule | 32 | `MAELYS_DATALOG_IR_MAX_VARIABLES` |
+| Existing installed header family | 11 | The paths listed below, detailed in [SDK headers](sdk-headers.md) |
+
+The eleven existing paths under `maelys/` are `datalog.h`,
+`datalog_builders.h`, `datalog_window.h`, `datalog_inputs.h`,
+`datalog_resources.h`, `datalog_program.h`, `datalog_explanations.h`,
+`datalog_extension.h`, `datalog_module.h`, `datalog_frontend.h` and
+`datalog_backend.h`. Their continued compatibility does not resurrect retired
+header paths. Program/build limits that differ by size profile and effective
+session quotas remain distinct; the numbers above do not replace admission or
+storage-plan queries.
+
 ## Public records and language features
 
 The four-term limit is the width of the current record family (public facts, fact views and IR atoms), not a promise about the language. A later version may admit wider relations through new capability bits and new entry points; the existing records remain valid for every program that does not require them.
