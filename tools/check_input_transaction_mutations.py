@@ -49,8 +49,8 @@ MUTATIONS = [
     ("boolean_not_normalized", INPUTS, "maelys_datalog_fact_set_boolean(&item, t, !!v->as.boolean);",
      "maelys_datalog_fact_set_boolean(&item, t, v->as.boolean);", PUBLIC),
     ("canonical_ids_not_remapped", PREPARED,
-     "maelys_datalog_fact_set_symbol(&s->fact_pool[i], t, map[maelys_datalog_fact_term(in, t).as.symbol-1u]);",
-     "maelys_datalog_fact_set_symbol(&s->fact_pool[i], t, maelys_datalog_fact_term(in, t).as.symbol);", PUBLIC),
+     "maelys_datalog_fact_set_symbol(&s->fact_pool[i], t, map[maelys_datalog_fact_symbol(in, t)-1u]);",
+     "maelys_datalog_fact_set_symbol(&s->fact_pool[i], t, maelys_datalog_fact_symbol(in, t));", PUBLIC),
     ("generation_wrap_allowed", INPUTS, "h->base.generation==UINT64_MAX)", "0)", ROLLBACK),
 ]
 

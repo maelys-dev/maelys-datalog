@@ -449,8 +449,8 @@ maelys_result_t maelys_datalog_prepared_session_materialize_retained(
     memset(map, 0, MAELYS_DATALOG_MAX_SYMBOLS * sizeof(*map));
     size_t symbols = 0;
     for (size_t i=0;i<count;++i) for (size_t t=0;t<facts[i].arity;++t) {
-        if (maelys_datalog_fact_term(&facts[i], t).kind != MAELYS_DATALOG_TERM_SYMBOL) continue;
-        maelys_datalog_symbol_id_t id = maelys_datalog_fact_term(&facts[i], t).as.symbol;
+        if (maelys_datalog_fact_kind(&facts[i], t) != MAELYS_DATALOG_TERM_SYMBOL) continue;
+        maelys_datalog_symbol_id_t id = maelys_datalog_fact_symbol(&facts[i], t);
         if (!maelys_datalog_symbol_id_is_valid(vocabulary,id))
             return reject_transaction(s,MAELYS_ERR_INVALID_STATE);
         if (!map[id-1u]) {
@@ -473,8 +473,8 @@ maelys_result_t maelys_datalog_prepared_session_materialize_retained(
             return reject_transaction(s,MAELYS_ERR_PAYLOAD_TOO_LARGE);
         s->fact_pool[i]=*in;
         for (size_t t=0;t<in->arity;++t)
-            if (maelys_datalog_fact_term(in, t).kind==MAELYS_DATALOG_TERM_SYMBOL)
-                maelys_datalog_fact_set_symbol(&s->fact_pool[i], t, map[maelys_datalog_fact_term(in, t).as.symbol-1u]);
+            if (maelys_datalog_fact_kind(in, t)==MAELYS_DATALOG_TERM_SYMBOL)
+                maelys_datalog_fact_set_symbol(&s->fact_pool[i], t, map[maelys_datalog_fact_symbol(in, t)-1u]);
     }
     s->edb.fact_count=count;
     s->edb.fact_set.count=count;

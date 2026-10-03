@@ -42,6 +42,8 @@ static void roundtrip(void) {
         }
         for (size_t t = 0; t < arity; ++t) {
             assert(maelys_datalog_fact_term(&fact, t).as.integer == integers[n]);
+            assert(maelys_datalog_fact_kind(&fact, t) == MAELYS_DATALOG_TERM_INT);
+            assert(maelys_datalog_fact_integer(&fact, t) == integers[n]);
             maelys_datalog_internal_term_t expanded;
             memset(&expanded, 0xa5, sizeof(expanded));
             maelys_datalog_fact_copy_term(&expanded, &fact, t);
@@ -74,6 +76,9 @@ static void reused_payload(void) {
     }
     assert(!memcmp(&actual, &expected, sizeof(actual)));
     assert(maelys_datalog_fact_term(&actual, 0).as.symbol == UINT32_MAX);
+    assert(maelys_datalog_fact_symbol(&actual, 0) == UINT32_MAX);
+    assert(maelys_datalog_fact_boolean(&actual, 2) == 1);
+    assert(maelys_datalog_fact_variable(&actual, 3) == 31);
     assert(maelys_datalog_fact_term(&actual, 2).as.boolean == 1);
     assert(maelys_datalog_fact_term(&actual, 3).as.variable == 31);
     maelys_datalog_fact_set_integer(&actual, 0, INT64_MIN);
@@ -84,6 +89,18 @@ static void reused_payload(void) {
     maelys_datalog_internal_atom_t narrow = {0}; narrow.arity=1;
     narrow.terms[0]=(maelys_datalog_internal_term_t){.kind=MAELYS_DATALOG_TERM_INT,.as.integer=-1};
     actual=maelys_datalog_atom_fact(&narrow);canonical(&actual);
+}
+static void accessor_arguments_once(void) {
+    maelys_datalog_internal_fact_t fact[1] = {{0}};
+    fact[0].arity = 1;
+    maelys_datalog_fact_set_kind(&fact[0], 0, MAELYS_DATALOG_TERM_INT);
+    maelys_datalog_fact_set_integer(&fact[0], 0, INT64_MIN);
+    size_t f = 0, t = 0;
+    assert(maelys_datalog_fact_integer(&fact[f++], t++) == INT64_MIN);
+    assert(f == 1 && t == 1);
+    f = t = 0;
+    assert(maelys_datalog_fact_kind(&fact[f++], t++) == MAELYS_DATALOG_TERM_INT);
+    assert(f == 1 && t == 1);
 }
 static void aggregate_metadata(void) {
     maelys_datalog_explanation_premise_t p = {0};
@@ -101,6 +118,6 @@ static void aggregate_metadata(void) {
 int main(void) {
     assert(sizeof(maelys_datalog_rule_t)==2016);
     assert(sizeof(maelys_datalog_literal_t)==144);
-    roundtrip();reused_payload();aggregate_metadata();
+    roundtrip();reused_payload();aggregate_metadata();accessor_arguments_once();
     return 0;
 }

@@ -13,6 +13,7 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[1]
 HEADER = Path("src/core/maelys_datalog_types.h")
 MUTATIONS = {
+    "typed-integer-read-truncated": ("((fact)->payload[(index)].integer)", "((int64_t)(int32_t)((fact)->payload[(index)].integer))"),
     "diagnostic-padding-not-cleared": ("    memset(out, 0, sizeof(*out));\n    out->kind", "    /* mutant retains diagnostic padding */\n    out->kind"),
     "integer-load-truncated": ("memcpy(&term.as, &fact->payload[index], sizeof(term.as));", "memcpy(&term.as, &fact->payload[index], sizeof(term.as)); if (term.kind == MAELYS_DATALOG_TERM_INT) term.as.integer = (int32_t)term.as.integer;"),
     "integer-store-truncated": ("fact->payload[index].integer = term.as.integer", "fact->payload[index].integer = (int32_t)term.as.integer"),
@@ -49,7 +50,9 @@ def main():
             if args.large:
                 command.append("-DMAELYS_DATALOG_PROFILE_LARGE")
             command.extend([str(ROOT / "tests/test_maelys_datalog_compact_facts.c"), "-o", str(binary)])
-            subprocess.run(command, check=True, capture_output=True)
+            compiled = subprocess.run(command, capture_output=True)
+            (args.output / (name + "-build.log")).write_bytes(compiled.stdout + compiled.stderr)
+            compiled.check_returncode()
             result = subprocess.run([str(binary)], capture_output=True)
             (args.output / (name + ".log")).write_bytes(result.stdout + result.stderr)
             if (result.returncode == 0) != (patch is None):

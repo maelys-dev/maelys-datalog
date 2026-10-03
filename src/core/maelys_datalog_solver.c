@@ -351,10 +351,10 @@ static void solve_once_diag_from_fact(maelys_datalog_internal_solve_diagnostic_t
         if (def) diag->arity_expected = def->arity;
     }
     for (size_t i = 0; i < fact->arity && i < MAELYS_DATALOG_MAX_TERMS; i++) {
-        if (!datalog_term_kind_known(maelys_datalog_fact_term(fact, i).kind) ||
-            maelys_datalog_fact_term(fact, i).kind == MAELYS_DATALOG_TERM_VAR) {
+        if (!datalog_term_kind_known(maelys_datalog_fact_kind(fact, i)) ||
+            maelys_datalog_fact_kind(fact, i) == MAELYS_DATALOG_TERM_VAR) {
             diag->term_index = (uint8_t)i;
-            diag->lhs_kind = (uint8_t)maelys_datalog_fact_term(fact, i).kind;
+            diag->lhs_kind = (uint8_t)maelys_datalog_fact_kind(fact, i);
             break;
         }
     }
@@ -641,8 +641,8 @@ static int datalog_fact_structurally_valid(const maelys_datalog_predicate_regist
         maelys_datalog_predicate_registry_get(registry, fact->predicate_id);
     if (!def || fact->arity != def->arity) return 0;
     for (size_t i = 0; i < fact->arity; i++) {
-        if (!datalog_term_kind_known(maelys_datalog_fact_term(fact, i).kind)) return 0;
-        if (maelys_datalog_fact_term(fact, i).kind == MAELYS_DATALOG_TERM_VAR) return 0;
+        if (!datalog_term_kind_known(maelys_datalog_fact_kind(fact, i))) return 0;
+        if (maelys_datalog_fact_kind(fact, i) == MAELYS_DATALOG_TERM_VAR) return 0;
     }
     return 1;
 }
@@ -839,10 +839,10 @@ static void solve_once_set_invalid_fact(maelys_datalog_internal_solve_result_t *
         if (def) result->runtime_diag.expected_arity = def->arity;
     }
     for (size_t i = 0; i < fact->arity && i < MAELYS_DATALOG_MAX_TERMS; i++) {
-        if (!datalog_term_kind_known(maelys_datalog_fact_term(fact, i).kind) ||
-            maelys_datalog_fact_term(fact, i).kind == MAELYS_DATALOG_TERM_VAR) {
+        if (!datalog_term_kind_known(maelys_datalog_fact_kind(fact, i)) ||
+            maelys_datalog_fact_kind(fact, i) == MAELYS_DATALOG_TERM_VAR) {
             result->runtime_diag.term_index = (uint8_t)i;
-            result->runtime_diag.observed_lhs_kind = (uint8_t)maelys_datalog_fact_term(fact, i).kind;
+            result->runtime_diag.observed_lhs_kind = (uint8_t)maelys_datalog_fact_kind(fact, i);
             break;
         }
     }
@@ -2101,8 +2101,8 @@ static maelys_result_t evaluate_numeric_aggregate(
     const unsigned projection = literal->lhs.as.variable;
     size_t projected_term = pattern->arity;
     for (size_t t = 0; t < pattern->arity; ++t)
-        if (maelys_datalog_fact_term(pattern, t).kind == MAELYS_DATALOG_TERM_VAR &&
-            maelys_datalog_fact_term(pattern, t).as.variable == projection) { projected_term = t; break; }
+        if (maelys_datalog_fact_kind(pattern, t) == MAELYS_DATALOG_TERM_VAR &&
+            maelys_datalog_fact_variable(pattern, t) == projection) { projected_term = t; break; }
     if (projected_term == pattern->arity) return MAELYS_ERR_INVALID_STATE;
     aggregate_fact_pointer_t matches[MAELYS_DATALOG_MAX_RULE_FACTS > MAELYS_DATALOG_MAX_FACTS_PER_PRED
         ? MAELYS_DATALOG_MAX_RULE_FACTS : MAELYS_DATALOG_MAX_FACTS_PER_PRED];
@@ -2140,7 +2140,7 @@ static maelys_result_t evaluate_numeric_aggregate(
         sort_aggregate_facts(matches, n);
         for (size_t i = 0; i < n; ++i) {
             if (i && !maelys_datalog_fact_cmp(matches[i - 1u], matches[i])) continue;
-            const long long addend = maelys_datalog_fact_term(matches[i], projected_term).as.integer;
+            const long long addend = maelys_datalog_fact_integer(matches[i], projected_term);
             /* Nonnegative bounded integers make overflow independent of order. */
             if (accumulated > MAELYS_DATALOG_MAX_INT - addend) {
                 maelys_datalog_internal_term_t total = {0};

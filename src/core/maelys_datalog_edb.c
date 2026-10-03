@@ -32,9 +32,32 @@ int maelys_datalog_fact_cmp(const maelys_datalog_internal_fact_t *a,
     if (a->predicate_id > b->predicate_id) return 1;
     if (a->arity < b->arity) return -1;
     if (a->arity > b->arity) return 1;
+    /* No expansion or temporary term: tags and aligned payloads are compared
+     * in place. Keep the typed historical order, including signed int64. */
     for (size_t i = 0; i < a->arity; i++) {
-        int cmp = maelys_datalog_term_cmp(MAELYS_DATALOG_FACT_TERM_REF(a, i), MAELYS_DATALOG_FACT_TERM_REF(b, i));
-        if (cmp != 0) return cmp;
+        unsigned ak = maelys_datalog_fact_kind(a, i);
+        unsigned bk = maelys_datalog_fact_kind(b, i);
+        if (ak != bk) return (int)ak - (int)bk;
+        const maelys_datalog_fact_payload_t *av = &a->payload[i];
+        const maelys_datalog_fact_payload_t *bv = &b->payload[i];
+        switch (ak) {
+        case MAELYS_DATALOG_TERM_SYMBOL:
+            if (av->symbol < bv->symbol) return -1;
+            if (av->symbol > bv->symbol) return 1;
+            break;
+        case MAELYS_DATALOG_TERM_INT:
+            if (av->integer < bv->integer) return -1;
+            if (av->integer > bv->integer) return 1;
+            break;
+        case MAELYS_DATALOG_TERM_BOOL:
+            if (av->boolean != bv->boolean) return av->boolean - bv->boolean;
+            break;
+        case MAELYS_DATALOG_TERM_VAR:
+            if (av->variable < bv->variable) return -1;
+            if (av->variable > bv->variable) return 1;
+            break;
+        default: break;
+        }
     }
     return 0;
 }

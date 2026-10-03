@@ -133,9 +133,19 @@ _Static_assert(_Alignof(maelys_datalog_internal_fact_t) >= _Alignof(int64_t),
 _Static_assert(sizeof(maelys_datalog_internal_atom_t) == 72u,
                "compiled atom layout must remain unchanged");
 
+/* Single-field reads do not materialize a padded temporary term. Each argument
+ * is evaluated once; these accessors are single loads in unoptimized builds
+ * too. Full expansion stays explicit at historical-term record boundaries. */
+#define maelys_datalog_fact_kind(fact, index) \
+    ((maelys_datalog_internal_term_kind_t)((fact)->kind[(index)]))
+#define maelys_datalog_fact_symbol(fact, index) ((fact)->payload[(index)].symbol)
+#define maelys_datalog_fact_integer(fact, index) ((fact)->payload[(index)].integer)
+#define maelys_datalog_fact_boolean(fact, index) ((fact)->payload[(index)].boolean)
+#define maelys_datalog_fact_variable(fact, index) ((fact)->payload[(index)].variable)
+
 static inline maelys_datalog_internal_term_t maelys_datalog_fact_term(
     const maelys_datalog_internal_fact_t *fact, size_t index) {
-    maelys_datalog_internal_term_t term = {0};
+    maelys_datalog_internal_term_t term; /* Both defined fields are assigned below. */
     term.kind = (maelys_datalog_internal_term_kind_t)fact->kind[index];
     /* Copy the aligned representation once, without a kind-dependent decode.
      * Writes canonicalize the inactive bytes of narrow union members. */

@@ -1,4 +1,5 @@
 #include "src/core/maelys_datalog_edb.h"
+#include "src/core/maelys_datalog_term_internal.h"
 #include "src/core/maelys_datalog_domain_registry.h"
 #include "tests/fixtures/domains/maelys_datalog_example_domains.h"
 #include "src/core/maelys_datalog_predicate_registry.h"
@@ -1156,8 +1157,38 @@ static int test_maelys_datalog_term_equal_padding_sensitive(void) {
     TEST_END();
 }
 
+/* The compact comparator must preserve the historical typed ordering, even
+ * when integer extrema cannot safely be compared by subtraction. */
+static int test_compact_typed_order(void) {
+    TEST_BEGIN();
+    maelys_datalog_internal_term_t values[] = {
+        symbol_term(1), symbol_term(UINT32_MAX), int_term(INT64_MIN),
+        int_term(-1), int_term(0), int_term(INT64_MAX), bool_term(0),
+        bool_term(1), var_term(0), var_term(31)
+    };
+    for (size_t i = 0; i < sizeof(values)/sizeof(*values); ++i)
+    for (size_t j = 0; j < sizeof(values)/sizeof(*values); ++j)
+    for (size_t position = 0; position < MAELYS_DATALOG_MAX_TERMS; ++position) {
+        maelys_datalog_internal_fact_t a = {0}, b = {0};
+        a.predicate_id = b.predicate_id = 1;
+        a.arity = b.arity = (uint8_t)(position+1);
+        for (size_t t = 0; t < position; ++t) {
+            maelys_datalog_fact_set_term(&a, t, int_term(17));
+            maelys_datalog_fact_set_term(&b, t, int_term(17));
+        }
+        maelys_datalog_fact_set_term(&a, position, values[i]);
+        maelys_datalog_fact_set_term(&b, position, values[j]);
+        int expected = maelys_datalog_term_cmp(&values[i], &values[j]);
+        int actual = maelys_datalog_fact_cmp(&a, &b);
+        TEST_ASSERT_TRUE((actual > 0) == (expected > 0));
+        TEST_ASSERT_TRUE((actual < 0) == (expected < 0));
+    }
+    TEST_END();
+}
+
 int main(int argc, char **argv) {
     test_case_t cases[] = {
+        {"maelys_datalog_edb/compact_typed_order", TEST_MODE_NON_BLOCKING, test_compact_typed_order},
         {"maelys_datalog_edb/add_query_duplicate", TEST_MODE_NON_BLOCKING, test_edb_add_query_duplicate},
         {"maelys_datalog_edb/overflow_unknown_atom", TEST_MODE_NON_BLOCKING, test_edb_overflow_and_unknown_atom},
         {"maelys_datalog_edb/intern_runtime_symbol_basic_idempotent", TEST_MODE_NON_BLOCKING, test_edb_intern_runtime_symbol_basic_idempotent},

@@ -795,13 +795,13 @@ maelys_datalog_status_t maelys_datalog_result_enumerate(const maelys_datalog_res
             maelys_datalog_fact_view_t v = {0};
             v.arity = f->arity;
             for (size_t t = 0; t < arity; ++t) {
-                v.terms[t].kind = (maelys_datalog_value_kind_t)maelys_datalog_fact_term(f, t).kind;
-                if (maelys_datalog_fact_term(f, t).kind == MAELYS_DATALOG_TERM_SYMBOL)
-                    v.terms[t].as.symbol_id = maelys_datalog_fact_term(f, t).as.symbol;
-                else if (maelys_datalog_fact_term(f, t).kind == MAELYS_DATALOG_TERM_INT)
-                    v.terms[t].as.integer = maelys_datalog_fact_term(f, t).as.integer;
+                v.terms[t].kind = (maelys_datalog_value_kind_t)maelys_datalog_fact_kind(f, t);
+                if (maelys_datalog_fact_kind(f, t) == MAELYS_DATALOG_TERM_SYMBOL)
+                    v.terms[t].as.symbol_id = maelys_datalog_fact_symbol(f, t);
+                else if (maelys_datalog_fact_kind(f, t) == MAELYS_DATALOG_TERM_INT)
+                    v.terms[t].as.integer = maelys_datalog_fact_integer(f, t);
                 else
-                    v.terms[t].as.boolean = maelys_datalog_fact_term(f, t).as.boolean;
+                    v.terms[t].as.boolean = maelys_datalog_fact_boolean(f, t);
             }
             out[n] = v;
         }

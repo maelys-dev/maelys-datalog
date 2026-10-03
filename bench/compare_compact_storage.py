@@ -32,6 +32,8 @@ def physical_functions(region):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--sdk-mode", choices=("default", "Release"), default="Release",
+                        help="measure the supported unoptimized or Release SDK without changing driver optimization")
     parser.add_argument("base")
     parser.add_argument("head")
     parser.add_argument("output", type=Path)
@@ -45,7 +47,7 @@ def main():
     if subprocess.check_output(["git", "status", "--porcelain"], cwd=ROOT, text=True):
         parser.error("tooling checkout must be clean")
     manifest = {"schema": 1, "revisions": refs, "profiles": PROFILES, "cases": CASES, "order": ORDER,
-        "regions_per_process": 2, "sdk_mode": "CMake Release, clang -O3 -DNDEBUG -g (source-qualified counts)",
+        "regions_per_process": 2, "sdk_mode": "CMake " + args.sdk_mode + ", clang -g (source-qualified counts)",
         "driver_mode": "clang -O3 -g -UNDEBUG; identical public consumer source",
         "scope": "Complete ordinary request (create/solve/query/release/destroy), 93 symbol facts, 16 requests per region; reference last-N 64-symbol window, 130 pushes including expiration/publication/old-result release per region. Fixture setup and final window teardown excluded; driver/status checks remain visible.",
         "limits": "Ir/Dr/Dw are software counts, not latency or hardware counters. Local Docker Linux ARM64 does not establish hosted-runner performance.",
@@ -61,7 +63,7 @@ def main():
         command(["tar", "-xf", str(out/(role+".tar")), "-C", str(source)], out/(role+"-extract.log"))
         for profile in PROFILES:
             path = out/profile/role; path.mkdir(parents=True)
-            command(["cmake", "-S", str(source), "-B", str(path/"build"), "-DCMAKE_BUILD_TYPE=Release", "-DBUILD_TESTING=OFF",
+            command(["cmake", "-S", str(source), "-B", str(path/"build"), "-DCMAKE_BUILD_TYPE=" + ("Release" if args.sdk_mode == "Release" else ""), "-DBUILD_TESTING=OFF",
                 "-DCMAKE_C_COMPILER=clang", "-DCMAKE_C_FLAGS=-g", "-DMAELYS_DATALOG_PROFILE_LARGE="+("ON" if profile=="LARGE" else "OFF"),
                 "-DCMAKE_INSTALL_PREFIX="+str(path/"sdk")], path/"configure.log")
             command(["cmake", "--build", str(path/"build"), "--target", "maelys_datalog", "-j4"], path/"build.log")
