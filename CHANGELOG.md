@@ -52,7 +52,8 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
   Its positive control passes; nine base-reference statistics exceed their
   matching null envelope in both rounds, including a SMALL/default complete
   request p95 of +35.72%/+5.96%. The report remains `review_required` and its
-  maintainer decision is pending; the earlier acceptance does not cover it.
+  David explicitly accepted this named report and its documented limits on
+  2026-10-03 and authorized the release ceremony. No causal attribution is made.
 
 ## 0.20.0 — 2026-10-02
 
