@@ -119,8 +119,8 @@ post-freeze release.
 
 The [public-constructor table](../../bindings/python/README.md#public-constructors-and-returned-objects)
 is also a prerequisite for the Python freeze review. Confirm public construction
-for `Engine`, `Edb`, `Predicate` and `SessionCapacities`, and internal construction
-for returned resources, snapshots, raw result terms and native exceptions.
+for `Engine`, `Edb`, `Predicate`, `SessionCapacities` and `InputBase`, and internal
+construction for returned resources, snapshots, raw result terms and native exceptions.
 Record the exact reviewed revision before publication. Exported names and
 generated dataclass constructors alone must not decide this boundary.
 

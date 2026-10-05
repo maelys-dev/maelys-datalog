@@ -80,8 +80,10 @@ that type a supported operation.
 | `Edb` | `Edb(ruleset, *, fact_capacity=None, text_capacity=None)` or `ruleset.edb(...)` |
 | `Predicate` | `Predicate(name, arity, flags)` or its named class methods |
 | `SessionCapacities` | `SessionCapacities(input_facts=None, derived_facts=None, symbols=None, text_bytes=None)`; normalized values also come from `session.capacities` |
+| `InputBase` | `InputBase(incarnation, generation)` with exact unsigned 64-bit integers; current tokens also come from `inputs.base` |
 | `Ruleset` | Returned by `engine.load_inline_ruleset(...)` or `engine.load_manifest(...)` |
 | `Session` | Returned by `ruleset.prepare(...)` |
+| `SessionInputs` | Returned by `session.inputs(...)`; direct construction is token-guarded and unsupported |
 | `SolveResult` | Returned by `session.solve(...)` or `ruleset.solve(...)` |
 | `Limits` | Read from `engine.limits` |
 | `ProgramCounts` | Returned by `ruleset.program_counts(...)` |
@@ -89,13 +91,16 @@ that type a supported operation.
 | `ResultTerm` | Returned inside `result.enumerate_raw(...)` |
 | `MaelysDatalogError` | Raised by native operations; catch it to inspect status and diagnostics |
 
-Only the first four types have public constructors. The remaining constructors
+Only the first five types have public constructors. The remaining constructors
 are internal, including the ones Python generates for frozen dataclasses.
 They may be callable at runtime, but calling them directly is unsupported and
 their signatures are outside the compatibility baseline. Obtain those objects
 through the documented routes above: snapshots describe native state, and raw
 result terms carry the lifetime of their owning result. `frozen=True` describes
 immutability; it does not grant public construction.
+
+Constructing an `InputBase` does not create a current attachment token. Native
+operations still reject a foreign or stale incarnation/generation pair.
 
 `Status`, `Capability` and `ExplanationKind` are enums. Their documented members
 and conversion from a represented native value follow their enum contracts;
