@@ -107,14 +107,22 @@ must still qualify their own heads.
 The Python owner-reference cleanup is a prerequisite for 0.22.0: integrate
 `Ruleset._engine` and `Edb/Session/SolveResult._ruleset`, with every internal
 access updated and no former-name aliases, before cutting the freeze release.
-The candidate is prepared on `fix/python-private-owners`. Its pull request
-must record the signed revision and the SMALL/LARGE installed-SDK Python
-checks, including the ownership-shadowing witness. Record its integrated
-revision and qualify the final binding candidate separately; the existing
-release evidence in this review does not cover this rename.
+PR [#184](https://github.com/maelys-dev/maelys-datalog/pull/184) integrated the
+cleanup at `61b064fcf20805a06b4245a74b4174239a1d1fa8` after all 46 hosted checks
+succeeded on its head `3880d3f5e9d1b48cb98fcfe79f6c04d39ef85657`. Its body
+records the separate SMALL/LARGE installed-SDK Python checks, including the
+ownership-shadowing witness. Qualify the final binding candidate separately;
+the existing release evidence in this review does not cover that final head.
 Review the exported names and documented public members at that same revision
 to establish the Python baseline. This cleanup must not be deferred to a
 post-freeze release.
+
+The [public-constructor table](../../bindings/python/README.md#public-constructors-and-returned-objects)
+is also a prerequisite for the Python freeze review. Confirm public construction
+for `Engine`, `Edb`, `Predicate` and `SessionCapacities`, and internal construction
+for returned resources, snapshots, raw result terms and native exceptions.
+Record the exact reviewed revision before publication. Exported names and
+generated dataclass constructors alone must not decide this boundary.
 
 1. Review and authorize the handle correction, then integrate and qualify each
    documentation successor on current main. A stacked branch's ancestor checks

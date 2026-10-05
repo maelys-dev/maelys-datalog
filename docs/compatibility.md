@@ -83,6 +83,15 @@ documentation of an older release does not qualify the new baseline. The
 release review must identify the reviewed public surface at the exact candidate
 revision before publication.
 
+The binding reference's [constructor table](../bindings/python/README.md#public-constructors-and-returned-objects)
+defines construction separately from export or dataclass status. `Engine`,
+`Edb`, `Predicate` and `SessionCapacities` have public constructors. `Limits`,
+`ProgramCounts`, `Diagnostic` and `ResultTerm` are returned snapshots or views;
+their generated dataclass constructors are internal. The table also identifies
+the access routes for native resources and exceptions. Review this table before
+cutting 0.22.0; callable implementation constructors do not enlarge the frozen
+surface by accident.
+
 A name without an underscore is not sufficient to establish a public member.
 Undocumented ownership bookkeeping is internal. Before publishing 0.22.0,
 `Ruleset.engine` must become `_engine`, and `Edb.ruleset`, `Session.ruleset`

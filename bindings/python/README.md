@@ -67,6 +67,40 @@ The wheel builds fresh installed Release/PIC SDKs. This differs from the
 historical Debug native SDK archive and does not establish a performance gain.
 Python/CFFI conversions and objects still allocate.
 
+## Public constructors and returned objects
+
+The constructor contract below is part of the proposed 0.22.0 compatibility
+baseline. Exporting a type in `__all__` makes its name available for annotations,
+inspection and exception handling; it does not make every way of constructing
+that type a supported operation.
+
+| Type | Public construction or access |
+| --- | --- |
+| `Engine` | `Engine()` |
+| `Edb` | `Edb(ruleset, *, fact_capacity=None, text_capacity=None)` or `ruleset.edb(...)` |
+| `Predicate` | `Predicate(name, arity, flags)` or its named class methods |
+| `SessionCapacities` | `SessionCapacities(input_facts=None, derived_facts=None, symbols=None, text_bytes=None)`; normalized values also come from `session.capacities` |
+| `Ruleset` | Returned by `engine.load_inline_ruleset(...)` or `engine.load_manifest(...)` |
+| `Session` | Returned by `ruleset.prepare(...)` |
+| `SolveResult` | Returned by `session.solve(...)` or `ruleset.solve(...)` |
+| `Limits` | Read from `engine.limits` |
+| `ProgramCounts` | Returned by `ruleset.program_counts(...)` |
+| `Diagnostic` | Read from `error.diagnostic` |
+| `ResultTerm` | Returned inside `result.enumerate_raw(...)` |
+| `MaelysDatalogError` | Raised by native operations; catch it to inspect status and diagnostics |
+
+Only the first four types have public constructors. The remaining constructors
+are internal, including the ones Python generates for frozen dataclasses.
+They may be callable at runtime, but calling them directly is unsupported and
+their signatures are outside the compatibility baseline. Obtain those objects
+through the documented routes above: snapshots describe native state, and raw
+result terms carry the lifetime of their owning result. `frozen=True` describes
+immutability; it does not grant public construction.
+
+`Status`, `Capability` and `ExplanationKind` are enums. Their documented members
+and conversion from a represented native value follow their enum contracts;
+they are not resource constructors in this table.
+
 ## Fixed session capacities
 
 `ruleset.prepare(capacities=SessionCapacities(input_facts=16,
