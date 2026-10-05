@@ -410,7 +410,7 @@ class SessionCapacities:
 
 class Ruleset:
     def __init__(self, engine: Engine, policy) -> None:
-        self.engine = engine
+        self._engine = engine
         self._policy = policy
         self._closed = False
         self._results: list[SolveResult] = []
@@ -418,7 +418,7 @@ class Ruleset:
         self._edbs: list[Edb] = []
 
     def _require_open(self) -> None:
-        self.engine._require_open()
+        self._engine._require_open()
         if self._closed:
             raise RuntimeError("Ruleset is closed")
 
@@ -531,7 +531,7 @@ class Ruleset:
         return result
 
     def close(self) -> None:
-        self.engine._require_thread()
+        self._engine._require_thread()
         if self._closed:
             return
         for result in list(self._results):
@@ -543,7 +543,7 @@ class Ruleset:
         _check(lib.maelys_datalog_policy_free(self._policy), "free policy")
         self._policy = ffi.NULL
         self._closed = True
-        self.engine._rulesets.remove(self)
+        self._engine._rulesets.remove(self)
 
     def __enter__(self) -> Ruleset:
         self._require_open()
@@ -557,7 +557,7 @@ class Session:
     """Single-threaded prepared state with at most one live result lease."""
 
     def __init__(self, ruleset: Ruleset, session, *, explanations: ExplanationKind | int = 0) -> None:
-        self.ruleset = ruleset
+        self._ruleset = ruleset
         self._session = session
         self._closed = False
         self._active: SolveResult | None = None
@@ -572,7 +572,7 @@ class Session:
                           ResourceWarning, stacklevel=2)
 
     def _require_open(self) -> None:
-        self.ruleset._require_open()
+        self._ruleset._require_open()
         if self._closed:
             raise RuntimeError("Session is closed")
 
@@ -628,7 +628,7 @@ class Session:
             raise RuntimeError("Session input is being staged")
         if self._active is not None:
             raise RuntimeError("Close the current result before reusing this Session")
-        if not isinstance(edb, Edb) or edb.ruleset is not self.ruleset or edb._closed:
+        if not isinstance(edb, Edb) or edb._ruleset is not self._ruleset or edb._closed:
             raise RuntimeError("EDB belongs to another or closed Ruleset")
         result_out = ffi.new("maelys_datalog_result_t **")
         diagnostic = ffi.new("maelys_datalog_diagnostic_t *")
@@ -637,13 +637,13 @@ class Session:
             self._session, edb._edb, result_out, diagnostic,
         ), "solve", diagnostic)
         edb._finalized = True
-        result = SolveResult(self.ruleset, self, result_out[0])
+        result = SolveResult(self._ruleset, self, result_out[0])
         self._active = result
-        self.ruleset._results.append(result)
+        self._ruleset._results.append(result)
         return result
 
     def close(self) -> None:
-        self.ruleset.engine._require_thread()
+        self._ruleset._engine._require_thread()
         if self._closed:
             return
         if self._busy:
@@ -657,7 +657,7 @@ class Session:
         _check(lib.maelys_datalog_session_free(self._session), "free session")
         self._session = ffi.NULL
         self._closed = True
-        self.ruleset._sessions.remove(self)
+        self._ruleset._sessions.remove(self)
 
     def __enter__(self) -> Session:
         self._require_open()
@@ -710,7 +710,7 @@ class SessionInputs:
             raise TypeError("symbols must be an iterable of strings")
         keepers = []
         for symbol in symbols:
-            if len(keepers) >= session.ruleset.engine.limits.max_symbols:
+            if len(keepers) >= session._ruleset._engine.limits.max_symbols:
                 raise ValueError("Too many vocabulary entries")
             if not isinstance(symbol, str):
                 raise TypeError("Vocabulary entries must be strings")
@@ -800,15 +800,15 @@ class SessionInputs:
             # Keep borrowed text alive across the complete native call.
             del owners_a, owners_r
             _check(status, "replace inputs" if replace else "apply inputs", diagnostic)
-            result = SolveResult(session.ruleset, session, result_out[0])
+            result = SolveResult(session._ruleset, session, result_out[0])
             session._active = result
-            session.ruleset._results.append(result)
+            session._ruleset._results.append(result)
             return result
         finally:
             session._busy = False
 
     def close(self) -> None:
-        self.session.ruleset.engine._require_thread()
+        self.session._ruleset._engine._require_thread()
         if self._closed:
             return
         if self.session._busy:
@@ -833,8 +833,8 @@ class Edb:
     def __init__(self, ruleset: Ruleset, *, fact_capacity: int | None = None,
                  text_capacity: int | None = None) -> None:
         ruleset._require_open()
-        self.ruleset = ruleset
-        limits = ruleset.engine.limits
+        self._ruleset = ruleset
+        limits = ruleset._engine.limits
         if fact_capacity is None:
             fact_capacity = limits.max_edb_facts
         if isinstance(fact_capacity, bool) or not isinstance(fact_capacity, int):
@@ -863,7 +863,7 @@ class Edb:
                           ResourceWarning, stacklevel=2)
 
     def __len__(self) -> int:
-        self.ruleset._require_open()
+        self._ruleset._require_open()
         if self._closed:
             raise RuntimeError("EDB is closed")
         out = ffi.new("size_t *")
@@ -871,8 +871,8 @@ class Edb:
         return int(out[0])
 
     def _require_mutable(self) -> None:
-        self.ruleset._require_open()
-        if self._closed or self.ruleset._closed or self._finalized:
+        self._ruleset._require_open()
+        if self._closed or self._ruleset._closed or self._finalized:
             raise RuntimeError("EDB is closed for mutation")
 
     def add_fact(self, predicate: str, terms: Sequence[object]) -> None:
@@ -939,20 +939,20 @@ class Edb:
         Existing results stay valid; their session's one-result lease remains.
         Unlike clear(), this explicitly ends the successful-solve mutation freeze.
         """
-        self.ruleset._require_open()
+        self._ruleset._require_open()
         if self._closed:
             raise RuntimeError("EDB is closed")
         _check(lib.maelys_datalog_input_edb_clear(self._edb), "reset input EDB")
         self._finalized = False
 
     def close(self) -> None:
-        self.ruleset.engine._require_thread()
+        self._ruleset._engine._require_thread()
         if self._closed:
             return
         _check(lib.maelys_datalog_input_edb_free(self._edb), "free input EDB")
         self._edb = ffi.NULL
         self._closed = True
-        self.ruleset._edbs.remove(self)
+        self._ruleset._edbs.remove(self)
 
 
 @dataclass(frozen=True)
@@ -969,7 +969,7 @@ class ResultTerm:
 
 class SolveResult:
     def __init__(self, ruleset: Ruleset, session, result) -> None:
-        self.ruleset = ruleset
+        self._ruleset = ruleset
         self._session = session
         self._result = result
         self._closed = False
@@ -982,8 +982,8 @@ class SolveResult:
                           ResourceWarning, stacklevel=2)
 
     def _require_open(self) -> None:
-        self.ruleset._require_open()
-        if self._closed or self.ruleset._closed:
+        self._ruleset._require_open()
+        if self._closed or self._ruleset._closed:
             raise RuntimeError("SolveResult is closed")
 
     @property
@@ -1154,7 +1154,7 @@ class SolveResult:
         return term.value
 
     def close(self) -> None:
-        self.ruleset.engine._require_thread()
+        self._ruleset._engine._require_thread()
         if self._closed:
             return
         _check(lib.maelys_datalog_result_free(self._result), "free result")
@@ -1163,8 +1163,8 @@ class SolveResult:
         self._session._active = None
         if self._owns_session:
             self._session.close()
-        if self in self.ruleset._results:
-            self.ruleset._results.remove(self)
+        if self in self._ruleset._results:
+            self._ruleset._results.remove(self)
 
     def __enter__(self) -> SolveResult:
         self._require_open()

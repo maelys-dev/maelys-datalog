@@ -9,7 +9,9 @@ baseline until the next release is explicitly approved.
 
 The [compatibility contract](../compatibility.md) covers installed declarations,
 public record layouts, negotiated backend ABIs, observable semantics and
-lifetimes. Private storage sizes, offsets, compiler placement and measured
+lifetimes. The candidate also defines the Python binding's exported and
+documented public surface; its exact revision still needs release review.
+Private storage sizes, offsets, compiler placement and measured
 latency are not frozen. Caller-owned consumers re-query requirements for the
 installed SDK, actual program, options, profile and provider.
 
@@ -101,6 +103,18 @@ passed all 46 checks on that head. The authorized squash merge is signed commit
 must still qualify their own heads.
 
 ## Remaining decisions before the release
+
+The Python owner-reference cleanup is a prerequisite for 0.22.0: integrate
+`Ruleset._engine` and `Edb/Session/SolveResult._ruleset`, with every internal
+access updated and no former-name aliases, before cutting the freeze release.
+The candidate is prepared on `fix/python-private-owners`. Its pull request
+must record the signed revision and the SMALL/LARGE installed-SDK Python
+checks, including the ownership-shadowing witness. Record its integrated
+revision and qualify the final binding candidate separately; the existing
+release evidence in this review does not cover this rename.
+Review the exported names and documented public members at that same revision
+to establish the Python baseline. This cleanup must not be deferred to a
+post-freeze release.
 
 1. Review and authorize the handle correction, then integrate and qualify each
    documentation successor on current main. A stacked branch's ancestor checks
