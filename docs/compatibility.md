@@ -70,6 +70,32 @@ profile and provider; they do not hard-code private sizes or reuse a plan from
 another SDK build. A new library may change these requirements while preserving
 public record layouts. Insufficient storage is rejected before publication.
 
+## Python binding public surface
+
+The candidate 0.22.0 freeze also covers the public Python binding. Its baseline
+is the published 0.22.0 tag: exported names listed in
+`bindings/python/maelys_datalog/__init__.py`'s `__all__`, and the public
+constructors, methods, properties, fields, enum members and language protocols
+documented for that release. Their documented signatures, keyword parameter
+names, return values, errors and lifetime behavior are compatibility contracts.
+The [binding reference](../bindings/python/README.md) records those contracts;
+documentation of an older release does not qualify the new baseline. The
+release review must identify the reviewed public surface at the exact candidate
+revision before publication.
+
+A name without an underscore is not sufficient to establish a public member.
+Undocumented ownership bookkeeping is internal. Before publishing 0.22.0,
+`Ruleset.engine` must become `_engine`, and `Edb.ruleset`, `Session.ruleset`
+and `SolveResult.ruleset` must become `_ruleset`, without former-name aliases.
+Constructor parameters keep their documented names. This pre-freeze cleanup
+must ship in 0.22.0; removing a frozen public member later requires the explicit
+compatibility decision and migration plan described below.
+
+Private implementation modules, underscore-prefixed ownership links and
+undocumented incidental instance attributes are outside the frozen surface.
+The binding provides no public owner-navigation accessor. A later public
+accessor would be an explicit API addition with its own documented contract.
+
 ## Observable behavior and lifetimes
 
 Canonical typed facts, identities and program/execution fingerprints are

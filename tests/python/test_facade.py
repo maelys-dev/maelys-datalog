@@ -66,6 +66,35 @@ class FacadeTest(unittest.TestCase):
     def policy(self, source=SOURCE):
         return self.engine.load_inline_ruleset(DOMAIN, "next.facade", source)
 
+    def test_owner_names_are_private_and_shadowing_cannot_change_membership(self):
+        rules = self.policy()
+        other = self.policy()
+        session = rules.prepare()
+        edb = inputs(rules, ("seed", ["alice"]))
+        foreign = inputs(other, ("seed", ["bob"]))
+        for owner, name in ((rules, "engine"), (session, "ruleset"), (edb, "ruleset")):
+            with self.assertRaises(AttributeError):
+                getattr(owner, name)
+
+        # Assigning an incidental old name cannot redirect ownership checks.
+        rules.engine = object()
+        session.ruleset = other
+        foreign.ruleset = rules
+        with self.assertRaisesRegex(RuntimeError, "another or closed Ruleset"):
+            session.solve(foreign)
+        with session.solve(edb) as result:
+            with self.assertRaises(AttributeError):
+                getattr(result, "ruleset")
+            self.assertTrue(result.contains_fact("allow", ["alice"]))
+
+        self.engine.close()
+        with self.assertRaisesRegex(RuntimeError, "Engine is closed"):
+            rules.fingerprint
+        session.close()
+        edb.close()
+        foreign.close()
+        other.close()
+
     def test_cffi_input_view_borrows_ordered_typed_entries(self):
         rules = self.policy()
         edb = rules.edb(fact_capacity=4, text_capacity=7)

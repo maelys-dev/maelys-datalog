@@ -710,6 +710,11 @@ and preserve query permissions.
 
 The following contracts apply to the single binding:
 
+- Owner references are internal bookkeeping: `Ruleset._engine` and
+  `Edb._ruleset`, `Session._ruleset`, `SolveResult._ruleset`. Do not read or
+  replace them. The former unprefixed attributes have no compatibility aliases;
+  this binding provides no public owner-navigation accessor. Constructor
+  arguments named `engine` or `ruleset` retain their existing spelling.
 - Garbage collection **never releases native resources**. `SolveResult`,
   `Session` and `Edb` emit `ResourceWarning` if collected unclosed; their
   destructors make no native calls. Enable these normally hidden warnings with

@@ -9,6 +9,14 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ### Changed
 
+- Python owner references are now internal: `Ruleset.engine` becomes `_engine`,
+  and `Edb.ruleset`, `Session.ruleset` and `SolveResult.ruleset` become `_ruleset`.
+  These bookkeeping attributes are not supported owner accessors; no aliases
+  retain the former names. Constructor parameters and public operations keep
+  their existing signatures. This cleanup must be included in 0.22.0 before
+  its compatibility freeze takes effect; it must not be deferred to a
+  post-freeze release.
+
 - Policy observations and session creation consistently return `INVALID_STATE`
   for a released handle whose caller-owned storage remains addressable. Previously
   `policy_id`, `policy_stat_get` and session creation could return `NOT_FOUND`
