@@ -105,6 +105,21 @@ undocumented incidental instance attributes are outside the frozen surface.
 The binding provides no public owner-navigation accessor. A later public
 accessor would be an explicit API addition with its own documented contract.
 
+## JavaScript and TypeScript error construction
+
+The Node and WebAssembly implementations share the public TypeScript declaration
+in `bindings/javascript/src/index.d.ts`. Unlike the Python binding, this API
+deliberately exposes `new MaelysDatalogError(operation: string, status: number,
+diagnostic: Diagnostic)`. The constructor has been public since 0.15.0; native
+binding operations can also throw the same exception. Python's internal error
+constructor is not a parity requirement for this operation.
+
+At the 0.22.0 freeze, the public constructor signature and its documented
+behavior become part of the JavaScript/TypeScript compatibility baseline.
+The binding may change how it creates errors internally, but it must preserve
+this callable constructor for consumers, including its parameter names and
+types, unless a later explicit compatibility decision provides a migration.
+
 ## Observable behavior and lifetimes
 
 Canonical typed facts, identities and program/execution fingerprints are
