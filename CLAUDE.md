@@ -70,7 +70,7 @@ when it has what they name.
   x86_64, Linux arm64 and macOS arm64 with `scripts/package-release.sh
   TARGET` — or on the targets `[targets]` names, packaging only on those
   `[package]` names when it names any — attests provenance, publishes the
-  GitHub release, renders packaging/homebrew/<name>.rb.in from the tag's own copy, builds bottles
+  GitHub release, renders packaging/homebrew/libmaelys-datalog.rb.in from the tag's own copy, builds bottles
   when configured and pushes the formula to `maelys-dev/homebrew-tap`.
 - If this repository pins other Maelys repositories: a dependency is
   `dependencies/<name>.pin` (tag on line 1, the commit that tag names on

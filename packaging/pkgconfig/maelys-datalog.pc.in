@@ -1,0 +1,10 @@
+prefix=@CMAKE_INSTALL_PREFIX@
+exec_prefix=${prefix}
+libdir=@CMAKE_INSTALL_FULL_LIBDIR@
+includedir=@CMAKE_INSTALL_FULL_INCLUDEDIR@
+
+Name: maelys-datalog
+Description: Bounded Datalog policy engine and public C extension SDK
+Version: @MAELYS_DATALOG_RELEASE_VERSION@
+Libs: -L${libdir} -lmaelys_datalog
+Cflags: -I${includedir}

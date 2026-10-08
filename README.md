@@ -422,3 +422,12 @@ authored external modules can use their own licenses, subject to the licenses
 of any code they incorporate. The vendored `yyjson` parser retains its own MIT
 license in `vendor/yyjson/LICENSE`. See [repository history](docs/repository-history.md)
 for the MIT-era archive and the MPL transition.
+
+### Homebrew C library
+
+The next release carrying this template publishes
+`maelys-dev/homebrew-tap/libmaelys-datalog` (default SMALL profile), separately
+from the CLI formula `maelys-datalog`. It installs the C libraries, all eleven
+public headers and `maelys-datalog.pc`; consumers can use
+`pkg-config --cflags --libs maelys-datalog`. The formula is published through
+the release workflow, after its source build and poured-bottle smoke test.
