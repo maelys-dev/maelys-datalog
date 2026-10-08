@@ -431,3 +431,9 @@ from the CLI formula `maelys-datalog`. It installs the C libraries, all eleven
 public headers and `maelys-datalog.pc`; consumers can use
 `pkg-config --cflags --libs maelys-datalog`. The formula is published through
 the release workflow, after its source build and poured-bottle smoke test.
+
+For temporal authorization quotas, see the
+[consumer guide](docs/guides/temporal-quotas.md): FIFO windows do not guarantee
+retention of the full live horizon, and successful solving is not authorization.
+It includes a checked example, complete storage inventory and the current
+snapshot/delta/session resource contracts.

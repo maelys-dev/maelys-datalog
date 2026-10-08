@@ -149,6 +149,10 @@ install(FILES vendor/yyjson/LICENSE DESTINATION licenses/yyjson
 
 include(CTest)
 if(BUILD_TESTING)
+    add_executable(example_temporal_quota examples/temporal_quota.c)
+    target_compile_options(example_temporal_quota PRIVATE -UNDEBUG -Wall -Wextra -Werror)
+    target_link_libraries(example_temporal_quota PRIVATE maelys_datalog)
+    add_test(NAME temporal_quota_consumer_contract COMMAND example_temporal_quota)
     find_package(Threads REQUIRED)
     add_executable(test_consumer_introspection tests/test_maelys_datalog_consumer_introspection.c)
     target_compile_options(test_consumer_introspection PRIVATE -Wall -Wextra -Werror)
