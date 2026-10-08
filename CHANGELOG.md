@@ -5,7 +5,7 @@ All notable changes to Maelys Datalog are documented in this file.
 The project follows [Semantic Versioning](https://semver.org/) and uses the
 format described by [Keep a Changelog](https://keepachangelog.com/).
 
-## 0.22.0 — 2026-10-03
+## 0.22.0 — 2026-10-08
 
 This version carries the compatibility freeze for the existing 0.x public
 contract. It does not declare a 1.0.0 release. The freeze declaration takes
@@ -13,13 +13,38 @@ effect only upon explicit approval and publication of 0.22.0.
 
 ### Changed
 
+- Python owner references are internal: `Ruleset.engine` becomes `_engine`,
+  and `Edb.ruleset`, `Session.ruleset` and `SolveResult.ruleset` become `_ruleset`.
+  No aliases retain these former bookkeeping attributes; constructor parameters
+  and public operation signatures are unchanged. This pre-freeze correction is
+  included in the frozen Python surface.
+
 - Return `INVALID_STATE` consistently from policy accessors and session creation
   after a caller-owned policy handle has been freed while its storage remains
   addressable. Previously `policy_id` and `policy_stat_get` could report
   `NOT_FOUND` after the storage was cleared. Live empty policy sets remain
   valid; freed engine-owned pointers remain invalid.
 
-### Python performance review — maintainer decision pending
+### Added
+
+- Homebrew formula `libmaelys-datalog`, separate from the `maelys-datalog` CLI
+  formula, installing the engine libraries, all eleven public C headers and
+  the new `maelys-datalog.pc` installation metadata. Its smoke test compiles an
+  installed consumer using pkg-config and runs on each poured release bottle.
+- A checked temporal quota consumer example, complete SMALL/LARGE storage
+  inventory and current session/snapshot/delta guide. Document the FIFO
+  retention and authorization boundaries; the full-window refusal mode remains
+  a proposal, not an implemented feature.
+
+### Build
+
+- Re-adopt maelys-release v0.63.1. The generated tap job publishes the library
+  formula and macOS bottles independently of the CLI formula; the v0.62.3
+  poured-bottle test must succeed before tap publication. No dependency-checkout
+  script migration is needed in this repository. Remove the obsolete direct tap
+  updater that targeted the CLI formula.
+
+### Python performance review — two accepted reports
 
 The complete Python lifecycle report measures signed candidate commit
 `5f668293241a0070202b06f177d2c87ea2318f2e` against v0.21.0 commit
@@ -45,28 +70,28 @@ as an alert; no mechanism is attributed. A/A and null envelopes are observations
 not confidence bounds or universal tolerances. Cold requests are informative
 only, and the report's raw classifications remain unchanged.
 
-**David's decision: PENDING.** Review the linked full report and decide whether
-to accept its documented limits, request a specific follow-up, or hold 0.22.0.
-No release cut has been started. The [freeze review](docs/validation/freeze-review.md)
+**David's decision, 2026-10-08: exception accepted for this named report.**
+All alerts, including the two recurring anchor observations, remain recorded
+without a new causal attribution or changed classification. This acceptance
+covers measured commit `5f668293241a0070202b06f177d2c87ea2318f2e`; it does not
+silently cover the later Python ownership changes in #184. Their integrated
+report and decision are recorded separately in the release review.
+David separately accepted the integrated binding report on 2026-10-08:
+[run 37511650103](https://github.com/maelys-dev/maelys-datalog/actions/runs/37511650103),
+measured commit `0e35275815ae73ac7f1467fd535addcc68993098`, `report.json` SHA-256
+`ce05e026eb92d6b36e6bcd60434754d170fed6e11dc9c1da268c6e097e6e013b`.
+All 41 review rows remain, including four beyond the matching null in both
+rounds: input p95 +2.64%/+2.00%, input median +4.33%/+2.05%, input p95
++4.55%/+2.18%, and solve median +0.36%/+0.24%. No total statistic is recurring
+beyond the null; one-round total alerts are retained. The acceptance rationale
+is #184's attribute-only rename: compiled binding code matches after
+normalizing the two owner names, with no native runtime change. This establishes
+no added code work, not equal timings; the recurring observations remain
+unattributed. The [release review](docs/validation/v0.22-release-review.md)
+records the configurations, envelopes and independent comparison scope.
+
+The [freeze review](docs/validation/freeze-review.md)
 records the broader evidence and compatibility boundaries.
-
-## [Unreleased]
-
-### Changed
-
-- Python owner references are now internal: `Ruleset.engine` becomes `_engine`,
-  and `Edb.ruleset`, `Session.ruleset` and `SolveResult.ruleset` become `_ruleset`.
-  These bookkeeping attributes are not supported owner accessors; no aliases
-  retain the former names. Constructor parameters and public operations keep
-  their existing signatures. This cleanup must be included in 0.22.0 before
-  its compatibility freeze takes effect; it must not be deferred to a
-  post-freeze release.
-
-- Policy observations and session creation consistently return `INVALID_STATE`
-  for a released handle whose caller-owned storage remains addressable. Previously
-  `policy_id`, `policy_stat_get` and session creation could return `NOT_FOUND`
-  after that storage was cleared. Live empty sets retain their defined behavior;
-  freed engine-owned pointers remain invalid to use.
 
 ## 0.21.0 — 2026-10-03
 
