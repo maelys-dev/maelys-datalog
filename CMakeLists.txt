@@ -118,6 +118,12 @@ install(FILES include/maelys/datalog.h include/maelys/datalog_builders.h
     include/maelys/datalog_module.h include/maelys/datalog_frontend.h
     include/maelys/datalog_backend.h
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/maelys COMPONENT sdk)
+# Public installation metadata; the library's existing archive name is preserved.
+configure_file(packaging/pkgconfig/maelys-datalog.pc.in
+    ${CMAKE_CURRENT_BINARY_DIR}/maelys-datalog.pc @ONLY)
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/maelys-datalog.pc
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/pkgconfig COMPONENT sdk)
+
 install(FILES LICENSE DESTINATION ${CMAKE_INSTALL_DATADIR}/maelys-datalog COMPONENT sdk)
 install(FILES sdk/conformance/maelys_conformance.h sdk/conformance/README.md
     sdk/conformance/allocation_provider.h sdk/conformance/allocation_provider.c

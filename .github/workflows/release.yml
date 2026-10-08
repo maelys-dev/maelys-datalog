@@ -1,6 +1,6 @@
 name: release
 
-# Managed by maelys-release v0.62.2 (0.62.2). Regenerate with
+# Managed by maelys-release v0.63.1 (0.63.1). Regenerate with
 # 'maelys-release adopt' of maelys-release; do not edit by hand.
 on:
   push:
@@ -19,7 +19,7 @@ permissions:
 
 jobs:
   release:
-    uses: maelys-dev/maelys-release/.github/workflows/release.yml@5148671abf3a1b437025881d10fd768efb9de5b3 # v0.62.2
+    uses: maelys-dev/maelys-release/.github/workflows/release.yml@18ff37d4acce34b01a9371be4ccb4f38b812d9c8 # v0.63.1
     permissions:
       contents: write
       id-token: write
@@ -36,7 +36,7 @@ jobs:
   channel-npm-javascript:
     needs: release
     if: needs.release.result == 'success'
-    uses: maelys-dev/maelys-release/.github/workflows/channel.yml@5148671abf3a1b437025881d10fd768efb9de5b3 # v0.62.2
+    uses: maelys-dev/maelys-release/.github/workflows/channel.yml@18ff37d4acce34b01a9371be4ccb4f38b812d9c8 # v0.63.1
     permissions:
       contents: write
       packages: write
@@ -46,3 +46,19 @@ jobs:
       channel: npm-javascript
       publish_command: bash scripts/publish-channel.sh TAG CHANNEL
       release_environment: ''
+
+  tap-libmaelys-datalog:
+    needs: release
+    if: needs.release.result == 'success'
+    uses: maelys-dev/maelys-release/.github/workflows/tap.yml@18ff37d4acce34b01a9371be4ccb4f38b812d9c8 # v0.63.1
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    with:
+      product: libmaelys-datalog
+      tag: ${{ inputs.tag || github.ref_name }}
+      bottles: '["macos-15","macos-26"]'
+    secrets:
+      tap_token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+      tap_signing_key: ${{ secrets.HOMEBREW_TAP_SIGNING_KEY }}
