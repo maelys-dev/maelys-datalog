@@ -81,14 +81,14 @@ typedef struct maelys_datalog_backend_output maelys_datalog_backend_output_t;
  * validates and deduplicates facts. Derived symbols must already belong to the
  * input/program vocabulary. A failed solve exposes no partial result. */
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_backend_emit(
-    maelys_datalog_backend_output_t *, const maelys_datalog_fact_t *);
+    maelys_datalog_backend_output_t *out, const maelys_datalog_fact_t *in);
 /* Cooperative per-backend work units, not comparable across algorithms and
  * not a sandbox or a wall-clock deadline. Charge before bounded units of work.
  * A charge/emit/filter error remains fatal even if the backend ignores it. */
 MAELYS_DATALOG_API maelys_datalog_status_t
-maelys_datalog_backend_charge(maelys_datalog_backend_output_t *, uint64_t units);
+maelys_datalog_backend_charge(maelys_datalog_backend_output_t *out, uint64_t units);
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_backend_filter(
-    maelys_datalog_backend_output_t *, const char *name, const char *semantic_id,
+    maelys_datalog_backend_output_t *out, const char *name, const char *semantic_id,
     const unsigned char *value, size_t value_length, const unsigned char *pattern,
     size_t pattern_length, int *out_matched);
 
@@ -104,17 +104,17 @@ typedef struct maelys_datalog_backend_t {
      * Called once per session creation before prepare (explicit public queries
      * are separate calls). Zero bytes is valid; alignment must be a nonzero
      * power of two <= alignof(max_align_t), even for zero bytes. */
-    maelys_datalog_status_t (*storage_requirements)(const maelys_datalog_program_t *,
+    maelys_datalog_status_t (*storage_requirements)(const maelys_datalog_program_t *program,
                                                    size_t *out_bytes, size_t *out_alignment);
     /* storage is non-NULL and valid for this call only; storage->bytes is the
      * caller's exact pointer. Retain the buffer, not the descriptor pointer.
      * Absent storage is represented by {sizeof(...), NULL, 0, 1}. */
-    maelys_datalog_status_t (*prepare)(const maelys_datalog_program_t *,
-                                      const maelys_datalog_backend_storage_t *, void **out_state);
+    maelys_datalog_status_t (*prepare)(const maelys_datalog_program_t *program,
+                                      const maelys_datalog_backend_storage_t *storage, void **out_state);
     maelys_datalog_status_t (*solve)(void *state,
                                      const maelys_datalog_fact_t *canonical_inputs,
-                                     size_t input_count, maelys_datalog_backend_output_t *,
-                                     void **out_result_state, maelys_datalog_diagnostic_t *);
+                                     size_t input_count, maelys_datalog_backend_output_t *output,
+                                     void **out_result_state, maelys_datalog_diagnostic_t *diag);
     /* Caller-owned explanation storage introduced in ABI 3 is retained in ABI 5.
      * The versioned common diagnostic protocol introduced in ABI 4 also remains.
      * All three are required if either EXPLAIN capability is advertised; the
@@ -132,14 +132,14 @@ typedef struct maelys_datalog_backend_t {
      * The host checks capacity first. Successful output is NUL-terminated and
      * exactly the prepared length. All callbacks are trusted and bounded. */
     maelys_datalog_status_t (*explanation_storage_requirements)(
-        void *state, void *result_state, maelys_datalog_explanation_kind_t,
+        void *state, void *result_state, maelys_datalog_explanation_kind_t kind,
         size_t *out_bytes, size_t *out_alignment);
     maelys_datalog_status_t (*explanation_prepare)(
-        void *state, void *result_state, maelys_datalog_explanation_kind_t,
-        const char *, const maelys_datalog_value_t *, size_t,
+        void *state, void *result_state, maelys_datalog_explanation_kind_t kind,
+        const char *predicate, const maelys_datalog_value_t *terms, size_t arity,
         void *storage, size_t storage_bytes, size_t *out_text_size);
     maelys_datalog_status_t (*explanation_write_text)(
-        void *state, void *result_state, maelys_datalog_explanation_kind_t,
+        void *state, void *result_state, maelys_datalog_explanation_kind_t kind,
         const void *storage, char *text, size_t capacity);
     /* Exactly once per accepted result, after host validation/copy/deduplication
      * and installation; for windows, only after publication is irrevocable.
@@ -175,28 +175,28 @@ typedef struct maelys_datalog_backend_v6_t {
     uint64_t capabilities;
     uint64_t resource_features;
     maelys_datalog_status_t (*storage_requirements)(
-        const maelys_datalog_program_t *,
-        const maelys_datalog_session_resources_t *,
+        const maelys_datalog_program_t *program,
+        const maelys_datalog_session_resources_t *resources,
         size_t *out_bytes, size_t *out_alignment);
     maelys_datalog_status_t (*prepare)(
-        const maelys_datalog_program_t *,
-        const maelys_datalog_session_resources_t *,
-        const maelys_datalog_backend_storage_t *, void **out_state);
+        const maelys_datalog_program_t *program,
+        const maelys_datalog_session_resources_t *resources,
+        const maelys_datalog_backend_storage_t *storage, void **out_state);
     /* Snapshot solve, complete emission, explanation and commit/abort contracts
      * retain their ABI 5 semantics and callback signatures. No delta callback. */
     maelys_datalog_status_t (*solve)(
         void *state, const maelys_datalog_fact_t *canonical_inputs,
-        size_t input_count, maelys_datalog_backend_output_t *,
-        void **out_result_state, maelys_datalog_diagnostic_t *);
+        size_t input_count, maelys_datalog_backend_output_t *output,
+        void **out_result_state, maelys_datalog_diagnostic_t *diag);
     maelys_datalog_status_t (*explanation_storage_requirements)(
-        void *state, void *result_state, maelys_datalog_explanation_kind_t,
+        void *state, void *result_state, maelys_datalog_explanation_kind_t kind,
         size_t *out_bytes, size_t *out_alignment);
     maelys_datalog_status_t (*explanation_prepare)(
-        void *state, void *result_state, maelys_datalog_explanation_kind_t,
-        const char *, const maelys_datalog_value_t *, size_t,
+        void *state, void *result_state, maelys_datalog_explanation_kind_t kind,
+        const char *predicate, const maelys_datalog_value_t *terms, size_t arity,
         void *storage, size_t storage_bytes, size_t *out_text_size);
     maelys_datalog_status_t (*explanation_write_text)(
-        void *state, void *result_state, maelys_datalog_explanation_kind_t,
+        void *state, void *result_state, maelys_datalog_explanation_kind_t kind,
         const void *storage, char *text, size_t capacity);
     void (*commit)(void *state, void *result_state);
     void (*destroy_result)(void *state, void *result_state);
@@ -224,10 +224,10 @@ typedef struct {
  * symbol IDs, allocation or promised enumeration order. NULL/empty view is
  * valid only when its packet count is zero. */
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_backend_input_at(
-    const maelys_datalog_backend_input_view_t *, size_t, maelys_datalog_fact_t *out);
+    const maelys_datalog_backend_input_view_t *view, size_t index, maelys_datalog_fact_t *out);
 typedef maelys_datalog_status_t (*maelys_datalog_backend_transaction_solve_t)(
-    void *, const maelys_datalog_backend_input_t *, maelys_datalog_backend_output_t *,
-    void **out_result_state, maelys_datalog_diagnostic_t *);
+    void *state, const maelys_datalog_backend_input_t *input, maelys_datalog_backend_output_t *output,
+    void **out_result_state, maelys_datalog_diagnostic_t *diag);
 
 /* Independent type, NEVER cast as ABI 5/6. Fixed normalized resources and
  * storage/prepare retain ABI 6 semantics; output, explanations, commit/abort
@@ -244,20 +244,20 @@ typedef struct maelys_datalog_backend_v7_t {
     size_t struct_size;
     const char *name, *semantic_id;
     uint64_t capabilities, resource_features;
-    maelys_datalog_status_t (*storage_requirements)(const maelys_datalog_program_t *,
-        const maelys_datalog_session_resources_t *, size_t *, size_t *);
-    maelys_datalog_status_t (*prepare)(const maelys_datalog_program_t *,
-        const maelys_datalog_session_resources_t *, const maelys_datalog_backend_storage_t *, void **);
+    maelys_datalog_status_t (*storage_requirements)(const maelys_datalog_program_t *program,
+        const maelys_datalog_session_resources_t *resources, size_t *out_bytes, size_t *out_alignment);
+    maelys_datalog_status_t (*prepare)(const maelys_datalog_program_t *program,
+        const maelys_datalog_session_resources_t *resources, const maelys_datalog_backend_storage_t *storage, void **out_state);
     maelys_datalog_backend_transaction_solve_t solve;
-    maelys_datalog_status_t (*explanation_storage_requirements)(void *, void *,
-        maelys_datalog_explanation_kind_t, size_t *, size_t *);
-    maelys_datalog_status_t (*explanation_prepare)(void *, void *, maelys_datalog_explanation_kind_t,
-        const char *, const maelys_datalog_value_t *, size_t, void *, size_t, size_t *);
-    maelys_datalog_status_t (*explanation_write_text)(void *, void *, maelys_datalog_explanation_kind_t,
-        const void *, char *, size_t);
-    void (*commit)(void *, void *);
-    void (*destroy_result)(void *, void *);
-    void (*destroy)(void *);
+    maelys_datalog_status_t (*explanation_storage_requirements)(void *state, void *result_state,
+        maelys_datalog_explanation_kind_t kind, size_t *out_bytes, size_t *out_alignment);
+    maelys_datalog_status_t (*explanation_prepare)(void *state, void *result_state, maelys_datalog_explanation_kind_t kind,
+        const char *predicate, const maelys_datalog_value_t *terms, size_t arity, void *storage, size_t storage_bytes, size_t *out_text_size);
+    maelys_datalog_status_t (*explanation_write_text)(void *state, void *result_state, maelys_datalog_explanation_kind_t kind,
+        const void *storage, char *text, size_t capacity);
+    void (*commit)(void *state, void *result_state);
+    void (*destroy_result)(void *state, void *result_state);
+    void (*destroy)(void *state);
 } maelys_datalog_backend_v7_t;
 #define MAELYS_DATALOG_BACKEND_V7_SIZE sizeof(maelys_datalog_backend_v7_t)
 #ifdef __cplusplus

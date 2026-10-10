@@ -14,17 +14,17 @@ typedef struct maelys_datalog_program_builder maelys_datalog_program_builder_t;
  * ignoring it cannot make a partially constructed program load successfully.
  * The domain is host-selected and cannot be extended by the frontend. */
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_program_add_fact(
-    maelys_datalog_program_builder_t *, const maelys_datalog_ir_atom_t *);
+    maelys_datalog_program_builder_t *b, const maelys_datalog_ir_atom_t *in);
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_program_add_rule(
-    maelys_datalog_program_builder_t *, const maelys_datalog_ir_rule_t *);
+    maelys_datalog_program_builder_t *b, const maelys_datalog_ir_rule_t *in);
 
 typedef struct maelys_datalog_frontend_t {
     uint32_t abi_version;
     size_t struct_size;
     const char *name;
     const char *semantic_id;
-    maelys_datalog_status_t (*lower)(const char *, size_t, maelys_datalog_program_builder_t *,
-                                     maelys_datalog_diagnostic_t *);
+    maelys_datalog_status_t (*lower)(const char *source, size_t source_length, maelys_datalog_program_builder_t *builder,
+                                     maelys_datalog_diagnostic_t *diag);
 } maelys_datalog_frontend_t;
 #ifdef __cplusplus
 }

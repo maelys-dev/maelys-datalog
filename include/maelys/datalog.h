@@ -296,7 +296,7 @@ static inline maelys_datalog_diagnostic_t maelys_datalog_diagnostic_initializer(
     return d;
 }
 #define MAELYS_DATALOG_DIAGNOSTIC_INIT maelys_datalog_diagnostic_initializer()
-MAELYS_DATALOG_API const char *maelys_datalog_diag_code_name(maelys_datalog_diag_code_t);
+MAELYS_DATALOG_API const char *maelys_datalog_diag_code_name(maelys_datalog_diag_code_t code);
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_diagnostic_init(
     void *storage, size_t storage_bytes);
 
@@ -427,8 +427,8 @@ MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_policy_load_manifest_b
  * Sources are borrowed for the call. For file-loader/Python semantics, use the
  * stable policy_load_manifest_buffer entry point (default_profile=enforce). */
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_policy_load_manifest_text(
-    const char *, size_t, const maelys_datalog_policy_bundle_entry_t *, size_t,
-    unsigned flags, maelys_datalog_policy_t **, maelys_datalog_diagnostic_t *);
+    const char *json, size_t length, const maelys_datalog_policy_bundle_entry_t *bundle, size_t count,
+    unsigned flags, maelys_datalog_policy_t **out, maelys_datalog_diagnostic_t *diag);
 
 
 /* Count enabled policies without allocating storage. A live empty set returns
@@ -815,23 +815,23 @@ MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_result_prepare_explana
     void *storage, size_t storage_bytes, maelys_datalog_prepared_explanation_t **out);
 /* Cached size, excluding the terminating NUL; no formatting or proof traversal. */
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_prepared_explanation_text_size(
-    const maelys_datalog_prepared_explanation_t *, size_t *out_required);
+    const maelys_datalog_prepared_explanation_t *prepared, size_t *out_required);
 /* Write only: NULL is invalid, including at capacity zero. No size-query mode.
  * Needs text_size + 1 bytes. On PAYLOAD_TOO_LARGE only out_text[0] is set to NUL
  * when capacity > 0; no partial text. Repeated successful writes are byte-identical.
  * If a third-party backend violates its callback contract, output text after
  * the resulting error is unspecified and must not be consumed. */
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_prepared_explanation_write_text(
-    const maelys_datalog_prepared_explanation_t *, char *out_text, size_t capacity);
+    const maelys_datalog_prepared_explanation_t *prepared, char *out_text, size_t capacity);
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_prepared_explanation_release(
-    maelys_datalog_prepared_explanation_t *);
+    maelys_datalog_prepared_explanation_t *prepared);
 
 /* Reference backend only; reports evaluations by solving, not Why-false search. */
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_result_filter_statistics(
-    const maelys_datalog_result_t *, maelys_datalog_filter_statistics_t *);
+    const maelys_datalog_result_t *result, maelys_datalog_filter_statistics_t *out);
 /* Explicit facts of presence, no query side effect. Values must be 0 or 1. */
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_decision_from_presence(
-    int allow, int reduce, int deny, maelys_datalog_decision_t *);
+    int allow, int reduce, int deny, maelys_datalog_decision_t *out);
 
 #ifdef __cplusplus
 }

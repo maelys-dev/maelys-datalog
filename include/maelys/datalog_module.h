@@ -86,11 +86,11 @@ maelys_datalog_register_planner_module(const maelys_datalog_planner_module_t *mo
  * Exactly one of domain.predicates and installer is provided. Domains remain
  * global; contexts do not isolate them. Incompatible re-registration fails. */
 typedef struct maelys_datalog_domain_builder maelys_datalog_domain_builder_t;
-typedef maelys_datalog_status_t (*maelys_datalog_domain_installer_t)(maelys_datalog_domain_builder_t *);
+typedef maelys_datalog_status_t (*maelys_datalog_domain_installer_t)(maelys_datalog_domain_builder_t *builder);
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_domain_register_advanced(
-    const maelys_datalog_domain_t *, const char *description, maelys_datalog_domain_installer_t);
+    const maelys_datalog_domain_t *d, const char *description, maelys_datalog_domain_installer_t installer);
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_domain_builder_add(
-    maelys_datalog_domain_builder_t *, const maelys_datalog_predicate_t *);
+    maelys_datalog_domain_builder_t *b, const maelys_datalog_predicate_t *p);
 #ifdef __cplusplus
 }
 #endif

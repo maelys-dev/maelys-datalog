@@ -51,13 +51,13 @@ typedef struct {
     unsigned filter_kind;
 } maelys_datalog_explanation_obstacle_view_t;
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_prepared_explanation_info(
-    const maelys_datalog_prepared_explanation_t *, maelys_datalog_explanation_info_t *);
+    const maelys_datalog_prepared_explanation_t *prepared, maelys_datalog_explanation_info_t *out);
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_prepared_explanation_step(
-    const maelys_datalog_prepared_explanation_t *, size_t, maelys_datalog_explanation_step_view_t *);
+    const maelys_datalog_prepared_explanation_t *prepared, size_t index, maelys_datalog_explanation_step_view_t *out);
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_prepared_explanation_premise(
-    const maelys_datalog_prepared_explanation_t *, size_t, maelys_datalog_explanation_premise_view_t *);
+    const maelys_datalog_prepared_explanation_t *prepared, size_t index, maelys_datalog_explanation_premise_view_t *out);
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_prepared_explanation_obstacle(
-    const maelys_datalog_prepared_explanation_t *, size_t, maelys_datalog_explanation_obstacle_view_t *);
+    const maelys_datalog_prepared_explanation_t *prepared, size_t index, maelys_datalog_explanation_obstacle_view_t *out);
 #ifdef __cplusplus
 }
 #endif
