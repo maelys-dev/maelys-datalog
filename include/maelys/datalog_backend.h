@@ -50,10 +50,10 @@ typedef struct {
     void *context;
     maelys_datalog_status_t (*inspect)(
         void *context, size_t bytes, size_t alignment,
-        maelys_datalog_allocation_budget_t *out);
+        maelys_datalog_allocation_budget_t *out_budget);
     maelys_datalog_status_t (*acquire)(
         void *context, size_t bytes, size_t alignment,
-        void **out_block, maelys_datalog_diagnostic_t *diagnostic);
+        void **out_block, maelys_datalog_diagnostic_t *out_diagnostic);
     void (*release)(void *context, void *block);
 } maelys_datalog_allocation_service_t;
 #define MAELYS_DATALOG_ALLOCATION_SERVICE_PREFIX_SIZE \
@@ -81,14 +81,14 @@ typedef struct maelys_datalog_backend_output maelys_datalog_backend_output_t;
  * validates and deduplicates facts. Derived symbols must already belong to the
  * input/program vocabulary. A failed solve exposes no partial result. */
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_backend_emit(
-    maelys_datalog_backend_output_t *out, const maelys_datalog_fact_t *in);
+    maelys_datalog_backend_output_t *output, const maelys_datalog_fact_t *fact);
 /* Cooperative per-backend work units, not comparable across algorithms and
  * not a sandbox or a wall-clock deadline. Charge before bounded units of work.
  * A charge/emit/filter error remains fatal even if the backend ignores it. */
 MAELYS_DATALOG_API maelys_datalog_status_t
-maelys_datalog_backend_charge(maelys_datalog_backend_output_t *out, uint64_t units);
+maelys_datalog_backend_charge(maelys_datalog_backend_output_t *output, uint64_t units);
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_backend_filter(
-    maelys_datalog_backend_output_t *out, const char *name, const char *semantic_id,
+    maelys_datalog_backend_output_t *output, const char *name, const char *semantic_id,
     const unsigned char *value, size_t value_length, const unsigned char *pattern,
     size_t pattern_length, int *out_matched);
 
@@ -114,7 +114,7 @@ typedef struct maelys_datalog_backend_t {
     maelys_datalog_status_t (*solve)(void *state,
                                      const maelys_datalog_fact_t *canonical_inputs,
                                      size_t input_count, maelys_datalog_backend_output_t *output,
-                                     void **out_result_state, maelys_datalog_diagnostic_t *diag);
+                                     void **out_result_state, maelys_datalog_diagnostic_t *out_diagnostic);
     /* Caller-owned explanation storage introduced in ABI 3 is retained in ABI 5.
      * The versioned common diagnostic protocol introduced in ABI 4 also remains.
      * All three are required if either EXPLAIN capability is advertised; the
@@ -140,7 +140,7 @@ typedef struct maelys_datalog_backend_t {
         void *storage, size_t storage_bytes, size_t *out_text_size);
     maelys_datalog_status_t (*explanation_write_text)(
         void *state, void *result_state, maelys_datalog_explanation_kind_t kind,
-        const void *storage, char *text, size_t capacity);
+        const void *storage, char *out_text, size_t capacity);
     /* Exactly once per accepted result, after host validation/copy/deduplication
      * and installation; for windows, only after publication is irrevocable.
      * Never called for an abandoned candidate (including window init probes).
@@ -187,7 +187,7 @@ typedef struct maelys_datalog_backend_v6_t {
     maelys_datalog_status_t (*solve)(
         void *state, const maelys_datalog_fact_t *canonical_inputs,
         size_t input_count, maelys_datalog_backend_output_t *output,
-        void **out_result_state, maelys_datalog_diagnostic_t *diag);
+        void **out_result_state, maelys_datalog_diagnostic_t *out_diagnostic);
     maelys_datalog_status_t (*explanation_storage_requirements)(
         void *state, void *result_state, maelys_datalog_explanation_kind_t kind,
         size_t *out_bytes, size_t *out_alignment);
@@ -197,7 +197,7 @@ typedef struct maelys_datalog_backend_v6_t {
         void *storage, size_t storage_bytes, size_t *out_text_size);
     maelys_datalog_status_t (*explanation_write_text)(
         void *state, void *result_state, maelys_datalog_explanation_kind_t kind,
-        const void *storage, char *text, size_t capacity);
+        const void *storage, char *out_text, size_t capacity);
     void (*commit)(void *state, void *result_state);
     void (*destroy_result)(void *state, void *result_state);
     void (*destroy)(void *state);
@@ -224,10 +224,10 @@ typedef struct {
  * symbol IDs, allocation or promised enumeration order. NULL/empty view is
  * valid only when its packet count is zero. */
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_backend_input_at(
-    const maelys_datalog_backend_input_view_t *view, size_t index, maelys_datalog_fact_t *out);
+    const maelys_datalog_backend_input_view_t *view, size_t index, maelys_datalog_fact_t *out_fact);
 typedef maelys_datalog_status_t (*maelys_datalog_backend_transaction_solve_t)(
     void *state, const maelys_datalog_backend_input_t *input, maelys_datalog_backend_output_t *output,
-    void **out_result_state, maelys_datalog_diagnostic_t *diag);
+    void **out_result_state, maelys_datalog_diagnostic_t *out_diagnostic);
 
 /* Independent type, NEVER cast as ABI 5/6. Fixed normalized resources and
  * storage/prepare retain ABI 6 semantics; output, explanations, commit/abort
@@ -254,7 +254,7 @@ typedef struct maelys_datalog_backend_v7_t {
     maelys_datalog_status_t (*explanation_prepare)(void *state, void *result_state, maelys_datalog_explanation_kind_t kind,
         const char *predicate, const maelys_datalog_value_t *terms, size_t arity, void *storage, size_t storage_bytes, size_t *out_text_size);
     maelys_datalog_status_t (*explanation_write_text)(void *state, void *result_state, maelys_datalog_explanation_kind_t kind,
-        const void *storage, char *text, size_t capacity);
+        const void *storage, char *out_text, size_t capacity);
     void (*commit)(void *state, void *result_state);
     void (*destroy_result)(void *state, void *result_state);
     void (*destroy)(void *state);

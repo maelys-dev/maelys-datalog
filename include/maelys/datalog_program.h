@@ -117,13 +117,13 @@ typedef struct {
  * is exposed. Rule accessors use zero-based indices; explanation rule IDs are
  * index + 1, preserving the existing normalized-program convention. */
 MAELYS_DATALOG_API maelys_datalog_status_t
-maelys_datalog_program_info(const maelys_datalog_program_t *p, maelys_datalog_program_info_t *out);
+maelys_datalog_program_info(const maelys_datalog_program_t *program, maelys_datalog_program_info_t *out_info);
 /* Typed, length-framed compiled identity: includes domain/schema, source
  * authority, normalized rules, filter semantics and query restrictions. */
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_program_fingerprint(
-    const maelys_datalog_program_t *p, char out[MAELYS_DATALOG_PUBLIC_FINGERPRINT_BYTES]);
+    const maelys_datalog_program_t *program, char out_fingerprint[MAELYS_DATALOG_PUBLIC_FINGERPRINT_BYTES]);
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_program_predicate(
-    const maelys_datalog_program_t *p, size_t index, maelys_datalog_predicate_t *out);
+    const maelys_datalog_program_t *program, size_t index, maelys_datalog_predicate_t *out_predicate);
 /* Effective query surface: QUERY predicates admitted by the manifest whitelist
  * when one is enforced. An absent or empty manifest queries list admits none;
  * without whitelist enforcement all QUERY predicates are admitted. This is
@@ -134,17 +134,17 @@ MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_program_predicate(
  * memory and leave outputs unchanged on failure. NULL arguments return
  * INVALID_ARGUMENT; a zero-based query index >= count returns NOT_FOUND. */
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_program_query_count(
-    const maelys_datalog_program_t *p, size_t *out_count);
+    const maelys_datalog_program_t *program, size_t *out_count);
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_program_query(
-    const maelys_datalog_program_t *p, size_t index, maelys_datalog_predicate_t *out);
+    const maelys_datalog_program_t *program, size_t index, maelys_datalog_predicate_t *out_predicate);
 MAELYS_DATALOG_API maelys_datalog_status_t
-maelys_datalog_program_fact(const maelys_datalog_program_t *p, size_t index, maelys_datalog_ir_atom_t *out);
+maelys_datalog_program_fact(const maelys_datalog_program_t *program, size_t index, maelys_datalog_ir_atom_t *out_atom);
 MAELYS_DATALOG_API maelys_datalog_status_t
-maelys_datalog_program_rule(const maelys_datalog_program_t *p, size_t index, maelys_datalog_ir_rule_t *out);
+maelys_datalog_program_rule(const maelys_datalog_program_t *program, size_t index, maelys_datalog_ir_rule_t *out_rule);
 
 
 MAELYS_DATALOG_API maelys_datalog_status_t
-maelys_datalog_session_program(const maelys_datalog_session_t *s, const maelys_datalog_program_t **out);
+maelys_datalog_session_program(const maelys_datalog_session_t *session, const maelys_datalog_program_t **out_program);
 #ifdef __cplusplus
 }
 #endif

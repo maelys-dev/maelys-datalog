@@ -427,8 +427,8 @@ MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_policy_load_manifest_b
  * Sources are borrowed for the call. For file-loader/Python semantics, use the
  * stable policy_load_manifest_buffer entry point (default_profile=enforce). */
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_policy_load_manifest_text(
-    const char *json, size_t length, const maelys_datalog_policy_bundle_entry_t *bundle, size_t count,
-    unsigned flags, maelys_datalog_policy_t **out, maelys_datalog_diagnostic_t *diag);
+    const char *manifest_json, size_t manifest_length, const maelys_datalog_policy_bundle_entry_t *bundle, size_t bundle_count,
+    unsigned flags, maelys_datalog_policy_t **out_policy, maelys_datalog_diagnostic_t *out_diagnostic);
 
 
 /* Count enabled policies without allocating storage. A live empty set returns
@@ -672,7 +672,7 @@ MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_result_enumerate(
     const char *predicate,
     size_t arity,
     maelys_datalog_fact_view_t *out_facts,
-    size_t out_capacity,
+    size_t capacity,
     size_t *out_count);
 /* Number of distinct derived IDB facts across ALL predicates, including those
  * not queryable. Excludes runtime EDB and policy facts. No re-solve; unchanged
@@ -709,7 +709,7 @@ MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_result_explain_true_te
     const maelys_datalog_value_t *terms,
     size_t arity,
     char *out_text,
-    size_t out_capacity,
+    size_t capacity,
     size_t *out_required);
 /* Why-false uses the same buffer contract. Text starts with MAELYS-DATALOG-v2
  * then document=why-false on its own line. This serialization contract replaces
@@ -730,7 +730,7 @@ MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_result_explain_false_t
     const maelys_datalog_value_t *terms,
     size_t arity,
     char *out_text,
-    size_t out_capacity,
+    size_t capacity,
     size_t *out_required);
 /* Releases the result lease. The reference backend resets bookkeeping, not
  * the retained fact/provenance storage: this is NOT secure memory erasure.
@@ -812,7 +812,7 @@ MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_result_explanation_sto
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_result_prepare_explanation(
     maelys_datalog_result_t *result, maelys_datalog_explanation_kind_t kind,
     const char *predicate, const maelys_datalog_value_t *terms, size_t arity,
-    void *storage, size_t storage_bytes, maelys_datalog_prepared_explanation_t **out);
+    void *storage, size_t storage_bytes, maelys_datalog_prepared_explanation_t **out_prepared);
 /* Cached size, excluding the terminating NUL; no formatting or proof traversal. */
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_prepared_explanation_text_size(
     const maelys_datalog_prepared_explanation_t *prepared, size_t *out_required);
@@ -828,10 +828,10 @@ MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_prepared_explanation_r
 
 /* Reference backend only; reports evaluations by solving, not Why-false search. */
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_result_filter_statistics(
-    const maelys_datalog_result_t *result, maelys_datalog_filter_statistics_t *out);
+    const maelys_datalog_result_t *result, maelys_datalog_filter_statistics_t *out_statistics);
 /* Explicit facts of presence, no query side effect. Values must be 0 or 1. */
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_decision_from_presence(
-    int allow, int reduce, int deny, maelys_datalog_decision_t *out);
+    int allow, int reduce, int deny, maelys_datalog_decision_t *out_decision);
 
 #ifdef __cplusplus
 }

@@ -148,7 +148,7 @@ typedef struct {
     { MAELYS_DATALOG_ALLOCATION_STATS_V1_SIZE, MAELYS_DATALOG_ALLOCATION_STATS_VERSION, \
       UINT32_C(0), UINT64_C(0), 0, 0, 0, 0 }
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_session_get_allocation_stats(
-    const maelys_datalog_session_t *s, maelys_datalog_session_allocation_stats_t *out);
+    const maelys_datalog_session_t *session, maelys_datalog_session_allocation_stats_t *out_stats);
 
 /* No prepared state is allocated by requirements. The output is descriptive;
  * init recomputes the plan from policy/config, rather than trusting stale sizes.
@@ -181,11 +181,11 @@ typedef struct {
  * failure. Policy-dependent normalization/admission occurs at planning/create. */
 MAELYS_DATALOG_API maelys_datalog_status_t
 maelys_datalog_session_config_set_resources(
-    maelys_datalog_session_config_t *c,
-    const maelys_datalog_session_resource_request_t *in);
+    maelys_datalog_session_config_t *config,
+    const maelys_datalog_session_resource_request_t *resources);
 MAELYS_DATALOG_API maelys_datalog_status_t
 maelys_datalog_session_get_resources(
-    const maelys_datalog_session_t *s, maelys_datalog_session_resources_t *out);
+    const maelys_datalog_session_t *session, maelys_datalog_session_resources_t *out_resources);
 
 /* Same backend-arena and explanation-storage setters as the existing config.
  * Explicit ABI 5 selections stay ABI 5; no automatic migration of a provider.
@@ -194,15 +194,15 @@ maelys_datalog_session_get_resources(
 MAELYS_DATALOG_API maelys_datalog_status_t
 maelys_datalog_session_storage_requirements_configured(
     const maelys_datalog_policy_t *policy, size_t policy_index,
-    const maelys_datalog_session_config_t *c,
+    const maelys_datalog_session_config_t *config,
     maelys_datalog_session_storage_plan_t *out_plan,
-    maelys_datalog_diagnostic_t *diag);
+    maelys_datalog_diagnostic_t *out_diagnostic);
 MAELYS_DATALOG_API maelys_datalog_status_t
 maelys_datalog_session_init_configured(
     void *arena, size_t arena_bytes,
     const maelys_datalog_policy_t *policy, size_t policy_index,
-    const maelys_datalog_session_config_t *c,
-    maelys_datalog_session_t **out, maelys_datalog_diagnostic_t *diag);
+    const maelys_datalog_session_config_t *config,
+    maelys_datalog_session_t **out_session, maelys_datalog_diagnostic_t *out_diagnostic);
 
 
 /* Caller-owned policy storage: fixed profile capacity (up to eight policies),
@@ -210,13 +210,13 @@ maelys_datalog_session_init_configured(
  * allocate in JSON parsing, contexts or extension callbacks: NOT a whole-loader
  * zero-malloc guarantee. Storage must be unused, aligned, disjoint from inputs,
  * outputs and diagnostics, and outlive the handle. Failure may overwrite it;
- * *out remains NULL. Close before reuse. free closes but never frees this arena.
+ * *out_policy remains NULL. Close before reuse. free closes but never frees this arena.
  * The convenience loaders allocate exactly one policy object in addition to
  * loader/callback allocations. Sessions make their own prepared program copy. */
-MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_policy_storage_requirements(size_t *bytes, size_t *alignment);
+MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_policy_storage_requirements(size_t *out_bytes, size_t *out_alignment);
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_policy_load_manifest_text_in(
-    void *storage, size_t bytes, const char *json, size_t length, const maelys_datalog_policy_bundle_entry_t *bundle, size_t count,
-    unsigned flags, maelys_datalog_policy_t **out, maelys_datalog_diagnostic_t *diag);
+    void *storage, size_t storage_bytes, const char *manifest_json, size_t manifest_length, const maelys_datalog_policy_bundle_entry_t *bundle, size_t bundle_count,
+    unsigned flags, maelys_datalog_policy_t **out_policy, maelys_datalog_diagnostic_t *out_diagnostic);
 #ifdef __cplusplus
 }
 #endif
