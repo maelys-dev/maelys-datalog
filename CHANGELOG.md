@@ -5,6 +5,14 @@ All notable changes to Maelys Datalog are documented in this file.
 The project follows [Semantic Versioning](https://semver.org/) and uses the
 format described by [Keep a Changelog](https://keepachangelog.com/).
 
+## Unreleased
+
+### Changed
+
+- Name the parameters of public C prototypes and harmonize 25 existing names,
+  including `out_capacity` → `capacity` for capacities passed by value, without
+  changing the ABI or behavior.
+
 ## 0.22.0 — 2026-10-08
 
 This version carries the compatibility freeze for the existing 0.x public

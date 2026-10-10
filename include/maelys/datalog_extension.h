@@ -45,25 +45,25 @@ typedef struct {
  * planner for policies compiled in this context. Sealed catalogs are immutable.
  * Domain registration is still process-wide; contexts isolate extensions only. */
 MAELYS_DATALOG_API maelys_datalog_status_t
-maelys_datalog_context_create(maelys_datalog_context_t **);
+maelys_datalog_context_create(maelys_datalog_context_t **out_context);
 MAELYS_DATALOG_API maelys_datalog_status_t
-maelys_datalog_context_register(maelys_datalog_context_t *, const maelys_datalog_extension_t *);
-MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_context_seal(maelys_datalog_context_t *,
+maelys_datalog_context_register(maelys_datalog_context_t *context, const maelys_datalog_extension_t *extension);
+MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_context_seal(maelys_datalog_context_t *context,
                                                                        const char *planner_name);
 /* Release the caller's handle; policies/sessions retain their own references. */
-MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_context_free(maelys_datalog_context_t *);
+MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_context_free(maelys_datalog_context_t *context);
 
 /* Names are explicit selections, never fallback hints. NULL frontend/backend
  * selects the built-in reference. Loading requires a sealed context. Existing
  * policy/session APIs also work on the resulting handles. */
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_context_load_inline(
-    maelys_datalog_context_t *, const char *frontend_name, const char *domain,
-    const char *policy_id, const char *source, size_t source_length, maelys_datalog_policy_t **,
-    maelys_datalog_diagnostic_t *);
+    maelys_datalog_context_t *context, const char *frontend_name, const char *domain,
+    const char *policy_id, const char *source, size_t source_length, maelys_datalog_policy_t **out_policy,
+    maelys_datalog_diagnostic_t *out_diagnostic);
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_context_session_create(
-    maelys_datalog_context_t *, const maelys_datalog_policy_t *, size_t policy_index,
+    maelys_datalog_context_t *context, const maelys_datalog_policy_t *policy, size_t policy_index,
     const char *backend_name, uint64_t required_capabilities, uint64_t work_limit,
-    maelys_datalog_session_t **);
+    maelys_datalog_session_t **out_session);
 
 typedef enum {
     MAELYS_DATALOG_EXTENSION_FRONTEND = 1,
@@ -77,10 +77,10 @@ typedef struct {
 } maelys_datalog_component_info_t;
 /* Metadata is borrowed from the context, not executable callback pointers. */
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_context_component_count(
-    const maelys_datalog_context_t *, maelys_datalog_extension_kind_t, size_t *);
+    const maelys_datalog_context_t *context, maelys_datalog_extension_kind_t kind, size_t *out_count);
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_context_component_info(
-    const maelys_datalog_context_t *, maelys_datalog_extension_kind_t, size_t,
-    maelys_datalog_component_info_t *);
+    const maelys_datalog_context_t *context, maelys_datalog_extension_kind_t kind, size_t index,
+    maelys_datalog_component_info_t *out_info);
 
 #define MAELYS_DATALOG_EXTENSION_V2_ABI_VERSION 2u
 /* Additive extension registration. Existing extension_t/register remain ABI 1.
@@ -103,15 +103,15 @@ typedef struct {
     size_t filter_count;
 } maelys_datalog_extension_v2_t;
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_context_register_v2(
-    maelys_datalog_context_t *, const maelys_datalog_extension_v2_t *);
+    maelys_datalog_context_t *context, const maelys_datalog_extension_v2_t *extension);
 MAELYS_DATALOG_API maelys_datalog_status_t
 maelys_datalog_session_config_set_context_backend_v6(
-    maelys_datalog_session_config_t *, maelys_datalog_context_t *,
+    maelys_datalog_session_config_t *config, maelys_datalog_context_t *context,
     const char *backend_name); /* NULL selects the V6 reference */
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_context_backend_v6_count(
-    const maelys_datalog_context_t *, size_t *out);
+    const maelys_datalog_context_t *context, size_t *out_count);
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_context_backend_v6_info(
-    const maelys_datalog_context_t *, size_t, maelys_datalog_component_info_t *out);
+    const maelys_datalog_context_t *context, size_t index, maelys_datalog_component_info_t *out_info);
 
 typedef struct {
     uint32_t abi_version;
@@ -126,18 +126,18 @@ MAELYS_DATALOG_API const maelys_datalog_backend_t *maelys_datalog_backend_refere
 MAELYS_DATALOG_API const maelys_datalog_backend_v6_t *
 maelys_datalog_backend_reference_v6(void);
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_session_create_ex(
-    const maelys_datalog_policy_t *, size_t policy_index, const maelys_datalog_session_options_t *,
-    maelys_datalog_session_t **);
+    const maelys_datalog_policy_t *policy, size_t policy_index, const maelys_datalog_session_options_t *options,
+    maelys_datalog_session_t **out_session);
 /* Compose backend/work requirements with the existing explanation storage
  * configuration. The descriptor is copied; callback code must outlive sessions.
  * Unsupported combinations fail before any session is returned. */
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_session_config_set_backend(
-    maelys_datalog_session_config_t *, const maelys_datalog_backend_t *);
+    maelys_datalog_session_config_t *config, const maelys_datalog_backend_t *backend);
 /* Query without preparing a session; NULL backend selects the reference.
  * Outputs are unchanged on failure. No allocation. Requirements are checked
  * again once at session creation; a backend must return deterministic values. */
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_backend_storage_requirements(
-    const maelys_datalog_policy_t *, size_t policy_index, const maelys_datalog_backend_t *,
+    const maelys_datalog_policy_t *policy, size_t policy_index, const maelys_datalog_backend_t *backend,
     size_t *out_bytes, size_t *out_alignment);
 /* Copies the descriptor, borrows its buffer; NULL clears the selection.
  * Backend/context selection does not reset this storage. Each live session
@@ -146,26 +146,26 @@ MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_backend_storage_requir
  * INVALID_ARGUMENT before prepare. No implicit allocation/fallback. Plain
  * session_create_ex/context_session_create supply no backend storage. */
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_session_config_set_backend_storage(
-    maelys_datalog_session_config_t *, const maelys_datalog_backend_storage_t *);
+    maelys_datalog_session_config_t *config, const maelys_datalog_backend_storage_t *storage);
 /* Select a registered backend, or NULL for the reference, in a sealed context.
  * The config retains
  * the context; the policy must have been compiled in that same context. Setting
  * a direct backend resets this selection, and vice versa. */
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_session_config_set_context(
-    maelys_datalog_session_config_t *, maelys_datalog_context_t *, const char *backend_name);
+    maelys_datalog_session_config_t *config, maelys_datalog_context_t *context, const char *backend_name);
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_session_config_set_requirements(
-    maelys_datalog_session_config_t *, uint64_t capabilities, uint64_t work_limit);
+    maelys_datalog_session_config_t *config, uint64_t capabilities, uint64_t work_limit);
 
 MAELYS_DATALOG_API maelys_datalog_status_t
 maelys_datalog_session_config_set_backend_v6(
-    maelys_datalog_session_config_t *, const maelys_datalog_backend_v6_t *);
+    maelys_datalog_session_config_t *config, const maelys_datalog_backend_v6_t *backend);
 /* Copies identities/descriptor; code must outlive the session. NULL restores
  * ordinary reference configuration. Requires a retained-input attachment
  * before solving; ordinary session_solve is refused. Unknown version, short
  * descriptor or missing callbacks reject without modifying the configuration.
  * There is no ABI 7 extension registry or language capability bit in V1. */
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_session_config_set_backend_v7(
-    maelys_datalog_session_config_t *, const maelys_datalog_backend_v7_t *);
+    maelys_datalog_session_config_t *config, const maelys_datalog_backend_v7_t *backend);
 
 /* Explicit per-load selection, not a mutable global grammar. Frontends are
  * trusted native code. They must not retain source/builder arguments or reenter
@@ -173,13 +173,13 @@ MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_session_config_set_bac
 MAELYS_DATALOG_API const maelys_datalog_frontend_t *maelys_datalog_frontend_datalog(void);
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_policy_load_frontend(
     const char *domain, const char *policy_id, const char *source, size_t source_length,
-    const maelys_datalog_frontend_t *, maelys_datalog_policy_t **,
-    maelys_datalog_diagnostic_t *);
+    const maelys_datalog_frontend_t *frontend, maelys_datalog_policy_t **out_policy,
+    maelys_datalog_diagnostic_t *out_diagnostic);
 
 /* Caller-owned policy storage follows datalog_resources.h. */
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_policy_load_frontend_in(
-    void *, size_t, const char *domain, const char *policy_id, const char *source, size_t,
-    const maelys_datalog_frontend_t *, maelys_datalog_policy_t **, maelys_datalog_diagnostic_t *);
+    void *storage, size_t storage_bytes, const char *domain, const char *policy_id, const char *source, size_t source_length,
+    const maelys_datalog_frontend_t *frontend, maelys_datalog_policy_t **out_policy, maelys_datalog_diagnostic_t *out_diagnostic);
 #ifdef __cplusplus
 }
 #endif

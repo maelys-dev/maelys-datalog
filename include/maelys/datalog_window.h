@@ -77,7 +77,7 @@ MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_window_init(
  */
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_window_push(
     maelys_datalog_window_t *window, const char *predicate,
-    const maelys_datalog_value_t *values, size_t value_count,
+    const maelys_datalog_value_t *terms, size_t value_count,
     uint32_t *out_occurrence, maelys_datalog_diagnostic_t *out_diagnostic);
 
 /* Borrow the latest result, including the initial empty snapshot. Do NOT call
@@ -175,7 +175,7 @@ MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_window_static_facts(
  * After ID exhaustion, expire and replace_static remain usable. */
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_window_push_until(
     maelys_datalog_window_t *window, const char *predicate,
-    const maelys_datalog_value_t *values, size_t value_count, uint64_t expires_at,
+    const maelys_datalog_value_t *terms, size_t value_count, uint64_t expires_at,
     uint32_t *out_occurrence, maelys_datalog_diagnostic_t *out_diagnostic);
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_window_expire(
     maelys_datalog_window_t *window, uint64_t now, size_t *out_expired,
