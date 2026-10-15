@@ -7,24 +7,52 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ## Unreleased
 
+## 0.23.0 — 2026-10-15
+
 ### Fixed
 
 - Restore the structured capacity diagnostic contract described in the
   [compatibility page](docs/compatibility.md): identify the violated budget
-  independently of its numeric value, including parser/lexer bounds and
-  rejected input batches and session input reservations. Existing diagnostic
-  codes and messages are unchanged; append budget introspection identifiers
-  and names without changing diagnostic record layouts. Session quotas report
-  their effective bounds; arena and execution-byte dimensions have no global
-  ceiling (`limit_get` returns `UNSUPPORTED`). Unknown budget identifiers now
-  return `INVALID_ARGUMENT` instead of `UNSUPPORTED`, distinguishing them from
-  these known session-specific dimensions.
+  independently of its numeric value, including parser/lexer bounds, rejected
+  input batches and effective session quotas. Existing diagnostic codes and
+  messages are unchanged. Capacity diagnostics include the attempted count and
+  the effective bound, including supplied arena bytes and execution-byte caps.
+
+### Added
+
+- `maelys_datalog_limit_name()` returns the stable name of a budget dimension,
+  or `NULL` for an unknown identifier. Structured Python diagnostics expose
+  `limit_kind` and `limit_name`; JavaScript capacity diagnostics expose `kind`
+  and `name` in both native and WASM runtimes.
+- Append budget identifiers without renumbering existing values:
+  `MAX_RULE_VARIABLES` (15), `MAX_ARITH_EXPR_NODES` (16),
+  `MAX_ARITH_EXPR_DEPTH` (17), `MAX_FILTER_PATTERN_BYTES` (18),
+  `MAX_FILTER_PROGRAMS` (19), `FILTER_PATTERN_POOL_BYTES` (20),
+  `MAX_FILTER_EVALUATIONS` (21), `MAX_FILTER_COST_UNITS` (22),
+  `SESSION_ARENA_BYTES` (23) and `EXECUTION_BYTES` (24). The last two identify
+  session-specific dimensions: `limit_get()` returns `UNSUPPORTED`, and the
+  diagnostic carries the effective bound. Public record layouts are unchanged.
 
 ### Changed
 
+- Unknown budget identifiers passed to `maelys_datalog_limit_get()` now return
+  `INVALID_ARGUMENT` instead of `UNSUPPORTED`, distinguishing them from known
+  dimensions whose bounds are session-specific. The output remains unchanged
+  on failure.
 - Name the parameters of public C prototypes and harmonize 25 existing names,
   including `out_capacity` → `capacity` for capacities passed by value, without
   changing the ABI or behavior.
+
+### Python performance review — maintainer decision pending
+
+The automatic complete Python lifecycle measurement targets signed main commit
+`8b9624a4c9cc7f9b37020433dc9bb881a0fb1746` in
+[run 38750945944](https://github.com/maelys-dev/maelys-datalog/actions/runs/38750945944).
+The run is in progress; the report SHA-256 and findings are pending.
+
+Maintainer decision: **pending David's explicit review of this named report**.
+Neither a successful workflow nor this changelog preparation approves performance.
+Do not run `cut --apply` or publish before that decision.
 
 ## 0.22.0 — 2026-10-08
 
