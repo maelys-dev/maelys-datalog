@@ -43,7 +43,7 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
   including `out_capacity` → `capacity` for capacities passed by value, without
   changing the ABI or behavior.
 
-### Python performance review — maintainer decision pending
+### Python performance review — exception accepted for 0.23.0
 
 The complete Python lifecycle report measures signed main commit
 `8b9624a4c9cc7f9b37020433dc9bb881a0fb1746` against published v0.22.0
@@ -71,7 +71,9 @@ warm rows not distinguished from the null in at least one round; this category
 can overlap rows requiring review in the other round and is not a subtraction.
 All raw classifications and cold observations remain in the run artifact.
 
-Three rows exceed both their own A/A floor and the null envelope in both rounds,
+Among the 34 review rows, four are slower than their A/A floor in both rounds,
+all in default (unoptimized) configurations. Three also exceed the matched null
+envelope in both rounds,
 all versus v0.22.0 on `LARGE-default/93-symbol-prepared`:
 
 | Phase / statistic | Round 1 | Round 2 | A/A floor | Null envelope |
@@ -79,6 +81,11 @@ all versus v0.22.0 on `LARGE-default/93-symbol-prepared`:
 | close / minimum | +9.58% | +4.71% | 3.68% | 4.47% |
 | input / median | +2.05% | +1.54% | 1.36% | 1.38% |
 | input / p95 | +3.24% | +2.62% | 1.39% | 1.26% |
+
+The fourth A/A-recurrent review row is `SMALL-default/93-integer-prepared/close`
+(minimum): +6.38% / +10.73%, A/A floor 4.44%, null envelope 8.70%; only round 2
+is beyond the null envelope. There are 225 candidate rows classified faster
+in both rounds; these correlated rows are not independent performance wins.
 
 No complete-request total is beyond the null envelope in both rounds. Five
 total-statistic rows require review in one round (three versus v0.22.0, two
@@ -93,9 +100,14 @@ separate phase and total loops are not paired. Neither timing classifications
 nor a matched null envelope identify a specific engine, allocator or placement
 mechanism. This run alone does not establish an absence of regressions.
 
-Maintainer decision: **pending David's explicit review of this named report**.
-No timing exception is accepted by this entry. Do not run `cut --apply` or
-publish before that decision.
+Maintainer decision, 2026-10-15: **David accepts the exception for 0.23.0**
+for this exact report, including the 34 review rows, four A/A-recurrent rows
+(all default), 225 faster-in-both-rounds rows and no recurrent total alert.
+The capacity-diagnostic paths added by #191 execute on refusal, which is absent
+from these measured scenarios; no native Release cause is identified from that
+change. This scope observation does not attribute a cause to the recurrent
+lines or erase any isolated alert. David authorized the release ceremony and
+will validate the publication environment himself.
 
 ## 0.22.0 — 2026-10-08
 
