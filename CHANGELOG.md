@@ -7,24 +7,107 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ## Unreleased
 
+## 0.23.0 — 2026-10-15
+
 ### Fixed
 
 - Restore the structured capacity diagnostic contract described in the
   [compatibility page](docs/compatibility.md): identify the violated budget
-  independently of its numeric value, including parser/lexer bounds and
-  rejected input batches and session input reservations. Existing diagnostic
-  codes and messages are unchanged; append budget introspection identifiers
-  and names without changing diagnostic record layouts. Session quotas report
-  their effective bounds; arena and execution-byte dimensions have no global
-  ceiling (`limit_get` returns `UNSUPPORTED`). Unknown budget identifiers now
-  return `INVALID_ARGUMENT` instead of `UNSUPPORTED`, distinguishing them from
-  these known session-specific dimensions.
+  independently of its numeric value, including parser/lexer bounds, rejected
+  input batches and effective session quotas. Existing diagnostic codes and
+  messages are unchanged. Capacity diagnostics include the attempted count and
+  the effective bound, including supplied arena bytes and execution-byte caps.
+
+### Added
+
+- `maelys_datalog_limit_name()` returns the stable name of a budget dimension,
+  or `NULL` for an unknown identifier. Structured Python diagnostics expose
+  `limit_kind` and `limit_name`; JavaScript capacity diagnostics expose `kind`
+  and `name` in both native and WASM runtimes.
+- Append budget identifiers without renumbering existing values:
+  `MAX_RULE_VARIABLES` (15), `MAX_ARITH_EXPR_NODES` (16),
+  `MAX_ARITH_EXPR_DEPTH` (17), `MAX_FILTER_PATTERN_BYTES` (18),
+  `MAX_FILTER_PROGRAMS` (19), `FILTER_PATTERN_POOL_BYTES` (20),
+  `MAX_FILTER_EVALUATIONS` (21), `MAX_FILTER_COST_UNITS` (22),
+  `SESSION_ARENA_BYTES` (23) and `EXECUTION_BYTES` (24). The last two identify
+  session-specific dimensions: `limit_get()` returns `UNSUPPORTED`, and the
+  diagnostic carries the effective bound. Public record layouts are unchanged.
 
 ### Changed
 
+- Unknown budget identifiers passed to `maelys_datalog_limit_get()` now return
+  `INVALID_ARGUMENT` instead of `UNSUPPORTED`, distinguishing them from known
+  dimensions whose bounds are session-specific. The output remains unchanged
+  on failure.
 - Name the parameters of public C prototypes and harmonize 25 existing names,
   including `out_capacity` → `capacity` for capacities passed by value, without
   changing the ABI or behavior.
+
+### Python performance review — exception accepted for 0.23.0
+
+The complete Python lifecycle report measures signed main commit
+`8b9624a4c9cc7f9b37020433dc9bb881a0fb1746` against published v0.22.0
+`e17fdc16cf4a5064b0c2686465f1ba837608c1b9` and immutable v0.11.1 anchor
+`0f247a7c81ec4a297f35ccee2bf007344f72ac7e` in
+[run 38750945944](https://github.com/maelys-dev/maelys-datalog/actions/runs/38750945944).
+The `report.json` SHA-256 is
+`c59db9c6a847201aa3820b464a9707e3df3a5fca99a11989d01bb526ef5aab3c`.
+Schema 4 covers SMALL/LARGE, default/Release, 501 warm samples and 31 cold
+requests per cold case. The report is `review_required`; `release_eligible: true`
+means that the evidence is eligible for review, not that performance is approved.
+
+The injected three-request positive control is detected in every case and
+configuration. Matching independent identical-binary null controls are complete;
+the historical v0.11.0 control remains informative and is not detected everywhere.
+The four harness hashes and 256 binary/SDK file hashes match. Rebuilding the
+statistics from 11,424 raw records reproduces all 616 candidate rows, 616 null
+rows and the positive/historical controls exactly, with telemetry and output
+checks passing.
+
+Of 616 candidate statistic rows, 73 have a raw A/A slowdown in at least one
+round (61 warm, 12 informative cold). After the matched null screening, 34 warm
+rows require review: 24 versus v0.22.0 and 10 versus the anchor. There are 28
+warm rows not distinguished from the null in at least one round; this category
+can overlap rows requiring review in the other round and is not a subtraction.
+All raw classifications and cold observations remain in the run artifact.
+
+Among the 34 review rows, four are slower than their A/A floor in both rounds,
+all in default (unoptimized) configurations. Three also exceed the matched null
+envelope in both rounds,
+all versus v0.22.0 on `LARGE-default/93-symbol-prepared`:
+
+| Phase / statistic | Round 1 | Round 2 | A/A floor | Null envelope |
+|---|---:|---:|---:|---:|
+| close / minimum | +9.58% | +4.71% | 3.68% | 4.47% |
+| input / median | +2.05% | +1.54% | 1.36% | 1.38% |
+| input / p95 | +3.24% | +2.62% | 1.39% | 1.26% |
+
+The fourth A/A-recurrent review row is `SMALL-default/93-integer-prepared/close`
+(minimum): +6.38% / +10.73%, A/A floor 4.44%, null envelope 8.70%; only round 2
+is beyond the null envelope. There are 225 candidate rows classified faster
+in both rounds; these correlated rows are not independent performance wins.
+
+No complete-request total is beyond the null envelope in both rounds. Five
+total-statistic rows require review in one round (three versus v0.22.0, two
+versus the anchor); the largest is a SMALL-default/7-symbol-solve total p95
+at +12.15% in round 2. Phase outliers also remain visible, including a
+LARGE-default/7-integer-prepared solve p95 at +49.07% in round 2.
+
+Separate observer/storage controls remain separate: observer raw alerts are
+4/4 for the base and 2/4 for the candidate, storage raw alerts 1/4 and 2/4,
+respectively. No sample is filtered or latency-normalized with this telemetry;
+separate phase and total loops are not paired. Neither timing classifications
+nor a matched null envelope identify a specific engine, allocator or placement
+mechanism. This run alone does not establish an absence of regressions.
+
+Maintainer decision, 2026-10-15: **David accepts the exception for 0.23.0**
+for this exact report, including the 34 review rows, four A/A-recurrent rows
+(all default), 225 faster-in-both-rounds rows and no recurrent total alert.
+The capacity-diagnostic paths added by #191 execute on refusal, which is absent
+from these measured scenarios; no native Release cause is identified from that
+change. This scope observation does not attribute a cause to the recurrent
+lines or erase any isolated alert. David authorized the release ceremony and
+will validate the publication environment himself.
 
 ## 0.22.0 — 2026-10-08
 
