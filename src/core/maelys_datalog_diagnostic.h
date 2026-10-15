@@ -51,6 +51,7 @@ void maelys_datalog_internal_diagnostic_set_predicate(maelys_datalog_internal_di
                                              const char *predicate,
                                              size_t arity);
 void maelys_datalog_internal_diagnostic_set_limit(maelys_datalog_internal_diagnostic_t *diag,
+                                         maelys_datalog_limit_t kind,
                                          size_t count,
                                          size_t limit);
 void maelys_datalog_internal_diagnostic_set_comparison_error(maelys_datalog_internal_diagnostic_t *diag,

@@ -196,6 +196,14 @@ for (const runtime of runtimes) {
     function* closes() { yield f('seed', 'new'); rules.close(); }
     assert.throws(() => edb.addFacts(closes()), status(S.INVALID_STATE));
   });
+  test(`${runtime}: capacity diagnostics identify their budget`, async t => {
+    const { engine } = await basic(t);
+    assert.throws(() => engine.loadInlineRuleset('js_common', 'rules_129', 'allow(X):-seed(X).\n'.repeat(129)), error => {
+      assert.equal(error.diagnostic.codeName, 'parser_rule_body_literal_overflow');
+      assert.deepEqual(error.diagnostic.capacity, { observed: 129, limit: 128, kind: 4, name: 'MAX_RULES' });
+      return error.status === S.PAYLOAD_TOO_LARGE;
+    });
+  });
   test(`${runtime}: failed solve is retryable and diagnostics are immutable snapshots`, async t => {
     const { engine, rules, edb } = await basic(t);
     let saved;
@@ -391,7 +399,7 @@ for (const runtime of runtimes) {
     });
     assert.equal(diagnostic.present & 6n,6n);
     assert.deepEqual(diagnostic.predicate,{name:'sg',arity:2});
-    assert.deepEqual(diagnostic.capacity,{observed:cap+1,limit:cap,kind:10});
+    assert.deepEqual(diagnostic.capacity,{observed:cap+1,limit:cap,kind:10,name:'MAX_FACTS_PER_PRED'});
     assert.equal(edb.count,n*2); edb.clear(); edb.addFacts([f('a',1),f('b',2)]);
     assert.equal(rules.solve(edb).containsFact('sg',[1,2]),true);
     assert.equal(diagnostic.capacity.observed,cap+1);

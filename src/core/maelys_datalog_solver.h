@@ -41,10 +41,20 @@ typedef struct {
     uint16_t rule_id;
     union {
         struct {
-            uint16_t depth;
-            uint16_t depth_limit;
-            uint16_t capacity;
-            uint16_t count_observed;
+            union {
+                struct {
+                    uint16_t depth;
+                    uint16_t depth_limit;
+                    uint16_t capacity;
+                    uint16_t count_observed;
+                };
+                /* Filter work budgets exceed uint16_t. The category selects
+                 * this view; retain the existing 32-byte diagnostic record. */
+                struct {
+                    uint32_t filter_capacity;
+                    uint32_t filter_count_observed;
+                };
+            };
             uint8_t lhs_kind;
             uint8_t rhs_kind;
             uint8_t comparison_op;

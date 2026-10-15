@@ -142,6 +142,7 @@ static void admission(void) {
     request(&f,f.plan.total_execution_bytes-1);CHECK(initialize(&f,&d)==FULL && !f.session);
     CHECK(!strcmp(d.phase,"backend-admit") && !strcmp(d.field,"execution_byte_cap") && d.limit==f.plan.total_execution_bytes-1);
     CHECK(d.observed_count==f.plan.total_execution_bytes && d.code==MAELYS_DATALOG_DIAG_NONE);
+    CHECK((d.present & MAELYS_DATALOG_DIAGNOSTIC_CAPACITY) && d.limit_kind==MAELYS_DATALOG_LIMIT_EXECUTION_BYTES && d.observed_count==d.limit+1);
     request(&f,f.plan.total_execution_bytes);CHECK(initialize(&f,&d)==FULL && !f.session);
     CHECK(!strcmp(d.phase,"backend-acquire") && f.ledger.calls==calls);
     request(&f,SIZE_MAX);OK(initialize(&f,NULL));close_fixture(&f);

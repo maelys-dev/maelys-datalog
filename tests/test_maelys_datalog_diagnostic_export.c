@@ -32,6 +32,17 @@ int main(void) {
     compact.predicate_id=UINT16_MAX;compact.rule_id=UINT16_MAX;compact.capacity=0;compact.count_observed=0;compact.depth_limit=0;compact.category=MAELYS_DATALOG_SOLVE_DIAG_INTERNAL_ERROR;
     maelys_datalog_copy_solve_diagnostic(&detail,&compact,r,&r->symbols,MAELYS_ERR_INTERNAL);
     assert(!(detail.present & bits));
+    /* Wide filter counts share the compact record without becoming depth fields. */
+    memset(&compact,0,sizeof(compact));
+    compact.category=MAELYS_DATALOG_SOLVE_DIAG_FILTER_ERROR;
+    compact.predicate_id=UINT16_MAX;compact.rule_id=UINT16_MAX;
+    compact.filter_capacity=1048576u;compact.filter_count_observed=1310720u;
+    compact.limit_kind=MAELYS_DATALOG_LIMIT_MAX_FILTER_COST_UNITS;
+    maelys_datalog_copy_solve_diagnostic(&detail,&compact,r,&r->symbols,MAELYS_ERR_PAYLOAD_TOO_LARGE);
+    assert(detail.present & MAELYS_DATALOG_DIAGNOSTIC_CAPACITY);
+    assert(!(detail.present & MAELYS_DATALOG_DIAGNOSTIC_DEPTH));
+    assert(detail.limit==1048576u && detail.observed_count==1310720u);
+    assert(detail.limit_kind==MAELYS_DATALOG_LIMIT_MAX_FILTER_COST_UNITS);
     maelys_datalog_internal_diagnostic_t load={0};
     load.code=MAELYS_DATALOG_DIAG_PARSER_ARITY_MISMATCH;
     strcpy(load.file,"source.dl");strcpy(load.predicate,"output");strcpy(load.field,"arity");strcpy(load.domain,"export");strcpy(load.token,"output");

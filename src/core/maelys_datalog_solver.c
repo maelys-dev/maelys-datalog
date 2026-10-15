@@ -391,6 +391,7 @@ static void solve_once_diag_malformed_edb(maelys_datalog_internal_solve_diagnost
     if (!diag || !set) return;
     diag->count_observed = (uint16_t)set->count;
     diag->capacity = (uint16_t)set->capacity;
+    diag->limit_kind = MAELYS_DATALOG_LIMIT_MAX_EDB_FACTS;
     const maelys_datalog_internal_fact_t *fact = solve_once_first_invalid_fact_in_set(registry, set);
     if (fact) solve_once_diag_from_fact(diag,
                                         MAELYS_DATALOG_SOLVE_DIAG_MALFORMED_EDB,
@@ -460,8 +461,9 @@ static void solve_once_diag_failed_result(maelys_datalog_internal_solve_diagnost
                                  rc,
                                  MAELYS_DATALOG_DENY_FILTER_ERROR);
             if (diag) {
-                diag->count_observed = (uint16_t)result->runtime_diag.count;
-                diag->capacity = (uint16_t)result->runtime_diag.limit;
+                diag->filter_count_observed = (uint32_t)result->runtime_diag.count;
+                diag->filter_capacity = (uint32_t)result->runtime_diag.limit;
+                diag->limit_kind = result->runtime_diag.limit_kind;
                 diag->lhs_kind = result->runtime_diag.observed_lhs_kind;
             }
             return;
@@ -686,6 +688,7 @@ static void solve_once_set_comparison_failure(maelys_datalog_internal_solve_resu
 static void solve_once_set_filter_failure(
     maelys_datalog_internal_solve_result_t *result,
     maelys_result_t error,
+    maelys_datalog_limit_t kind,
     size_t count,
     size_t limit,
     maelys_datalog_internal_term_kind_t observed_kind) {
@@ -703,7 +706,8 @@ static void solve_once_set_filter_failure(
             ? "filter evaluation budget exceeded"
             : "invalid filter evaluation state",
         "validate the filter program, ground symbol value, and configured capacities");
-    maelys_datalog_internal_diagnostic_set_limit(&result->runtime_diag, count, limit);
+    if (limit) maelys_datalog_internal_diagnostic_set_limit(&result->runtime_diag,
+        kind, count, limit);
     result->runtime_diag.observed_lhs_kind = (uint8_t)observed_kind;
 }
 
@@ -1696,7 +1700,7 @@ static int solve_once_evaluate_filter_literal(
     if (!filter_program_resolve(
             ruleset, literal, &program, &definition, &pattern)) {
         solve_once_set_filter_failure(
-            result, MAELYS_ERR_INVALID_STATE, 0u, 0u, 0);
+            result, MAELYS_ERR_INVALID_STATE, 0, 0u, 0u, 0);
         return 0;
     }
     (void)definition;
@@ -1708,7 +1712,7 @@ static int solve_once_evaluate_filter_literal(
     if (instantiate != MAELYS_DATALOG_COMPARE_TRUE ||
         value.kind != MAELYS_DATALOG_TERM_SYMBOL) {
         solve_once_set_filter_failure(
-            result, MAELYS_ERR_INVALID_FIELD, 0u, 0u, value.kind);
+            result, MAELYS_ERR_INVALID_FIELD, 0, 0u, 0u, value.kind);
         return 0;
     }
     const unsigned char *value_bytes = NULL;
@@ -1718,7 +1722,7 @@ static int solve_once_evaluate_filter_literal(
                                      &value_bytes,
                                      &value_length)) {
         solve_once_set_filter_failure(
-            result, MAELYS_ERR_INVALID_STATE, 0u, 0u, value.kind);
+            result, MAELYS_ERR_INVALID_STATE, 0, 0u, 0u, value.kind);
         return 0;
     }
     size_t cost = 0u;
@@ -1728,7 +1732,7 @@ static int solve_once_evaluate_filter_literal(
         program->pattern_length,
         &cost);
     if (rc != MAELYS_OK) {
-        solve_once_set_filter_failure(result, rc, 0u, 0u, value.kind);
+        solve_once_set_filter_failure(result, rc, 0, 0u, 0u, value.kind);
         return 0;
     }
     if (result->filter_statistics.evaluations >=
@@ -1742,6 +1746,8 @@ static int solve_once_evaluate_filter_literal(
         solve_once_set_filter_failure(
             result,
             MAELYS_ERR_PAYLOAD_TOO_LARGE,
+            evaluations_exhausted ? MAELYS_DATALOG_LIMIT_MAX_FILTER_EVALUATIONS
+                : MAELYS_DATALOG_LIMIT_MAX_FILTER_COST_UNITS,
             evaluations_exhausted
                 ? result->filter_statistics.evaluations + 1u
                 : result->filter_statistics.cost_units + cost,
@@ -1760,7 +1766,7 @@ static int solve_once_evaluate_filter_literal(
         program->pattern_length,
         &matched);
     if (rc != MAELYS_OK) {
-        solve_once_set_filter_failure(result, rc, 0u, 0u, value.kind);
+        solve_once_set_filter_failure(result, rc, 0, 0u, 0u, value.kind);
         return 0;
     }
     result->filter_statistics.evaluations++;
@@ -2808,6 +2814,7 @@ static maelys_result_t solve_stratified_path(
         if (out_diag) {
             out_diag->count_observed = (uint16_t)edb->fact_set.count;
             out_diag->capacity = (uint16_t)MAELYS_DATALOG_MAX_EDB_FACTS;
+            out_diag->limit_kind = MAELYS_DATALOG_LIMIT_MAX_EDB_FACTS;
         }
         return MAELYS_ERR_PAYLOAD_TOO_LARGE;
     }
@@ -3077,6 +3084,7 @@ static maelys_result_t maelys_datalog_solve_once_run(
         if (out_diag) {
             out_diag->count_observed = (uint16_t)edb->fact_set.count;
             out_diag->capacity = (uint16_t)MAELYS_DATALOG_MAX_EDB_FACTS;
+            out_diag->limit_kind = MAELYS_DATALOG_LIMIT_MAX_EDB_FACTS;
         }
         return MAELYS_ERR_PAYLOAD_TOO_LARGE;
     }

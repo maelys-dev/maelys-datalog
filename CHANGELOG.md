@@ -7,6 +7,19 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ## Unreleased
 
+### Fixed
+
+- Restore the structured capacity diagnostic contract described in the
+  [compatibility page](docs/compatibility.md): identify the violated budget
+  independently of its numeric value, including parser/lexer bounds and
+  rejected input batches and session input reservations. Existing diagnostic
+  codes and messages are unchanged; append budget introspection identifiers
+  and names without changing diagnostic record layouts. Session quotas report
+  their effective bounds; arena and execution-byte dimensions have no global
+  ceiling (`limit_get` returns `UNSUPPORTED`). Unknown budget identifiers now
+  return `INVALID_ARGUMENT` instead of `UNSUPPORTED`, distinguishing them from
+  these known session-specific dimensions.
+
 ### Changed
 
 - Name the parameters of public C prototypes and harmonize 25 existing names,

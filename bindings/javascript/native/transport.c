@@ -231,6 +231,8 @@ const char *maelys_js_diagnostic(maelys_js_context *c, uint32_t field) {
     case 7: return c->diagnostic.domain;
     case 8: return maelys_datalog_diag_code_name(c->diagnostic.code);
     case 9: return maelys_datalog_status_name((maelys_datalog_status_t)c->status);
+    case 10: { const char *name = maelys_datalog_limit_name(c->diagnostic.limit_kind);
+        return name ? name : ""; }
     default: return "";
     }
 }

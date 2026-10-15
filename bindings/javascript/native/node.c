@@ -61,8 +61,8 @@ static napi_status response(napi_env env, maelys_js_context *c, int status, napi
             PUT(napi_create_uint32(env, maelys_js_scalar(c, i), &value));
             PUT(napi_set_element(env, scalars, i, value));
         }
-        PUT(napi_create_array_with_length(env, 10, &texts));
-        for (uint32_t i = 0; i < 10; ++i) {
+        PUT(napi_create_array_with_length(env, 11, &texts));
+        for (uint32_t i = 0; i < 11; ++i) {
             const char *t = maelys_js_diagnostic(c, i);
             PUT(napi_create_string_utf8(env, t ? t : "", NAPI_AUTO_LENGTH, &value));
             PUT(napi_set_element(env, texts, i, value));

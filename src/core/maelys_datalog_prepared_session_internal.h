@@ -52,6 +52,11 @@ maelys_result_t maelys_datalog_prepared_session_materialize_inputs(
     maelys_datalog_internal_prepared_session_t *, const maelys_datalog_fact_t *, size_t);
 
 /* Optional internal explanation; public diagnostic layout remains unchanged. */
+/* Rejection metadata is caller-owned and outside the session rollback image. */
+maelys_result_t maelys_datalog_prepared_session_materialize_inputs_diagnosed_capacity(
+    maelys_datalog_internal_prepared_session_t *session,
+    const maelys_datalog_fact_t *facts, size_t fact_count,
+    char *message, size_t message_capacity, maelys_datalog_diagnostic_t *diagnostic);
 maelys_result_t maelys_datalog_prepared_session_materialize_inputs_diagnosed(
     maelys_datalog_internal_prepared_session_t *, const maelys_datalog_fact_t *, size_t,
     char *message, size_t message_capacity);

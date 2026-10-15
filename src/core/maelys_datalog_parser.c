@@ -83,7 +83,7 @@ static maelys_result_t allocate_anonymous_variable(parser_t *p, maelys_datalog_i
                     MAELYS_DATALOG_DIAG_PARSER_TOO_MANY_VARIABLES,
                     "rule variable limit exceeded",
                     "reduce anonymous variables or split the rule");
-        maelys_datalog_internal_diagnostic_set_limit(p->diag,
+        maelys_datalog_internal_diagnostic_set_limit(p->diag, MAELYS_DATALOG_LIMIT_MAX_RULE_VARIABLES,
                                             (size_t)id + 1u,
                                             MAELYS_DATALOG_MAX_RULE_VARIABLES);
         return MAELYS_ERR_PAYLOAD_TOO_LARGE;
@@ -113,7 +113,7 @@ static maelys_result_t validate_policy_symbol_constant(parser_t *p) {
                     "policy atom exceeds capacity",
                     "limit policy atoms to 63 UTF-8 bytes");
         maelys_datalog_internal_diagnostic_set_limit(
-            p->diag, p->tok.len, max_policy_atom_bytes);
+            p->diag, MAELYS_DATALOG_LIMIT_MAX_POLICY_ATOM_BYTES, p->tok.len, max_policy_atom_bytes);
         return MAELYS_ERR_PAYLOAD_TOO_LARGE;
     }
     maelys_datalog_symbol_id_t sid;
@@ -127,7 +127,7 @@ static maelys_result_t validate_policy_symbol_constant(parser_t *p) {
                     "policy atom count exceeds capacity",
                     "limit each ruleset to 256 distinct policy atoms");
         maelys_datalog_internal_diagnostic_set_limit(
-            p->diag, p->ruleset->symbols.count + 1u, MAELYS_DATALOG_MAX_ATOMS);
+            p->diag, MAELYS_DATALOG_LIMIT_MAX_POLICY_ATOMS, p->ruleset->symbols.count + 1u, MAELYS_DATALOG_MAX_ATOMS);
         return MAELYS_ERR_PAYLOAD_TOO_LARGE;
     }
     return MAELYS_OK;
@@ -241,7 +241,7 @@ static maelys_result_t parse_atom(parser_t *p,
                             "predicate arity exceeds maximum",
                             "reduce predicate arity or update the accepted predicate declaration");
                 maelys_datalog_internal_diagnostic_set_predicate(p->diag, pred, arity + 1u);
-                maelys_datalog_internal_diagnostic_set_limit(p->diag, arity + 1u, MAELYS_DATALOG_MAX_TERMS);
+                maelys_datalog_internal_diagnostic_set_limit(p->diag, MAELYS_DATALOG_LIMIT_MAX_ARITY, arity + 1u, MAELYS_DATALOG_MAX_TERMS);
                 return MAELYS_ERR_PAYLOAD_TOO_LARGE;
             }
             rc = parse_term(p, &terms[arity++], context, has_anonymous);
@@ -329,7 +329,7 @@ static maelys_result_t arith_expr_add_node(parser_t *p,
                     MAELYS_DATALOG_DIAG_PARSER_INVALID_COMPARISON,
                     "arithmetic expression node limit exceeded",
                     "simplify the arithmetic expression");
-        maelys_datalog_internal_diagnostic_set_limit(p->diag,
+        maelys_datalog_internal_diagnostic_set_limit(p->diag, MAELYS_DATALOG_LIMIT_MAX_ARITH_EXPR_NODES,
                                             (size_t)rule->expr_node_count + 1u,
                                             MAELYS_DATALOG_MAX_ARITH_EXPR_NODES);
         return MAELYS_ERR_PAYLOAD_TOO_LARGE;
@@ -361,7 +361,7 @@ static maelys_result_t parse_arith_atom(parser_t *p,
                     MAELYS_DATALOG_DIAG_PARSER_INVALID_COMPARISON,
                     "arithmetic expression depth limit exceeded",
                     "reduce parentheses or split the expression");
-        maelys_datalog_internal_diagnostic_set_limit(p->diag,
+        maelys_datalog_internal_diagnostic_set_limit(p->diag, MAELYS_DATALOG_LIMIT_MAX_ARITH_EXPR_DEPTH,
                                             (size_t)depth,
                                             MAELYS_DATALOG_MAX_ARITH_EXPR_DEPTH);
         return MAELYS_ERR_PAYLOAD_TOO_LARGE;
@@ -568,7 +568,7 @@ static maelys_result_t parse_filter_literal(
                     "filter pattern exceeds capacity",
                     "shorten the constant pattern");
         maelys_datalog_internal_diagnostic_set_limit(
-            p->diag, p->tok.len, MAELYS_DATALOG_MAX_FILTER_PATTERN_BYTES);
+            p->diag, MAELYS_DATALOG_LIMIT_MAX_FILTER_PATTERN_BYTES, p->tok.len, MAELYS_DATALOG_MAX_FILTER_PATTERN_BYTES);
         return MAELYS_ERR_PAYLOAD_TOO_LARGE;
     }
     if (p->ruleset->filter_program_count >= MAELYS_DATALOG_MAX_FILTER_PROGRAMS) {
@@ -577,7 +577,7 @@ static maelys_result_t parse_filter_literal(
                     "filter program capacity exceeded",
                     "reduce the number of filter literals");
         maelys_datalog_internal_diagnostic_set_limit(
-            p->diag,
+            p->diag, MAELYS_DATALOG_LIMIT_MAX_FILTER_PROGRAMS,
             p->ruleset->filter_program_count + 1u,
             MAELYS_DATALOG_MAX_FILTER_PROGRAMS);
         return MAELYS_ERR_PAYLOAD_TOO_LARGE;
@@ -589,7 +589,7 @@ static maelys_result_t parse_filter_literal(
                     "filter pattern pool capacity exceeded",
                     "reduce the total pattern bytes");
         maelys_datalog_internal_diagnostic_set_limit(
-            p->diag,
+            p->diag, MAELYS_DATALOG_LIMIT_FILTER_PATTERN_POOL_BYTES,
             p->ruleset->filter_pattern_pool_used + p->tok.len,
             MAELYS_DATALOG_FILTER_PATTERN_POOL_BYTES);
         return MAELYS_ERR_PAYLOAD_TOO_LARGE;
@@ -846,7 +846,7 @@ static maelys_result_t normalize_anonymous_variables(parser_t *p,
                             "rule variable limit exceeded",
                             "reduce anonymous variables or split the rule");
                 maelys_datalog_internal_diagnostic_set_limit(
-                    p->diag,
+                    p->diag, MAELYS_DATALOG_LIMIT_MAX_RULE_VARIABLES,
                     (size_t)next_anonymous + 1u,
                     MAELYS_DATALOG_MAX_RULE_VARIABLES);
                 return MAELYS_ERR_PAYLOAD_TOO_LARGE;
@@ -862,7 +862,7 @@ static void parser_rule_expansion_overflow(parser_t *p, size_t requested) {
                 MAELYS_DATALOG_DIAG_PARSER_RULE_BODY_LITERAL_OVERFLOW,
                 "OR expansion exceeds rule capacity",
                 "reduce OR alternatives or split the policy");
-    maelys_datalog_internal_diagnostic_set_limit(p->diag,
+    maelys_datalog_internal_diagnostic_set_limit(p->diag, MAELYS_DATALOG_LIMIT_MAX_RULES,
                                         requested,
                                         MAELYS_DATALOG_MAX_RULES);
 }
@@ -952,7 +952,7 @@ static maelys_result_t parse_clause(parser_t *p) {
                         "rule body literal limit exceeded",
                         "split rule into IDB helper predicates");
             if (def) maelys_datalog_internal_diagnostic_set_predicate(p->diag, def->name, def->arity);
-            maelys_datalog_internal_diagnostic_set_limit(p->diag,
+            maelys_datalog_internal_diagnostic_set_limit(p->diag, MAELYS_DATALOG_LIMIT_MAX_BODY_LITERALS,
                                                 first->body_count + 1u,
                                                 MAELYS_DATALOG_MAX_BODY_LITERALS);
             rc = MAELYS_ERR_PAYLOAD_TOO_LARGE;

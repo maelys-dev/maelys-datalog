@@ -238,7 +238,7 @@ maelys_result_t maelys_datalog_lexer_next(maelys_datalog_lexer_t *l,
                                                    0,
                                                    "string literal too long",
                                                    "shorten the string atom or register a bounded atom");
-                maelys_datalog_internal_diagnostic_set_limit(l->diag, bytes, MAELYS_DATALOG_MAX_STRING_BYTES);
+                maelys_datalog_internal_diagnostic_set_limit(l->diag, MAELYS_DATALOG_LIMIT_MAX_STRING_BYTES, bytes, MAELYS_DATALOG_MAX_STRING_BYTES);
                 return er;
             }
         }

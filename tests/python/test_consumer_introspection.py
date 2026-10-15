@@ -1,7 +1,8 @@
 """Build bounds, normalized program counts and effective quotas stay distinct."""
 import unittest
 from dataclasses import FrozenInstanceError
-from maelys_datalog import Engine, Predicate, ProgramCounts, SessionCapacities
+from maelys_datalog import Engine, Predicate, ProgramCounts, SessionCapacities, MaelysDatalogError
+from maelys_datalog.engine import Diagnostic
 
 
 class ConsumerIntrospectionTest(unittest.TestCase):
@@ -31,3 +32,18 @@ class ConsumerIntrospectionTest(unittest.TestCase):
                         rules.program_counts(index)
             with self.assertRaises(RuntimeError):
                 rules.program_counts()
+
+    def test_capacity_budget_names(self):
+        self.assertIsNone(Diagnostic().limit_name)
+        self.assertIsNone(Diagnostic(limit_kind=999).limit_name)
+        with Engine() as engine:
+            engine.register_domain("consumer_counts", [Predicate.edb("seed", 1),
+                Predicate.policy_fact("fixed", 1), Predicate.idb_query("out", 1),
+                Predicate.edb("unused", 1)])
+            with self.assertRaises(MaelysDatalogError) as failure:
+                engine.load_inline_ruleset("consumer_counts", "rules_129", "out(X):-seed(X).\n" * 129)
+            diagnostic = failure.exception.diagnostic
+            self.assertEqual(diagnostic.limit_kind, 4)
+            self.assertEqual(diagnostic.limit_name, "MAX_RULES")
+            self.assertTrue(diagnostic.present & 4)
+            self.assertEqual((diagnostic.observed_count, diagnostic.limit), (129, 128))

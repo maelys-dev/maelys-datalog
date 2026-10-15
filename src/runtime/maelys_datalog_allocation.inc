@@ -75,7 +75,7 @@ static maelys_datalog_status_t allocation_diagnose(maelys_datalog_diagnostic_t *
         snprintf(d->field, sizeof(d->field), "%s", field);
         if (rc == MAELYS_DATALOG_STATUS_PAYLOAD_TOO_LARGE) {
             d->present |= MAELYS_DATALOG_DIAGNOSTIC_CAPACITY;
-            d->observed_count = observed; d->limit = cap; d->limit_kind = 0;
+            d->observed_count = observed; d->limit = cap; d->limit_kind = MAELYS_DATALOG_LIMIT_EXECUTION_BYTES;
         } else if (rc == MAELYS_DATALOG_STATUS_STORAGE_TOO_SMALL)
             snprintf(d->token, sizeof(d->token), "%zu", observed);
     }
