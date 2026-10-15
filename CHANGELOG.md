@@ -7,6 +7,8 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ## Unreleased
 
+## 0.23.1 — 2026-10-15
+
 ### Fixed
 
 - Restore structured capacity diagnostics for a direct policy fact beyond
@@ -15,6 +17,27 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
   through `maelys_datalog_limit_get()` and `maelys_datalog_limit_name()`.
   This completes the capacity diagnostic contract on the
   [compatibility page](docs/compatibility.md); existing diagnostic codes are unchanged.
+
+### Changed
+
+- Retry publication of the `libmaelys-datalog` Homebrew formula with socle
+  v0.64.4, adopted in #194. The 0.23.0 publication stopped at the bottle builds
+  with `TapFormulaAmbiguityError`: a socle defect made the staging and public
+  formulas ambiguous during Homebrew's install-linkage correction. Socle
+  v0.64.4 fixes this workflow defect; 0.23.1 publishes the formula from its
+  own release. The v0.23.0 tag and release remain unchanged and are not replayed.
+
+### Python performance review — pending maintainer decision
+
+The candidate report is being produced for signed commit
+`256d744a5838c582eb334e5a7559051e2ffc52b8` in
+[run 38806853997](https://github.com/maelys-dev/maelys-datalog/actions/runs/38806853997),
+against the published previous release and the immutable anchor, with the
+complete configured lifecycle matrix and independent positive/null controls.
+The report SHA-256, measured findings and control validation will be recorded
+here after the run completes. David's decision is pending; no previous timing
+exception is carried forward to this candidate. No `cut --apply` before that
+explicit decision and authorization.
 
 ## 0.23.0 — 2026-10-15
 
