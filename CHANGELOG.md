@@ -45,14 +45,57 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ### Python performance review — maintainer decision pending
 
-The automatic complete Python lifecycle measurement targets signed main commit
-`8b9624a4c9cc7f9b37020433dc9bb881a0fb1746` in
+The complete Python lifecycle report measures signed main commit
+`8b9624a4c9cc7f9b37020433dc9bb881a0fb1746` against published v0.22.0
+`e17fdc16cf4a5064b0c2686465f1ba837608c1b9` and immutable v0.11.1 anchor
+`0f247a7c81ec4a297f35ccee2bf007344f72ac7e` in
 [run 38750945944](https://github.com/maelys-dev/maelys-datalog/actions/runs/38750945944).
-The run is in progress; the report SHA-256 and findings are pending.
+The `report.json` SHA-256 is
+`c59db9c6a847201aa3820b464a9707e3df3a5fca99a11989d01bb526ef5aab3c`.
+Schema 4 covers SMALL/LARGE, default/Release, 501 warm samples and 31 cold
+requests per cold case. The report is `review_required`; `release_eligible: true`
+means that the evidence is eligible for review, not that performance is approved.
+
+The injected three-request positive control is detected in every case and
+configuration. Matching independent identical-binary null controls are complete;
+the historical v0.11.0 control remains informative and is not detected everywhere.
+The four harness hashes and 256 binary/SDK file hashes match. Rebuilding the
+statistics from 11,424 raw records reproduces all 616 candidate rows, 616 null
+rows and the positive/historical controls exactly, with telemetry and output
+checks passing.
+
+Of 616 candidate statistic rows, 73 have a raw A/A slowdown in at least one
+round (61 warm, 12 informative cold). After the matched null screening, 34 warm
+rows require review: 24 versus v0.22.0 and 10 versus the anchor. There are 28
+warm rows not distinguished from the null in at least one round; this category
+can overlap rows requiring review in the other round and is not a subtraction.
+All raw classifications and cold observations remain in the run artifact.
+
+Three rows exceed both their own A/A floor and the null envelope in both rounds,
+all versus v0.22.0 on `LARGE-default/93-symbol-prepared`:
+
+| Phase / statistic | Round 1 | Round 2 | A/A floor | Null envelope |
+|---|---:|---:|---:|---:|
+| close / minimum | +9.58% | +4.71% | 3.68% | 4.47% |
+| input / median | +2.05% | +1.54% | 1.36% | 1.38% |
+| input / p95 | +3.24% | +2.62% | 1.39% | 1.26% |
+
+No complete-request total is beyond the null envelope in both rounds. Five
+total-statistic rows require review in one round (three versus v0.22.0, two
+versus the anchor); the largest is a SMALL-default/7-symbol-solve total p95
+at +12.15% in round 2. Phase outliers also remain visible, including a
+LARGE-default/7-integer-prepared solve p95 at +49.07% in round 2.
+
+Separate observer/storage controls remain separate: observer raw alerts are
+4/4 for the base and 2/4 for the candidate, storage raw alerts 1/4 and 2/4,
+respectively. No sample is filtered or latency-normalized with this telemetry;
+separate phase and total loops are not paired. Neither timing classifications
+nor a matched null envelope identify a specific engine, allocator or placement
+mechanism. This run alone does not establish an absence of regressions.
 
 Maintainer decision: **pending David's explicit review of this named report**.
-Neither a successful workflow nor this changelog preparation approves performance.
-Do not run `cut --apply` or publish before that decision.
+No timing exception is accepted by this entry. Do not run `cut --apply` or
+publish before that decision.
 
 ## 0.22.0 — 2026-10-08
 
