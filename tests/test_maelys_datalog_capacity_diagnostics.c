@@ -76,6 +76,44 @@ static int loads(void) {
     CHECK(!load_case("filter pool +1",MAELYS_DATALOG_LIMIT_FILTER_PATTERN_POOL_BYTES,8193,MAELYS_DATALOG_DIAG_PARSER_INVALID_FILTER));
     return 0;
 }
+/* Public loader boundary: two relations keep each below SMALL's 64-fact ceiling. */
+static int direct_facts_128_load_129_names_MAX_RULE_FACTS(void) {
+    const maelys_datalog_predicate_t facts[] = {
+        {"fixed_a", 1, MAELYS_DATALOG_PREDICATE_POLICY_FACT},
+        {"fixed_b", 1, MAELYS_DATALOG_PREDICATE_POLICY_FACT}
+    };
+    const maelys_datalog_domain_t domain = {"direct_fact_capacity", facts, 2, NULL, 0};
+    CHECK(maelys_datalog_domain_register(&domain) == MAELYS_DATALOG_STATUS_OK);
+    size_t limit = 0;
+    CHECK(MAELYS_DATALOG_LIMIT_EXECUTION_BYTES == 24);
+    CHECK(MAELYS_DATALOG_LIMIT_MAX_RULE_FACTS == 25);
+    CHECK(maelys_datalog_limit_get(MAELYS_DATALOG_LIMIT_MAX_RULE_FACTS, &limit) == MAELYS_DATALOG_STATUS_OK);
+    CHECK(limit == 128);
+    CHECK(strcmp(maelys_datalog_limit_name(MAELYS_DATALOG_LIMIT_MAX_RULE_FACTS), "MAX_RULE_FACTS") == 0);
+    size_t used = 0;
+    for (size_t i = 0; i < limit; ++i)
+        used += (size_t)snprintf(source + used, sizeof(source) - used,
+            "fixed_%c(%zu).\n", i < 64 ? 'a' : 'b', i % 64);
+    maelys_datalog_policy_t *policy = NULL;
+    maelys_datalog_diagnostic_t diag = MAELYS_DATALOG_DIAGNOSTIC_INIT;
+    CHECK(maelys_datalog_policy_load_inline(domain.name, "direct_facts", source, used,
+        &policy, &diag) == MAELYS_DATALOG_STATUS_OK);
+    CHECK(policy != NULL);
+    CHECK(maelys_datalog_policy_free(policy) == MAELYS_DATALOG_STATUS_OK);
+    policy = NULL;
+    used += (size_t)snprintf(source + used, sizeof(source) - used, "fixed_a(64).\n");
+    CHECK(maelys_datalog_policy_load_inline(domain.name, "direct_facts", source, used,
+        &policy, &diag) == MAELYS_DATALOG_STATUS_PAYLOAD_TOO_LARGE);
+    CHECK(policy == NULL);
+    CHECK(!capacity("direct_facts_129_names_MAX_RULE_FACTS", &diag,
+        MAELYS_DATALOG_LIMIT_MAX_RULE_FACTS, 129, 128));
+    CHECK(diag.code == MAELYS_DATALOG_DIAG_OPERATION_REJECTED);
+    CHECK(strcmp(diag.phase, "parser") == 0);
+    CHECK(diag.present & MAELYS_DATALOG_DIAGNOSTIC_LOCATION);
+    CHECK(diag.line == 129 && diag.column == 12);
+    printf("capacity: direct_facts_128_load PASS\n");
+    return 0;
+}
 static int batches(void) {
     const maelys_datalog_domain_t domain={"capacity_inputs",predicates,3,NULL,0};CHECK(!maelys_datalog_domain_register(&domain));
     maelys_datalog_policy_t *policy=NULL;maelys_datalog_session_t *session=NULL;
@@ -109,5 +147,5 @@ int main(void) {
     }
     size_t value=777;
     CHECK(maelys_datalog_limit_get((maelys_datalog_limit_t)999,&value)==MAELYS_DATALOG_STATUS_INVALID_ARGUMENT); CHECK(value==777);
-    CHECK(!loads());CHECK(!batches());return 0;
+    CHECK(!loads());CHECK(!direct_facts_128_load_129_names_MAX_RULE_FACTS());CHECK(!batches());return 0;
 }

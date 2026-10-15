@@ -12,6 +12,18 @@ MUTATIONS = (
      "l->diag, MAELYS_DATALOG_LIMIT_MAX_STRING_BYTES,", "l->diag, 0,", "lexer string +1"),
     ("rules_report_literals_budget", "src/core/maelys_datalog_parser.c",
      "p->diag, MAELYS_DATALOG_LIMIT_MAX_RULES,", "p->diag, MAELYS_DATALOG_LIMIT_MAX_BODY_LITERALS,", "rules_129_names_MAX_RULES"),
+    ("direct_fact_bare_return", "src/core/maelys_datalog_parser.c",
+     """        if (p->ruleset->fact_count >= MAELYS_DATALOG_MAX_RULE_FACTS) {
+            parser_diag(p,
+                        MAELYS_DATALOG_DIAG_OPERATION_REJECTED,
+                        "direct facts exceed policy fact capacity",
+                        "reduce the number of direct policy facts");
+            maelys_datalog_internal_diagnostic_set_limit(p->diag,
+                MAELYS_DATALOG_LIMIT_MAX_RULE_FACTS,
+                p->ruleset->fact_count + 1u, MAELYS_DATALOG_MAX_RULE_FACTS);
+            return MAELYS_ERR_PAYLOAD_TOO_LARGE;
+        }""",
+     '        if (p->ruleset->fact_count >= MAELYS_DATALOG_MAX_RULE_FACTS) return MAELYS_ERR_PAYLOAD_TOO_LARGE;', "direct_facts_129_names_MAX_RULE_FACTS"),
 )
 
 
