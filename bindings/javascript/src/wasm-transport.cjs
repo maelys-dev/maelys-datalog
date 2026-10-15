@@ -24,7 +24,7 @@ function wasmTransport(module) {
           text: run('text', [context], 'string') };
         if (status) {
           response.scalars = Array.from({ length: 24 }, (_, i) => run('scalar', [context, i]) >>> 0);
-          response.texts = Array.from({ length: 10 }, (_, i) => run('diagnostic', [context, i], 'string'));
+          response.texts = Array.from({ length: 11 }, (_, i) => run('diagnostic', [context, i], 'string'));
         }
         return response;
       } finally { module._free(ptr); }

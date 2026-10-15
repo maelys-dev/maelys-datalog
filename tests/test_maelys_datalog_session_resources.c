@@ -198,7 +198,11 @@ static void arenas(void) {
     printf("resource plan E4/D8/S32/T2048: host=%zu explanation=%zu padding=%zu arena=%zu; default host=%zu\n",
         p.host_bytes,p.explanation_bytes,p.padding_bytes,p.arena_bytes,large.host_bytes);
     void *memory=malloc(p.arena_bytes);CHECK(memory);maelys_datalog_session_t *s,*other;
-    CHECK(maelys_datalog_session_init_configured(memory,p.arena_bytes-1,policy,0,c,&s,NULL)==MAELYS_DATALOG_STATUS_STORAGE_TOO_SMALL && !s);
+    /* Named boundary: the attempted arena reservation exceeds supplied storage by one. */
+    maelys_datalog_diagnostic_t arena_diag=MAELYS_DATALOG_DIAGNOSTIC_INIT;
+    CHECK(maelys_datalog_session_init_configured(memory,p.arena_bytes-1,policy,0,c,&s,&arena_diag)==MAELYS_DATALOG_STATUS_STORAGE_TOO_SMALL && !s);
+    CHECK((arena_diag.present & MAELYS_DATALOG_DIAGNOSTIC_CAPACITY) && arena_diag.limit_kind==MAELYS_DATALOG_LIMIT_SESSION_ARENA_BYTES);
+    CHECK(arena_diag.observed_count==p.arena_bytes && arena_diag.limit==p.arena_bytes-1);
     CHECK(maelys_datalog_session_init_configured((char *)memory+1,p.arena_bytes-1,policy,0,c,&s,NULL)==BAD && !s);
     size_t before=allocations;
     forbidden=1;OK(maelys_datalog_session_init_configured(memory,p.arena_bytes,policy,0,c,&s,NULL));
@@ -237,16 +241,16 @@ static void diagnostics(void) {
     maelys_datalog_fact_t f[3]={fact(1),fact(2),fact(3)};maelys_datalog_result_t *r;
     maelys_datalog_diagnostic_t d;OK(maelys_datalog_diagnostic_init(&d,sizeof(d)));
     CHECK(maelys_datalog_session_solve(s,f,3,&r,&d)==FULL);
-    CHECK(!strcmp(d.field,"session_input_facts") && d.limit==2 && d.observed_count==3 && !d.limit_kind);
+    CHECK(!strcmp(d.field,"session_input_facts") && d.limit==2 && d.observed_count==3 && d.limit_kind==MAELYS_DATALOG_LIMIT_MAX_EDB_FACTS);
     CHECK(maelys_datalog_session_solve(s,f,2,&r,&d)==FULL);
-    CHECK(!strcmp(d.field,"session_derived_facts") && d.limit==2 && d.observed_count==3 && !d.limit_kind);
+    CHECK(!strcmp(d.field,"session_derived_facts") && d.limit==2 && d.observed_count==3 && d.limit_kind==MAELYS_DATALOG_LIMIT_MAX_IDB_FACTS);
     f[0].terms[0]=(maelys_datalog_value_t)MAELYS_DATALOG_SYMBOL("a");
     f[1].terms[0]=(maelys_datalog_value_t)MAELYS_DATALOG_SYMBOL("b");
     CHECK(maelys_datalog_session_solve(s,f,2,&r,&d)==FULL);
-    CHECK(!strcmp(d.field,"session_symbols") && d.limit==1 && d.observed_count==2 && !d.limit_kind);
+    CHECK(!strcmp(d.field,"session_symbols") && d.limit==1 && d.observed_count==2 && d.limit_kind==MAELYS_DATALOG_LIMIT_MAX_SYMBOLS);
     f[0].terms[0]=(maelys_datalog_value_t)MAELYS_DATALOG_SYMBOL("aaa");
     CHECK(maelys_datalog_session_solve(s,f,1,&r,&d)==FULL);
-    CHECK(!strcmp(d.field,"session_text_bytes") && d.limit==3 && d.observed_count==4 && !d.limit_kind);
+    CHECK(!strcmp(d.field,"session_text_bytes") && d.limit==3 && d.observed_count==4 && d.limit_kind==MAELYS_DATALOG_LIMIT_STRING_POOL_BYTES);
     /* A quota failure must not contaminate the next, unrelated diagnostic. */
     f[0].predicate="missing";CHECK(maelys_datalog_session_solve(s,f,1,&r,&d)!=0);
     CHECK(strcmp(d.field,"session_symbols"));

@@ -67,9 +67,11 @@ void maelys_datalog_internal_diagnostic_set_predicate(maelys_datalog_internal_di
 }
 
 void maelys_datalog_internal_diagnostic_set_limit(maelys_datalog_internal_diagnostic_t *diag,
+                                         maelys_datalog_limit_t kind,
                                          size_t count,
                                          size_t limit) {
     if (!diag) return;
+    diag->limit_kind = (uint8_t)kind;
     diag->count = count;
     diag->limit = limit;
 }
@@ -225,15 +227,19 @@ void maelys_datalog_copy_solve_diagnostic(maelys_datalog_diagnostic_t *out,
             : "Each projected value must be an integer in [0, 2147483647]; no coercion is performed.");
         return; /* The compact aggregate payload aliases the other error sections. */
     }
-    if (in->depth_limit) {
+    const int filter_budget = in->category == MAELYS_DATALOG_SOLVE_DIAG_FILTER_ERROR;
+    if (!filter_budget && in->depth_limit) {
         out->present |= MAELYS_DATALOG_DIAGNOSTIC_DEPTH;
         out->depth = in->depth; out->depth_limit = in->depth_limit;
     }
-    if (in->capacity || in->count_observed) {
+    size_t count = filter_budget ? in->filter_count_observed : in->count_observed;
+    size_t limit = filter_budget ? in->filter_capacity : in->capacity;
+    if (limit || count) {
         out->present |= MAELYS_DATALOG_DIAGNOSTIC_CAPACITY;
-        out->observed_count = in->count_observed; out->limit = in->capacity;
+        out->observed_count = count; out->limit = limit;
         out->limit_kind = (maelys_datalog_limit_t)in->limit_kind;
         if (out->code == MAELYS_DATALOG_DIAG_SOLVE_IDB_OVERFLOW && !in->limit_kind) {
+            out->limit_kind = MAELYS_DATALOG_LIMIT_MAX_IDB_FACTS;
             out->present |= MAELYS_DATALOG_DIAGNOSTIC_CONTEXT;
             snprintf(out->field, sizeof(out->field), "session_derived_facts");
         }

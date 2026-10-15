@@ -212,8 +212,10 @@ typedef enum {
     MAELYS_DATALOG_DIAGNOSTIC_SOLVE = 2
 } maelys_datalog_diagnostic_source_t;
 
-/* Append-only identifiers for capacities of the loaded library, not current
- * occupancy. Scalar queries keep this surface extensible without struct growth. */
+/* Append-only identifiers for budget dimensions, not current occupancy.
+ * Most bounds are library ceilings; a dimension with a session-specific bound
+ * has no global value (limit_get returns UNSUPPORTED). Capacity diagnostics
+ * carry the effective bound at the failure site, including session quotas. */
 typedef enum {
     MAELYS_DATALOG_LIMIT_MAX_SYMBOLS = 1,
     MAELYS_DATALOG_LIMIT_STRING_POOL_BYTES,
@@ -228,7 +230,17 @@ typedef enum {
     MAELYS_DATALOG_LIMIT_MAX_STRING_BYTES,
     MAELYS_DATALOG_LIMIT_INPUT_EDB_TEXT_BYTES,
     MAELYS_DATALOG_LIMIT_MAX_POLICY_ATOMS,
-    MAELYS_DATALOG_LIMIT_MAX_POLICY_ATOM_BYTES
+    MAELYS_DATALOG_LIMIT_MAX_POLICY_ATOM_BYTES,
+    MAELYS_DATALOG_LIMIT_MAX_RULE_VARIABLES,
+    MAELYS_DATALOG_LIMIT_MAX_ARITH_EXPR_NODES,
+    MAELYS_DATALOG_LIMIT_MAX_ARITH_EXPR_DEPTH,
+    MAELYS_DATALOG_LIMIT_MAX_FILTER_PATTERN_BYTES,
+    MAELYS_DATALOG_LIMIT_MAX_FILTER_PROGRAMS,
+    MAELYS_DATALOG_LIMIT_FILTER_PATTERN_POOL_BYTES,
+    MAELYS_DATALOG_LIMIT_MAX_FILTER_EVALUATIONS,
+    MAELYS_DATALOG_LIMIT_MAX_FILTER_COST_UNITS,
+    MAELYS_DATALOG_LIMIT_SESSION_ARENA_BYTES,
+    MAELYS_DATALOG_LIMIT_EXECUTION_BYTES
 } maelys_datalog_limit_t;
 
 /* Append-only immutable compiled-program statistics, not build ceilings or
@@ -281,6 +293,9 @@ typedef struct {
     char file[256], predicate[96];
     size_t arity, observed_count, limit, depth, depth_limit, rule_id;
     unsigned comparison_result, expected_kind, lhs_kind, rhs_kind, comparison_op;
+    /* limit is the effective bound (possibly a smaller session reservation),
+     * while limit_get reports the library ceiling, or UNSUPPORTED for a
+     * dimension whose bound is session-specific. */
     maelys_datalog_limit_t limit_kind; /* 0 when the producer cannot identify the budget. */
     size_t term_index, expected_arity, observed_arity;
     char token[96], field[96], domain[96];
@@ -357,8 +372,10 @@ typedef struct maelys_datalog_result maelys_datalog_result_t;
 typedef struct maelys_datalog_session_config maelys_datalog_session_config_t;
 typedef struct maelys_datalog_input_edb maelys_datalog_input_edb_t;
 
-/* Unknown identifiers return UNSUPPORTED; NULL out_value returns
- * INVALID_ARGUMENT. On failure the output is unchanged. */
+/* Stable budget identifier name (for example "MAX_RULES"); NULL for an unknown value. */
+MAELYS_DATALOG_API const char *maelys_datalog_limit_name(maelys_datalog_limit_t limit);
+/* Session-specific dimensions return UNSUPPORTED; unknown identifiers and
+ * NULL out_value return INVALID_ARGUMENT. On failure the output is unchanged. */
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_limit_get(
     maelys_datalog_limit_t limit, size_t *out_value);
 

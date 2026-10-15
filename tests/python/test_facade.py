@@ -218,6 +218,7 @@ class FacadeTest(unittest.TestCase):
         # decision. Extension SDK authoring callbacks are a separate surface.
         coverage = {
             "status_name": "error formatting", "limit_get": "Engine.limits",
+            "limit_name": "Diagnostic.limit_name",
             "diagnostic_clear": "CFFI diagnostic utility",
             "diagnostic_init": "CFFI diagnostic protocol",
             "diag_code_name": "CFFI diagnostic utility",

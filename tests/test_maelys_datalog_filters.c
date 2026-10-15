@@ -538,6 +538,16 @@ static int bounds_cost_last_admitted_then_refused(void) {
                       diag.category, "%u");
     TEST_ASSERT_EQUAL(MAELYS_DATALOG_DENY_FILTER_ERROR,
                       diag.failure_reason, "%u");
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_LIMIT_MAX_FILTER_COST_UNITS, diag.limit_kind, "%u");
+    TEST_ASSERT_EQUAL((uint32_t)MAELYS_DATALOG_MAX_FILTER_COST_UNITS, diag.filter_capacity, "%u");
+    TEST_ASSERT_EQUAL((uint32_t)(MAELYS_DATALOG_MAX_FILTER_COST_UNITS + MAELYS_DATALOG_MAX_FILTER_COST_UNITS / 4u), diag.filter_count_observed, "%u");
+    maelys_datalog_diagnostic_t public_diag = MAELYS_DATALOG_DIAGNOSTIC_INIT;
+    maelys_datalog_copy_solve_diagnostic(&public_diag, &diag, &ruleset,
+        &ruleset.symbols, MAELYS_ERR_PAYLOAD_TOO_LARGE);
+    TEST_ASSERT_TRUE(public_diag.present & MAELYS_DATALOG_DIAGNOSTIC_CAPACITY);
+    TEST_ASSERT_TRUE(!(public_diag.present & MAELYS_DATALOG_DIAGNOSTIC_DEPTH));
+    TEST_ASSERT_EQUAL((size_t)MAELYS_DATALOG_MAX_FILTER_COST_UNITS, public_diag.limit, "%zu");
+    TEST_ASSERT_EQUAL((size_t)diag.filter_count_observed, public_diag.observed_count, "%zu");
     maelys_datalog_edb_clear(&edb);
     free(pool);
     maelys_datalog_ruleset_clear(&ruleset);
@@ -596,6 +606,9 @@ static int bounds_evaluations_last_admitted_then_refused(void) {
     TEST_ASSERT_TRUE(result == NULL);
     TEST_ASSERT_EQUAL(MAELYS_DATALOG_SOLVE_DIAG_FILTER_ERROR,
                       diag.category, "%u");
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_LIMIT_MAX_FILTER_EVALUATIONS, diag.limit_kind, "%u");
+    TEST_ASSERT_EQUAL((uint32_t)MAELYS_DATALOG_MAX_FILTER_EVALUATIONS, diag.filter_capacity, "%u");
+    TEST_ASSERT_EQUAL((uint32_t)MAELYS_DATALOG_MAX_FILTER_EVALUATIONS + 1u, diag.filter_count_observed, "%u");
     maelys_datalog_ruleset_clear(&ruleset);
     TEST_END();
 }

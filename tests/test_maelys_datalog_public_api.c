@@ -919,7 +919,7 @@ static int test_public_api_errors_are_atomic_and_diagnostic(void) {
 static int test_public_api_limits_and_derived_count(void) {
     TEST_BEGIN();
     size_t limit = 777u;
-    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_UNSUPPORTED,
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_INVALID_ARGUMENT,
                       maelys_datalog_limit_get((maelys_datalog_limit_t)999, &limit), "%d");
     TEST_ASSERT_EQUAL((size_t)777u, limit, "%zu");
     TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_INVALID_ARGUMENT,

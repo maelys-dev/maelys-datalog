@@ -78,7 +78,17 @@ static maelys_datalog_status_t resource_failure(maelys_datalog_diagnostic_t *d,
         d->status = rc; d->source = MAELYS_DATALOG_DIAGNOSTIC_SOLVE;
         d->code = MAELYS_DATALOG_DIAG_OPERATION_REJECTED;
         d->present = MAELYS_DATALOG_DIAGNOSTIC_CAPACITY | MAELYS_DATALOG_DIAGNOSTIC_CONTEXT;
-        d->observed_count = observed; d->limit = limit; d->limit_kind = 0;
+        d->observed_count = observed; d->limit = limit;
+        d->limit_kind = !strcmp(field, "input_facts") ? MAELYS_DATALOG_LIMIT_MAX_EDB_FACTS
+            : !strcmp(field, "derived_facts") ? MAELYS_DATALOG_LIMIT_MAX_IDB_FACTS
+            : !strcmp(field, "symbols") ? MAELYS_DATALOG_LIMIT_MAX_SYMBOLS
+            : !strcmp(field, "text_bytes") ? MAELYS_DATALOG_LIMIT_STRING_POOL_BYTES
+            : MAELYS_DATALOG_LIMIT_SESSION_ARENA_BYTES;
+        /* An undersized arena supplies the bound, while the plan is the
+         * attempted reservation. Keep the existing explanatory message below. */
+        if (!strcmp(field, "arena_bytes")) {
+            d->observed_count = limit; d->limit = observed;
+        }
         snprintf(d->field, sizeof(d->field), "session_%s", field);
         snprintf(d->phase, sizeof(d->phase), "session_resources");
         snprintf(d->message, sizeof(d->message), "Session %s: requested/observed %zu, bound %zu.", field, observed, limit);

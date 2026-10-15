@@ -202,6 +202,7 @@ typedef struct {
 
 const char *maelys_datalog_status_name(int status);
 int maelys_datalog_limit_get(int limit, size_t *out_value);
+const char *maelys_datalog_limit_name(int limit);
 int maelys_datalog_diagnostic_clear(
     maelys_datalog_diagnostic_t *diagnostic);
 int maelys_datalog_domain_register(

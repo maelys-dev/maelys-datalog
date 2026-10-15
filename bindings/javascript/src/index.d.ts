@@ -80,7 +80,7 @@ export interface Diagnostic {
   readonly hint: string; readonly codeName: string; readonly statusName: string;
   readonly location?: Readonly<{ line: number; column: number; file: string }>;
   readonly predicate?: Readonly<{ name: string; arity: number }>;
-  readonly capacity?: Readonly<{ observed: number; limit: number; kind: number }>;
+  readonly capacity?: Readonly<{ observed: number; limit: number; kind: number; name?: string | null }>;
   readonly depth?: Readonly<{ observed: number; limit: number }>;
   readonly comparison?: Readonly<{ result: number; expectedKind: number; lhsKind: number; rhsKind: number; op: number }>;
   readonly arity?: Readonly<{ expected: number; observed: number; termIndex: number }>;

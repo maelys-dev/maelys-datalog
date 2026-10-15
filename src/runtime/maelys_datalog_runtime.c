@@ -47,6 +47,14 @@ static maelys_datalog_status_t create_resourced(
 static void resource_session_unlink(maelys_datalog_session_t *);
 static void resource_session_track_legacy(maelys_datalog_session_t *, size_t,
     const maelys_datalog_backend_storage_t *);
+static void diagnostic_capacity(maelys_datalog_diagnostic_t *diagnostic,
+    maelys_datalog_limit_t kind, size_t count, size_t limit) {
+    if (!diagnostic) return;
+    diagnostic->present |= MAELYS_DATALOG_DIAGNOSTIC_CAPACITY;
+    diagnostic->observed_count = count;
+    diagnostic->limit = limit;
+    diagnostic->limit_kind = kind;
+}
 static maelys_datalog_status_t resource_failure(maelys_datalog_diagnostic_t *,
     maelys_datalog_status_t, const char *, size_t, size_t);
 
@@ -591,10 +599,14 @@ maelys_datalog_status_t maelys_datalog_session_solve(maelys_datalog_session_t *s
     if (count > s->resources.input_facts && s->resources.input_facts < MAELYS_DATALOG_MAX_EDB_FACTS)
         return resource_failure(diag, MAELYS_DATALOG_STATUS_PAYLOAD_TOO_LARGE,
                                 "input_facts", count, s->resources.input_facts);
-    if (count > s->resources.input_facts)
-        return solve_input_error(diag, MAELYS_DATALOG_STATUS_PAYLOAD_TOO_LARGE,
+    if (count > s->resources.input_facts) {
+        maelys_datalog_status_t rc = solve_input_error(diag, MAELYS_DATALOG_STATUS_PAYLOAD_TOO_LARGE,
                                  "Input batch contains %zu facts; EDB fact limit is %u (before deduplication).",
                                  count, MAELYS_DATALOG_MAX_EDB_FACTS);
+        diagnostic_capacity(diag, MAELYS_DATALOG_LIMIT_MAX_EDB_FACTS,
+                            count, MAELYS_DATALOG_MAX_EDB_FACTS);
+        return rc;
+    }
     maelys_datalog_status_t status = MAELYS_DATALOG_STATUS_OK;
     for (size_t i = 0; i < count && status == MAELYS_DATALOG_STATUS_OK; ++i) {
         if (!facts[i].predicate) {
@@ -623,8 +635,8 @@ maelys_datalog_status_t maelys_datalog_session_solve(maelys_datalog_session_t *s
     }
     if (status == MAELYS_DATALOG_STATUS_OK) {
         char message[256] = {0};
-        status = (maelys_datalog_status_t)maelys_datalog_prepared_session_materialize_inputs_diagnosed(
-            s->inputs, facts, count, message, sizeof(message));
+        status = (maelys_datalog_status_t)maelys_datalog_prepared_session_materialize_inputs_diagnosed_capacity(
+            s->inputs, facts, count, message, sizeof(message), diag);
         if (status != MAELYS_DATALOG_STATUS_OK)
             solve_input_error(diag, status, "%s", message[0] ? message : "Input materialization failed.");
         if (status != MAELYS_DATALOG_STATUS_OK && s->inputs->quota_field)

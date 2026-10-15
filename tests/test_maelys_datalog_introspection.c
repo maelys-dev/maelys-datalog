@@ -31,7 +31,7 @@ static int test_build_limits_match_compile_time_macros(void) {
     }
 
     size_t untouched = 73u;
-    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_UNSUPPORTED,
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_INVALID_ARGUMENT,
         maelys_datalog_limit_get((maelys_datalog_limit_t)0, &untouched), "%d");
     TEST_ASSERT_EQUAL((size_t)73u, untouched, "%zu");
     TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_INVALID_ARGUMENT,

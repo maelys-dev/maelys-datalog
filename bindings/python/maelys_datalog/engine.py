@@ -182,6 +182,12 @@ class Diagnostic:
     field: str = ""
     domain: str = ""
 
+    @property
+    def limit_name(self) -> str | None:
+        """Stable native budget name, or None for an unknown identifier."""
+        name = lib.maelys_datalog_limit_name(self.limit_kind)
+        return _text(name) if name != ffi.NULL else None
+
 
 class MaelysDatalogError(RuntimeError):
     def __init__(self, code: int, message: str, hint: str = "",

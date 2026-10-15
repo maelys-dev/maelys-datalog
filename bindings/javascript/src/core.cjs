@@ -80,7 +80,7 @@ function diagnostic(response) {
     present, phase: text(0), message: text(1), hint: text(2), codeName: text(8), statusName: text(9) };
   if (present & 1n) d.location = Object.freeze({ line: n(5), column: n(6), file: text(3) });
   if (present & 2n) d.predicate = Object.freeze({ name: text(4), arity: n(7) });
-  if (present & 4n) d.capacity = Object.freeze({ observed: n(8), limit: n(9), kind: n(18) });
+  if (present & 4n) d.capacity = Object.freeze({ observed: n(8), limit: n(9), kind: n(18), name: text(10) || null });
   if (present & 8n) d.depth = Object.freeze({ observed: n(10), limit: n(11) });
   if (present & 16n) d.comparison = Object.freeze({ result: n(13), expectedKind: n(14), lhsKind: n(15), rhsKind: n(16), op: n(17) });
   if (present & 32n) d.arity = Object.freeze({ expected: n(20), observed: n(21), termIndex: n(19) });

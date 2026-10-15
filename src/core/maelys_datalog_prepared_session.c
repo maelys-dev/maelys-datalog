@@ -338,7 +338,7 @@ maelys_result_t maelys_datalog_prepared_session_solve(
 static void explain_fact_rejection(
     const maelys_datalog_internal_prepared_session_t *session,
     const maelys_datalog_fact_t *fact, size_t index,
-    char *message, size_t message_capacity) {
+    char *message, size_t message_capacity, maelys_datalog_diagnostic_t *diagnostic) {
     maelys_datalog_predicate_id_t pid;
     const maelys_datalog_predicate_registry_t *registry = &session->prepared->registry;
     if (!maelys_datalog_predicate_registry_find(registry, fact->predicate, fact->arity, &pid)) {
@@ -364,10 +364,22 @@ static void explain_fact_rejection(
         input_message(message, message_capacity,
                       "Invalid fact at index %zu: %.63s is not an EDB predicate.", index, fact->predicate);
     } else if (session->edb.fact_count >= MAELYS_DATALOG_MAX_EDB_FACTS) {
+        if (diagnostic) {
+            diagnostic->present |= MAELYS_DATALOG_DIAGNOSTIC_CAPACITY;
+            diagnostic->limit_kind = MAELYS_DATALOG_LIMIT_MAX_EDB_FACTS;
+            diagnostic->observed_count = session->edb.fact_count + 1u;
+            diagnostic->limit = MAELYS_DATALOG_MAX_EDB_FACTS;
+        }
         input_message(message, message_capacity,
                       "Invalid fact at index %zu (%.63s): EDB fact limit %u reached.",
                       index, fact->predicate, MAELYS_DATALOG_MAX_EDB_FACTS);
     } else if (session->edb.facts_per_pred[pid] >= MAELYS_DATALOG_MAX_FACTS_PER_PRED) {
+        if (diagnostic) {
+            diagnostic->present |= MAELYS_DATALOG_DIAGNOSTIC_CAPACITY;
+            diagnostic->limit_kind = MAELYS_DATALOG_LIMIT_MAX_FACTS_PER_PRED;
+            diagnostic->observed_count = session->edb.facts_per_pred[pid] + 1u;
+            diagnostic->limit = MAELYS_DATALOG_MAX_FACTS_PER_PRED;
+        }
         input_message(message, message_capacity,
                       "Invalid fact at index %zu (%.63s): per-predicate fact limit %u reached.",
                       index, fact->predicate, MAELYS_DATALOG_MAX_FACTS_PER_PRED);
@@ -389,6 +401,14 @@ maelys_result_t maelys_datalog_prepared_session_materialize_inputs_diagnosed(
     maelys_datalog_internal_prepared_session_t *session,
     const maelys_datalog_fact_t *facts, size_t fact_count,
     char *message, size_t message_capacity) {
+    return maelys_datalog_prepared_session_materialize_inputs_diagnosed_capacity(
+        session, facts, fact_count, message, message_capacity, NULL);
+}
+
+maelys_result_t maelys_datalog_prepared_session_materialize_inputs_diagnosed_capacity(
+    maelys_datalog_internal_prepared_session_t *session,
+    const maelys_datalog_fact_t *facts, size_t fact_count,
+    char *message, size_t message_capacity, maelys_datalog_diagnostic_t *diagnostic) {
     if (message && message_capacity) message[0] = '\0';
     if (!session || (!facts && fact_count > 0u)) {
         return MAELYS_ERR_INVALID_ARGUMENT;
@@ -423,7 +443,7 @@ maelys_result_t maelys_datalog_prepared_session_materialize_inputs_diagnosed(
     for (size_t i = 0u; i < fact_count; i++) {
         rc = materialize_input_fact(session, &facts[i]);
         if (rc != MAELYS_OK) {
-            explain_fact_rejection(session, &facts[i], i, message, message_capacity);
+            explain_fact_rejection(session, &facts[i], i, message, message_capacity, diagnostic);
             return reject_transaction(session, rc);
         }
     }
