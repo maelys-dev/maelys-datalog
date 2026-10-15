@@ -30,7 +30,7 @@ jobs:
   # libFuzzer smoke over the committed corpus. The AFL++ smoke stays below:
   # it needs afl++ and a core-pattern change.
   check:
-    uses: maelys-dev/maelys-release/.github/workflows/check-product.yml@18ff37d4acce34b01a9371be4ccb4f38b812d9c8 # v0.63.1
+    uses: maelys-dev/maelys-release/.github/workflows/check-product.yml@37d42b82a9e97c24cc87b92e3046c3360e7bbf84 # v0.64.4
     with:
       product: maelys-datalog
       sanitizer_command: make -j4 -f Makefile.asan asan
