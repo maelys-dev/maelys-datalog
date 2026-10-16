@@ -7,7 +7,7 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ## Unreleased
 
-## 0.23.1 — 2026-10-15
+## 0.23.1 — 2026-10-16
 
 ### Fixed
 
@@ -27,7 +27,7 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
   v0.64.4 fixes this workflow defect; 0.23.1 publishes the formula from its
   own release. The v0.23.0 tag and release remain unchanged and are not replayed.
 
-### Python performance review — pending maintainer decision
+### Python performance review — exception accepted for 0.23.1
 
 The complete Python lifecycle report measures signed candidate commit
 `256d744a5838c582eb334e5a7559051e2ffc52b8` against published v0.23.0
@@ -51,7 +51,7 @@ Status: **review_required**. Of 145 raw A/A alert rows, 135 are warm and ten
 are informative cold rows. After matched-null screening, 83 warm rows require
 review (62 against v0.23.0, 21 against the anchor); 63 warm rows are not
 distinguished from their null envelope in at least one round. These categories
-can overlap. Twenty-two warm rows are A/A-slower in both rounds, of which 17
+can overlap. Twenty-two warm rows are A/A-slower in both rounds, of which 18
 require review in at least one round and seven exceed the matched null in
 both rounds. All seven compare against v0.23.0:
 
@@ -85,11 +85,23 @@ Phase samples cannot be paired by index with separately measured totals.
 No samples are filtered or normalized. The extra direct-fact diagnostic work
 is on a parser refusal path, absent from the measured requests; that inspection
 does not prove equal cycles or identify the cause of any timing alert.
-No native instruction-count equivalence is claimed for this candidate.
+David independently reports Callgrind counts on the ordinary SMALL
+93-symbol path that are identical between `d72815d` and `256d744`: 1,140,650
+instructions for convenience solve and 1,117,963 for prepared solve. The
+change in #195 affects policy loading only. These scoped software counts
+support the maintainer's finding of no native cause identified; they do not
+establish equal cycles or explain any measured timing alert.
 
-**Maintainer decision: pending David.** No exception is accepted automatically,
-and the 0.23.0 decision is not reused. No `cut --apply` before David's explicit
-decision and authorization.
+**Maintainer decision — accepted by David on 2026-10-16 for 0.23.1.**
+David accepts the exception for this named report: 83 review rows, 18
+A/A-recurrent review rows, including the two Release input statistics on
+SMALL-Release/93-symbol-prepared, with no total recurring beyond its matched
+null envelope. The remaining five twice-beyond-null rows are in default
+builds. The refusal-path scope and the identical scoped Callgrind counts
+above inform that decision. No further cause is attributed to the recurring
+or single-round alerts. The report retains `review_required` and all
+observations unchanged; its limits are accepted, not erased. David authorizes
+the 0.23.1 release ceremony and personally approves its publication gate.
 
 ## 0.23.0 — 2026-10-15
 
