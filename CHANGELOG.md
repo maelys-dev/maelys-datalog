@@ -7,6 +7,8 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ## Unreleased
 
+## 0.23.1 — 2026-10-16
+
 ### Fixed
 
 - Restore structured capacity diagnostics for a direct policy fact beyond
@@ -15,6 +17,91 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
   through `maelys_datalog_limit_get()` and `maelys_datalog_limit_name()`.
   This completes the capacity diagnostic contract on the
   [compatibility page](docs/compatibility.md); existing diagnostic codes are unchanged.
+
+### Changed
+
+- Retry publication of the `libmaelys-datalog` Homebrew formula with socle
+  v0.64.4, adopted in #194. The 0.23.0 publication stopped at the bottle builds
+  with `TapFormulaAmbiguityError`: a socle defect made the staging and public
+  formulas ambiguous during Homebrew's install-linkage correction. Socle
+  v0.64.4 fixes this workflow defect; 0.23.1 publishes the formula from its
+  own release. The v0.23.0 tag and release remain unchanged and are not replayed.
+
+### Python performance review — exception accepted for 0.23.1
+
+The complete Python lifecycle report measures signed candidate commit
+`256d744a5838c582eb334e5a7559051e2ffc52b8` against published v0.23.0
+`d72815d59351ff599516f426852f68a24e90d00f` and immutable v0.11.1 anchor
+`0f247a7c81ec4a297f35ccee2bf007344f72ac7e` in
+[run 38806853997](https://github.com/maelys-dev/maelys-datalog/actions/runs/38806853997).
+The `report.json` SHA-256 is
+`ecdb0091f03d2978dc5f0a61a6a5bd0f511b8b5d588c01dc66e2577687d7c87d`. Schema 4 covers SMALL/LARGE, default/Release,
+501 warm samples and 31 cold first requests, with independent identical-binary
+null controls and the fixed three-request positive control. The positive
+control detects the injected cost in both rounds of every case/configuration;
+`release_eligible` is true. The informative historical v0.11.0 control is not
+detected everywhere and is not presented as a validated release control.
+
+Independent offline verification checks 256 binary/SDK hashes, four harness
+hashes, 11,424 raw records, output digests and telemetry completeness, and
+recomputes all 597 candidate rows, 597 null rows, control results and the
+unchanged descriptive null cross-screening.
+
+Status: **review_required**. Of 145 raw A/A alert rows, 135 are warm and ten
+are informative cold rows. After matched-null screening, 83 warm rows require
+review (62 against v0.23.0, 21 against the anchor); 63 warm rows are not
+distinguished from their null envelope in at least one round. These categories
+can overlap. Twenty-two warm rows are A/A-slower in both rounds, of which 18
+require review in at least one round and seven exceed the matched null in
+both rounds. All seven compare against v0.23.0:
+
+| Configuration / scenario / phase | Statistic | A/A floor | Null envelope | Round 1 | Round 2 |
+|---|---|---:|---:|---:|---:|
+| LARGE-default/7-integer-solve/solve | median | 5.57% | 5.57% | +7.18% | +5.96% |
+| LARGE-default/7-symbol-prepared/solve | min | 1.78% | 1.78% | +3.04% | +2.52% |
+| LARGE-default/7-symbol-solve/solve | median | 0.54% | 2.55% | +7.68% | +7.26% |
+| LARGE-default/7-symbol-solve/solve | p95 | 0.43% | 2.54% | +5.10% | +5.22% |
+| LARGE-default/93-symbol-solve/solve | median | 2.39% | 2.80% | +4.99% | +2.93% |
+| SMALL-Release/93-symbol-prepared/input | median | 2.23% | 2.23% | +2.48% | +6.76% |
+| SMALL-Release/93-symbol-prepared/input | p95 | 1.47% | 1.47% | +2.42% | +7.99% |
+
+Five recurring matched-null alerts are in default builds and two are in
+SMALL-Release `93-symbol-prepared/input` (median and p95). There are 17 total
+rows requiring review in at least one round (14 base, three anchor), but no
+total exceeds its matched null in both rounds. Three review-required total
+rows are A/A-slower twice while only one round exceeds the null: base
+LARGE-Release `93-symbol-prepared/total` p95 (+4.67%, +56.71%), and base
+SMALL-default `7-integer-solve/total` median (+6.29%, +2.94%) and p95
+(+5.55%, +65.65%). These observations are retained. There are 145 rows
+classified faster in both rounds; they do not cancel slower rows.
+
+The original report retains all rows, cold observations, separate observer
+and storage controls, and both directions of descriptive null cross-screening
+including unmatched statistics. Those controls neither subtract alerts nor
+change review status. A/A floors and the empirical null envelope are not
+confidence bounds, universal tolerances or causal evidence. The positive
+control certifies detection of its coarse injected cost, not smaller gaps.
+Phase samples cannot be paired by index with separately measured totals.
+No samples are filtered or normalized. The extra direct-fact diagnostic work
+is on a parser refusal path, absent from the measured requests; that inspection
+does not prove equal cycles or identify the cause of any timing alert.
+David independently reports Callgrind counts on the ordinary SMALL
+93-symbol path that are identical between `d72815d` and `256d744`: 1,140,650
+instructions for convenience solve and 1,117,963 for prepared solve. The
+change in #195 affects policy loading only. These scoped software counts
+support the maintainer's finding of no native cause identified; they do not
+establish equal cycles or explain any measured timing alert.
+
+**Maintainer decision — accepted by David on 2026-10-16 for 0.23.1.**
+David accepts the exception for this named report: 83 review rows, 18
+A/A-recurrent review rows, including the two Release input statistics on
+SMALL-Release/93-symbol-prepared, with no total recurring beyond its matched
+null envelope. The remaining five twice-beyond-null rows are in default
+builds. The refusal-path scope and the identical scoped Callgrind counts
+above inform that decision. No further cause is attributed to the recurring
+or single-round alerts. The report retains `review_required` and all
+observations unchanged; its limits are accepted, not erased. David authorizes
+the 0.23.1 release ceremony and personally approves its publication gate.
 
 ## 0.23.0 — 2026-10-15
 
