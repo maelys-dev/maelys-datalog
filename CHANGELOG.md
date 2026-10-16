@@ -7,6 +7,15 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ## Unreleased
 
+### Fixed
+
+- Restore structured capacity diagnostics for a direct policy fact beyond
+  `MAX_RULE_FACTS`: report the parser location, attempted count and bound,
+  with append-only budget identifier `MAX_RULE_FACTS` (25), also available
+  through `maelys_datalog_limit_get()` and `maelys_datalog_limit_name()`.
+  This completes the capacity diagnostic contract on the
+  [compatibility page](docs/compatibility.md); existing diagnostic codes are unchanged.
+
 ## 0.23.0 — 2026-10-15
 
 ### Fixed

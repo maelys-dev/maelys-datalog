@@ -896,7 +896,16 @@ static maelys_result_t parse_clause(parser_t *p) {
             if (def) maelys_datalog_internal_diagnostic_set_predicate(p->diag, def->name, def->arity);
             return MAELYS_ERR_INVALID_FIELD;
         }
-        if (p->ruleset->fact_count >= MAELYS_DATALOG_MAX_RULE_FACTS) return MAELYS_ERR_PAYLOAD_TOO_LARGE;
+        if (p->ruleset->fact_count >= MAELYS_DATALOG_MAX_RULE_FACTS) {
+            parser_diag(p,
+                        MAELYS_DATALOG_DIAG_OPERATION_REJECTED,
+                        "direct facts exceed policy fact capacity",
+                        "reduce the number of direct policy facts");
+            maelys_datalog_internal_diagnostic_set_limit(p->diag,
+                MAELYS_DATALOG_LIMIT_MAX_RULE_FACTS,
+                p->ruleset->fact_count + 1u, MAELYS_DATALOG_MAX_RULE_FACTS);
+            return MAELYS_ERR_PAYLOAD_TOO_LARGE;
+        }
         for (size_t i = 0; i < head.arity; i++) {
             if (head.terms[i].kind == MAELYS_DATALOG_TERM_VAR) {
                 parser_diag(p,
