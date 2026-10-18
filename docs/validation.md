@@ -683,7 +683,7 @@ Run `python3 tools/check_variable_name_compatibility.py --profile small --output
 /private/tmp/variable-proof-small` (and separately `--profile large` with a new
 output directory) to compare the existing corpus against commit
 `f1632b5e39ea2f3e85d743fa260736ae884af7c0`. The tool builds both engines with the
-same observation harness, compares authority and program fingerprints for every
+same observation harness, compares internal canonical-ruleset hashes and `program_fingerprint` for every
 accepted fixture using only single-letter or anonymous variables, lists longer
 name changes separately, and preserves rejected-fixture outcomes. It also rebuilds
 two first-letter mutants, one at each parser entry point, and requires the
