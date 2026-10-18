@@ -118,7 +118,7 @@ static int manifest_paths(void) {
     maelys_datalog_policy_bundle_entry_t bundle[]={{"0",sources[0],strlen(sources[0])},{"1",sources[1],strlen(sources[1])}};
     size_t bytes, alignment; OK(maelys_datalog_policy_storage_requirements(&bytes,&alignment));
     void *storage=malloc(bytes); CHECK(storage);
-    char directory[]="/private/tmp/maelys-reads-manifest-XXXXXX"; CHECK(mkdtemp(directory));
+    char directory[]="/tmp/maelys-reads-manifest-XXXXXX"; CHECK(mkdtemp(directory));
     char path[256];
     for(size_t i=0;i<2;i++) { snprintf(path,sizeof(path),"%s/%zu.dl",directory,i); FILE *f=fopen(path,"w"); CHECK(f); CHECK(fputs(sources[i],f)>=0); CHECK(!fclose(f)); }
     snprintf(path,sizeof(path),"%s/manifest.json",directory); FILE *f=fopen(path,"w"); CHECK(f); CHECK(fputs(json,f)>=0); CHECK(!fclose(f));
