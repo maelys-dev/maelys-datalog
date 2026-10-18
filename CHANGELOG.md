@@ -40,15 +40,31 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 ### Python performance review — pending maintainer decision
 
 [Run 39156330444](https://github.com/maelys-dev/maelys-datalog/actions/runs/39156330444)
-is measuring integrated runtime commit
-`e5b5f09198fa927b3f70aea609666bc5f15673d6`, containing #200 and #201.
-The report is still running: its artifact name, report SHA-256, control
-validity, findings and David's decision remain to be recorded before `cut --apply`.
-The documentation correction does not itself require another measurement.
-The accepted #198 report for 0.24.0 does not cover the predicate-read cache;
-no performance exception is accepted for 0.25.0. The changelog must first be
-merged onto main on David's instruction; cut then runs from updated main and
-carries only VERSION and the generated version header.
+measures integrated #200/#201 commit `e5b5f09198fa927b3f70aea609666bc5f15673d6`
+against v0.24.0 `f164ab32483ac95eb0f70a7fc669d3b4c8f20d7c` and immutable
+v0.11.1 anchor `0f247a7c81ec4a297f35ccee2bf007344f72ac7e`. The artifact is
+`python-performance-e5b5f09198fa927b3f70aea609666bc5f15673d6`; `report.json`
+SHA-256 is `7aea8b59c7b1bcc9e6697c98df80f70adc8f55648173d21c8a2c2a727214c1d3`.
+The schema-4 report retains `review_required`. The three-request positive
+control is detected in both rounds for every warm total (all 64 median/p95
+rows). Same-path identical-binary null controls use independent samples for
+both references; their 612 matched warm rows are preserved.
+
+There are 78 raw A/A alert rows (69 warm, nine informative cold), and 43 warm
+rows require review after null screening: 27 against v0.24.0 and 16 against
+the anchor, including 18 total-time rows. Five review rows are raw slowdowns
+in both rounds. Two exceed the matched null envelope in both rounds, both
+against v0.24.0 in SMALL-default/93-symbol-prepared: solve median +2.413% /
++1.953% (null envelope 0.938%), and total p95 +1.431% / +1.278% (1.186%).
+Three other recurrent raw review rows exceed the envelope in only one round:
+LARGE-Release/93-symbol-solve solve median and p95, and
+SMALL-Release/7-integer-solve total p95. All original alerts remain preserved.
+The empirical null envelope is not a confidence bound; these observations
+do not establish an engine cause. The earlier 0.24.0 exception does not
+approve this report. David's decision is pending; no exception or cut is
+authorized for 0.25.0. The later #204 change is documentation only.
+The changelog must be merged onto main on David's instruction before cut;
+cut then carries only VERSION and the generated version header.
 
 ## 0.24.0 — 2026-10-18
 
