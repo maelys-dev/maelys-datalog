@@ -7,6 +7,8 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ## Unreleased
 
+## 0.24.0 — 2026-10-18
+
 ### Fixed
 
 - Identify named source variables by their complete, case-sensitive name within
@@ -20,6 +22,28 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
   fingerprint (`session_execution_fingerprint`) are unchanged for single-letter
   and anonymous variables; they can change for longer names under the corrected
   mapping. Policies using longer names can derive more facts than before.
+
+### Python performance review — exception accepted for 0.24.0
+
+[Run 39141827494](https://github.com/maelys-dev/maelys-datalog/actions/runs/39141827494)
+measures merged #198 commit `1a3830781b64c96375f73eaa14f455c156fdc5fb`
+against v0.23.1 `f1632b5e39ea2f3e85d743fa260736ae884af7c0` and immutable
+v0.11.1 anchor `0f247a7c81ec4a297f35ccee2bf007344f72ac7e`. The artifact is
+`python-performance-1a3830781b64c96375f73eaa14f455c156fdc5fb`; its `report.json`
+SHA-256 is `1d870ef7baa5ecadf90b19f04678a18b7795af31913ac8995f90d2b284ce8335`.
+The three-request positive control is detected in every case/configuration.
+The report retains `review_required`: 45 rows require review, including eight
+recurrent raw slowdowns among the review rows, three of them in Release solve
+measurements. Six rows exceed the matched null envelope in both rounds. All original observations remain preserved.
+
+David explicitly accepts this exception for 0.24.0 with #198 alone. His
+Callgrind measurement of the 93-symbol fixture with long variable names gives
+identical instruction counts between `f1632b5` and `1a38307`: 1,140,650 per
+solve request and 1,117,963 per prepared request. No native cause is established;
+these scoped software counts do not establish equal cycles or erase the timing
+observations. This decision does not cover the diagnostic or predicate-read
+changes planned for 0.25.0, which require a named integrated Python report and
+maintainer decision of their own.
 
 ## 0.23.1 — 2026-10-16
 
