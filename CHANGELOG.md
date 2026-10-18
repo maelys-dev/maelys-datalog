@@ -33,8 +33,8 @@ v0.11.1 anchor `0f247a7c81ec4a297f35ccee2bf007344f72ac7e`. The artifact is
 SHA-256 is `1d870ef7baa5ecadf90b19f04678a18b7795af31913ac8995f90d2b284ce8335`.
 The three-request positive control is detected in every case/configuration.
 The report retains `review_required`: 45 rows require review, including eight
-recurrent rows beyond the matched null envelope in both rounds, three of them
-in Release solve measurements. All original observations remain preserved.
+recurrent raw slowdowns among the review rows, three of them in Release solve
+measurements. Six rows exceed the matched null envelope in both rounds. All original observations remain preserved.
 
 David explicitly accepts this exception for 0.24.0 with #198 alone. His
 Callgrind measurement of the 93-symbol fixture with long variable names gives
