@@ -1105,9 +1105,12 @@ static int test_public_api_capacity_diagnostics(void) {
     TEST_ASSERT_NOT_NULL(strstr(diag.message, expected));
     memset(strings, 'x', string_limit + 1u);
     inputs[0] = fact("observed", symbol_value(strings));
-    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_INVALID_ARGUMENT,
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_STATUS_PAYLOAD_TOO_LARGE,
                       maelys_datalog_session_solve(session, inputs, 1u, &result, &diag), "%d");
     TEST_ASSERT_NOT_NULL(strstr(diag.message, "index 0 (observed), term 0: symbol exceeds"));
+    TEST_ASSERT_EQUAL(MAELYS_DATALOG_LIMIT_MAX_STRING_BYTES, diag.limit_kind, "%d");
+    TEST_ASSERT_EQUAL(string_limit + 1u, diag.observed_count, "%zu");
+    TEST_ASSERT_EQUAL(string_limit, diag.limit, "%zu");
     for (size_t i = 0u; i <= symbol_limit; ++i) {
         char *text = strings + i * (string_limit + 2u);
         snprintf(text, string_limit + 2u, "s%05zu", i);

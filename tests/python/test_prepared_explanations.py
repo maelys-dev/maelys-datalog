@@ -10,7 +10,7 @@ from maelys_datalog import engine as binding
 PREFIX = "maelys_datalog_"
 SEQUENCE = [
     "result_explanation_storage_requirements",
-    "result_prepare_explanation",
+    "result_prepare_explanation_diagnosed",
     "prepared_explanation_text_size",
     "prepared_explanation_write_text",
     "prepared_explanation_release",
@@ -38,7 +38,7 @@ class NativeSpy:
             if short == self.fail and self.fail_once:
                 self.fail_once = False
                 return self.native.MAELYS_DATALOG_STATUS_PAYLOAD_TOO_LARGE
-            if short == "result_prepare_explanation":
+            if short == "result_prepare_explanation_diagnosed":
                 # Exercise the real native lease and the actual aligned workspace.
                 required, alignment = binding.ffi.new("size_t *"), binding.ffi.new("size_t *")
                 self.native.maelys_datalog_result_explanation_storage_requirements(
@@ -76,7 +76,7 @@ class PreparedExplanationTest(unittest.TestCase):
                 operation = getattr(native, name)
                 if "explain" not in name and "explanation" not in name:
                     return operation
-                if name not in (PREFIX + "result_explain_true_text", PREFIX + "result_explain_false_text"):
+                if name != PREFIX + "result_explain_text_diagnosed":
                     raise AssertionError("Configured Python should reuse the session workspace")
                 def call(*args):
                     calls.append(name)
@@ -116,6 +116,25 @@ class PreparedExplanationTest(unittest.TestCase):
         with self.rules.solve(self.edb, explanations=ExplanationKind.FALSE) as result:
             self.assertIn("document=why-false", result.explain_false("allow", ["mallory"]))
 
+    def test_diagnosed_unknown_symbol_and_unreserved_kind(self):
+        for kinds in (0, ExplanationKind.TRUE):
+            with self.rules.prepare(explanations=kinds) as session, session.solve(self.edb) as result:
+                with self.assertRaises(MaelysDatalogError) as caught:
+                    result.explain_true("allow", ["never-interned"])
+                error = caught.exception
+                self.assertEqual(error.status, binding.Status.NOT_FOUND)
+                self.assertIn("unknown query symbol", str(error))
+                self.assertEqual(error.diagnostic.message, "query symbol absent from the result")
+                self.assertEqual(error.diagnostic.hint, "query a symbol the result contains")
+                self.assertEqual(error.diagnostic.predicate, "allow")
+                if kinds:
+                    with self.assertRaises(MaelysDatalogError) as caught:
+                        result.explain_false("allow", ["mallory"])
+                    self.assertEqual(caught.exception.status, binding.Status.UNSUPPORTED)
+                    self.assertIn("explanation kind not reserved at prepare", str(caught.exception))
+                    self.assertNotIn("cached", str(caught.exception))
+                    self.assertEqual(caught.exception.diagnostic.predicate, "allow")
+
     def test_cached_output_failures_do_not_leak_a_result_lease(self):
         native, real_ffi = binding.lib, binding.ffi
         class FailingOutput:
@@ -128,22 +147,22 @@ class PreparedExplanationTest(unittest.TestCase):
         class FailingWrite:
             def __getattr__(self, name):
                 operation = getattr(native, name)
-                if name != PREFIX + "result_explain_true_text":
+                if name != PREFIX + "result_explain_text_diagnosed":
                     return operation
                 def call(*args):
-                    if args[4] != real_ffi.NULL:
+                    if args[5] != real_ffi.NULL:
                         return -7  # IO after a successful native measure/cache fill
                     return operation(*args)
                 return call
         class InvalidUTF8:
             def __getattr__(self, name):
                 operation = getattr(native, name)
-                if name != PREFIX + "result_explain_true_text":
+                if name != PREFIX + "result_explain_text_diagnosed":
                     return operation
                 def call(*args):
                     rc = operation(*args)
-                    if rc == 0 and args[4] != real_ffi.NULL:
-                        args[4][0] = b"\xff"
+                    if rc == 0 and args[5] != real_ffi.NULL:
+                        args[5][0] = b"\xff"
                     return rc
                 return call
         with self.rules.prepare(explanations=ExplanationKind.TRUE) as session:

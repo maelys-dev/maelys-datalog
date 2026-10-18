@@ -126,7 +126,7 @@ field offsets, alignment and meanings. Otherwise it requires a new contract.
 The following historical diagnostic codes retain their numeric values:
 
 - `policy_not_stratifiable` covers both a cycle through a negative dependency
-  (`negation cycle`, with a predicate belonging to the cycle) and a finite
+  (`stratification cycle`, with a predicate belonging to the cycle) and a finite
   stratification exceeding the build ceiling (`negation depth exceeds stratum
   limit`). The latter carries CAPACITY with `MAX_STRATA` (append-only limit ID
   26), `observed_count` equal to the required number of strata and `limit = 4`,
@@ -149,6 +149,33 @@ The following historical diagnostic codes retain their numeric values:
   constant is not a body literal and suggests a comparison (`X = true`). Boolean
   constants remain valid comparison operands; no Prolog-style truth literal is
   introduced.
+
+The 0.26.0 diagnostic wording uses the same code values:
+
+| Code | Message and sections |
+| --- | --- |
+| `parser_unsafe_variable` | Invalid aggregate projection/result relationships report `aggregate result variable must differ from the projected variable and must not occur in the source atom`; the hint shows `count(U, member(G,U), N)`. The projected variable must occur in the source. The defensive malformed-IR guard remains for frontend/backend authors. |
+| `policy_not_stratifiable` | Cycles report neutral `stratification cycle`, including aggregate-only cycles. The existing advice is retained. Finite stratum-depth wording and counts are unchanged. |
+| `operation_rejected` (input) | Existing symbol-count, dictionary-byte and symbol-length messages gain CAPACITY with `MAX_SYMBOLS`, `STRING_POOL_BYTES`, or `MAX_STRING_BYTES`, including the attempted count and bound. A too-long input symbol now returns `PAYLOAD_TOO_LARGE` (previously `INVALID_ARGUMENT`); other statuses stay unchanged. |
+| `parser_rule_body_literal_overflow` | Ordinary rules report `rule capacity exceeded`; OR lowering retains `OR expansion exceeds rule capacity`. Both retain CAPACITY / `MAX_RULES`. |
+| `solve_max_depth` | `recursive evaluation exceeds iteration depth limit`; the hint asks to reduce recursive derivation rounds to a fixed point. DEPTH remains populated. This is emitted by the ordinary or stratified solver when its recursive fixed-point iteration budget is exhausted, not by the loader. A twelve-rule chain can load successfully. |
+| `operation_rejected` (explanation) | Diagnosed preparation/text calls report `query symbol absent from the result` with `query a symbol the result contains`, `unknown or non-query predicate` with declaration/arity advice, or `explanation kind not reserved at prepare` with session-reservation advice. Backend `UNSUPPORTED` reports `explanation kind not supported by the backend`; other failures report `explanation preparation failed` with lifetime/query/storage advice. Status, code, message, hint and PREDICATE are filled on failures. |
+
+Symbols in an input batch are interned in sorted order: the fact identified by
+symbol-count exhaustion carries the 513th sorted symbol, which need not be the
+last fact in the submitted batch. Dictionary byte counts include NUL terminators.
+
+`result_prepare_explanation_diagnosed` and `result_explain_text_diagnosed`
+add caller-owned, optional diagnostics (last argument); the latter takes the
+same explanation kind as prepare and covers Why-true and Why-false. Existing
+functions keep their signatures and statuses. No diagnostic code is added and
+no diagnostic is cached in a session/result. Python and JavaScript expose the
+native diagnostic message and predicate; unknown-symbol exceptions also name
+`unknown query symbol` rather than an internal cached-workspace operation.
+
+CLI migration: switch structured explanation preparation to
+`result_prepare_explanation_diagnosed`, or text convenience to
+`result_explain_text_diagnosed`, passing the CLI's initialized diagnostic.
 
 `status` carries the status associated with a populated diagnostic; `code`
 carries the precise cause and has one typed namespace. `source == NONE` means

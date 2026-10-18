@@ -227,6 +227,10 @@ void maelys_datalog_copy_solve_diagnostic(maelys_datalog_diagnostic_t *out,
             : "Each projected value must be an integer in [0, 2147483647]; no coercion is performed.");
         return; /* The compact aggregate payload aliases the other error sections. */
     }
+    if (in->category == MAELYS_DATALOG_SOLVE_DIAG_MAX_DEPTH) {
+        snprintf(out->message, sizeof(out->message), "recursive evaluation exceeds iteration depth limit");
+        snprintf(out->hint, sizeof(out->hint), "reduce the number of recursive derivation rounds required to reach a fixed point");
+    }
     const int filter_budget = in->category == MAELYS_DATALOG_SOLVE_DIAG_FILTER_ERROR;
     if (!filter_budget && in->depth_limit) {
         out->present |= MAELYS_DATALOG_DIAGNOSTIC_DEPTH;

@@ -307,6 +307,14 @@ int maelys_datalog_result_prepare_explanation(
     maelys_datalog_result_t *, maelys_datalog_explanation_kind_t,
     const char *, const maelys_datalog_value_t *, size_t,
     void *, size_t, maelys_datalog_prepared_explanation_t **);
+int maelys_datalog_result_prepare_explanation_diagnosed(
+    maelys_datalog_result_t *, maelys_datalog_explanation_kind_t,
+    const char *, const maelys_datalog_value_t *, size_t,
+    void *, size_t, maelys_datalog_prepared_explanation_t **, maelys_datalog_diagnostic_t *);
+int maelys_datalog_result_explain_text_diagnosed(
+    const maelys_datalog_result_t *, maelys_datalog_explanation_kind_t,
+    const char *, const maelys_datalog_value_t *, size_t,
+    char *, size_t, size_t *, maelys_datalog_diagnostic_t *);
 int maelys_datalog_prepared_explanation_text_size(
     const maelys_datalog_prepared_explanation_t *, size_t *);
 int maelys_datalog_prepared_explanation_write_text(

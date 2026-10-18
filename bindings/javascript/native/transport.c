@@ -405,13 +405,14 @@ static int dispatch(maelys_js_context *c, uint32_t op, const uint32_t *w, uint32
             c->words[0] = (uint32_t)present; c->word_count = 1; return OK;
         }
         size_t required = 0;
-        int (*explain)(const maelys_datalog_result_t *, const char *, const maelys_datalog_value_t *, size_t, char *, size_t, size_t *) =
-            w[1] == 1 ? maelys_datalog_result_explain_true_text : maelys_datalog_result_explain_false_text;
-        TRY(explain(h->result, f->predicate, f->terms, f->arity, NULL, 0, &required));
+        maelys_datalog_explanation_kind_t kind = (maelys_datalog_explanation_kind_t)w[1];
+        TRY(maelys_datalog_result_explain_text_diagnosed(h->result, kind,
+            f->predicate, f->terms, f->arity, NULL, 0, &required, &c->diagnostic));
         if (required >= UINT32_MAX) return TOO_LARGE;
         c->owned_text = malloc(required + 1);
         if (!c->owned_text) return INTERNAL;
-        TRY(explain(h->result, f->predicate, f->terms, f->arity, c->owned_text, required + 1, &required));
+        TRY(maelys_datalog_result_explain_text_diagnosed(h->result, kind,
+            f->predicate, f->terms, f->arity, c->owned_text, required + 1, &required, &c->diagnostic));
         c->text = c->owned_text; return OK;
     }
     case 17: {
