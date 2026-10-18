@@ -237,6 +237,11 @@ class EngineBase {
   [Symbol.dispose]() { this.close(); }
 }
 class Ruleset {
+  readsPredicate(name, arity, policyIndex = 0) {
+    const s = live(this, 'Ruleset'), pool = strings();
+    return !!invoke(s.engine, 'readsPredicate', 26,
+      [s.id, u32(policyIndex, 'policyIndex'), u32(arity, 'arity'), ...pool.add(name)], pool.finish()).words[0];
+  }
   programCounts(policyIndex = 0) {
     const s = live(this, 'Ruleset');
     const [predicates, facts, rules] = invoke(s.engine, 'programCounts', 21,

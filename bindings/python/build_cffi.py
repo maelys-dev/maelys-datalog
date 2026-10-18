@@ -225,6 +225,7 @@ int maelys_datalog_policy_load_manifest_buffer(
     const char *, size_t, const maelys_datalog_policy_bundle_entry_t *, size_t,
     unsigned, maelys_datalog_policy_t **, maelys_datalog_diagnostic_t *);
 int maelys_datalog_policy_count(const maelys_datalog_policy_t *, size_t *);
+int maelys_datalog_policy_reads_predicate(const maelys_datalog_policy_t *, size_t, const char *, size_t, int *);
 int maelys_datalog_policy_stat_get(const maelys_datalog_policy_t *, size_t, int, size_t *);
 int maelys_datalog_policy_fingerprint(const maelys_datalog_policy_t *, char[65]);
 int maelys_datalog_session_fingerprint(const maelys_datalog_session_t *, char[65]);

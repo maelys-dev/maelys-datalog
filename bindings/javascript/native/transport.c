@@ -460,6 +460,12 @@ static int dispatch(maelys_js_context *c, uint32_t op, const uint32_t *w, uint32
         }
         c->word_count = 3; return OK;
     }
+    case 26: {
+        REQUIRE(n == 5 && TEXT(3)); HANDLE(h, w[0], POLICY);
+        int reads;
+        TRY(maelys_datalog_policy_reads_predicate(h->p.policy, w[1], TEXT(3), w[2], &reads));
+        c->words[0] = (uint32_t)reads; c->word_count = 1; return OK;
+    }
     case 22: { /* Attach retained input before the first successful solve. */
         REQUIRE(n >= 5); HANDLE(session, w[0], SESSION);
         size_t max_symbols;

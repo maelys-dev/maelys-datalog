@@ -435,6 +435,22 @@ class Ruleset:
         _check(lib.maelys_datalog_policy_count(self._policy, out), "count policies")
         return int(out[0])
 
+    def reads_predicate(self, name: str, arity: int, policy_index: int = 0) -> bool:
+        """Read cached structural body use; no native session is created."""
+        self._require_open()
+        for label, value in (("arity", arity), ("policy_index", policy_index)):
+            if isinstance(value, bool) or not isinstance(value, int):
+                raise TypeError(f"{label} must be an int")
+            if value < 0:
+                raise ValueError(f"{label} must be nonnegative")
+        if policy_index >= self.policy_count:
+            raise IndexError("policy_index outside the loaded policy set")
+        text = ffi.new("char[]", _name(name, "predicate"))
+        out = ffi.new("int *")
+        _check(lib.maelys_datalog_policy_reads_predicate(
+            self._policy, policy_index, text, arity, out), "read predicate use")
+        return bool(out[0])
+
     def program_counts(self, policy_index: int = 0) -> ProgramCounts:
         """Read compiled counts without preparing a session."""
         self._require_open()

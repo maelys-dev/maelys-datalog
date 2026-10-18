@@ -16,6 +16,24 @@ for (const runtime of runtimes) {
   const api = await import(pathToFileURL(resolve(packageRoot, `src/${runtime}.mjs`)));
   const { Engine, Predicate: P, Status: S, MaelysDatalogError, Capability, ExplanationKind } = api;
   const status = expected => error => error instanceof MaelysDatalogError && error.status === expected;
+  test(`${runtime}: cached policy reads include negation and every aggregate`, async t => {
+    const engine = await Engine.create({profile}); t.after(() => engine.close());
+    engine.registerDomain('reads', [P.edb('seed',1),P.edb('blocked',1),P.edb('agg',1),
+      P.edb('unused',1),P.idbQuery('out',1),P.policyFact('fixed',1)], ['a']);
+    for (const [source, expected] of [
+      ['out(X):-seed(X),not(blocked(X)). fixed(1).', ['seed','blocked']],
+      ['out(X):-seed(X),X=X,starts_with(X,"a").', ['seed']],
+      ...['count','min','max','sum'].map(kind => [`out(N):-${kind}(V,agg(V),N).`,['agg']]),
+    ]) {
+      const rules=engine.loadInlineRuleset('reads','reads',source);
+      for(const name of ['seed','blocked','agg','unused','out','fixed','unknown'])
+        assert.equal(rules.readsPredicate(name,1),expected.includes(name));
+      assert.equal(rules.readsPredicate('seed',2),false);
+      assert.throws(()=>rules.readsPredicate('seed',1,1),status(S.NOT_FOUND));
+      assert.throws(()=>rules.readsPredicate('seed',-1));
+      rules.close(); assert.throws(()=>rules.readsPredicate('seed',1));
+    }
+  });
   test(`${runtime}: complete variable names in joins, recursion and arithmetic`, async t => {
     const engine = await Engine.create({profile}); t.after(() => engine.close());
     engine.registerDomain('variable_names', [P.edb('edge',2), P.edb('seed',2), P.idbQuery('out',2)]);

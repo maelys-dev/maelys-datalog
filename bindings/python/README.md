@@ -778,3 +778,13 @@ adds once per distinct complete source fact, so different event IDs with equal
 values each contribute. A matching non-integer or overflow rejects the solve
 with `INVALID_FIELD`. These are snapshot operators; see the
 [aggregate contract](../../docs/specifications/maelys-datalog-v2/aggregates.md).
+
+### Structural policy reads
+
+`rules.reads_predicate("seed", 1, policy_index=0)` returns whether the selected policy structurally reads a
+registry name/arity pair. Positive and negated body atoms and aggregate sources
+count; comparisons, filters, rule heads and compiled facts do not. Unknown
+constructions conservatively read every registry pair; unknown pairs return
+false. Reads are cached at load time and require no native session. The binding
+still allocates conversion/transport storage. Closed rulesets and invalid policy
+indices are errors.

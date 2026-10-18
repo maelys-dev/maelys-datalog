@@ -472,6 +472,18 @@ MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_policy_count(
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_policy_id(
     const maelys_datalog_policy_t *policy, size_t policy_index,
     const char **out_policy_id);
+/* Read structural predicate use, cached at load time, without allocation or a
+ * session. policy_index follows enabled-policy order. A read is a positive or
+ * negated rule-body atom or an aggregate source. Comparisons, filters, rule
+ * heads and compiled facts do not count. A construction whose reads cannot be
+ * established conservatively reads every (name, arity) pair in the registry,
+ * including builtin predicates; an unknown literal kind has this behavior.
+ * Unknown registry pair: OK and 0. NULL arguments: INVALID_ARGUMENT. Invalid
+ * index: NOT_FOUND. Released, still-addressable handle: INVALID_STATE; a freed
+ * pointer is invalid. Every failure leaves out_reads intact. */
+MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_policy_reads_predicate(
+    const maelys_datalog_policy_t *policy, size_t policy_index,
+    const char *name, size_t arity, int *out_reads);
 /* Read one selected policy without preparing a session or allocating storage.
  * policy_index follows manifest enabled-policy order, as session_create does.
  * An invalid index returns NOT_FOUND; an unknown statistic returns UNSUPPORTED.
