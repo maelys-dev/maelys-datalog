@@ -39,9 +39,11 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ### Python performance review — pending maintainer decision
 
-The report must measure the integrated 0.25.0 runtime commit containing #200
-and #201. Record its exact commit, run URL, artifact name, report SHA-256,
-control validity, findings and David's decision here before `cut --apply`.
+[Run 39156330444](https://github.com/maelys-dev/maelys-datalog/actions/runs/39156330444)
+is measuring integrated runtime commit
+`e5b5f09198fa927b3f70aea609666bc5f15673d6`, containing #200 and #201.
+The report is still running: its artifact name, report SHA-256, control
+validity, findings and David's decision remain to be recorded before `cut --apply`.
 The documentation correction does not itself require another measurement.
 The accepted #198 report for 0.24.0 does not cover the predicate-read cache;
 no performance exception is accepted for 0.25.0. The changelog must first be
