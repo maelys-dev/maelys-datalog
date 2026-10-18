@@ -818,7 +818,9 @@ static maelys_result_t parse_literal(parser_t *p,
         if (!token_is_cmp(p->tok.kind)) {
             parser_diag(p,
                         MAELYS_DATALOG_DIAG_PARSER_INVALID_COMPARISON,
-                        "expected comparison operator",
+                        lhs.has_simple_term && lhs.term.kind == MAELYS_DATALOG_TERM_BOOL
+                            ? "boolean constant is not a body literal; compare it (X = true)"
+                            : "expected comparison operator",
                         "use a supported comparison between typed terms");
             return MAELYS_ERR_INVALID_FIELD;
         }

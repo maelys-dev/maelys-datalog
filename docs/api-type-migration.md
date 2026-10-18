@@ -123,6 +123,33 @@ Unknown presence bits must be ignored by readers; unknown diagnostic codes must
 not be inferred from text. Future compatible evolution must preserve known
 field offsets, alignment and meanings. Otherwise it requires a new contract.
 
+The following historical diagnostic codes retain their numeric values:
+
+- `policy_not_stratifiable` covers both a cycle through a negative dependency
+  (`negation cycle`, with a predicate belonging to the cycle) and a finite
+  stratification exceeding the build ceiling (`negation depth exceeds stratum
+  limit`). The latter carries CAPACITY with `MAX_STRATA` (append-only limit ID
+  26), `observed_count` equal to the required number of strata and `limit = 4`,
+  plus DEPTH with the same stratum counts in `depth` and `depth_limit`. Strata
+  are counted from one: three stacked negations require four strata and are
+  accepted; four require five and are refused. A cycle has no finite required
+  depth and carries neither CAPACITY nor DEPTH. Aggregate dependencies also
+  require a strictly higher stratum and use this stratification diagnostic.
+- `solve_comparison_type_error` also covers arithmetic overflow. Its message
+  distinguishes `arithmetic overflow`, `comparison operands have different
+  kinds`, and `ordering requires integer operands`. The COMPARISON section
+  carries the operator and operand kinds; arithmetic overflow is not a capacity
+  exhaustion and does not carry CAPACITY.
+- `parser_anonymous_variable_in_comparison` is a historical name covering `_`
+  in comparisons, arithmetic expressions, and `not(...)`. The message names
+  the actual rejected context, including `anonymous variable not allowed in
+  not()`. This is not permission to use anonymous variables in these contexts.
+- `parser_invalid_comparison` includes a standalone boolean body item such as
+  `allow() :- true.` or `allow() :- false.`. Its message explains that a boolean
+  constant is not a body literal and suggests a comparison (`X = true`). Boolean
+  constants remain valid comparison operands; no Prolog-style truth literal is
+  introduced.
+
 `status` carries the status associated with a populated diagnostic; `code`
 carries the precise cause and has one typed namespace. `source == NONE` means
 no diagnostic was supplied: always use the function's return status. Generic

@@ -30,6 +30,7 @@ maelys_datalog_status_t maelys_datalog_limit_get(
         case MAELYS_DATALOG_LIMIT_MAX_FILTER_EVALUATIONS: value = MAELYS_DATALOG_MAX_FILTER_EVALUATIONS; break;
         case MAELYS_DATALOG_LIMIT_MAX_FILTER_COST_UNITS: value = MAELYS_DATALOG_MAX_FILTER_COST_UNITS; break;
         case MAELYS_DATALOG_LIMIT_MAX_RULE_FACTS: value = MAELYS_DATALOG_MAX_RULE_FACTS; break;
+        case MAELYS_DATALOG_LIMIT_MAX_STRATA: value = MAELYS_DATALOG_MAX_STRATA; break;
         case MAELYS_DATALOG_LIMIT_SESSION_ARENA_BYTES:
         case MAELYS_DATALOG_LIMIT_EXECUTION_BYTES:
             return MAELYS_DATALOG_STATUS_UNSUPPORTED;
@@ -66,6 +67,7 @@ const char *maelys_datalog_limit_name(maelys_datalog_limit_t limit) {
         case MAELYS_DATALOG_LIMIT_SESSION_ARENA_BYTES: return "SESSION_ARENA_BYTES";
         case MAELYS_DATALOG_LIMIT_EXECUTION_BYTES: return "EXECUTION_BYTES";
         case MAELYS_DATALOG_LIMIT_MAX_RULE_FACTS: return "MAX_RULE_FACTS";
+        case MAELYS_DATALOG_LIMIT_MAX_STRATA: return "MAX_STRATA";
         default: return NULL;
     }
 }

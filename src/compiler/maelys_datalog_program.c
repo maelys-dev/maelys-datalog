@@ -74,6 +74,10 @@ void maelys_datalog_copy_load_diagnostic(maelys_datalog_diagnostic_t *out,
         out->observed_count = in->count; out->limit = in->limit;
         out->limit_kind = (maelys_datalog_limit_t)in->limit_kind;
     }
+    if (in->limit_kind == MAELYS_DATALOG_LIMIT_MAX_STRATA) {
+        out->present |= MAELYS_DATALOG_DIAGNOSTIC_DEPTH;
+        out->depth = in->count; out->depth_limit = in->limit;
+    }
     if (in->token[0] || in->field[0] || in->domain[0]) out->present |= MAELYS_DATALOG_DIAGNOSTIC_CONTEXT;
     if (in->code == MAELYS_DATALOG_DIAG_PARSER_ARITY_MISMATCH &&
         in->expected_arity != in->observed_arity) {

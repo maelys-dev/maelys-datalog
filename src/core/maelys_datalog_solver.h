@@ -62,7 +62,7 @@ typedef struct {
             uint8_t arity_expected;
             uint8_t arity_observed;
             uint8_t limit_kind; /* maelys_datalog_limit_t, zero when unavailable. */
-            uint8_t _pad[1];
+            uint8_t compare_result; /* Uses the existing padding byte. */
         };
         maelys_datalog_aggregate_error_t aggregate;
     };

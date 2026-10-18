@@ -72,16 +72,6 @@ static void solve_once_bindings_set_bound(solve_once_bindings_t *bindings,
     bindings->bound_mask |= (uint32_t)1u << variable;
 }
 
-typedef enum {
-    MAELYS_DATALOG_COMPARE_TRUE = 0,
-    MAELYS_DATALOG_COMPARE_FALSE,
-    MAELYS_DATALOG_COMPARE_INVALID_KIND,
-    MAELYS_DATALOG_COMPARE_INVALID_ORDINAL_TYPE,
-    MAELYS_DATALOG_COMPARE_UNBOUND_VARIABLE,
-    MAELYS_DATALOG_COMPARE_UNKNOWN_OPERATOR,
-    MAELYS_DATALOG_COMPARE_UNKNOWN_TERM_KIND,
-    MAELYS_DATALOG_COMPARE_ARITH_OVERFLOW
-} maelys_datalog_compare_result_t;
 
 struct maelys_datalog_solve_result {
     /* Only this metadata prefix is reset on workspace release. Payload arrays
@@ -435,6 +425,7 @@ static void solve_once_diag_comparison(maelys_datalog_internal_solve_diagnostic_
     diag->lhs_kind = result->runtime_diag.observed_lhs_kind;
     diag->rhs_kind = result->runtime_diag.observed_rhs_kind;
     diag->comparison_op = result->runtime_diag.failed_op;
+    diag->compare_result = result->runtime_diag.compare_result;
     diag->term_index = result->runtime_diag.term_index;
 }
 

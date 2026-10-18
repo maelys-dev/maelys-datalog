@@ -9,6 +9,17 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ### Fixed
 
+- Distinguish a negation cycle from finite stratification exceeding four strata,
+  retaining `policy_not_stratifiable`. Report a cycle predicate, or the required
+  stratum count in CAPACITY (`MAX_STRATA`, appended limit ID 26) and DEPTH.
+  Four stacked negations require five strata and are the first refused chain.
+- Report arithmetic overflow distinctly from mixed comparison kinds and ordering
+  on symbols, retaining `solve_comparison_type_error`, its operator and kinds,
+  without a capacity section for overflow. Clarify the historical anonymous
+  variable diagnostic code's comparison, arithmetic and `not(...)` contexts,
+  and explain why a standalone boolean constant is not a body literal; parsing
+  rules and existing diagnostic code values remain unchanged.
+
 - Identify named source variables by their complete, case-sensitive name within
   each rule, rather than silently aliasing names with the same initial letter
   (`U`/`Ux`, `G1`/`G2`). Up to 26 distinct names are accepted; the next name
