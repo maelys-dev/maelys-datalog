@@ -42,9 +42,14 @@ names take the lowest remaining index in first-occurrence order. Anonymous `_`
 occurrences retain their independent slots 26..31 and existing restrictions.
 The 27th distinct name reports CAPACITY (`MAX_RULE_VARIABLES`, observed 27,
 effective limit 26); the total internal variable ceiling remains 32.
-Fingerprints remain unchanged for policies using only single-letter names and
-anonymous variables. Longer names previously aliased by first letter; correcting
-that interpretation may change both results and fingerprints.
+The policy-set fingerprint (`policy_fingerprint`, source authority) is unchanged
+for every policy with unchanged source and manifest, including longer names.
+The program fingerprint (`program_fingerprint`) and execution fingerprint
+(`session_execution_fingerprint`) remain unchanged for single-letter names and
+anonymous variables. For longer names these two identities can change with the
+corrected variable mapping; longer names previously aliased by first letter.
+Such policies can derive more facts than before. A long name whose assigned
+slot already matched the old mapping need not change either identity.
 
 ## Public records and language features
 
