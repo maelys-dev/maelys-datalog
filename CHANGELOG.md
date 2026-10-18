@@ -7,6 +7,8 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ## Unreleased
 
+## 0.25.0 — 2026-10-18
+
 ### Fixed
 
 - Distinguish a negation cycle from finite stratification exceeding four strata,
@@ -20,6 +22,9 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
   and explain why a standalone boolean constant is not a body literal; parsing
   rules and existing diagnostic code values remain unchanged.
 
+- Correct the aggregate specification: a named variable is identified by its
+  complete, case-sensitive name within each rule, as implemented since 0.24.0.
+
 ### Added
 
 - Add `maelys_datalog_policy_reads_predicate` and Python `reads_predicate` /
@@ -31,6 +36,17 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
   `maelys_datalog_policy_storage_requirements`; callers must re-read the required
   size and alignment before supplying storage. The native accessor's allocation
   guarantee does not cover Python or JavaScript conversions.
+
+### Python performance review — pending maintainer decision
+
+The report must measure the integrated 0.25.0 runtime commit containing #200
+and #201. Record its exact commit, run URL, artifact name, report SHA-256,
+control validity, findings and David's decision here before `cut --apply`.
+The documentation correction does not itself require another measurement.
+The accepted #198 report for 0.24.0 does not cover the predicate-read cache;
+no performance exception is accepted for 0.25.0. The changelog must first be
+merged onto main on David's instruction; cut then runs from updated main and
+carries only VERSION and the generated version header.
 
 ## 0.24.0 — 2026-10-18
 
