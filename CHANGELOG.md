@@ -7,8 +7,6 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ## Unreleased
 
-## 0.24.0 — 2026-10-18
-
 ### Fixed
 
 - Distinguish a negation cycle from finite stratification exceeding four strata,
@@ -21,6 +19,22 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
   variable diagnostic code's comparison, arithmetic and `not(...)` contexts,
   and explain why a standalone boolean constant is not a body literal; parsing
   rules and existing diagnostic code values remain unchanged.
+
+### Added
+
+- Add `maelys_datalog_policy_reads_predicate` and Python `reads_predicate` /
+  JavaScript `readsPredicate`: cached, per-policy structural reads from positive
+  and negated body atoms and all aggregate sources, without a native allocation
+  or session. Comparisons, filters, rule heads and compiled facts do not count.
+  Unknown constructions conservatively read every name/arity pair in the
+  registry; unknown registry pairs return false. The cache increases
+  `maelys_datalog_policy_storage_requirements`; callers must re-read the required
+  size and alignment before supplying storage. The native accessor's allocation
+  guarantee does not cover Python or JavaScript conversions.
+
+## 0.24.0 — 2026-10-18
+
+### Fixed
 
 - Identify named source variables by their complete, case-sensitive name within
   each rule, rather than silently aliasing names with the same initial letter

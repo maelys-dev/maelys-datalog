@@ -202,6 +202,7 @@ static maelys_datalog_status_t policy_load_in(void *storage, size_t bytes, maely
     }
     policy->set.policy_count = 1u;
     maelys_datalog_context_retain(context);
+    maelys_datalog_policy_cache_reads(policy);
     *out_policy = policy;
     return MAELYS_DATALOG_STATUS_OK;
 }
@@ -258,7 +259,59 @@ maelys_datalog_status_t maelys_datalog_policy_load_manifest(
         free(policy);
         return public_status(status);
     }
+    maelys_datalog_policy_cache_reads(policy);
     *out_policy = policy;
+    return MAELYS_DATALOG_STATUS_OK;
+}
+
+void maelys_datalog_policy_cache_reads(maelys_datalog_policy_t *policy) {
+    memset(policy->reads, 0, sizeof(policy->reads));
+    for (size_t p = 0; p < policy->set.policy_count; ++p) {
+        const maelys_datalog_internal_ruleset_t *r = &policy->set.policies[p];
+        for (size_t i = 0; i < r->rule_count; ++i) {
+            const maelys_datalog_rule_t *rule = &r->rules[i];
+            for (size_t j = 0; j < rule->body_count; ++j) {
+                const maelys_datalog_literal_t *literal = &rule->body[j];
+                switch (literal->kind) {
+                    case MAELYS_DATALOG_LITERAL_ATOM:
+                    case MAELYS_DATALOG_LITERAL_NEGATED_ATOM:
+                    case MAELYS_DATALOG_LITERAL_COUNT:
+                    case MAELYS_DATALOG_LITERAL_MIN:
+                    case MAELYS_DATALOG_LITERAL_MAX:
+                    case MAELYS_DATALOG_LITERAL_SUM: {
+                        size_t id = literal->atom.predicate_id;
+                        if (id < r->registry.count)
+                            policy->reads[p][id / 8u] |= (uint8_t)(1u << (id % 8u));
+                        else
+                            memset(policy->reads[p], 0xff, sizeof(policy->reads[p]));
+                        break;
+                    }
+                    case MAELYS_DATALOG_LITERAL_COMPARISON:
+                    case MAELYS_DATALOG_LITERAL_FILTER:
+                        break;
+                    default:
+                        /* Unknown construction: no registry pair can be excluded,
+                         * regardless of its declaration origin or predicate flags. */
+                        memset(policy->reads[p], 0xff, sizeof(policy->reads[p]));
+                        break;
+                }
+            }
+        }
+    }
+}
+
+maelys_datalog_status_t maelys_datalog_policy_reads_predicate(
+    const maelys_datalog_policy_t *policy, size_t policy_index,
+    const char *name, size_t arity, int *out_reads) {
+    if (!policy || !name || !out_reads) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
+    if (!maelys_datalog_policy_is_live(policy)) return MAELYS_DATALOG_STATUS_INVALID_STATE;
+    if (policy_index >= policy->set.policy_count) return MAELYS_DATALOG_STATUS_NOT_FOUND;
+    maelys_datalog_predicate_id_t id;
+    int reads = 0;
+    if (maelys_datalog_predicate_registry_find(&policy->set.policies[policy_index].registry,
+                                             name, arity, &id))
+        reads = !!(policy->reads[policy_index][id / 8u] & (1u << (id % 8u)));
+    *out_reads = reads;
     return MAELYS_DATALOG_STATUS_OK;
 }
 
@@ -359,6 +412,7 @@ static maelys_datalog_status_t load_manifest_text(void *storage, size_t bytes, c
         discard_policy(policy);
         return (maelys_datalog_status_t)rc;
     }
+    maelys_datalog_policy_cache_reads(policy);
     *out = policy;
     return MAELYS_DATALOG_STATUS_OK;
 }

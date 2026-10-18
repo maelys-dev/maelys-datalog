@@ -244,3 +244,13 @@ reference pages and receipt checks before publishing the cutover release; then
 promote its immutable bytes together. Historical URLs may redirect or explain
 migration, but must not present the retired API as the current binding. No
 intermediate release continues both publication channels.
+
+### Structural policy reads
+
+`rules.readsPredicate("seed", 1, 0)` returns whether the selected policy structurally reads a
+registry name/arity pair. Positive and negated body atoms and aggregate sources
+count; comparisons, filters, rule heads and compiled facts do not. Unknown
+constructions conservatively read every registry pair; unknown pairs return
+false. Reads are cached at load time and require no native session. The binding
+still allocates conversion/transport storage. Closed rulesets and invalid policy
+indices are errors.

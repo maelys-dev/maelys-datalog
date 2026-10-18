@@ -154,6 +154,7 @@ export class Ruleset implements Disposable {
   private constructor();
   readonly policyCount: number;
   /** Read the selected compiled program without preparing a session. */
+  readsPredicate(name: string, arity: number, policyIndex?: number): boolean;
   programCounts(policyIndex?: number): Readonly<ProgramCounts>;
   readonly fingerprint: string;
   /** Reserve a reusable input EDB with explicit or profile-default bounds. */

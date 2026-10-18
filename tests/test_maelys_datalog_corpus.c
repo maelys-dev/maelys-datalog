@@ -1,4 +1,6 @@
 #include "helpers/test_framework.h"
+#include "helpers/policy_reads_oracle.h"
+#include "src/public/maelys_datalog_public_internal.h"
 #include "helpers/solve_validated_seed.h"
 
 #include "common/maelys_sha256.h"
@@ -360,7 +362,19 @@ static int run_corpus_file(const char *path)
         printf("CORPUS %s %d %d %s %s\n", path, long_names, api_rc,
                api_rc == MAELYS_OK ? ruleset.sha256 : "-", program);
     }
-    if (api_rc == MAELYS_OK) solve_validated_seed(&ruleset);
+    if (api_rc == MAELYS_OK) {
+        maelys_datalog_policy_t *policy = calloc(1, sizeof(*policy));
+        if (!policy) abort();
+        policy->set.policies[0] = ruleset;
+        policy->set.policy_count = 1;
+        atomic_init(&policy->references, 1);
+        maelys_datalog_policy_cache_reads(policy);
+        maelys_datalog_program_t program = {.ruleset=&ruleset};
+        int mismatch = policy_reads_oracle(policy, 0, &program);
+        free(policy); /* Test-only borrowed ruleset copy, no ownership transfer. */
+        if (mismatch) { fprintf(stderr, "read oracle fixture: %s\n", path); abort(); }
+        solve_validated_seed(&ruleset);
+    }
     maelys_datalog_ruleset_clear(&ruleset);
     free(buf);
     return 0;

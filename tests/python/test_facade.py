@@ -228,6 +228,7 @@ class FacadeTest(unittest.TestCase):
             "policy_load_manifest_buffer": "CFFI memory-bundle alternative; Engine uses the file loader",
             "policy_count": "Ruleset.policy_count", "policy_fingerprint": "Ruleset.fingerprint",
             "policy_stat_get": "Ruleset.program_counts",
+            "policy_reads_predicate": "Ruleset.reads_predicate",
             "policy_free": "Ruleset.close", "session_create": "Ruleset.prepare defaults",
             "session_config_create": "Ruleset.prepare",
             "session_config_set_required_capabilities": "Ruleset.prepare",

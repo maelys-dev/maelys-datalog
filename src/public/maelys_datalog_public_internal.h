@@ -6,10 +6,14 @@
 #include <stdatomic.h>
 struct maelys_datalog_policy {
     maelys_datalog_internal_policy_set_t set;
+    uint8_t reads[sizeof(((maelys_datalog_internal_policy_set_t *)0)->policies) /
+                  sizeof(maelys_datalog_internal_ruleset_t)][(MAELYS_DATALOG_MAX_PREDICATES + 7u) / 8u];
     int owns_storage;
     int released;
     atomic_size_t references;
 };
+/* Populate once, after successful compilation of every enabled policy. */
+void maelys_datalog_policy_cache_reads(maelys_datalog_policy_t *policy);
 /* A released caller-owned handle may have been zeroed by discard_policy.
  * Addressability alone does not restore the reference that makes it live.
  * This does not validate freed pointers or synchronize concurrent release. */
