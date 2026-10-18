@@ -56,7 +56,10 @@ static int named_cases(void) {
         maelys_datalog_policy_t *p=NULL;
         maelys_datalog_diagnostic_t d=MAELYS_DATALOG_DIAGNOSTIC_INIT;
         int rc=maelys_datalog_policy_load_inline("reads","r",sources[i],strlen(sources[i]),&p,&d);
-        if(rc) fprintf(stderr,"%s: %s\n",names[i],d.message); OK(rc);
+        if (rc) {
+            fprintf(stderr,"%s: %s\n",names[i],d.message);
+        }
+        OK(rc);
         maelys_datalog_program_t program={.ruleset=&p->set.policies[0]};
         forbid_allocator=1;
         CHECK(!answer(p,"seed",1,i<2 || i==6)); CHECK(!answer(p,"blocked",1,i==1));
