@@ -7,6 +7,20 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ## Unreleased
 
+### Fixed
+
+- Identify named source variables by their complete, case-sensitive name within
+  each rule, rather than silently aliasing names with the same initial letter
+  (`U`/`Ux`, `G1`/`G2`). Up to 26 distinct names are accepted; the next name
+  reports CAPACITY with `MAX_RULE_VARIABLES`, observed count 27 and limit 26.
+  Single-letter variables retain their historical slots and anonymous variables
+  retain their separate slots. The policy-set fingerprint (`policy_fingerprint`,
+  source authority) is unchanged for every policy with unchanged source and
+  manifest. The program fingerprint (`program_fingerprint`) and execution
+  fingerprint (`session_execution_fingerprint`) are unchanged for single-letter
+  and anonymous variables; they can change for longer names under the corrected
+  mapping. Policies using longer names can derive more facts than before.
+
 ## 0.23.1 — 2026-10-16
 
 ### Fixed

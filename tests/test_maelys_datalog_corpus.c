@@ -2,9 +2,11 @@
 #include "helpers/solve_validated_seed.h"
 
 #include "common/maelys_sha256.h"
+#include "src/compiler/maelys_datalog_program_internal.h"
 #include "src/core/maelys_datalog_diagnostic.h"
 #include "src/core/maelys_datalog_domain_registry.h"
 #include "src/core/maelys_datalog_parser.h"
+#include "src/core/maelys_datalog_lexer.h"
 #include "src/core/maelys_datalog_predicate_registry.h"
 #include "src/core/maelys_datalog_ruleset.h"
 #include "src/core/maelys_datalog_solver.h"
@@ -339,6 +341,25 @@ static int run_corpus_file(const char *path)
         }
     }
 
+    if (getenv("MAELYS_CORPUS_FINGERPRINTS")) {
+        char program[65] = "-";
+        int long_names = 0;
+        maelys_datalog_lexer_t lexer;
+        maelys_datalog_token_t token;
+        maelys_datalog_lexer_init(&lexer, (const char *)buf, len);
+        while (maelys_datalog_lexer_next(&lexer, &token) == MAELYS_OK &&
+               token.kind != MAELYS_DATALOG_TOKEN_EOF)
+            if (token.kind == MAELYS_DATALOG_TOKEN_VARIABLE && token.len > 1u)
+                long_names = 1;
+        if (api_rc == MAELYS_OK) {
+            strcpy(ruleset.sha256, MAELYS_DATALOG_SHA256_UNSET);
+            if (maelys_datalog_ruleset_finalize_sha256(&ruleset) != MAELYS_OK ||
+                maelys_datalog_compute_program_fingerprint(&ruleset, program) != MAELYS_OK)
+                abort();
+        }
+        printf("CORPUS %s %d %d %s %s\n", path, long_names, api_rc,
+               api_rc == MAELYS_OK ? ruleset.sha256 : "-", program);
+    }
     if (api_rc == MAELYS_OK) solve_validated_seed(&ruleset);
     maelys_datalog_ruleset_clear(&ruleset);
     free(buf);

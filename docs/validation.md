@@ -670,3 +670,21 @@ all caller blocks. `--windows` adds six sanitizer-backed mutations; raw evidence
 remains in CI artifacts. The installed static and shared SDK consumer replays the
 same four variants. No private backend, arbitrary negation solver or recursive
 allocation guarantee is inferred from this bounded fixture.
+
+### Source variable identity compatibility
+
+`test_maelys_datalog_variable_names` exercises full-name joins, recursion,
+late single-letter reservations, arithmetic, unbound filter variables, separate
+rule scopes, the 26-name boundary and its structured diagnostic, and the combined
+26 named plus six anonymous slots. Python and JavaScript contract tests also
+execute full-name rules and the README's `Id`/`Service` aggregate example.
+
+Run `python3 tools/check_variable_name_compatibility.py --profile small --output
+/private/tmp/variable-proof-small` (and separately `--profile large` with a new
+output directory) to compare the existing corpus against commit
+`f1632b5e39ea2f3e85d743fa260736ae884af7c0`. The tool builds both engines with the
+same observation harness, compares internal canonical-ruleset hashes and `program_fingerprint` for every
+accepted fixture using only single-letter or anonymous variables, lists longer
+name changes separately, and preserves rejected-fixture outcomes. It also rebuilds
+two first-letter mutants, one at each parser entry point, and requires the
+semantic tests to reject each. All generated logs stay in the output directory.
