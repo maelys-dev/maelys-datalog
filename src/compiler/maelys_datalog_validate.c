@@ -185,6 +185,12 @@ static maelys_result_t assign_strata_impl(validation_context_t *p) {
     ruleset->max_stratum = 0;
     ruleset->strata_assigned = 0;
 
+    /* Keep a maximizing dependency for each update. After more than N passes,
+     * following N predecessors reaches a cycle, rather than a downstream head.
+     * Do not apply the stratum ceiling until convergence: a cycle is not a
+     * finite policy whose required number of strata exceeds the build bound. */
+    maelys_datalog_predicate_id_t predecessor[MAELYS_DATALOG_MAX_PREDICATES] = {0};
+    maelys_datalog_predicate_id_t updated = 0;
     int changed = 1;
     size_t iters = 0;
     while (changed && iters <= MAELYS_DATALOG_MAX_PREDICATES) {
@@ -208,29 +214,16 @@ static maelys_result_t assign_strata_impl(validation_context_t *p) {
                 uint32_t ns = ruleset->strata[bpid];
                 if (literal->kind == MAELYS_DATALOG_LITERAL_NEGATED_ATOM ||
                     maelys_datalog_literal_is_aggregate(literal->kind)) {
-                    if (ns >= MAELYS_DATALOG_MAX_STRATA) {
-                        validation_diag(
-                            p, MAELYS_DATALOG_DIAG_POLICY_NOT_STRATIFIABLE,
-                            ruleset->aggregates_supported ? "aggregate/negation stratum limit exceeded"
-                                                           : "negation stratum limit exceeded",
-                            ruleset->aggregates_supported ? "remove recursion through aggregate/negation or reduce depth"
-                                                         : "remove recursion through negation or reduce negation depth");
-                        return MAELYS_ERR_INVALID_FIELD;
-                    }
                     ns += 1u;
                 }
-                if (ns > s)
+                if (ns > s) {
                     s = ns;
-            }
-            if (s >= MAELYS_DATALOG_MAX_STRATA) {
-                validation_diag(p, MAELYS_DATALOG_DIAG_POLICY_NOT_STRATIFIABLE,
-                                ruleset->aggregates_supported ? "aggregate/negation stratum limit exceeded"
-                                                           : "negation stratum limit exceeded",
-                                "reduce stratification depth below MAELYS_DATALOG_MAX_STRATA");
-                return MAELYS_ERR_INVALID_FIELD;
+                    predecessor[hpid] = bpid;
+                }
             }
             if (s > ruleset->strata[hpid]) {
                 ruleset->strata[hpid] = s;
+                updated = hpid;
                 changed = 1;
             }
         }
@@ -239,9 +232,14 @@ static maelys_result_t assign_strata_impl(validation_context_t *p) {
 
     if (changed) {
         validation_diag(p, MAELYS_DATALOG_DIAG_POLICY_NOT_STRATIFIABLE,
-                        "policy is not stratifiable", ruleset->aggregates_supported
+                        "negation cycle", ruleset->aggregates_supported
                             ? "remove recursion through count or negation"
                             : "remove recursion through negation");
+        for (size_t i = 0; i < MAELYS_DATALOG_MAX_PREDICATES; ++i)
+            updated = predecessor[updated];
+        const maelys_datalog_predicate_entry_t *pred =
+            maelys_datalog_predicate_registry_get(&ruleset->registry, updated);
+        if (pred) maelys_datalog_internal_diagnostic_set_predicate(p->diag, pred->name, pred->arity);
         return MAELYS_ERR_INVALID_FIELD;
     }
 
@@ -249,6 +247,14 @@ static maelys_result_t assign_strata_impl(validation_context_t *p) {
     for (size_t i = 0; i < MAELYS_DATALOG_MAX_PREDICATES; i++) {
         if (ruleset->strata[i] > max)
             max = ruleset->strata[i];
+    }
+    if (max >= MAELYS_DATALOG_MAX_STRATA) {
+        validation_diag(p, MAELYS_DATALOG_DIAG_POLICY_NOT_STRATIFIABLE,
+                        "negation depth exceeds stratum limit",
+                        "reduce the required number of strata");
+        maelys_datalog_internal_diagnostic_set_limit(p->diag,
+            MAELYS_DATALOG_LIMIT_MAX_STRATA, (size_t)max + 1u, MAELYS_DATALOG_MAX_STRATA);
+        return MAELYS_ERR_INVALID_FIELD;
     }
     ruleset->max_stratum = max;
     ruleset->strata_assigned = 1;

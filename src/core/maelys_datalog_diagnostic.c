@@ -246,6 +246,13 @@ void maelys_datalog_copy_solve_diagnostic(maelys_datalog_diagnostic_t *out,
     }
     if (in->category == MAELYS_DATALOG_SOLVE_DIAG_COMPARISON_TYPE_ERROR) {
         out->present |= MAELYS_DATALOG_DIAGNOSTIC_COMPARISON;
+        out->comparison_result = in->compare_result;
+        const char *message = in->compare_result == MAELYS_DATALOG_COMPARE_ARITH_OVERFLOW
+            ? "arithmetic overflow" : in->compare_result == MAELYS_DATALOG_COMPARE_INVALID_KIND
+            ? "comparison operands have different kinds"
+            : in->compare_result == MAELYS_DATALOG_COMPARE_INVALID_ORDINAL_TYPE
+            ? "ordering requires integer operands" : "comparison_type_error";
+        snprintf(out->message, sizeof(out->message), "%s", message);
         out->lhs_kind = in->lhs_kind; out->rhs_kind = in->rhs_kind;
         out->comparison_op = in->comparison_op; out->term_index = in->term_index;
     }

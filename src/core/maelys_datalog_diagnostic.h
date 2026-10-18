@@ -8,6 +8,17 @@
 
 #include "maelys/datalog.h"
 
+typedef enum {
+    MAELYS_DATALOG_COMPARE_TRUE = 0,
+    MAELYS_DATALOG_COMPARE_FALSE,
+    MAELYS_DATALOG_COMPARE_INVALID_KIND,
+    MAELYS_DATALOG_COMPARE_INVALID_ORDINAL_TYPE,
+    MAELYS_DATALOG_COMPARE_UNBOUND_VARIABLE,
+    MAELYS_DATALOG_COMPARE_UNKNOWN_OPERATOR,
+    MAELYS_DATALOG_COMPARE_UNKNOWN_TERM_KIND,
+    MAELYS_DATALOG_COMPARE_ARITH_OVERFLOW
+} maelys_datalog_compare_result_t;
+
 typedef struct {
     maelys_datalog_diag_code_t code;
     uint8_t compare_result;
