@@ -37,7 +37,7 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
   size and alignment before supplying storage. The native accessor's allocation
   guarantee does not cover Python or JavaScript conversions.
 
-### Python performance review — pending maintainer decision
+### Python performance review — exception accepted for 0.25.0
 
 [Run 39156330444](https://github.com/maelys-dev/maelys-datalog/actions/runs/39156330444)
 measures integrated #200/#201 commit `e5b5f09198fa927b3f70aea609666bc5f15673d6`
@@ -59,12 +59,17 @@ against v0.24.0 in SMALL-default/93-symbol-prepared: solve median +2.413% /
 Three other recurrent raw review rows exceed the envelope in only one round:
 LARGE-Release/93-symbol-solve solve median and p95, and
 SMALL-Release/7-integer-solve total p95. All original alerts remain preserved.
-The empirical null envelope is not a confidence bound; these observations
-do not establish an engine cause. The earlier 0.24.0 exception does not
-approve this report. David's decision is pending; no exception or cut is
-authorized for 0.25.0. The later #204 change is documentation only.
-The changelog must be merged onto main on David's instruction before cut;
-cut then carries only VERSION and the generated version header.
+David explicitly accepts this report as an exception for 0.25.0. The
+LARGE-Release/93-symbol-solve median changes by +2.704% and +14.273% across
+the two rounds; this variation does not establish a native cause. David's
+Callgrind counts for the 93-symbol fixture are identical between `f164ab3`
+and `e5b5f09` in both profiles: SMALL 1,140,650 solve / 1,117,963 prepared,
+and LARGE 1,141,525 solve / 1,118,325 prepared instructions per request.
+These supplied, scoped software counts do not establish equal cycles or
+erase the timing observations. No native cause is established and no
+further attribution is made. The empirical null envelope is not a
+confidence bound. The recurrent total p95 above remains part of the record.
+The later #204 change is documentation only.
 
 ## 0.24.0 — 2026-10-18
 
