@@ -15,8 +15,8 @@ alert(Service) :- error_count(Service, N), N >= 10.
 
 The domain registers the ordinary predicates before parsing. Runtime events
 are EDB facts supplied through the API. Give each occurrence its own ID to
-count repeated events separately. The source language's existing variable
-identity rules apply (the first uppercase letter identifies a named variable).
+count repeated events separately. A named variable is identified by its complete,
+case-sensitive name within each rule.
 
 ## Binding and grouping
 
