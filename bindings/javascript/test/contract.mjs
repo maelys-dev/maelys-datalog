@@ -16,6 +16,39 @@ for (const runtime of runtimes) {
   const api = await import(pathToFileURL(resolve(packageRoot, `src/${runtime}.mjs`)));
   const { Engine, Predicate: P, Status: S, MaelysDatalogError, Capability, ExplanationKind } = api;
   const status = expected => error => error instanceof MaelysDatalogError && error.status === expected;
+  test(`${runtime}: complete variable names in joins, recursion and arithmetic`, async t => {
+    const engine = await Engine.create({profile}); t.after(() => engine.close());
+    engine.registerDomain('variable_names', [P.edb('edge',2), P.edb('seed',2), P.idbQuery('out',2)]);
+    for (const [source, expected] of [
+      ['out(U,Ux) :- edge(U,Ux), Ux > U.', [[1n,2n],[2n,3n]]],
+      ['out(U,G2) :- out(U,G1), edge(G1,G2). out(U,G) :- seed(U,G).', [[7n,1n],[7n,2n],[7n,3n]]],
+      ['out(Id,Service) :- edge(Id,Service), Service = Id + 1.', [[1n,2n],[2n,3n]]],
+    ]) {
+      const rules=engine.loadInlineRuleset('variable_names','names',source), edb=rules.edb();
+      edb.addFacts([f('edge',1n,2n),f('edge',2n,3n),f('seed',7n,1n)]);
+      const session=rules.prepare(), result=session.solve(edb);
+      assert.equal(result.derivedFactCount(),expected.length);
+      for (const terms of expected) assert.equal(result.containsFact('out',terms),true);
+      result.close();session.close();edb.close();rules.close();
+    }
+  });
+  test(`${runtime}: README Id/Service aggregate example`, async t => {
+    const engine=await Engine.create({profile});t.after(()=>engine.close());
+    engine.registerDomain('readme_names', [P.edb('log',3),P.edb('service',1),P.idb('errors',2),
+      P.idbQuery('error_count',2),P.idbQuery('alert',1)], ['error']);
+    const rules=engine.loadInlineRuleset('readme_names','readme',
+      'errors(Id, Service) :- log(Id, Service, "error"). '+
+      'error_count(Service, N) :- service(Service), count(Id, errors(Id, Service), N). '+
+      'alert(Service) :- error_count(Service, N), N >= 10.');
+    const edb=rules.edb();edb.addFacts([f('service','api'),f('service','empty'),
+      ...Array.from({length:10},(_,i)=>f('log',BigInt(i),'api','error'))]);
+    const session=rules.prepare(),result=session.solve(edb);
+    assert.equal(result.containsFact('error_count',['api',10n]),true);
+    assert.equal(result.containsFact('error_count',['empty',0n]),true);
+    assert.equal(result.containsFact('alert',['api']),true);
+    assert.equal(result.containsFact('alert',['empty']),false);
+    result.close();session.close();edb.close();rules.close();
+  });
   async function basic(t, options) {
     const engine = await Engine.create({ profile }); t.after(() => engine.close());
     engine.registerDomain('js_common', [P.edbQuery('seed', 1), P.edb('blocked', 1), P.idbQuery('allow', 1), P.idb('hidden', 1)]);

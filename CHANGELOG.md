@@ -7,6 +7,16 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ## Unreleased
 
+### Fixed
+
+- Identify named source variables by their complete, case-sensitive name within
+  each rule, rather than silently aliasing names with the same initial letter
+  (`U`/`Ux`, `G1`/`G2`). Up to 26 distinct names are accepted; the next name
+  reports CAPACITY with `MAX_RULE_VARIABLES`, observed count 27 and limit 26.
+  Single-letter variables retain their historical slots and anonymous variables
+  retain their separate slots. Policies using only those variables preserve
+  fingerprints; policies using longer names may change fingerprints and results.
+
 ## 0.23.1 — 2026-10-16
 
 ### Fixed

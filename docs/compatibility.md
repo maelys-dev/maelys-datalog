@@ -33,6 +33,19 @@ header paths. Program/build limits that differ by size profile and effective
 session quotas remain distinct; the numbers above do not replace admission or
 storage-plan queries.
 
+## Source variable identity
+
+Named variables are case-sensitive full names scoped to one source rule (including
+its OR alternatives), with at most 26 distinct names. Single letters retain
+indices A=0 through Z=25. After reserving all single letters in the rule, longer
+names take the lowest remaining index in first-occurrence order. Anonymous `_`
+occurrences retain their independent slots 26..31 and existing restrictions.
+The 27th distinct name reports CAPACITY (`MAX_RULE_VARIABLES`, observed 27,
+effective limit 26); the total internal variable ceiling remains 32.
+Fingerprints remain unchanged for policies using only single-letter names and
+anonymous variables. Longer names previously aliased by first letter; correcting
+that interpretation may change both results and fingerprints.
+
 ## Public records and language features
 
 The four-term limit is the width of the current record family (public facts, fact views and IR atoms), not a promise about the language. A later version may admit wider relations through new capability bits and new entry points; the existing records remain valid for every program that does not require them.

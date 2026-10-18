@@ -17,6 +17,10 @@ typedef struct {
     const char *file_path;
     maelys_datalog_internal_diagnostic_t *diag;
     unsigned anonymous_var_count;
+    uint32_t named_slots;
+    unsigned named_count;
+    char variable_names[MAELYS_DATALOG_NAMED_VARIABLE_COUNT][MAELYS_DATALOG_MAX_TOKEN_BYTES + 1];
+    unsigned variable_slots[MAELYS_DATALOG_NAMED_VARIABLE_COUNT];
     unsigned flags;
     maelys_datalog_parse_origin_t *origin;
 } parser_t;
@@ -54,6 +58,66 @@ static void parser_diag(parser_t *p,
         snprintf(p->diag->token, sizeof(p->diag->token),
                  "%.*s", (int)p->tok.len, p->tok.text);
     }
+}
+
+/* Reserve single-letter identities across the complete source clause, including
+ * OR alternatives, before assigning long names. The probe never publishes a
+ * diagnostic: the ordinary parse retains error ordering and source locations. */
+static void reserve_letter_variables(parser_t *p) {
+    maelys_datalog_lexer_t probe = p->lexer;
+    maelys_datalog_token_t token = p->tok;
+    probe.diag = NULL;
+    p->named_slots = 0;
+    p->named_count = 0;
+    while (token.kind != MAELYS_DATALOG_TOKEN_DOT &&
+           token.kind != MAELYS_DATALOG_TOKEN_EOF) {
+        if (token.kind == MAELYS_DATALOG_TOKEN_VARIABLE) {
+            unsigned i = 0;
+            while (i < p->named_count && strcmp(p->variable_names[i], token.text)) ++i;
+            if (i == p->named_count) {
+                /* Leave the 27th name to the real parse and its diagnostic. */
+                if (i == MAELYS_DATALOG_NAMED_VARIABLE_COUNT) break;
+                memcpy(p->variable_names[p->named_count++], token.text, token.len + 1u);
+            }
+            if (token.len == 1u)
+                p->named_slots |= UINT32_C(1) << (unsigned)(token.text[0] - 'A');
+        }
+        if (maelys_datalog_lexer_next(&probe, &token) != MAELYS_OK) break;
+    }
+    p->named_count = 0;
+}
+
+/* Names are clause-local and case-sensitive. Long names take the lowest free
+ * slot in first-occurrence order; anonymous variables retain slots 26..31. */
+static maelys_result_t named_variable(parser_t *p, unsigned *out) {
+    for (unsigned i = 0; i < p->named_count; ++i) {
+        if (strcmp(p->variable_names[i], p->tok.text) == 0) {
+            *out = p->variable_slots[i];
+            return MAELYS_OK;
+        }
+    }
+    unsigned slot = 0;
+    if (p->tok.len == 1u) slot = (unsigned)(p->tok.text[0] - 'A');
+    else {
+        while (slot < MAELYS_DATALOG_NAMED_VARIABLE_COUNT &&
+               (p->named_slots & (UINT32_C(1) << slot))) ++slot;
+    }
+    if (p->named_count == MAELYS_DATALOG_NAMED_VARIABLE_COUNT ||
+        slot == MAELYS_DATALOG_NAMED_VARIABLE_COUNT) {
+        parser_diag(p, MAELYS_DATALOG_DIAG_PARSER_TOO_MANY_VARIABLES,
+                    "rule named variable limit exceeded",
+                    "use at most 26 distinct named variables per rule");
+        maelys_datalog_internal_diagnostic_set_limit(p->diag,
+            MAELYS_DATALOG_LIMIT_MAX_RULE_VARIABLES, 27u,
+            MAELYS_DATALOG_NAMED_VARIABLE_COUNT);
+        return MAELYS_ERR_PAYLOAD_TOO_LARGE;
+    }
+    unsigned index = p->named_count++;
+    memcpy(p->variable_names[index], p->tok.text, p->tok.len + 1u);
+    p->variable_slots[index] = slot;
+    p->named_slots |= UINT32_C(1) << slot;
+    *out = slot;
+    return MAELYS_OK;
 }
 
 static int predicate_name_exists(const maelys_datalog_predicate_registry_t *registry,
@@ -154,7 +218,8 @@ static maelys_result_t parse_term(parser_t *p,
     memset(term, 0, sizeof(*term));
     if (p->tok.kind == MAELYS_DATALOG_TOKEN_VARIABLE) {
         term->kind = MAELYS_DATALOG_TERM_VAR;
-        term->as.variable = (unsigned)(p->tok.text[0] - 'A');
+        maelys_result_t rc = named_variable(p, &term->as.variable);
+        if (rc != MAELYS_OK) return rc;
         return next(p);
     }
     if (p->tok.kind == MAELYS_DATALOG_TOKEN_UNDERSCORE) {
@@ -534,7 +599,8 @@ static maelys_result_t parse_filter_literal(
     int value_requires_intern = 0;
     if (p->tok.kind == MAELYS_DATALOG_TOKEN_VARIABLE) {
         value.kind = MAELYS_DATALOG_TERM_VAR;
-        value.as.variable = (unsigned)(p->tok.text[0] - 'A');
+        rc = named_variable(p, &value.as.variable);
+        if (rc != MAELYS_OK) return rc;
     } else {
         rc = validate_policy_symbol_constant(p);
         if (rc != MAELYS_OK) return rc;
@@ -872,6 +938,7 @@ static maelys_result_t parse_clause(parser_t *p) {
     maelys_datalog_internal_atom_t head;
     int head_has_anonymous = 0;
     p->anonymous_var_count = 0;
+    reserve_letter_variables(p);
     maelys_result_t rc = parse_atom(p,
                                     &head,
                                     MAELYS_DATALOG_TERM_CTX_HEAD_CANDIDATE,
