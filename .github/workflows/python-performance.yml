@@ -198,7 +198,7 @@ jobs:
           name: ${{ inputs.javascript_diagnostic == true && 'python-javascript-diagnostic' || inputs.prepared_span_counts == true && 'python-prepared-span-counts' || inputs.prepared_diagnostic == true && 'python-prepared-diagnostic' || inputs.allocator_diagnostic == true && 'python-allocator-control' || inputs.release_process_control == true && 'python-release-process-control' || inputs.release_diagnostic == true && 'python-release-instructions' || inputs.instruction_diagnostic == true && 'python-tail-instructions' || inputs.tail_diagnostic == true && 'python-tail-diagnostic' || 'python-performance' }}-${{ github.sha }}
           path: evidence/
           if-no-files-found: error
-          retention-days: 90
+          retention-days: 7
       - name: Report
         if: always()
         run: |
