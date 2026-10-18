@@ -7,6 +7,8 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ## Unreleased
 
+## 0.24.0 — 2026-10-18
+
 ### Fixed
 
 - Identify named source variables by their complete, case-sensitive name within
@@ -20,6 +22,19 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
   fingerprint (`session_execution_fingerprint`) are unchanged for single-letter
   and anonymous variables; they can change for longer names under the corrected
   mapping. Policies using longer names can derive more facts than before.
+
+### Python performance review — pending maintainer decision
+
+The Python performance run for this correction is
+[39141827494](https://github.com/maelys-dev/maelys-datalog/actions/runs/39141827494),
+measuring merged commit `1a3830781b64c96375f73eaa14f455c156fdc5fb`
+from [#198](https://github.com/maelys-dev/maelys-datalog/pull/198).
+Its named artifact is
+`python-performance-1a3830781b64c96375f73eaa14f455c156fdc5fb`.
+The run is in progress. Before release, record the completed report's SHA-256,
+reference revisions, control validity, raw and null-screened findings, and
+David's decision here. The prior 0.23.1 performance exception does not approve
+this correction. No release decision or `cut --apply` is authorized by this entry.
 
 ## 0.23.1 — 2026-10-16
 
