@@ -1010,7 +1010,10 @@ static maelys_result_t parse_clause(parser_t *p) {
     rc = next(p);
     if (rc != MAELYS_OK) return rc;
     if (p->ruleset->rule_count >= MAELYS_DATALOG_MAX_RULES) {
-        parser_rule_expansion_overflow(p, p->ruleset->rule_count + 1u);
+        parser_diag(p, MAELYS_DATALOG_DIAG_PARSER_RULE_BODY_LITERAL_OVERFLOW,
+                    "rule capacity exceeded", "reduce the number of rules or split the policy");
+        maelys_datalog_internal_diagnostic_set_limit(p->diag, MAELYS_DATALOG_LIMIT_MAX_RULES,
+            p->ruleset->rule_count + 1u, MAELYS_DATALOG_MAX_RULES);
         return MAELYS_ERR_PAYLOAD_TOO_LARGE;
     }
     const size_t staged_base = p->ruleset->rule_count;

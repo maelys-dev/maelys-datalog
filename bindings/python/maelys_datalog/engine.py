@@ -213,7 +213,9 @@ def _check(status: int, step: str, diagnostic=None) -> None:
         for name, field in Diagnostic.__dataclass_fields__.items()
     }) if diagnostic is not None else Diagnostic()
     raise MaelysDatalogError(
-        int(status), detail.message or f"{step}: {_text(lib.maelys_datalog_status_name(status))}",
+        int(status), ("unknown query symbol: " + detail.message
+                      if detail.phase == "explanation" and status == lib.MAELYS_DATALOG_STATUS_NOT_FOUND
+                      else detail.message or f"{step}: {_text(lib.maelys_datalog_status_name(status))}"),
         detail.hint, diagnostic=detail,
     )
 
@@ -1038,18 +1040,19 @@ class SolveResult:
         keepers: list[object] = []
         for index, term in enumerate(normalized):
             _fill_value(values[index], term, keepers)
+        diagnostic = ffi.new("maelys_datalog_diagnostic_t *")
+        lib.maelys_datalog_diagnostic_init(diagnostic, ffi.sizeof("maelys_datalog_diagnostic_t"))
         if self._session._explanations:
             # Both calls address the same native one-entry cache. No CFFI arena
             # per explanation; conversion, output and Python strings still allocate.
-            explain = (lib.maelys_datalog_result_explain_true_text
-                       if kind == lib.MAELYS_DATALOG_EXPLAIN_TRUE
-                       else lib.maelys_datalog_result_explain_false_text)
             required = ffi.new("size_t *")
-            _check(explain(self._result, name, values, len(normalized),
-                           ffi.NULL, 0, required), "prepare cached explanation")
+            _check(lib.maelys_datalog_result_explain_text_diagnosed(
+                self._result, kind, name, values, len(normalized), ffi.NULL, 0, required, diagnostic),
+                "prepare explanation", diagnostic)
             text = ffi.new("char[]", int(required[0]) + 1)
-            _check(explain(self._result, name, values, len(normalized),
-                           text, int(required[0]) + 1, required), "render cached explanation")
+            _check(lib.maelys_datalog_result_explain_text_diagnosed(
+                self._result, kind, name, values, len(normalized), text, int(required[0]) + 1, required, diagnostic),
+                "render explanation", diagnostic)
             return bytes(ffi.buffer(text, required[0])).decode("utf-8")
         storage_bytes = ffi.new("size_t *")
         alignment = ffi.new("size_t *")
@@ -1065,9 +1068,9 @@ class SolveResult:
         storage = ffi.cast("void *", (address + align - 1) & ~(align - 1))
         prepared = ffi.new("maelys_datalog_prepared_explanation_t **")
         try:
-            _check(lib.maelys_datalog_result_prepare_explanation(
+            _check(lib.maelys_datalog_result_prepare_explanation_diagnosed(
                 self._result, kind, name, values, len(normalized),
-                storage, size, prepared), "prepare explanation")
+                storage, size, prepared, diagnostic), "prepare explanation", diagnostic)
             required = ffi.new("size_t *")
             _check(lib.maelys_datalog_prepared_explanation_text_size(prepared[0], required),
                    "read explanation text size")

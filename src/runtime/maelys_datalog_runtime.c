@@ -962,10 +962,34 @@ static void destroy_explanation_workspace(maelys_datalog_session_t *s) {
     unlock_workspaces();
     if (s->owns_explanation_storage) free(s->explanation_storage);
 }
-maelys_datalog_status_t maelys_datalog_result_prepare_explanation(
+/* Diagnosed variants use caller storage only; no result/session error cache. */
+static maelys_datalog_status_t explanation_rejection(maelys_datalog_diagnostic_t *d,
+    maelys_datalog_status_t rc, const char *predicate, size_t arity,
+    const char *message, const char *hint) {
+    if (!rc || !d) return rc;
+    d->source = MAELYS_DATALOG_DIAGNOSTIC_SOLVE; d->status = rc;
+    d->code = MAELYS_DATALOG_DIAG_OPERATION_REJECTED;
+    d->present |= MAELYS_DATALOG_DIAGNOSTIC_PREDICATE;
+    d->arity = arity;
+    snprintf(d->predicate, sizeof(d->predicate), "%s", predicate ? predicate : "");
+    snprintf(d->phase, sizeof(d->phase), "explanation");
+    if (!d->message[0]) {
+        if (!message) message = rc == MAELYS_DATALOG_STATUS_NOT_FOUND
+            ? "query symbol absent from the result" : rc == MAELYS_DATALOG_STATUS_UNSUPPORTED
+            ? "explanation kind not supported by the backend" : "explanation preparation failed";
+        if (!hint) hint = rc == MAELYS_DATALOG_STATUS_NOT_FOUND
+            ? "query a symbol the result contains" : rc == MAELYS_DATALOG_STATUS_UNSUPPORTED
+            ? "use a backend that supports this explanation kind"
+            : "check the result lifetime, query, kind and explanation storage";
+        snprintf(d->message, sizeof(d->message), "%s", message);
+        snprintf(d->hint, sizeof(d->hint), "%s", hint);
+    }
+    return rc;
+}
+static maelys_datalog_status_t prepare_explanation(
     maelys_datalog_result_t *result, maelys_datalog_explanation_kind_t kind,
     const char *predicate, const maelys_datalog_value_t *terms, size_t arity,
-    void *storage, size_t bytes, maelys_datalog_prepared_explanation_t **out) {
+    void *storage, size_t bytes, maelys_datalog_prepared_explanation_t **out, maelys_datalog_diagnostic_t *diag) {
     if (!storage || !out || (uintptr_t)storage % EXPLANATION_ALIGNMENT ||
         bytes > UINTPTR_MAX - (uintptr_t)storage)
         return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
@@ -973,7 +997,8 @@ maelys_datalog_status_t maelys_datalog_result_prepare_explanation(
     if (rc) return rc;
     maelys_datalog_predicate_id_t pid;
     rc = query_predicate(result, predicate, arity, &pid);
-    if (rc) return rc;
+    if (rc) return explanation_rejection(diag, rc, predicate, arity,
+        "unknown or non-query predicate", "query a declared query predicate with its declared arity");
     maelys_datalog_session_t *s = result->owner;
     maelys_datalog_internal_term_t checked[MAELYS_DATALOG_MAX_TERMS];
     int found;
@@ -1003,6 +1028,23 @@ maelys_datalog_status_t maelys_datalog_result_prepare_explanation(
     result->explanations = p;
     *out = p;
     return MAELYS_DATALOG_STATUS_OK;
+}
+maelys_datalog_status_t maelys_datalog_result_prepare_explanation_diagnosed(
+    maelys_datalog_result_t *result, maelys_datalog_explanation_kind_t kind,
+    const char *predicate, const maelys_datalog_value_t *terms, size_t arity,
+    void *storage, size_t bytes, maelys_datalog_prepared_explanation_t **out,
+    maelys_datalog_diagnostic_t *diag) {
+    maelys_datalog_status_t rc = maelys_datalog_diagnostic_clear(diag);
+    if (rc) return rc;
+    rc = prepare_explanation(result, kind, predicate, terms, arity, storage, bytes, out, diag);
+    return explanation_rejection(diag, rc, predicate, arity, NULL, NULL);
+}
+maelys_datalog_status_t maelys_datalog_result_prepare_explanation(
+    maelys_datalog_result_t *result, maelys_datalog_explanation_kind_t kind,
+    const char *predicate, const maelys_datalog_value_t *terms, size_t arity,
+    void *storage, size_t bytes, maelys_datalog_prepared_explanation_t **out) {
+    return maelys_datalog_result_prepare_explanation_diagnosed(
+        result, kind, predicate, terms, arity, storage, bytes, out, NULL);
 }
 static maelys_datalog_status_t prepared_valid(const maelys_datalog_prepared_explanation_t *p) {
     if (!p) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
@@ -1080,9 +1122,11 @@ static void clear_explanation_cache(maelys_datalog_session_t *s) {
 static maelys_datalog_status_t cached_explain_text(maelys_datalog_result_t *result,
     maelys_datalog_explanation_kind_t kind, const char *predicate,
     const maelys_datalog_value_t *terms, size_t arity,
-    char *text, size_t capacity, size_t *required) {
+    char *text, size_t capacity, size_t *required, maelys_datalog_diagnostic_t *diag) {
     maelys_datalog_session_t *s = result->owner;
-    if (!(s->explanation_kinds & (unsigned)kind)) return MAELYS_DATALOG_STATUS_UNSUPPORTED;
+    if (!(s->explanation_kinds & (unsigned)kind))
+        return explanation_rejection(diag, MAELYS_DATALOG_STATUS_UNSUPPORTED, predicate, arity,
+            "explanation kind not reserved at prepare", "reserve this explanation kind when preparing the session");
     /* A borrowed workspace is also visible to its owner. Reject output aliases
      * before touching the cache: even a size query must not overwrite its handle. */
     if (explanation_overlap(required, sizeof(*required), s->explanation_storage, s->explanation_bytes) ||
@@ -1103,8 +1147,8 @@ static maelys_datalog_status_t cached_explain_text(maelys_datalog_result_t *resu
         s->explanation_cache->kind != kind ||
         !maelys_datalog_fact_equals(&query, &s->explanation_query)) {
         clear_explanation_cache(s);
-        rc = maelys_datalog_result_prepare_explanation(result, kind, predicate, terms, arity,
-            s->explanation_storage, s->explanation_bytes, &s->explanation_cache);
+        rc = prepare_explanation(result, kind, predicate, terms, arity,
+            s->explanation_storage, s->explanation_bytes, &s->explanation_cache, diag);
         if (rc) return rc;
         s->explanation_query = query;
         s->explanation_generation = s->result_generation;
@@ -1115,25 +1159,26 @@ static maelys_datalog_status_t cached_explain_text(maelys_datalog_result_t *resu
 }
 static maelys_datalog_status_t result_explain_text(const maelys_datalog_result_t *result,
     const char *predicate, const maelys_datalog_value_t *terms, size_t arity,
-    char *text, size_t capacity, size_t *required, int why_false) {
+    char *text, size_t capacity, size_t *required, int why_false, maelys_datalog_diagnostic_t *diag) {
     if (!required || (!text && capacity)) return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
     maelys_datalog_predicate_id_t pid;
     maelys_datalog_status_t rc = query_predicate(result, predicate, arity, &pid);
-    if (rc) return rc;
+    if (rc) return explanation_rejection(diag, rc, predicate, arity,
+        "unknown or non-query predicate", "query a declared query predicate with its declared arity");
     maelys_datalog_explanation_kind_t kind = why_false ? MAELYS_DATALOG_EXPLAIN_FALSE : MAELYS_DATALOG_EXPLAIN_TRUE;
     rc = explanation_available(result, kind);
     if (rc) return rc;
     if (result->owner->explanation_kinds)
         return cached_explain_text((maelys_datalog_result_t *)result, kind,
-                                  predicate, terms, arity, text, capacity, required);
+                                  predicate, terms, arity, text, capacity, required, diag);
     size_t bytes, alignment;
     rc = maelys_datalog_result_explanation_storage_requirements(result, kind, &bytes, &alignment);
     if (rc) return rc;
     void *storage = malloc(bytes);
     if (!storage) return MAELYS_DATALOG_STATUS_INTERNAL;
     maelys_datalog_prepared_explanation_t *p = NULL;
-    rc = maelys_datalog_result_prepare_explanation((maelys_datalog_result_t *)result,
-        kind, predicate, terms, arity, storage, bytes, &p);
+    rc = prepare_explanation((maelys_datalog_result_t *)result,
+        kind, predicate, terms, arity, storage, bytes, &p, diag);
     if (!rc) {
         *required = p->text_size;
         if (text) rc = maelys_datalog_prepared_explanation_write_text(p, text, capacity);
@@ -1142,19 +1187,31 @@ static maelys_datalog_status_t result_explain_text(const maelys_datalog_result_t
     free(storage);
     return rc;
 }
+maelys_datalog_status_t maelys_datalog_result_explain_text_diagnosed(
+    const maelys_datalog_result_t *result, maelys_datalog_explanation_kind_t kind,
+    const char *predicate, const maelys_datalog_value_t *terms, size_t arity,
+    char *text, size_t capacity, size_t *required, maelys_datalog_diagnostic_t *diag) {
+    maelys_datalog_status_t rc = maelys_datalog_diagnostic_clear(diag);
+    if (rc) return rc;
+    if (kind != MAELYS_DATALOG_EXPLAIN_TRUE && kind != MAELYS_DATALOG_EXPLAIN_FALSE)
+        rc = MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
+    else rc = result_explain_text(result, predicate, terms, arity, text, capacity, required,
+                                 kind == MAELYS_DATALOG_EXPLAIN_FALSE, diag);
+    return explanation_rejection(diag, rc, predicate, arity, NULL, NULL);
+}
 maelys_datalog_status_t
 maelys_datalog_result_explain_true_text(const maelys_datalog_result_t *result,
                                         const char *predicate,
                                         const maelys_datalog_value_t *terms, size_t arity,
                                         char *text, size_t capacity, size_t *required) {
-    return result_explain_text(result, predicate, terms, arity, text, capacity, required, 0);
+    return result_explain_text(result, predicate, terms, arity, text, capacity, required, 0, NULL);
 }
 maelys_datalog_status_t
 maelys_datalog_result_explain_false_text(const maelys_datalog_result_t *result,
                                          const char *predicate,
                                          const maelys_datalog_value_t *terms, size_t arity,
                                          char *text, size_t capacity, size_t *required) {
-    return result_explain_text(result, predicate, terms, arity, text, capacity, required, 1);
+    return result_explain_text(result, predicate, terms, arity, text, capacity, required, 1, NULL);
 }
 maelys_datalog_status_t maelys_datalog_result_free(maelys_datalog_result_t *result) {
     if (!result || !result->owner)

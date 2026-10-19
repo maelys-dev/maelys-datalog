@@ -739,6 +739,7 @@ MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_result_symbol_text(
  * Output text remains caller-owned; text and out_required must not overlap each
  * other or the session workspace. Formatting still costs work; cache hits avoid
  * exploration, not text rendering. */
+/* For populated failure diagnostics use result_explain_text_diagnosed. */
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_result_explain_true_text(
     const maelys_datalog_result_t *result,
     const char *predicate,
@@ -760,6 +761,7 @@ MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_result_explain_true_te
  * explores at most 128 candidate rules, 4,096 substitutions per rule, depth 10
  * and 16 diagnostics; backend ABI v3 preserves these bounds, they are not
  * caller-tunable. Truncated text is not a proof of non-derivability. */
+/* For populated failure diagnostics use result_explain_text_diagnosed. */
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_result_explain_false_text(
     const maelys_datalog_result_t *result,
     const char *predicate,
@@ -813,6 +815,7 @@ MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_session_explanation_st
  * does not remove exploration limits. Backend write failures follow write_text's
  * output contract below; their text must not be consumed.
  */
+/* Use result_prepare_explanation_diagnosed for caller-storage diagnostics. */
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_result_explain_text_in(
     maelys_datalog_result_t *result, maelys_datalog_explanation_kind_t kind,
     const char *predicate, const maelys_datalog_value_t *terms, size_t arity,
@@ -849,6 +852,27 @@ MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_result_prepare_explana
     maelys_datalog_result_t *result, maelys_datalog_explanation_kind_t kind,
     const char *predicate, const maelys_datalog_value_t *terms, size_t arity,
     void *storage, size_t storage_bytes, maelys_datalog_prepared_explanation_t **out_prepared);
+/* Diagnosed preparation: same status, storage, lease and output contract as
+ * result_prepare_explanation. diagnostic is last and may be NULL, yielding the
+ * same behavior as that function. With an initialized diagnostic, every failure
+ * fills code, status, message, hint and predicate (empty when predicate is NULL);
+ * success clears it, as session_solve does. An invalid diagnostic storage/version
+ * is rejected before use, as in session_solve. Diagnostic storage must not alias
+ * arguments, engine objects or output/storage buffers. No diagnostic allocation
+ * or result/session error cache is introduced. Existing code values are reused. */
+MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_result_prepare_explanation_diagnosed(
+    maelys_datalog_result_t *result, maelys_datalog_explanation_kind_t kind,
+    const char *predicate, const maelys_datalog_value_t *terms, size_t arity,
+    void *storage, size_t storage_bytes, maelys_datalog_prepared_explanation_t **out_prepared,
+    maelys_datalog_diagnostic_t *diagnostic);
+/* Diagnosed text convenience for either kind: same buffer/allocation/cache
+ * contract as result_explain_true_text / result_explain_false_text. diagnostic
+ * follows the diagnosed preparation contract above, including NULL acceptance. */
+MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_result_explain_text_diagnosed(
+    const maelys_datalog_result_t *result, maelys_datalog_explanation_kind_t kind,
+    const char *predicate, const maelys_datalog_value_t *terms, size_t arity,
+    char *out_text, size_t capacity, size_t *out_required,
+    maelys_datalog_diagnostic_t *diagnostic);
 /* Cached size, excluding the terminating NUL; no formatting or proof traversal. */
 MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_prepared_explanation_text_size(
     const maelys_datalog_prepared_explanation_t *prepared, size_t *out_required);

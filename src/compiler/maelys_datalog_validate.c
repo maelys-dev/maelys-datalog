@@ -68,6 +68,16 @@ static maelys_result_t validate_rule_impl(validation_context_t *p,
     for (size_t i = 0; i < rule->body_count; ++i) {
         const maelys_datalog_literal_t *l = &rule->body[i];
         if (maelys_datalog_literal_is_aggregate(l->kind)) {
+            uint32_t source_vars = 0;
+            vars_in_atom(&l->atom, &source_vars);
+            if (l->lhs.as.variable == l->rhs.as.variable ||
+                !(source_vars & (UINT32_C(1) << l->lhs.as.variable)) ||
+                (source_vars & (UINT32_C(1) << l->rhs.as.variable))) {
+                validation_diag(p, MAELYS_DATALOG_DIAG_PARSER_UNSAFE_VARIABLE,
+                    "aggregate result variable must differ from the projected variable and must not occur in the source atom",
+                    "use count(U, member(G,U), N): project a source variable U and use a distinct result N outside the source atom");
+                return MAELYS_ERR_INVALID_FIELD;
+            }
             body_vars |= UINT32_C(1) << l->rhs.as.variable;
             outside |= UINT32_C(1) << l->rhs.as.variable;
             uint32_t keys = 0;
@@ -232,7 +242,7 @@ static maelys_result_t assign_strata_impl(validation_context_t *p) {
 
     if (changed) {
         validation_diag(p, MAELYS_DATALOG_DIAG_POLICY_NOT_STRATIFIABLE,
-                        "negation cycle", ruleset->aggregates_supported
+                        "stratification cycle", ruleset->aggregates_supported
                             ? "remove recursion through count or negation"
                             : "remove recursion through negation");
         for (size_t i = 0; i < MAELYS_DATALOG_MAX_PREDICATES; ++i)
@@ -315,8 +325,8 @@ static int valid_expressions(const maelys_datalog_internal_ruleset_t *r, const m
     }
     return 1;
 }
-static int valid_literal(const maelys_datalog_internal_ruleset_t *r, const maelys_datalog_rule_t *rule,
-                         const maelys_datalog_literal_t *l) {
+static int valid_literal_impl(const maelys_datalog_internal_ruleset_t *r, const maelys_datalog_rule_t *rule,
+                              const maelys_datalog_literal_t *l, int check_aggregate_variables) {
     if (l->kind == MAELYS_DATALOG_LITERAL_ATOM || l->kind == MAELYS_DATALOG_LITERAL_NEGATED_ATOM)
         return valid_atom(r, &l->atom, 1);
     if (l->kind == MAELYS_DATALOG_LITERAL_COMPARISON) {
@@ -341,8 +351,9 @@ static int valid_literal(const maelys_datalog_internal_ruleset_t *r, const maely
             l->rhs.kind != MAELYS_DATALOG_TERM_VAR ||
             !valid_term(r, &l->lhs, 1) || !valid_term(r, &l->rhs, 1) ||
             l->lhs.as.variable >= MAELYS_DATALOG_NAMED_VARIABLE_COUNT ||
-            l->rhs.as.variable >= MAELYS_DATALOG_NAMED_VARIABLE_COUNT ||
-            l->lhs.as.variable == l->rhs.as.variable) return 0;
+            l->rhs.as.variable >= MAELYS_DATALOG_NAMED_VARIABLE_COUNT) return 0;
+        if (!check_aggregate_variables) return 1;
+        if (l->lhs.as.variable == l->rhs.as.variable) return 0;
         uint32_t variables = 0;
         vars_in_atom(&l->atom, &variables);
         return (variables & (UINT32_C(1) << l->lhs.as.variable)) &&
@@ -357,6 +368,11 @@ static int valid_literal(const maelys_datalog_internal_ruleset_t *r, const maely
         return r->filter_programs[l->filter_program_index].kind == l->filter_kind;
     }
     return 0;
+}
+
+static int valid_literal(const maelys_datalog_internal_ruleset_t *r,
+                         const maelys_datalog_rule_t *rule, const maelys_datalog_literal_t *l) {
+    return valid_literal_impl(r, rule, l, 1);
 }
 
 /* Preserve the low-level parser's clause atomicity even though validation is
@@ -469,8 +485,20 @@ static maelys_result_t validate_program_impl(maelys_datalog_internal_ruleset_t *
             goto malformed;
         }
         for (size_t j = 0; j < rule->body_count; ++j) {
-            if (!valid_literal(r, rule, &rule->body[j]))
+            if (!valid_literal(r, rule, &rule->body[j])) {
+                /* Parsed author input gets a safety diagnostic before the
+                 * defensive IR guard. Malformed third-party IR keeps its guard. */
+                if (origin && origin->rules[i].end.line &&
+                    valid_literal_impl(r, rule, &rule->body[j], 0)) {
+                    validation_context_t p = {r, file, line, column, diag};
+                    maelys_result_t rc = validate_rule_impl(&p, rule);
+                    if (rc != MAELYS_OK) {
+                        reject_parsed_clause(r, origin, i, diag);
+                        return rc;
+                    }
+                }
                 goto malformed;
+            }
             if (rule->body[j].kind == MAELYS_DATALOG_LITERAL_NEGATED_ATOM)
                 r->negation_supported = 1;
             if (maelys_datalog_literal_is_aggregate(rule->body[j].kind))

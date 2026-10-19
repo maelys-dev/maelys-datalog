@@ -42,7 +42,7 @@ static int cycle_is_not_depth(void) {
         maelys_datalog_diagnostic_t d=MAELYS_DATALOG_DIAGNOSTIC_INIT;
         CHECK(load(cases[i],&p,&d)==MAELYS_DATALOG_STATUS_INVALID_FIELD); CHECK(!p);
         CHECK(d.code==MAELYS_DATALOG_DIAG_POLICY_NOT_STRATIFIABLE);
-        CHECK(!strcmp(d.message,"negation cycle"));
+        CHECK(!strcmp(d.message,"stratification cycle"));
         CHECK(d.present & MAELYS_DATALOG_DIAGNOSTIC_PREDICATE);
         CHECK(!strcmp(d.predicate,"a") || !strcmp(d.predicate,"b")); CHECK(d.arity==1);
         CHECK(!(d.present & (MAELYS_DATALOG_DIAGNOSTIC_CAPACITY|MAELYS_DATALOG_DIAGNOSTIC_DEPTH)));

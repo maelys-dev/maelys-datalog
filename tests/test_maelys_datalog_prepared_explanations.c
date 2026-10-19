@@ -178,6 +178,12 @@ static void reference_conveniences(maelys_datalog_policy_t *policy) {
         OK(maelys_datalog_result_explain_text_in(result, kind, "allow", query, 1,
             storage, bounds[i], text, length + 1, &required));
         assert(required == length && !strcmp(text, expected));
+        maelys_datalog_diagnostic_t diagnostic = MAELYS_DATALOG_DIAGNOSTIC_INIT;
+        maelys_datalog_prepared_explanation_t *diagnosed = NULL;
+        OK(maelys_datalog_result_prepare_explanation_diagnosed(result, kind, "allow", query, 1,
+            storage, bounds[i], &diagnosed, &diagnostic));
+        assert(diagnostic.code == MAELYS_DATALOG_DIAG_NONE);
+        OK(maelys_datalog_prepared_explanation_release(diagnosed));
         assert(attempts == 0 && frees == 0);
         forbidden = 0;
         free(storage);

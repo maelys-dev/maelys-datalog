@@ -266,10 +266,29 @@ for (const runtime of runtimes) {
     edb.clear(); edb.addFacts([f('seed', 'alice'), f('seed', 'bob'), f('blocked', 'bob')]);
     const result = rules.solve(edb);
     assert.equal(result.containsFact('allow', ['never-interned']), false);
-    for (const method of ['explainTrue', 'explainFalse']) assert.throws(() => result[method]('allow', ['never-interned']), status(S.NOT_FOUND));
+    for (const method of ['explainTrue', 'explainFalse']) assert.throws(() => result[method]('allow', ['never-interned']), error => {
+      assert.match(error.message, /unknown query symbol/);
+      assert.equal(error.diagnostic.message, 'query symbol absent from the result');
+      assert.equal(error.diagnostic.hint, 'query a symbol the result contains');
+      assert.deepEqual(error.diagnostic.predicate, { name: 'allow', arity: 1 });
+      return error.status === S.NOT_FOUND;
+    });
     assert.throws(() => result.containsFact('blocked', ['bob']), status(S.INVALID_FIELD));
     assert.throws(() => result.enumerateRaw('hidden', 1), status(S.INVALID_FIELD));
     assert.equal(saved.message, text); assert.ok(Object.isFrozen(saved));
+  });
+  test(`${runtime}: unreserved explanation kind describes the caller action`, async t => {
+    const { rules, edb } = await basic(t);
+    edb.addFact('seed', ['alice']);
+    const session = rules.prepare({ explanations: ExplanationKind.TRUE });
+    t.after(() => session.close());
+    const result = session.solve(edb); t.after(() => result.close());
+    assert.throws(() => result.explainFalse('allow', ['alice']), error => {
+      assert.equal(error.diagnostic.message, 'explanation kind not reserved at prepare');
+      assert.deepEqual(error.diagnostic.predicate, { name: 'allow', arity: 1 });
+      assert.ok(error.diagnostic.hint.length);
+      return error.status === S.UNSUPPORTED;
+    });
   });
   test(`${runtime}: explicit session capacities, capability admission and fingerprints`, async t => {
     const { rules, edb, engine } = await basic(t);

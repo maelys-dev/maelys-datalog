@@ -7,6 +7,41 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ## Unreleased
 
+### Fixed
+
+- Diagnose invalid aggregate projection/result variables as author safety errors
+  (`parser_unsafe_variable`) before the defensive malformed-program guard, with
+  the expected aggregate form in the hint.
+- Describe stratification cycles neutrally, including cycles through aggregates
+  without negation, retaining `policy_not_stratifiable` and its advice.
+- Include CAPACITY with the attempted count and named build bound for input
+  symbol-count, dictionary-byte and symbol-length exhaustion. Symbol interning
+  order, atomic rejection and existing messages remain unchanged.
+- Distinguish ordinary rule capacity exhaustion from OR expansion, retaining
+  the diagnostic code and `MAX_RULES` section.
+- Explain recursive evaluation depth exhaustion and its fixed-point remedy,
+  retaining `solve_max_depth` and DEPTH; this is not a rule-loading depth bound.
+- Expose explanation failures in Python and JavaScript as caller-facing messages,
+  including unknown query symbols and explanation kinds not reserved at prepare.
+  Diagnosed preparation fills the message, hint and predicate for failures,
+  including `NOT_FOUND` and `UNSUPPORTED`, with existing statuses and code values.
+
+### Changed
+
+- An input-batch symbol exceeding `MAX_STRING_BYTES` now returns
+  `PAYLOAD_TOO_LARGE` instead of `INVALID_ARGUMENT`, consistently with the other
+  payload capacity failures. Its diagnostic carries the attempted length and
+  bound; its existing message is retained.
+
+### Added
+
+- Add `maelys_datalog_result_prepare_explanation_diagnosed` and
+  `maelys_datalog_result_explain_text_diagnosed` with an optional caller-owned
+  diagnostic as the last parameter. The text variant takes an explanation kind
+  for both Why-true and Why-false. Existing functions retain their signatures,
+  statuses, storage/lease and allocation contracts. No diagnostic code or
+  session/result error cache is added.
+
 ## 0.25.0 — 2026-10-18
 
 ### Fixed

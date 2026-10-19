@@ -35,11 +35,19 @@ static int symbol_pointer_cmp(const void *lhs, const void *rhs) {
 
 MAELYS_DEFINE_SORT(sort_symbol_pointers, const char *, symbol_pointer_cmp)
 
+static void input_capacity(maelys_datalog_diagnostic_t *diag,
+    maelys_datalog_limit_t kind, size_t observed, size_t limit) {
+    if (!diag) return;
+    diag->present |= MAELYS_DATALOG_DIAGNOSTIC_CAPACITY;
+    diag->limit_kind = kind; diag->observed_count = observed; diag->limit = limit;
+}
+
 static maelys_result_t collect_input_symbols(
     maelys_datalog_internal_prepared_session_t *session,
     const maelys_datalog_fact_t *facts,
     size_t fact_count,
-    size_t *out_count, char *message, size_t message_capacity) {
+    size_t *out_count, char *message, size_t message_capacity,
+    maelys_datalog_diagnostic_t *diagnostic) {
     if (!session || (!facts && fact_count > 0u) || !out_count) {
         return MAELYS_ERR_INVALID_ARGUMENT;
     }
@@ -70,7 +78,9 @@ static maelys_result_t collect_input_symbols(
                         input_message(message, message_capacity,
                                       "Invalid fact at index %zu (%.63s), term %zu: symbol exceeds %u bytes.",
                                       i, fact->predicate, j, MAELYS_DATALOG_MAX_STRING_BYTES);
-                        return MAELYS_ERR_INVALID_ARGUMENT;
+                        input_capacity(diagnostic, MAELYS_DATALOG_LIMIT_MAX_STRING_BYTES,
+                            MAELYS_DATALOG_MAX_STRING_BYTES + 1u, MAELYS_DATALOG_MAX_STRING_BYTES);
+                        return MAELYS_ERR_PAYLOAD_TOO_LARGE;
                     }
                     session->symbol_inputs[count++] = term->as.symbol;
                     break;
@@ -92,7 +102,7 @@ static maelys_result_t collect_input_symbols(
 static maelys_result_t intern_input_symbols(
     maelys_datalog_internal_prepared_session_t *session,
     size_t count, const maelys_datalog_fact_t *facts, size_t fact_count,
-    char *message, size_t message_capacity) {
+    char *message, size_t message_capacity, maelys_datalog_diagnostic_t *diagnostic) {
     if (!session || count > MAELYS_DATALOG_MAX_INPUT_SYMBOLS) {
         return MAELYS_ERR_INVALID_ARGUMENT;
     }
@@ -134,10 +144,14 @@ static maelys_result_t intern_input_symbols(
             if (session->symbols.count >= MAELYS_DATALOG_MAX_SYMBOLS) {
                 reason = "symbol count limit";
                 bound = MAELYS_DATALOG_MAX_SYMBOLS;
+                input_capacity(diagnostic, MAELYS_DATALOG_LIMIT_MAX_SYMBOLS,
+                    session->symbols.count + 1u, bound);
             } else if (strlen(text) + 1u >
                        sizeof(session->symbols.storage) - session->symbols.used) {
                 reason = "symbol storage byte limit";
                 bound = sizeof(session->symbols.storage);
+                input_capacity(diagnostic, MAELYS_DATALOG_LIMIT_STRING_POOL_BYTES,
+                    session->symbols.used + strlen(text) + 1u, bound);
             }
             for (size_t f = 0u; f < fact_count; ++f) {
                 for (size_t t = 0u; t < facts[f].arity; ++t) {
@@ -429,9 +443,9 @@ maelys_result_t maelys_datalog_prepared_session_materialize_inputs_diagnosed_cap
     if (rc != MAELYS_OK) return rc;
 
     size_t symbol_count = 0u;
-    rc = collect_input_symbols(session, facts, fact_count, &symbol_count, message, message_capacity);
+    rc = collect_input_symbols(session, facts, fact_count, &symbol_count, message, message_capacity, diagnostic);
     if (rc != MAELYS_OK) return reject_transaction(session, rc);
-    rc = intern_input_symbols(session, symbol_count, facts, fact_count, message, message_capacity);
+    rc = intern_input_symbols(session, symbol_count, facts, fact_count, message, message_capacity, diagnostic);
     if (rc != MAELYS_OK) return reject_transaction(session, rc);
     /* Drop every borrowed pointer and initialize the whole overlapping index,
      * even for integer-only batches following an indexed transaction. The
@@ -478,7 +492,7 @@ maelys_result_t maelys_datalog_prepared_session_materialize_retained(
             s->symbol_inputs[symbols++]=maelys_datalog_symbol_text(vocabulary,id);
         }
     }
-    rc=intern_input_symbols(s,symbols,NULL,0,NULL,0);
+    rc=intern_input_symbols(s,symbols,NULL,0,NULL,0,NULL);
     if (rc) return reject_transaction(s,rc);
     for (size_t i=0;i<vocabulary->count;++i) if (map[i]) {
         int found=0;

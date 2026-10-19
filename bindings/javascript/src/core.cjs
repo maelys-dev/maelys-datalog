@@ -93,7 +93,8 @@ function diagnostic(response) {
 
 class MaelysDatalogError extends Error {
   constructor(operation, status, detail) {
-    super(`${operation}: ${detail.statusName}${detail.message ? ': ' + detail.message : ''}`);
+    const query = detail.phase === 'explanation' && status === Status.NOT_FOUND ? 'unknown query symbol: ' : '';
+    super(`${operation}: ${detail.statusName}${detail.message ? ': ' + query + detail.message : ''}`);
     this.name = 'MaelysDatalogError'; this.code = this.status = status;
     this.diagnostic = detail;
   }
