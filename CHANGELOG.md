@@ -49,7 +49,7 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 - Adopt maelys-release v0.64.5 for CI, release, npm and Homebrew workflows.
   The socle requests no product adaptation for this version.
 
-### Python performance review — decision pending
+### Python performance review — exception accepted for 0.26.0
 
 [Run 39299540820](https://github.com/maelys-dev/maelys-datalog/actions/runs/39299540820)
 measures integrated #207 commit `ab6263576a58d01846ec8c54237ca467f47e2554`
@@ -109,8 +109,17 @@ contracts in both profiles; they do not establish equal timing. Since the
 measured runtime commit, #208 changes only generated workflow references to
 the socle, and this PR changes documentation; neither substitutes a new binary
 measurement. No new instruction-count evidence or native cause is claimed.
-David's decision on this concrete report is pending. No timing exception,
-changelog merge or cut is approved by this record.
+David explicitly accepts this report as an exception for 0.26.0: 26 review
+rows, seven recurrent raw slowdowns, including SMALL-Release/7-symbol-solve
+solve median +5.761% / +5.806%, and no recurrent total. All five recurrent
+null-envelope exceedances and all other observations above remain preserved.
+David supplies Callgrind counts for the 93-symbol fixture in both size profiles:
++11 instructions per request with a new session and +2 with a reused session,
+on approximately 1.14 million instructions. These are small nonzero scoped
+instruction differences, not evidence of equal cycles or an established layout
+cause for the timing alerts, including the separate 7-symbol case. David's
+acceptance authorizes proceeding with this unresolved timing evidence; no
+additional causal attribution is made.
 
 ## 0.25.0 — 2026-10-18
 
