@@ -7,6 +7,8 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ## Unreleased
 
+## 0.26.0 — 2026-10-19
+
 ### Fixed
 
 - Diagnose invalid aggregate projection/result variables as author safety errors
@@ -41,6 +43,19 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
   for both Why-true and Why-false. Existing functions retain their signatures,
   statuses, storage/lease and allocation contracts. No diagnostic code or
   session/result error cache is added.
+
+### Build
+
+- Adopt maelys-release v0.64.5 for CI, release, npm and Homebrew workflows.
+  The socle requests no product adaptation for this version.
+
+### Python performance review — decision pending
+
+[Run 39299540820](https://github.com/maelys-dev/maelys-datalog/actions/runs/39299540820)
+measures integrated #207 commit `ab6263576a58d01846ec8c54237ca467f47e2554`.
+The report is still being generated. Its artifact name, report SHA-256,
+controls, findings and David's decision must be recorded here before release.
+No performance exception or release decision has been accepted for 0.26.0.
 
 ## 0.25.0 — 2026-10-18
 
