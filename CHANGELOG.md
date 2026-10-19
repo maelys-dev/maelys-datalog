@@ -52,10 +52,65 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 ### Python performance review — decision pending
 
 [Run 39299540820](https://github.com/maelys-dev/maelys-datalog/actions/runs/39299540820)
-measures integrated #207 commit `ab6263576a58d01846ec8c54237ca467f47e2554`.
-The report is still being generated. Its artifact name, report SHA-256,
-controls, findings and David's decision must be recorded here before release.
-No performance exception or release decision has been accepted for 0.26.0.
+measures integrated #207 commit `ab6263576a58d01846ec8c54237ca467f47e2554`
+against v0.25.0 `0d61a4b848e5a94a0a352124989cd7ae1b672dec` and immutable
+v0.11.1 anchor `0f247a7c81ec4a297f35ccee2bf007344f72ac7e`. Artifact:
+`python-performance-ab6263576a58d01846ec8c54237ca467f47e2554`; `report.json`
+SHA-256: `b1fea5ca535eb2beb9fa7379e7ee6d9065a118c11bef270a0c61cd412f472cab`.
+The schema-4 report is release-eligible and retains `review_required`.
+The three-request positive control is slower in both rounds for all 32 warm
+total scenarios (all 64 median/p95 rows). Both references have independently
+sampled, same-path identical-binary null controls, with all 616 matched rows.
+The informative v0.11.0 historical control is detected; it does not replace
+the positive control or approve the candidate.
+
+There are 58 raw A/A alert rows: 40 warm and 18 informative cold. After null
+screening, 26 warm rows require review (20 against v0.25.0, six against the
+anchor), including one total. Seven review rows are raw slowdowns in both
+rounds. Five exceed the matching null envelope in both rounds:
+
+| Reference | Configuration / case / phase | Statistic | Round 1 | Round 2 | Null envelope |
+| --- | --- | --- | --- | --- | --- |
+| v0.25.0 | SMALL-Release/7-symbol-solve/solve | median | +5.761% | +5.806% | 5.554% |
+| v0.25.0 | SMALL-default/93-integer-solve/solve | median | +2.335% | +3.947% | 0.956% |
+| v0.25.0 | SMALL-default/93-symbol-prepared/solve | median | +3.906% | +2.446% | 1.804% |
+| v0.25.0 | SMALL-default/93-symbol-solve/solve | median | +2.159% | +2.194% | 0.729% |
+| v0.11.1 | SMALL-Release/7-symbol-prepared/input | p95 | +3.612% | +3.101% | 1.744% |
+
+The other two recurrent raw review rows exceed the null envelope only once:
+v0.25.0 SMALL-default/93-integer-solve/close minimum +3.356% / +8.921%
+(envelope 7.051%), and anchor LARGE-Release/7-integer-prepared/close minimum
++5.855% / +5.741% (5.741%; round two equals the envelope at full precision).
+No total is a raw slowdown in both rounds. The sole total requiring review is
+v0.25.0 SMALL-default/93-symbol-prepared median +1.872% / +0.464%
+(envelope 0.714%), exceeding it in round one only. Two other raw total alerts
+remain unresolved against their null controls; none is discarded.
+
+Cold rows are informative, not screened release triggers. Against v0.25.0,
+SMALL Release/default 7-symbol-solve cold medians are +14.607% / +12.542%
+and +12.393% / +12.930%; cold p95 and prepared-call alerts remain in the
+original report. These observations have no established causal attribution.
+
+The descriptive null cross-check has 268 matched warm statistics per direction:
+base-null against anchor envelope alerts on 19 / 8 rows in rounds one / two
+(one recurrent), and anchor-null against base envelope on 18 / 29 (two
+recurrent). Candidate alerts on that same population are 10 / 11 and 5 / 2,
+respectively. There are 16 / 32 unmatched warm statistics; they remain outside
+the cross-check, not outside the original review. These are descriptive counts,
+not false-positive estimates, a tolerance, or a subtraction from candidate
+alerts. Separate observer/storage controls retain their own observations,
+including recurrent telemetry-control slowdowns; no timings are normalized.
+
+An offline audit verifies all 256 retained installed-file hashes, four harness
+hashes and reproduces all candidate, positive, historical and null comparison
+rows from 3,377,136 archived sample values. The earlier deterministic checks
+retain 67 make-check executables, allocation guards and installed-SDK binding
+contracts in both profiles; they do not establish equal timing. Since the
+measured runtime commit, #208 changes only generated workflow references to
+the socle, and this PR changes documentation; neither substitutes a new binary
+measurement. No new instruction-count evidence or native cause is claimed.
+David's decision on this concrete report is pending. No timing exception,
+changelog merge or cut is approved by this record.
 
 ## 0.25.0 — 2026-10-18
 
