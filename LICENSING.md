@@ -116,5 +116,13 @@ engaged even though no reader arrives at them from the README:
   by [`RELEASING.md`](RELEASING.md), the operator's sequence. The scripts
   say what they say for reasons a migration tool cannot rewrite.
 
+The compatibility commitment of the 0.x series, which consumers of the
+installed SDK build against:
+
+- [`docs/compatibility.md`](docs/compatibility.md) — the frozen consumer API,
+  program ABI, backend ABIs, record bounds and installed headers, and the
+  rules for evolving them. It changes only with a release, so it stays with
+  the tag that declares it.
+
 Nothing else in `docs/` is unengaged: `maelys-platform docs --prose` reports
 no document to migrate.

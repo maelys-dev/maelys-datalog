@@ -308,5 +308,5 @@ smaller costs. A reproducible complete-Python slowdown
 requires human review; phase timings inform diagnosis. Workflow success is not
 performance approval. There is no Python timing or artifact hook in
 `verify-release.sh`, packaging or tag replay. The contract and operator commands
-are in [Python performance](python-performance.md); the generated release
+are in the Python performance contract, kept with the project's documentation; the generated release
 workflow and the release environment's final approval are unchanged.
