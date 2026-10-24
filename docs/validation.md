@@ -226,7 +226,7 @@ manual comparison protocol above to changes in ordinary solve paths.
 
 ## Installed facade and SDK
 
-The ABI 7 delivery contract is in `docs/proposals/backend-input-delivery.md`.
+The ABI 7 delivery contract is a proposal kept with the project's documentation.
 `backend_input_delivery` links every engine unit with allocator guards and a
 separately compiled public provider; the installed-SDK replay copies both source
 files outside the repository and links static/shared libraries independently.

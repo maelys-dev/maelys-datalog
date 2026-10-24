@@ -162,7 +162,7 @@ when it has what they name.
 
 - Prefer caller-owned, aligned storage and explicit bounded capacities for new
   runtime APIs. Opaque handles do not justify mandatory heap allocation.
-- For session sizing, follow `docs/architecture/sized-reference-sessions.md` as
+- For session sizing, follow `../maelys-docs/maelys-datalog/architecture/sized-reference-sessions.md` as
   a proposal, not an implemented API. Keep program/build bounds distinct from
   effective session capacities; never pass smaller quotas through `program_info`
   to an ABI 5 backend. Preserve default external-backend behavior and validate
@@ -237,9 +237,9 @@ when it has what they name.
 
 ## Experimental delta transport
 
-- The agreement in `docs/proposals/backend-transaction-deltas.md` is not a public
+- The agreement in `../maelys-docs/maelys-datalog/proposals/backend-transaction-deltas.md` is not a public
   API. Keep the first A/B driver isolated under `bench/`; follow
-  `docs/proposals/host-delta-snapshot-experiment.md` for its admitted subset,
+  `../maelys-docs/maelys-datalog/proposals/host-delta-snapshot-experiment.md` for its admitted subset,
   alternating-bank bases, unchanged ABI 5 provider, oracle and exclusive Ir/Dr/Dw
   accounting. Preserve complete export, retained copies, failures and full-replace
   losses. A restricted host saving does not reserve an ABI or waive the remaining
@@ -247,7 +247,7 @@ when it has what they name.
 
 ## Python performance and release evidence
 
-- Follow `docs/python-performance.md`. Protect the complete Python input /
+- Follow `../maelys-docs/maelys-datalog/python-performance.md`. Protect the complete Python input /
   solve / query / close lifecycle, both convenience and reused sessions; native
   prepared-solve timing alone cannot establish Python performance.
 - Preserve the native allocation/reservation/reset budgets and the installed-SDK
@@ -288,7 +288,7 @@ when it has what they name.
   candidate false-positive rate. Never subtract null alerts or change review
   status, floors or release decisions from this diagnostic. Supplement archived
   reports separately with source/code hashes; never overwrite them or remeasure
-  merely to calculate the cross-check. Follow `docs/python-performance.md`.
+  merely to calculate the cross-check. Follow `../maelys-docs/maelys-datalog/python-performance.md`.
 - Before `maelys-release cut ... --apply`, read the Python report and record the
   measured commit, run URL, report SHA-256, findings and maintainer decision in
   the changelog pull request. Review any later runtime, binding, build or harness
@@ -311,7 +311,7 @@ when it has what they name.
   universal absence of regressions. Do not silently move references or widen
   budgets to make a candidate pass.
 - For a transient Python tail, use the bounded diagnostics documented in
-  `docs/python-performance.md`: preserve unchanged workload samples alongside
+  `../maelys-docs/maelys-datalog/python-performance.md`: preserve unchanged workload samples alongside
   separate CPU/resource/GC observations and scoped software counts. Never pair
   separate phase samples by index with total samples. A later quiet run does
   not erase an earlier alert; equal CPU and wall inflation does not identify
@@ -327,7 +327,7 @@ when it has what they name.
   needs a registered runner and writer-only dispatch; never substitute local
   Docker smoke or hosted ARM and call it self-hosted evidence.
 
-- The v0.13 attribution follow-up in `docs/python-performance.md` compares the
+- The v0.13 attribution follow-up in `../maelys-docs/maelys-datalog/python-performance.md` compares the
   original hosted binaries, complete-request software counts and independently
   measured identical-binary labels. It found matching native/CFFI-module work
   in 72 scoped comparisons and timing alerts/bursts with unchanged v0.12.0.

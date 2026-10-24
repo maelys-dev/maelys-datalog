@@ -49,6 +49,7 @@ binding, capability negotiation and explanation semantics.
 
 ## Retain multi-fact events (0.9.0)
 
+The native group adapter in `datalog_window.h`
 retains N groups of complete typed facts and recomputes their union. A shared fact
 survives until its last contributing group expires; empty groups still advance
 retention. Group IDs are metadata, with no implicit term injection. Caller-owned
@@ -59,6 +60,7 @@ leaves the original single-fact adapter below unchanged; bindings are deferred.
 
 ## Retain the last N events (0.8.0)
 
+The native `datalog_window.h` adapter adds
 integer occurrence IDs and recomputes the last N accepted events. Expiration,
 insertion and result replacement commit together: a rejected event preserves
 the old window and result. It uses caller-provided input storage and two borrowed
@@ -159,6 +161,7 @@ not the availability of every later additive symbol. Consumers must use headers
 and libraries from one matching SDK revision/profile and check any required
 feature guards (for example `MAELYS_DATALOG_HAS_MANIFEST_BUFFER` for the new
 memory manifest loader). Datalog syntax is unchanged. See the
+migration contract and ABI 5 addendum for advanced operations
 and required diagnostic initialization.
 
 ## Build and test
@@ -197,6 +200,7 @@ New integrations use the opaque, installed C API:
 
 CMake installations and native SDK archives share eleven public headers under
 `include/maelys/`, organized for applications, integrators and component authors.
+See the header map and source migration. The historical
 `maelys_datalog.h` umbrella, version-macro header and `src/`/`common/` headers
 are no longer distributed; they remain private to repository builds. There
 are no compatibility aliases for the concrete native representations.
@@ -206,6 +210,7 @@ both use `maelys_datalog_predicate_t` (`name`, `arity`, `flags`). Domain
 registration copies names into bounded owned storage; pointer declarations do
 not require heap allocation. The old low-level and Python-shim C predicate
 declarations are removed without aliases. See the
+complete migration contract.
 
 Declaration initializers, added in 0.7.0, keep common predicate roles explicit:
 
@@ -428,10 +433,11 @@ public headers and `maelys-datalog.pc`; consumers can use
 the release workflow, after its source build and poured-bottle smoke test.
 
 For temporal authorization quotas, see the
+consumer guide: FIFO windows do not guarantee
 retention of the full live horizon, and successful solving is not authorization.
 It includes a checked example, complete storage inventory and the current
 snapshot/delta/session resource contracts.
 
 ## Documentation
 
-The documentation of maelys-datalog is no longer kept in this repository.
+The documentation of maelys-datalog is no longer kept in this repository; it is published at [datalog.maelys.dev](https://datalog.maelys.dev).
