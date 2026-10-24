@@ -44,7 +44,8 @@ attribution.
 
 - [`specification.md`](docs/specifications/maelys-datalog-v2/specification.md),
   [`semantics.md`](docs/specifications/maelys-datalog-v2/semantics.md),
-  [`conformance.md`](docs/specifications/maelys-datalog-v2/conformance.md)
+  [`conformance.md`](docs/specifications/maelys-datalog-v2/conformance.md),
+  [`aggregates.md`](docs/specifications/maelys-datalog-v2/aggregates.md)
 
 Its code components are **MIT**, because an implementer copies them into a
 parser generator or a test suite, and Creative Commons licenses are not meant
