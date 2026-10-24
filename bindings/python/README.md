@@ -184,7 +184,7 @@ The binding owns an aligned attachment allocation until close. Python/CFFI
 batch arrays, text conversions, results and explanation strings still allocate.
 The native attachment operation and prepared transaction path use fixed storage;
 this does not make Python allocation-free or the reference solver incremental.
-See [the binding transaction contract](../../docs/binding-input-transactions.md)
+See the binding transaction contract
 for the shared semantics and qualification scope.
 
 ## Build

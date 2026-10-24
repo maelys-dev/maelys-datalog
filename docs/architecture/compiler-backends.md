@@ -3,14 +3,14 @@
 > 0.11.0 adds backend ABI 5 preparation storage and explicit
 > acceptance. This does not implement or freeze the proposed resource/delta
 > protocol below; its historical ABI-number proposals are superseded. See the
-> [ABI 5 migration addendum](../api-type-migration.md#0110--backend-abi-5).
+> ABI 5 migration addendum.
 
 > 0.10.0 migration note: the common diagnostic now uses consumer API 2,
 > frontend/program ABI 2 and backend ABI 4. Snapshot materialization is unchanged.
 > References below to the original ABI 3 constraints describe the snapshot
 > protocol on which this design was based. The future incompatible resource/
 > delta contract must receive a distinct ABI identifier; it is not this ABI 4.
-> See [the migration contract](../api-type-migration.md).
+> See the migration contract.
 
 The MPL core includes a complete standard Datalog frontend and reference solver.
 The alpha C SDK has two independent extension points: source-language frontends
@@ -232,7 +232,7 @@ the number of a future ABI. Validate them with the incremental prototype first.
 - A named backend registry reachable from the opaque facade, so Python-next and
   the WASM binding can select a backend by name. C context registration and
   selection already exist; the remaining work is coherent binding exposure.
-- A [session resource contract](session-resource-contract.md), agreed by the
+- A session resource contract, agreed by the
   host and backend before initialization: effective capacities, checked storage
   planning, immutable session budgets/memory policy, transaction peaks and
   observable bounded fallback. This is a design requirement, not implemented or frozen by ABI 5. Smaller quotas and genuinely capacity-sized storage
@@ -277,7 +277,7 @@ kind switches must reject or implement the new alternative. See
 ## Budgets and shared filters
 
 Current limits below describe ABI 3. The
-[target resource contract](session-resource-contract.md) also budgets persistent
+target resource contract also budgets persistent
 incremental state and the whole transaction; it is not implemented by the
 existing `work_limit` or input-buffer capacity setters.
 

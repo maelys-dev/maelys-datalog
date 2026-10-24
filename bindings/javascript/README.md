@@ -144,7 +144,7 @@ replace/apply, queries and result release. JS arrays, encoded text and copied
 outputs still allocate. Reference solving still recomputes IDB. The private wire
 protocol is version 2, so these sources reject an older transport explicitly.
 
-See [the shared contract](../../docs/binding-input-transactions.md). This feature
+See the shared binding transaction contract. This feature
 does not expose window adapters or change any public C/backend ABI.
 
 ## Manifests and environment I/O

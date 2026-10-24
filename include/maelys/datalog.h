@@ -519,7 +519,7 @@ MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_policy_free(
  * builds may reuse one equal-sized idle allocation from a previously closed
  * session, with no allocator call on that hit. Closing can retain this raw
  * block until replacement or library/process teardown (bounded by the profile's
- * maximum legacy host arena; see docs/validation/session-recycling.md).
+ * maximum legacy host arena).
  * Caller-owned storage never enters this cache. The compiled policy and
  * opt-in explanation storage are accounted separately. No canonical public
  * input export buffer is reserved for the reference backend. */

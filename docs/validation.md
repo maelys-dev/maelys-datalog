@@ -22,7 +22,7 @@ suite summaries rather than a hardcoded historical count.
 ASan/UBSan run locally; macOS disables leak detection. The Linux CI enables
 LSan. A local macOS PASS alone is not evidence of Linux leak safety.
 
-The [multi-fact window](architecture/multi-fact-window.md) adds a separate FIFO/set
+The multi-fact window adds a separate FIFO/set
 oracle and allocation guard, included in both native profiles and sanitizer
 inventories. Tests distinguish groups, raw contributions and the unique union,
 cover empty groups, shared facts, boolean normalization, last-contributor expiry,
@@ -35,7 +35,7 @@ with already-created sessions; rejected attempts preserve every committed bank
 byte and adapter header byte, excluding candidate scratch. The installed static
 and shared SDK runs the functional suite and minimal multi-fact C example.
 
-The [last-N window](architecture/last-n-window.md) tests cover atomic expiry and
+The last-N window tests cover atomic expiry and
 recomputation against a separately maintained FIFO, all IDB and canonical IDs,
 aggregate/negation/recursion behavior, capacity errors, injected backend failures,
 prepared result leases and long vocabulary rotation. Its allocation guard checks
@@ -226,7 +226,7 @@ manual comparison protocol above to changes in ordinary solve paths.
 
 ## Installed facade and SDK
 
-The ABI 7 delivery contract is in `docs/proposals/backend-input-delivery.md`.
+The ABI 7 delivery contract is a proposal kept with the project's documentation.
 `backend_input_delivery` links every engine unit with allocator guards and a
 separately compiled public provider; the installed-SDK replay copies both source
 files outside the repository and links static/shared libraries independently.
@@ -258,8 +258,8 @@ per-function counts and residuals remain available. No timings, hardware
 counters, private-provider support or whole-request O(delta) are claimed.
 
 The opt-in retained-input contract is declared in
-`maelys/datalog_inputs.h` and specified in
-`proposals/session-input-transactions.md`. The public-only consumer test replays
+`maelys/datalog_inputs.h` and specified in the session input
+transactions proposal, kept with the project's documentation. The public-only consumer test replays
 1,200 seeded transactions against fresh reference snapshots with each of the
 reference, ABI 5 and ABI 6 paths. Its two external fixture providers implement
 the fixture's projection, negation and count directly from the delivered facts;
@@ -293,7 +293,7 @@ required on the final release candidate.
 The diagnostic `tools/session_storage_inventory.sh SMALL|LARGE` reports current
 private layout sizes/offsets and session allocation payload sums, without timing
 or solving. It is not part of the installed SDK. The
-[sized-session proposal](architecture/sized-reference-sessions.md) separates
+sized-session proposal separates
 these observations from hypothetical payload projections and future contracts.
 Generated CSV stays outside git; the existing allocation guard independently
 checks shared-policy, copied-policy and exporting reservations.
@@ -327,7 +327,7 @@ materialized inputs. The reference and copied/renamed reference descriptors
 reserve none; an external wrapper reserves the canonical input array and
 runtime-owned derived array, in the same single host arena. Native constructors
 can reuse one bounded, equal-sized idle host allocation; caller-owned arenas
-never enter that cache. See [session recycling](validation/session-recycling.md)
+never enter that cache. See the session recycling validation
 for its process-wide retention and lifecycle limits. The allocation
 guard checks the exact additional bytes for both arrays, both selections, every
 constructor failure point, and repeated solve/query/release with allocation
@@ -611,7 +611,7 @@ snapshots and reject expiry/clock changes byte-for-byte on failure.
 
 ## Optional external-provider allocation (0.19.0 candidate)
 
-The installed [version 1 contract](proposals/backend-allocation.md) is qualified
+The installed version 1 contract is qualified
 separately from reference FIXED sessions. No Python or JavaScript allocator option
 is exposed. `MAELYS_DATALOG_RESOURCE_SUPPORTED_014` retains its historical value.
 The following names are executable cases of `test_backend_allocation`; all engine
