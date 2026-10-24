@@ -107,7 +107,7 @@ jobs:
         with:
           name: backend-allocation-${{ github.sha }}
           path: ${{ runner.temp }}/backend-allocation
-          retention-days: 30
+          retention-days: 7
       - name: Measure complete ABI 7 window transactions
         if: inputs.window_inputs
         env:
@@ -162,4 +162,4 @@ jobs:
             ${{ runner.temp }}/retained-inputs/
             ${{ runner.temp }}/window-inputs/
           if-no-files-found: warn
-          retention-days: 30
+          retention-days: 7
