@@ -89,11 +89,12 @@ Referenced from [`README.md`](README.md), the repository's public entry point:
 
 - The normative definition of the language this engine implements, which
   third-party frontends and backends are written against. The specification
-  links the other two, so they are engaged with it and must be named here to
+  links the other three, so they are engaged with it and must be named here to
   stay beside it:
   [`docs/specifications/maelys-datalog-v2/specification.md`](docs/specifications/maelys-datalog-v2/specification.md),
   [`docs/specifications/maelys-datalog-v2/semantics.md`](docs/specifications/maelys-datalog-v2/semantics.md),
   [`docs/specifications/maelys-datalog-v2/conformance.md`](docs/specifications/maelys-datalog-v2/conformance.md),
+  [`docs/specifications/maelys-datalog-v2/aggregates.md`](docs/specifications/maelys-datalog-v2/aggregates.md),
   with the ABNF grammars and `.dl` fixtures beside them.
 - [`docs/architecture/open-core.md`](docs/architecture/open-core.md),
   [`docs/architecture/compiler-backends.md`](docs/architecture/compiler-backends.md)

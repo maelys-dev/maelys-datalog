@@ -35,6 +35,9 @@ jobs:
       product: maelys-datalog
       sanitizer_command: make -j4 -f Makefile.asan asan
       fuzz_command: make -f Makefile.fuzz fuzz-smoke
+      # docs/ holds no prose: what is not engaged by LICENSING.md, generated
+      # or data is refused, not noted.
+      docs_contract: true
 
   # One job per concern, so that the wall time of a run is the longest
   # concern and not their sum: a release waits for this file three times
