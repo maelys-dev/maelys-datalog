@@ -26,7 +26,7 @@ release may bypass a missing-header or private-header failure.
 Before `cut --apply`, read the **Python performance** report and record the
 measured commit, run URL, report SHA-256, findings and maintainer decision in
 the changelog pull request. Review any measured tradeoff using
-[`docs/python-performance.md`](docs/python-performance.md); do not waive a
+`docs/python-performance.md`; do not waive a
 timing finding by changing its threshold or deleting a case. Obtain new
 measurements if runtime, binding, build or harness changes have landed since
 the reviewed commit. Version/documentation-only changes do not by themselves

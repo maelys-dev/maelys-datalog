@@ -503,10 +503,10 @@ beyond the null; one-round total alerts are retained. The acceptance rationale
 is #184's attribute-only rename: compiled binding code matches after
 normalizing the two owner names, with no native runtime change. This establishes
 no added code work, not equal timings; the recurring observations remain
-unattributed. The [release review](docs/validation/v0.22-release-review.md)
+unattributed. The release review
 records the configurations, envelopes and independent comparison scope.
 
-The [freeze review](docs/validation/freeze-review.md)
+The freeze review
 records the broader evidence and compatibility boundaries.
 
 ## 0.21.0 — 2026-10-03
@@ -545,7 +545,7 @@ records the broader evidence and compatibility boundaries.
   the matching null envelope in both rounds, all in default builds; six solve
   medians range from +1.34% to +5.44%. Raw alerts, including a Release p95 not
   distinguished from its null in the second round, remain preserved. The
-  [release review](docs/validation/v0.21-release-review.md) records the decision,
+  release review records the decision,
   measured scope, controls and distinction between raw and screened statistics.
   This accepts that named report, not an automatic attribution or publication.
 
@@ -585,7 +585,7 @@ records the broader evidence and compatibility boundaries.
 
 ### Validation and performance review
 
-- The complete [Python performance report](docs/validation/v0.20-release-review.md)
+- The complete Python performance report
   measures signed commit `88f085343c956b34a3c66b9750858fec6b987c41` in
   [run 37056424298](https://github.com/maelys-dev/maelys-datalog/actions/runs/37056424298).
   Its `report.json` SHA-256 is
@@ -941,7 +941,7 @@ ABI 5 remains available under its existing default resource contract.
   is additional to live-session reservations and is released at native library
   teardown; no malloc tuning or public API is added. Reuse is conditional on
   size and availability; Python/CFFI still allocate. See the
-  [ownership and qualification limits](docs/validation/session-recycling.md).
+  ownership and qualification limits.
 
 - Disposable `solve_once` workspaces use `malloc` plus metadata initialization
   instead of zeroing the complete reservation with `calloc`. Used facts, proof
@@ -949,7 +949,7 @@ ABI 5 remains available under its existing default resource contract.
   is not exposed. This removes a fixed initialization cost from the allocating
   microbenchmark, not from an already prepared session. See the scoped local
   and hosted timing evidence and qualification limits in
-  [session resources validation](docs/validation/session-resources.md).
+  session resources validation.
 
 ### Performance review and accepted limits
 
@@ -967,11 +967,11 @@ ABI 5 remains available under its existing default resource contract.
   LARGE/7 and 15.20–21.49% for LARGE/93. These comparisons include multiple
   changes and do not attribute the whole improvement to recycling. They do
   not cancel the prepared-session observations.
-- The [named release review](docs/validation/v0.14-release-review.md) records
+- The named release review records
   immutable revisions, report SHA-256, raw verification, controls, all remaining
   findings and attribution limits. Earlier reports, including 93-integer
   prepared +1.84–4.29% and the isolated seven-symbol +21.75% median event,
-  remain preserved in [session recycling validation](docs/validation/session-recycling.md).
+  remain preserved in session recycling validation.
   David explicitly accepted this named report's documented tradeoff for 0.14.0
   publication on 2026-09-29, including these unresolved observations. The
   decision is separate from earlier merge-only approvals and does not claim
