@@ -172,7 +172,8 @@ class PositiveControlTests(unittest.TestCase):
                 self.assertEqual(normal.read_bytes(), null.read_bytes())
                 self.assertEqual(len(list((output / 'telemetry-controls').glob('*.json'))), 72)
                 self.assertIn('Historical comparison (informative)', (output / 'report.md').read_text())
-                self.assertIn('positive_control', (output / 'samples.csv').read_text())
+                self.assertTrue(list((output / 'raw').glob('*-positive-requests3-*.json')))
+                self.assertFalse((output / 'samples.csv').exists())
 
     def test_informative_history_cannot_approve_or_invalidate_positive_control(self):
         data = controlled_samples()
