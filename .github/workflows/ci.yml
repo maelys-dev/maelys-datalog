@@ -5,6 +5,15 @@ on:
     branches: [main]
   pull_request:
 
+# Artifacts: every upload-artifact step names retention-days, from 1 to 14
+# days (tools/check_artifact_retention.py), never the repository default of
+# 90 days. Controls produced on every push or pull request keep 3 days; the
+# release binaries handed to the wheel jobs of the same run keep 1. Evidence
+# that must last belongs in a document or a release, not an artifact.
+# GitHub documents Actions usage of public repositories as free; the
+# organization's 2 GB of artifact storage, shared with GitHub Packages and
+# updated every 6 to 12 hours, counts its private repositories.
+
 permissions:
   contents: read
 
@@ -20,6 +29,17 @@ jobs:
       - run: python -m unittest discover -s tests/tooling -p 'test_python_perf*.py' -v
       - run: python -m unittest discover -s bench -p 'test_report_host_delta.py' -v
       - run: python -m unittest discover -s bench -p 'test_compare*.py' -v
+
+  artifact-retention:
+    name: Artifact retention
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12.12'
+      - run: python -m unittest discover -s tests/tooling -p 'test_artifact_retention.py' -v
+      - run: python tools/check_artifact_retention.py
 
   # The shared CI of the socle: make check on the three release targets and
   # the conventions drift, from the declarations in maelys-release.conf. Its
@@ -74,6 +94,7 @@ jobs:
         with:
           name: policy-liveness-mutations
           path: ${{ runner.temp }}/policy-liveness-*/*
+          retention-days: 3
 
       - name: Rebuild fixed-resource negative controls under ASan and UBSan
         if: runner.os == 'Linux'
@@ -112,6 +133,7 @@ jobs:
         with:
           name: compact-fact-mutations-${{ runner.os }}
           path: ${{ runner.temp }}/compact-facts-*/*.log
+          retention-days: 3
       - name: Check retained-input transaction negative controls
         if: runner.os == 'Linux'
         run: |
@@ -133,6 +155,7 @@ jobs:
             ${{ runner.temp }}/backend-input-*/**/*.log
             ${{ runner.temp }}/backend-input-*/**/*.patch
             ${{ runner.temp }}/backend-input-*/results.json
+          retention-days: 3
 
       - name: Preserve fixed-resource mutation evidence
         if: always() && runner.os == 'Linux'
@@ -148,7 +171,7 @@ jobs:
             ${{ runner.temp }}/session-recycle-small/results.json
             ${{ runner.temp }}/session-recycle-large/**/*.log
             ${{ runner.temp }}/session-recycle-large/results.json
-          retention-days: 30
+          retention-days: 3
 
   sdk-python:
     name: SDK and Python (${{ matrix.os }})
@@ -222,7 +245,7 @@ jobs:
             ${{ runner.temp }}/allocation-matrix-*/*.log
             ${{ runner.temp }}/allocation-matrix-*/matrix/*.json
             ${{ runner.temp }}/allocation-matrix-*/matrix/*.log
-          retention-days: 30
+          retention-days: 3
 
   # The socle's sanitizers job covers SMALL on Linux; the three other cells
   # (LARGE on Linux, both profiles on macOS) keep the coverage of the
@@ -337,7 +360,8 @@ jobs:
         with:
           name: javascript-release-${{ matrix.target }}
           path: dist/
-          retention-days: 14
+          # Only the wheel jobs of this run read it.
+          retention-days: 1
 
   python-wheels:
     name: Python wheel (${{ matrix.target }}, CPython ${{ matrix.python }})

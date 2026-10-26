@@ -336,6 +336,15 @@ when it has what they name.
   do not erase old signals, claim a specific hardware cause or infer a fix
   solely from equal counts or a later quiet run.
 
+## CI artifacts
+
+- Every `actions/upload-artifact` step names `retention-days`, a literal from 1
+  to 14; `tools/check_artifact_retention.py` fails the CI otherwise. Controls
+  produced on every push or pull request keep 3 days, the release binaries the
+  wheel jobs read in the same run keep 1, manual comparisons keep 7. Evidence
+  that must outlive that belongs in a document or a release. Do not raise the
+  limit to keep a report: record its run, commit and SHA-256 instead.
+
 ## Manual benchmark evidence
 
 - Keep `bench-compare.yml` workflow_dispatch-only, with base/head inputs and
