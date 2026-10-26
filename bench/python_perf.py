@@ -6,7 +6,6 @@ Exit 0: no review trigger; 2: review required; 1: invalid run.
 Local smoke evidence is never release evidence. Raw results stay in --output.
 """
 import argparse
-import csv
 import hashlib
 import importlib.metadata
 import json
@@ -483,13 +482,8 @@ def run(args):
     report['null_cross_check'] = null_cross_check(report)
     report_path = out / "report.json"
     report_path.write_text(json.dumps(report, indent=2) + "\n")
-    with (out / "samples.csv").open("w", newline="") as stream:
-        writer = csv.writer(stream)
-        writer.writerow(["role", "pass", "scenario", "sample", "ns"])
-        for role, passes in samples.items():
-            for name, cases in passes.items():
-                for case, values in cases.items():
-                    writer.writerows((role, name, case, i, value) for i, value in enumerate(values))
+    # Every sample stays in raw/, one file per process; a flat copy would only
+    # double the evidence uploaded on every push.
     summary = ["# Python performance evidence", "", f"Status: **{report['status']}**.",
                f"Additional comparison only: **{report['comparison_only']}**; release eligible: **{report['release_eligible']}**.",
                f"Candidate: `{commits['head']}`; base: `{commits['base']}`; anchor: `{ANCHOR}`.",
