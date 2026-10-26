@@ -4,6 +4,8 @@
 #   - linux-x86_64, linux-arm64, macos-arm64 : lib/libmaelys_datalog.a + the
 #     public headers, a common JavaScript archive and a Python wheel,
 #     each binding with both native profiles
+#   - linux-x86_64, linux-arm64 also : libmaelys-datalog-dev .deb and
+#     maelys-datalog-devel .rpm, SMALL profile (scripts/package-linux.sh)
 #   - wasm32 : one common JavaScript archive with both WASM profiles
 #
 # One command, used both locally and by the build job of maelys-release,
@@ -121,6 +123,15 @@ if [ "$target" != wasm32 ]; then
   echo "packaged ${native_name}"
   artifacts+=("$native_name")
 fi
+
+# Debian and RPM development packages, the content of the Homebrew formula.
+case "$target" in
+  linux-*)
+    bash scripts/package-linux.sh "$target" "$dist"
+    case "$target" in linux-x86_64) deb_arch=amd64; rpm_arch=x86_64 ;; *) deb_arch=arm64; rpm_arch=aarch64 ;; esac
+    artifacts+=("libmaelys-datalog-dev_${version}_${deb_arch}.deb" "maelys-datalog-devel-${version}-1.${rpm_arch}.rpm")
+    ;;
+esac
 
 # ---------------------------------------------------------------------------
 # WASM artifacts (D1 wasm32 row: small and large profiles, D2 pinned emsdk).

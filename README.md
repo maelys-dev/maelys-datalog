@@ -432,6 +432,26 @@ public headers and `maelys-datalog.pc`; consumers can use
 `pkg-config --cflags --libs maelys-datalog`. The formula is published through
 the release workflow, after its source build and poured-bottle smoke test.
 
+### Debian and RPM packages
+
+From the next release, each GitHub release also carries the same content as
+one development package per Linux architecture, SMALL profile:
+`libmaelys-datalog-dev_<version>_{amd64,arm64}.deb` and
+`maelys-datalog-devel-<version>-1.{x86_64,aarch64}.rpm`. They install under
+`/usr/lib/<triplet>` and `/usr/lib64` respectively, where `pkg-config` and the
+linker look by default; `pkg-config --libs maelys-datalog` links the static
+library, so the programs built with it need no Maelys package at run time.
+The shared library needs glibc 2.33 or later (Debian 12, Ubuntu 22.04,
+Fedora, RHEL 9 and their derivatives).
+
+```sh
+sudo apt install ./libmaelys-datalog-dev_<version>_amd64.deb
+sudo dnf install ./maelys-datalog-devel-<version>-1.x86_64.rpm
+```
+
+These are release files, not an APT or DNF repository: an upgrade installs
+the next release's file.
+
 For temporal authorization quotas, see the
 consumer guide: FIFO windows do not guarantee
 retention of the full live horizon, and successful solving is not authorization.
