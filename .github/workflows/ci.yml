@@ -432,6 +432,20 @@ jobs:
           TSC="$PWD/build/js-test-deps/node_modules/.bin/tsc" node bindings/javascript/test/package.mjs
           PLAYWRIGHT_MODULE="$PWD/build/js-test-deps/node_modules/@playwright/test/index.mjs" PLAYWRIGHT_CHANNEL=chromium node bindings/javascript/test/browser.mjs
 
+  linux-packages:
+    name: Linux packages (deb, rpm)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install packaging tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y dpkg-dev rpm clang cmake binutils
+      - name: Build the development packages
+        run: bash scripts/package-linux.sh linux-x86_64 "$RUNNER_TEMP/linux-packages"
+      - name: Install them and run consumers on four distributions
+        run: bash tools/check_linux_packages.sh "$RUNNER_TEMP/linux-packages"
+
   fuzz-smoke:
     name: Bounded parser fuzz smokes
     runs-on: ubuntu-latest

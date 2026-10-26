@@ -7,6 +7,15 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ## Unreleased
 
+### Added
+
+- Linux development packages: every release carries
+  `libmaelys-datalog-dev` (`.deb`) and `maelys-datalog-devel` (`.rpm`) for
+  x86_64 and arm64, with the content of the Homebrew formula in the SMALL
+  profile. `scripts/package-linux.sh` builds them reproducibly;
+  `tools/check_linux_packages.sh` installs them in Debian, Ubuntu, Fedora and
+  Rocky Linux containers and runs a static and a shared consumer.
+
 ## 0.26.0 — 2026-10-19
 
 ### Fixed
