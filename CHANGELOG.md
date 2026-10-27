@@ -7,12 +7,14 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ## Unreleased
 
+## 0.27.0 — 2026-10-27
+
 ### Added
 
 - Add the C accessor `maelys_datalog_program_rule_variable_name` for borrowed,
   rule-local source spellings, including named aggregate variables. Bounded
   metadata shares source-clause strings across OR alternatives and adds no
-  allocations or loading failures. Anonymous, unused, synthetic and pool-omitted
+  allocations or loading failures. Anonymous, unused and pool-omitted
   names return `NOT_FOUND`; existing identities and explanation formats persist.
 
 - Linux development packages: every release carries
@@ -21,6 +23,53 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
   profile. `scripts/package-linux.sh` builds them reproducibly;
   `tools/check_linux_packages.sh` installs them in Debian, Ubuntu, Fedora and
   Rocky Linux containers and runs a static and a shared consumer.
+
+### Changed
+
+- The repository's technical prose moved out of `docs/`; what remains is
+  engaged by `LICENSING.md` (now including `docs/compatibility.md` and the
+  aggregate specification) or is data. CI refuses new prose in `docs/`.
+- Every CI artifact upload names its retention (at most 14 days), checked by
+  `tools/check_artifact_retention.py`. Python performance reports are kept
+  7 days and no longer carry `samples.csv`, a flat copy of the samples `raw/`
+  already holds; measurements and classifications are unchanged.
+
+### Python performance review — exception accepted for 0.27.0
+
+[Run 40516577907](https://github.com/maelys-dev/maelys-datalog/actions/runs/40516577907)
+measures `main` commit `a06e75fe2775128ae2d24dd18277e2440f47425e` (#217, the
+last engine change of this release) against v0.26.0
+`2a69e8daa937fc80cc2852b35288db18097b94f9` and immutable v0.11.1 anchor
+`0f247a7c81ec4a297f35ccee2bf007344f72ac7e`. Artifact:
+`python-performance-a06e75fe2775128ae2d24dd18277e2440f47425e`; `report.json`
+SHA-256: `5a83e33df7434cdce53987ca2770a54c65b0f8ce26bd1f37540865eb99f0d0e6`.
+The schema-4 report is release-eligible and retains `review_required`.
+The three-request positive control is detected: 63 of the 64 warm total
+median/p95 rows are slower in both rounds (SMALL-Release/93-integer-prepared
+total p95 is slower in round one only). The informative v0.11.0 historical
+control is not detected in this run; it neither replaces the positive control
+nor approves the candidate.
+
+There are 69 raw A/A alert rows: 57 warm and 12 informative cold. After null
+screening, 37 rows require review (26 against v0.26.0, 11 against the anchor).
+One review row is a raw slowdown in both rounds and exceeds the matching null
+envelope in both:
+
+| Reference | Configuration / case / phase | Statistic | Round 1 | Round 2 | Null envelope |
+| --- | --- | --- | --- | --- | --- |
+| v0.26.0 | SMALL-Release/93-integer-prepared/close | minimum | +6.43% | +6.43% | 4.64% |
+
+It is not attributed. The only engine change since v0.26.0 is #217, and the
+Python binding creates library-owned sessions, whose create/close instruction
+count is identical before and after #217 under Callgrind; the larger ruleset
+(+15,112 bytes) is a possible, unproven contributor. Five totals require
+review, each a slowdown in one round only, including the round-one outliers of
+SMALL-default/7-symbol-solve (+79.3% median, +278.0% p95 against v0.26.0) that
+the second round does not reproduce.
+
+David accepted this named report's tradeoff for 0.27.0 publication on
+2026-10-27, including the unattributed close minimum. This is a decision on
+this report, not an automatic attribution or a performance guarantee.
 
 ## 0.26.0 — 2026-10-19
 
