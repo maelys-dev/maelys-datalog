@@ -143,6 +143,20 @@ MAELYS_DATALOG_API maelys_datalog_status_t
 maelys_datalog_program_rule(const maelys_datalog_program_t *program, size_t index, maelys_datalog_ir_rule_t *out_rule);
 
 
+/* Complete case-sensitive source spelling of a named variable present in this
+ * normalized rule (zero-based index; explanation rule_id = index + 1), including
+ * aggregate projection/output and named locals. OK assigns *out_name to a
+ * NUL-terminated string borrowed until policy_free, or until session_free for a
+ * session_program view. Source input buffers need not remain live. No allocation.
+ * INVALID_ARGUMENT: NULL program, underlying ruleset or out_name.
+ * NOT_FOUND: rule out of range, variable >= 26, unused variable in this OR
+ * alternative, a rule built by program_add_rule, or spelling omitted when the
+ * bounded metadata pool filled. Failure leaves *out_name unchanged. Single
+ * letters retain their source spelling; IDs are never decoded into invented names. */
+MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_program_rule_variable_name(
+    const maelys_datalog_program_t *program, size_t rule_index, uint32_t variable,
+    const char **out_name);
+
 MAELYS_DATALOG_API maelys_datalog_status_t
 maelys_datalog_session_program(const maelys_datalog_session_t *session, const maelys_datalog_program_t **out_program);
 #ifdef __cplusplus

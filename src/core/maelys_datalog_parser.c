@@ -1134,7 +1134,20 @@ static maelys_result_t parse_clause(parser_t *p) {
         rc = normalize_anonymous_variables(p, candidate);
         if (rc != MAELYS_OK) goto fail_staged_clause;
     }
+    /* Retain complete source spellings in first-occurrence order. Optional
+     * display metadata cannot make a previously accepted policy fail. A long
+     * name that does not fit leaves room for subsequent shorter names. */
+    for (unsigned j = 0; j < p->named_count; ++j) {
+        const size_t bytes = strlen(p->variable_names[j]) + 1u;
+        const size_t used = p->ruleset->rule_variable_name_pool_used;
+        if (bytes > sizeof(p->ruleset->rule_variable_name_pool) - used) continue;
+        memcpy(p->ruleset->rule_variable_name_pool + used, p->variable_names[j], bytes);
+        p->ruleset->rule_variable_name_offsets[staged_base][p->variable_slots[j]] =
+            (uint16_t)(used + 1u);
+        p->ruleset->rule_variable_name_pool_used += bytes;
+    }
     for (size_t i = 0u; i < staged_count; ++i) {
+        p->ruleset->rule_variable_name_rows[staged_base + i] = (uint16_t)(staged_base + 1u);
         p->ruleset->rule_sources[staged_base + i] = source;
         if (p->origin)
             p->origin->rules[staged_base + i] = (maelys_datalog_clause_origin_t){

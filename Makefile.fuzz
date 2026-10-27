@@ -48,7 +48,7 @@ FUZZ_ASAN_OPTIONS = \
 FUZZ_SMOKE_FLAGS = \
 	-max_total_time=30 \
 	-runs=10000 \
-	-max_len=4096 \
+	-max_len=32768 \
 	-rss_limit_mb=0 \
 	-print_final_stats=1
 

@@ -35,6 +35,8 @@ storage-plan queries.
 
 ## Source variable identity
 
+`maelys_datalog_program_rule_variable_name` exposes optional source spellings without allocation or identity changes; absent, anonymous, synthetic or pool-omitted names return `NOT_FOUND`.
+
 Named variables are case-sensitive full names scoped to one source rule (including
 its OR alternatives), with at most 26 distinct names. Single letters retain
 indices A=0 through Z=25. After reserving all single letters in the rule, longer

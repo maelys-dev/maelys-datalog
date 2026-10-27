@@ -148,6 +148,8 @@ extern "C" {
  * Feature guards require matching headers AND libraries from one SDK build. */
 #define MAELYS_DATALOG_HAS_MANIFEST_BUFFER 1
 #define MAELYS_DATALOG_HAS_CONSUMER_INTROSPECTION 1
+/* API availability; individual names may be absent from the bounded pool. */
+#define MAELYS_DATALOG_HAS_RULE_VARIABLE_NAMES 1
 #define MAELYS_DATALOG_PUBLIC_MAX_TERMS 4u
 #define MAELYS_DATALOG_PUBLIC_FINGERPRINT_BYTES 65u
 /* Independent optional manifest-loading permissions, combined with |.
@@ -757,7 +759,8 @@ MAELYS_DATALOG_API maelys_datalog_status_t maelys_datalog_result_explain_true_te
  * filter-cost), counters, then per-diagnostic bindings, supports and one
  * obstacle. Variables print as ?N and binding=N where N is the rule-local IR
  * variable id reported by maelys_datalog_program_rule; the standard grammar
- * maps A-Z to 0-25 and anonymous variables to 26 and above. The reference
+ * reserves A-Z slots 0-25, assigns long names to remaining slots, and anonymous
+ * variables to 26 and above. Use program_rule_variable_name for source spellings. The reference
  * explores at most 128 candidate rules, 4,096 substitutions per rule, depth 10
  * and 16 diagnostics; backend ABI v3 preserves these bounds, they are not
  * caller-tunable. Truncated text is not a proof of non-derivability. */

@@ -28,6 +28,7 @@ if [[ -n "$(find "$prefix/include" -type l -print)" ]]; then
 fi
 cp "$root/tests/fixtures/public_api_consumer.c" "$scratch/"
 cp "$root/tests/fixtures/sdk_header.c" "$scratch/"
+cp "$root/tests/fixtures/rule_variable_name_guard.c" "$scratch/"
 cp "$root/tests/fixtures/cpp_fact_builders.cpp" "$scratch/"
 cp "$root/tests/test_maelys_datalog_predicate_builders.c" "$scratch/"
 cp "$root/tests/fixtures/opaque_handle.c" "$scratch/"
@@ -42,6 +43,7 @@ cp "$root/tests/test_maelys_datalog_group_window.c" "$scratch/"
 cp "$root/tests/test_maelys_datalog_window_updates.c" "$scratch/"
 cp "$root/tests/test_maelys_datalog_consumer_introspection.c" "$scratch/"
 cp "$root/tests/test_maelys_datalog_program_queries.c" "$scratch/"
+cp "$root/tests/test_maelys_datalog_rule_variable_names.c" "$scratch/"
 cp "$root/tests/test_maelys_datalog_input_transactions.c" "$scratch/"
 cp "$root/tests/test_maelys_datalog_backend_inputs.c" "$scratch/"
 cp "$root/tests/test_maelys_datalog_backend_allocation.c" "$scratch/"
@@ -150,6 +152,18 @@ for linkage in "${linkages[@]}"; do
     -c test_maelys_datalog_program_queries.c -o queries-cpp.o
   "$cxx" queries-cpp.o "${libs[@]}" -o queries-cpp
   ./queries-cpp
+  "$cc" "${flags[@]}" -pedantic-errors rule_variable_name_guard.c "${libs[@]}" -o names-guard
+  ./names-guard
+  "$cxx" -x c++ -std=c++17 -Wall -Wextra -Werror -pedantic-errors -I"$prefix/include" \
+    -c rule_variable_name_guard.c -o names-guard-cpp.o
+  "$cxx" names-guard-cpp.o "${libs[@]}" -o names-guard-cpp
+  ./names-guard-cpp
+  "$cc" "${flags[@]}" -pedantic-errors test_maelys_datalog_rule_variable_names.c "${libs[@]}" -o names-c
+  ./names-c
+  "$cxx" -x c++ -std=c++17 -Wall -Wextra -Werror -pedantic-errors -I"$prefix/include" \
+    -c test_maelys_datalog_rule_variable_names.c -o names-cpp.o
+  "$cxx" names-cpp.o "${libs[@]}" -o names-cpp
+  ./names-cpp
   "$cc" "${flags[@]}" public_api_consumer.c "${libs[@]}" -o facade
   ./facade
   "$cc" "${flags[@]}" -UNDEBUG test_maelys_datalog_advanced.c "${libs[@]}" -o advanced

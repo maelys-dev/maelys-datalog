@@ -66,6 +66,9 @@ $(BUILD_DIR)/tests/test_maelys_datalog_backend_allocation: tests/test_maelys_dat
 $(BUILD_DIR)/tests/test_maelys_datalog_allocation_windows: tests/test_maelys_datalog_allocation_windows.c sdk/conformance/allocation_provider.c sdk/conformance/allocation_provider.h tests/fixtures/allocation_guard.h $(SRCS) $(ENGINE_HEADERS) | $(BUILD_DIR)/tests
 	$(CC) $(TEST_CFLAGS) -include tests/fixtures/allocation_guard.h $(SRCS) sdk/conformance/allocation_provider.c $< -o $@
 
+$(BUILD_DIR)/tests/test_maelys_datalog_rule_variable_names: tests/test_maelys_datalog_rule_variable_names.c tests/fixtures/allocation_guard.h $(SRCS) $(ENGINE_HEADERS) | $(BUILD_DIR)/tests
+	$(CC) $(TEST_CFLAGS) -DRULE_NAMES_ALLOCATION_TEST -include tests/fixtures/allocation_guard.h $(SRCS) $< -o $@
+
 # This test includes the EDB implementation with local allocator fault hooks.
 # Do not link a second copy of that translation unit into its executable.
 $(BUILD_DIR)/tests/test_maelys_datalog_diagnostic_writes: tests/test_maelys_datalog_diagnostic_writes.c $(SRCS) $(ENGINE_HEADERS) | $(BUILD_DIR)/tests
