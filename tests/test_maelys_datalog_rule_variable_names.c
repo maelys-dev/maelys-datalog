@@ -1,4 +1,7 @@
 /* SPDX-License-Identifier: MPL-2.0 */
+#if defined(__linux__) && !defined(_GNU_SOURCE)
+#define _GNU_SOURCE 1
+#endif
 /* Installed public headers only; engine allocations are instrumented. */
 #undef malloc
 #undef calloc
