@@ -9,6 +9,12 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 
+- Add the C accessor `maelys_datalog_program_rule_variable_name` for borrowed,
+  rule-local source spellings, including named aggregate variables. Bounded
+  metadata shares source-clause strings across OR alternatives and adds no
+  allocations or loading failures. Anonymous, unused, synthetic and pool-omitted
+  names return `NOT_FOUND`; existing identities and explanation formats persist.
+
 - Linux development packages: every release carries
   `libmaelys-datalog-dev` (`.deb`) and `maelys-datalog-devel` (`.rpm`) for
   x86_64 and arm64, with the content of the Homebrew formula in the SMALL

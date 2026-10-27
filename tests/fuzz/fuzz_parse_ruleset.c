@@ -66,7 +66,7 @@ static const maelys_datalog_predicate_t FUZZ_PREDS[] = {
 #define FUZZ_PRED_COUNT (sizeof(FUZZ_PREDS) / sizeof(FUZZ_PREDS[0]))
 
 int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
-    if (size > 4096u) return 0;
+    if (size > 32768u) return 0;
 
     maelys_datalog_internal_ruleset_t ruleset = {0};
     maelys_datalog_internal_diagnostic_t diag = {0};

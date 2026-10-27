@@ -17,6 +17,8 @@ typedef struct {
     size_t arity;
 } maelys_datalog_query_whitelist_entry_t;
 
+#define MAELYS_DATALOG_RULE_VARIABLE_NAME_POOL_BYTES 8192u
+
 typedef struct {
     int loaded;
     /* Borrowed immutable extension catalog. NULL is the legacy registry. */
@@ -54,6 +56,13 @@ typedef struct {
     size_t filter_pattern_pool_used;
     /* Keep existing hot-field offsets when adding optional language state. */
     int aggregates_supported;
+    /* Optional display metadata, excluded from canonical streams/fingerprints.
+     * Rows are indexed by the first normalized rule of a source clause. Zero
+     * denotes absence; row and pool offsets are encoded as index + 1. */
+    uint16_t rule_variable_name_rows[MAELYS_DATALOG_MAX_RULES];
+    uint16_t rule_variable_name_offsets[MAELYS_DATALOG_MAX_RULES][MAELYS_DATALOG_NAMED_VARIABLE_COUNT];
+    char rule_variable_name_pool[MAELYS_DATALOG_RULE_VARIABLE_NAME_POOL_BYTES];
+    size_t rule_variable_name_pool_used;
 } maelys_datalog_internal_ruleset_t;
 
 maelys_result_t maelys_datalog_ruleset_init(maelys_datalog_internal_ruleset_t *ruleset,

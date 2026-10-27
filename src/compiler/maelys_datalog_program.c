@@ -389,6 +389,51 @@ maelys_datalog_status_t maelys_datalog_program_fact(const maelys_datalog_program
         *out = a;
     return (maelys_datalog_status_t)rc;
 }
+static uint32_t named_term_mask(const maelys_datalog_internal_term_t *term) {
+    return term->kind == MAELYS_DATALOG_TERM_VAR &&
+           term->as.variable < MAELYS_DATALOG_NAMED_VARIABLE_COUNT
+        ? UINT32_C(1) << term->as.variable : 0u;
+}
+static uint32_t named_atom_mask(const maelys_datalog_internal_atom_t *atom) {
+    uint32_t mask = 0;
+    for (size_t i = 0; i < atom->arity; ++i) mask |= named_term_mask(&atom->terms[i]);
+    return mask;
+}
+static uint32_t named_rule_mask(const maelys_datalog_rule_t *rule) {
+    uint32_t mask = named_atom_mask(&rule->head);
+    for (size_t i = 0; i < rule->body_count; ++i) {
+        const maelys_datalog_literal_t *literal = &rule->body[i];
+        if (literal->kind == MAELYS_DATALOG_LITERAL_ATOM ||
+            literal->kind == MAELYS_DATALOG_LITERAL_NEGATED_ATOM ||
+            maelys_datalog_literal_is_aggregate(literal->kind)) mask |= named_atom_mask(&literal->atom);
+        if (maelys_datalog_literal_is_aggregate(literal->kind) ||
+            (literal->kind == MAELYS_DATALOG_LITERAL_COMPARISON && !literal->has_arith_expr))
+            mask |= named_term_mask(&literal->lhs) | named_term_mask(&literal->rhs);
+        if (literal->kind == MAELYS_DATALOG_LITERAL_FILTER)
+            mask |= named_term_mask(&literal->filter_value);
+    }
+    for (size_t i = 0; i < rule->expr_node_count; ++i)
+        if (rule->expr_nodes[i].kind == MAELYS_DATALOG_ARITH_EXPR_VAR)
+            mask |= named_term_mask(&rule->expr_nodes[i].term);
+    return mask;
+}
+maelys_datalog_status_t maelys_datalog_program_rule_variable_name(
+    const maelys_datalog_program_t *program, size_t rule_index, uint32_t variable,
+    const char **out_name) {
+    if (!program || !program->ruleset || !out_name)
+        return MAELYS_DATALOG_STATUS_INVALID_ARGUMENT;
+    const maelys_datalog_internal_ruleset_t *r = program->ruleset;
+    if (rule_index >= r->rule_count || variable >= MAELYS_DATALOG_NAMED_VARIABLE_COUNT)
+        return MAELYS_DATALOG_STATUS_NOT_FOUND;
+    const uint16_t row = r->rule_variable_name_rows[rule_index];
+    if (!row || !(named_rule_mask(&r->rules[rule_index]) & (UINT32_C(1) << variable)))
+        return MAELYS_DATALOG_STATUS_NOT_FOUND;
+    const uint16_t offset = r->rule_variable_name_offsets[row - 1u][variable];
+    if (!offset) return MAELYS_DATALOG_STATUS_NOT_FOUND;
+    *out_name = r->rule_variable_name_pool + offset - 1u;
+    return MAELYS_DATALOG_STATUS_OK;
+}
+
 maelys_datalog_status_t maelys_datalog_program_rule(const maelys_datalog_program_t *p, size_t index,
                                                     maelys_datalog_ir_rule_t *out) {
     if (!p || !p->ruleset || !out)
