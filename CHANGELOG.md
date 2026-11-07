@@ -7,6 +7,15 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ## Unreleased
 
+### Fixed
+
+- The fact builders are tested in C11 and in C23. C23 made `true` and
+  `false` bool constants, so `MAELYS_DATALOG_ADD_FACT` turns them into
+  BOOLEAN terms there and INTEGER terms in C11; comparisons stay INTEGER and
+  `MAELYS_DATALOG_BOOL` means the same in both. The header and README say so,
+  and the allocation test no longer assumes C11 under a compiler that
+  defaults to C23 (GCC 15).
+
 ## 0.27.0 — 2026-10-27
 
 ### Added
