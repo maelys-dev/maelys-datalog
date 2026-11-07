@@ -7,6 +7,11 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ## Unreleased
 
+### Build
+
+- Adopt maelys-release v0.66.0 for CI, release, npm and Homebrew workflows.
+  The socle asks no product gesture between v0.64.5 and this version.
+
 ## 0.27.0 — 2026-10-27
 
 ### Added
