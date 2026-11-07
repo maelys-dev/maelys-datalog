@@ -31,7 +31,7 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 - CI, release, npm and Homebrew workflows run on maelys-release v0.66.0
   (from v0.64.5); the socle asks no product change between the two.
 
-### Python performance review — decision pending
+### Python performance review — exception accepted for 0.27.1
 
 [Run 42410695399](https://github.com/maelys-dev/maelys-datalog/actions/runs/42410695399)
 measures `main` commit `77f43e5995666a8be7b6dfee77973232255a85f5` (#220, the
@@ -71,6 +71,10 @@ own persistent row, SMALL-Release/7-integer-prepared/input median against
 v0.27.0 (+1.76%, +2.06%, envelope 1.69%), does not recur here (+0.60%,
 −0.36%). Five totals require review against v0.27.0; each of them exceeds its
 envelope in one round only.
+
+David accepted this named report's tradeoff for 0.27.1 publication on
+2026-11-07, including the unattributed anchor row. This is a decision on this
+report, not an automatic attribution or a performance guarantee.
 
 ## 0.27.0 — 2026-10-27
 
