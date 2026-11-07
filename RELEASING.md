@@ -181,7 +181,7 @@ SMALL/LARGE Release/PIC SDKs, audits the stable Python ABI and native OS
 dependencies, then installs the actual wheel into a fresh environment and runs
 both profiles' Python suites before writing its checksum and target receipt.
 CI downloads those same packaging outputs and repeats consumption on CPython
-3.10, 3.11, 3.12, 3.13 and 3.14. No compiler runs during ordinary wheel
+3.10, 3.11, 3.12, 3.13, 3.14 and 3.15. No compiler runs during ordinary wheel
 installation or import. Build-only negative SDK controls remain separate.
 
 The build inputs and container digests are in `tools/python-wheel-build.json`.
