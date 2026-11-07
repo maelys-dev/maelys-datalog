@@ -7,6 +7,14 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ## Unreleased
 
+### Added
+
+- Python wheels support CPython 3.15. The wheel is `cp310-abi3`, so the same
+  file already ran there; its `Requires-Python` stopped below 3.15 and the
+  builder refused a 3.15 host. Both bounds now come from
+  `tools/python-wheel-build.json`, and a test keeps that list and the CI
+  matrix in step.
+
 ### Fixed
 
 - The fact builders are tested in C11 and in C23. C23 made `true` and

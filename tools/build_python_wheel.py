@@ -17,6 +17,9 @@ from wheel.wheelfile import WheelFile
 
 ROOT = Path(__file__).resolve().parents[1]
 POLICY = json.loads((ROOT / "tools/python-wheel-build.json").read_text())
+PYTHON_MINIMUM = tuple(map(int, POLICY["pythonMinimum"].split(".")))
+PYTHON_MAXIMUM_EXCLUSIVE = tuple(map(int, POLICY["pythonMaximumExclusive"].split(".")))
+REQUIRES_PYTHON = f">={POLICY['pythonMinimum']},<{POLICY['pythonMaximumExclusive']}"
 PLATFORMS = {"linux-x86_64": "manylinux_2_28_x86_64",
              "linux-arm64": "manylinux_2_28_aarch64",
              "macos-arm64": "macosx_13_0_arm64"}
@@ -31,8 +34,8 @@ def build(target: str, output: Path) -> Path:
                 "macos-arm64": ("Darwin", "arm64")}[target]
     if (platform.system(), platform.machine()) != expected:
         raise SystemExit(f"{target}: native build required, got {platform.system()}/{platform.machine()}")
-    if sys.implementation.name != "cpython" or not (3, 10) <= sys.version_info[:2] < (3, 15):
-        raise SystemExit("wheel build requires CPython 3.10–3.14")
+    if sys.implementation.name != "cpython" or not PYTHON_MINIMUM <= sys.version_info[:2] < PYTHON_MAXIMUM_EXCLUSIVE:
+        raise SystemExit(f"wheel build requires CPython {POLICY['pythonVersions'][0]}–{POLICY['pythonVersions'][-1]}")
     version = (ROOT / "VERSION").read_text().strip()
     output.mkdir(parents=True, exist_ok=True)
     tag = "cp310-abi3-" + PLATFORMS[target]
@@ -92,7 +95,7 @@ def build(target: str, output: Path) -> Path:
         (info / "METADATA").write_text(
             "Metadata-Version: 2.4\nName: maelys-datalog\n" + f"Version: {version}\n"
             "Summary: Maelys Datalog Python binding with bundled native SMALL and LARGE engines\n"
-            "Requires-Python: >=3.10,<3.15\nRequires-Dist: cffi>=2.1.1,<3\n"
+            f"Requires-Python: {REQUIRES_PYTHON}\nRequires-Dist: cffi>=2.1.1,<3\n"
             "License-Expression: MPL-2.0 AND MIT\nLicense-File: LICENSE\n"
             "License-File: yyjson/LICENSE\n"
             "Project-URL: Source, https://github.com/maelys-dev/maelys-datalog\n"

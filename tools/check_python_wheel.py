@@ -19,6 +19,7 @@ from wheel.wheelfile import WheelFile
 
 ROOT = Path(__file__).resolve().parents[1]
 POLICY = json.loads((ROOT / "tools/python-wheel-build.json").read_text())
+REQUIRES_PYTHON = f">={POLICY['pythonMinimum']},<{POLICY['pythonMaximumExclusive']}"
 
 
 def run(*args, **kwargs):
@@ -56,7 +57,7 @@ def inspect_archive(wheel: Path, dest: Path) -> list[str]:
             assert archive.read("maelys_datalog/" + name) == (ROOT / "bindings/python/maelys_datalog" / name).read_bytes()
         metadata = BytesParser().parsebytes(archive.read(info + "/METADATA"))
         assert metadata["Name"] == "maelys-datalog" and metadata["Version"] == str(version)
-        assert metadata["Requires-Python"] == ">=3.10,<3.15"
+        assert metadata["Requires-Python"] == REQUIRES_PYTHON
         assert metadata.get_all("Requires-Dist") == ["cffi>=2.1.1,<3"]
         wheel_metadata = BytesParser().parsebytes(archive.read(info + "/WHEEL"))
         assert wheel_metadata["Root-Is-Purelib"] == "false"

@@ -90,7 +90,7 @@ implementation. The source binding retains its installed shared-SDK path.
 
 `tools/python-wheel-build.json` pins the build/audit tools and immutable official
 manylinux_2_28 images for x86_64 and AArch64. macOS ARM64 targets 13.0. The
-`cp310-abi3` payload is audited with `abi3audit`; CPython 3.10–3.14 with the GIL
+`cp310-abi3` payload is audited with `abi3audit`; CPython 3.10–3.15 with the GIL
 installs the same platform wheel in CI. Free-threaded Python, PyPy, Windows,
 musl and macOS Intel are outside this matrix. Symbol/dependency audits enforce
 the OS floors and a single `PyInit__maelys_cffi` export per stripped extension;

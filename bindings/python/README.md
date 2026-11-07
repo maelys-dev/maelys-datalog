@@ -34,7 +34,7 @@ python3 -m venv .venv
 # A downloaded .whl path works in place of "$WHEEL_URL".
 ```
 
-Supported wheels: CPython 3.10–3.14 with the GIL, Linux x86_64/ARM64 with
+Supported wheels: CPython 3.10–3.15 with the GIL, Linux x86_64/ARM64 with
 glibc 2.28 or newer, and macOS ARM64 13.0 or newer. PyPy, free-threaded Python,
 musl/Alpine, Windows and macOS Intel are not covered. The wheel filename and
 Python metadata make pip reject incompatible interpreters/platforms. Python's

@@ -1,6 +1,7 @@
 """Negative controls for release-wheel contents; no native code is executed."""
 import importlib.util
 from pathlib import Path
+import re
 import tempfile
 import unittest
 import zipfile
@@ -31,7 +32,7 @@ class WheelContents(unittest.TestCase):
             "maelys_datalog/_wheel_profile.py": b"# fixture\n",
             f"{self.info}/METADATA": (
                 f"Metadata-Version: 2.4\nName: maelys-datalog\nVersion: {self.version}\n"
-                "Requires-Python: >=3.10,<3.15\nRequires-Dist: cffi>=2.1.1,<3\n").encode(),
+                f"Requires-Python: {check.REQUIRES_PYTHON}\nRequires-Dist: cffi>=2.1.1,<3\n").encode(),
             f"{self.info}/WHEEL": f"Wheel-Version: 1.0\nRoot-Is-Purelib: false\nTag: {self.tag}\n".encode(),
             f"{self.info}/top_level.txt": b"maelys_datalog\n",
             f"{self.info}/licenses/LICENSE": b"test license",
@@ -93,6 +94,24 @@ class WheelContents(unittest.TestCase):
                 archive.writestr(name, data)
         with self.assertRaises(WheelError):
             self.inspect()
+
+
+class PythonPolicy(unittest.TestCase):
+    """One supported-interpreter list: the policy, its bounds and the CI matrix agree."""
+
+    def test_versions_fill_the_declared_range(self):
+        minimum, maximum = (tuple(map(int, check.POLICY[key].split(".")))
+                            for key in ("pythonMinimum", "pythonMaximumExclusive"))
+        self.assertEqual(minimum[0], maximum[0])
+        expected = [f"{minimum[0]}.{minor}" for minor in range(minimum[1], maximum[1])]
+        self.assertEqual(check.POLICY["pythonVersions"], expected)
+
+    def test_ci_matrix_tests_every_supported_version(self):
+        workflow = (ROOT / ".github/workflows/ci.yml").read_text()
+        job = workflow.split("\n  python-wheels:\n", 1)[1].split("\n  javascript-parity:\n", 1)[0]
+        matrix = re.search(r"^\s+python: \[(.*)\]$", job, re.M)
+        self.assertIsNotNone(matrix)
+        self.assertEqual(re.findall(r"'([0-9.]+)'", matrix.group(1)), check.POLICY["pythonVersions"])
 
 
 if __name__ == "__main__":
