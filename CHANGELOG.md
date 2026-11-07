@@ -7,6 +7,8 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
 
 ## Unreleased
 
+## 0.27.1 — 2026-11-07
+
 ### Added
 
 - Python wheels support CPython 3.15. The wheel is `cp310-abi3`, so the same
@@ -23,6 +25,56 @@ format described by [Keep a Changelog](https://keepachangelog.com/).
   `MAELYS_DATALOG_BOOL` means the same in both. The header and README say so,
   and the allocation test no longer assumes C11 under a compiler that
   defaults to C23 (GCC 15).
+
+### Changed
+
+- CI, release, npm and Homebrew workflows run on maelys-release v0.66.0
+  (from v0.64.5); the socle asks no product change between the two.
+
+### Python performance review — exception accepted for 0.27.1
+
+[Run 42410695399](https://github.com/maelys-dev/maelys-datalog/actions/runs/42410695399)
+measures `main` commit `77f43e5995666a8be7b6dfee77973232255a85f5` (#220, the
+commit this release tags) against v0.27.0
+`24b16552d7ef566cfc68597f98ed34f37eb57f76` and the immutable v0.11.1 anchor
+`0f247a7c81ec4a297f35ccee2bf007344f72ac7e`.
+
+- Artifact: `python-performance-77f43e5995666a8be7b6dfee77973232255a85f5`.
+- `report.json` SHA-256:
+  `16777bf8ca58c9c63cfcbddaf06ed95e15d61936546ed7786b4159a6c454077b`.
+
+The schema-4 report is release-eligible and keeps the status
+`review_required`. The three-request positive control is detected: all 64 warm
+total median/p95 rows are slower in both rounds. The informative v0.11.0
+historical control is also detected in this run. It neither replaces the
+positive control nor approves the candidate.
+
+The run has 63 raw A/A alert rows: 54 warm and 9 informative cold. After null
+screening, 25 rows require review: 17 against v0.27.0 and 8 against the
+anchor. None against v0.27.0 is a raw slowdown in both rounds beyond its null
+envelope. One row against the anchor is:
+
+| Reference | Configuration / case / phase | Statistic | Round 1 | Round 2 | Null envelope |
+| --- | --- | --- | --- | --- | --- |
+| v0.11.1 | SMALL-default/93-symbol-prepared/query | p95 | +2.03% | +2.93% | 1.69% |
+
+It is not attributed. Between v0.27.0 and this commit no engine source
+changed: the only differences are a comment in `datalog_builders.h` and the
+Python README. Per the report's binary digests, the Release shared libraries
+of both profiles are byte-identical to v0.27.0's. The CFFI module, which
+includes that header, differs in every configuration, and so do the default
+builds' shared libraries.
+
+Run 42406928927 measured `00a8783` (#222), whose engine sources are the same.
+In that run this row was indeterminate in both rounds (−5.42%, −0.43%). Its
+own persistent row, SMALL-Release/7-integer-prepared/input median against
+v0.27.0 (+1.76%, +2.06%, envelope 1.69%), does not recur here (+0.60%,
+−0.36%). Five totals require review against v0.27.0; each of them exceeds its
+envelope in one round only.
+
+David accepted this named report's tradeoff for 0.27.1 publication on
+2026-11-07, including the unattributed anchor row. This is a decision on this
+report, not an automatic attribution or a performance guarantee.
 
 ## 0.27.0 — 2026-10-27
 
