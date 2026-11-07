@@ -81,7 +81,12 @@ static void test_c11_fact_builders(void) {
     assert(edb->facts[6].terms[2].as.boolean == 1);
     assert(MAELYS_DATALOG_ADD_FACT(edb, NULL, "bools", true, 1 < 2,
                                  MAELYS_DATALOG_BOOL(true), MAELYS_DATALOG_BOOL(0)) == 0);
+#if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 202311L
+    /* C23 made true a bool constant; comparisons still yield int. */
+    assert(edb->facts[7].terms[0].kind == MAELYS_DATALOG_VALUE_BOOLEAN && edb->facts[7].terms[0].as.boolean == 1);
+#else
     assert(edb->facts[7].terms[0].kind == MAELYS_DATALOG_VALUE_INTEGER);
+#endif
     assert(edb->facts[7].terms[1].kind == MAELYS_DATALOG_VALUE_INTEGER);
     assert(edb->facts[7].terms[2].kind == MAELYS_DATALOG_VALUE_BOOLEAN && edb->facts[7].terms[2].as.boolean == 1);
     assert(edb->facts[7].terms[3].kind == MAELYS_DATALOG_VALUE_BOOLEAN && edb->facts[7].terms[3].as.boolean == 0);

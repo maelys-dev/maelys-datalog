@@ -280,8 +280,9 @@ maelys_datalog_status_t rc = MAELYS_DATALOG_ADD_FACT(
 
 The macro infers zero to four terms: strings become symbols, representable
 integers become signed 64-bit integers, and `_Bool` becomes a boolean.
-`MAELYS_DATALOG_BOOL(value)` requests boolean semantics explicitly: C11 `true`
-and comparison expressions otherwise have integer type. Arguments are evaluated
+`MAELYS_DATALOG_BOOL(value)` requests boolean semantics explicitly, the same in
+C11 and C23: C11 `true` and comparison expressions otherwise have integer type,
+while C23 `true` is already a boolean. Arguments are evaluated
 once, with no evaluation-order guarantee and no extra allocation. Invalid
 types fail compilation; out-of-range integers return an input diagnostic before
 any insertion. C++ and FFI consumers continue using the typed-value API.
