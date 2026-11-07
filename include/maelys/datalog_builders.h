@@ -87,8 +87,10 @@
  * Plain char is numeric (its signedness is implementation-defined). Enumerated
  * types follow their compatible integer type. Other types, including floating
  * point, arbitrary pointers and structs, are rejected at compile time.
- * In C11 true/false and comparison results have type int, not _Bool: use
- * MAELYS_DATALOG_BOOL(expression) to request boolean semantics explicitly.
+ * In C11 true/false and comparison results have type int, not _Bool, so they
+ * become INTEGER. C23 made true/false bool constants, which become BOOLEAN;
+ * comparison results stay int. MAELYS_DATALOG_BOOL(expression) requests
+ * boolean semantics explicitly and means the same in both standards.
  *
  * Each argument is evaluated once; evaluation order is NOT specified. Do not
  * use mutually dependent side effects in arguments. Conversions and temporary

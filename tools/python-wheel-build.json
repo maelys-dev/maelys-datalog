@@ -1,7 +1,7 @@
 {
   "pythonMinimum": "3.10",
-  "pythonMaximumExclusive": "3.15",
-  "pythonVersions": ["3.10", "3.11", "3.12", "3.13", "3.14"],
+  "pythonMaximumExclusive": "3.16",
+  "pythonVersions": ["3.10", "3.11", "3.12", "3.13", "3.14", "3.15"],
   "macosMinimum": "13.0",
   "linuxGlibcMaximum": "2.28",
   "requirements": ["cffi==2.1.1", "setuptools==84.0.0", "wheel==0.48.0", "packaging==26.3", "abi3audit==0.0.26", "pytest==9.1.1"],
